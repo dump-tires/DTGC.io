@@ -286,7 +286,7 @@ const SUPPLY_WALLETS = {
 // ═══════════════════════════════════════════════════════════════
 // Fetches live holder data from PulseChain Explorer API
 
-const DTGC_TOKEN_ADDRESS = '0x146a6F852D2B9a24e1078e6D2f86486D1C09165e';
+const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
 
 // PulseChain Explorer API (Blockscout-compatible)
 const PULSECHAIN_API = {
