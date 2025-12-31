@@ -358,9 +358,9 @@ const CONTRACT_ADDRESSES = {
 const VIDEOS_ENABLED = true; // Videos are enabled!
 
 const VIDEOS = {
-  stake: '/videos/stake-video.mov',
-  popup: '/videos/popup-video.mov',
-  whitepaper: '/videos/whitepaper-video.mov',
+  stake: '/videos/stake-video.mp4',
+  popup: '/videos/popup-video.mp4',
+  whitepaper: '/videos/whitepaper-video.mp4',
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -2737,6 +2737,10 @@ export default function App() {
       setIsAuthenticated(true);
       sessionStorage.setItem('dtgc-mainnet-auth', 'true');
       setPasswordError(false);
+      // Scroll to top after authentication
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
     } else {
       logAccessAttempt(false, passwordInput);
       setPasswordError(true);
@@ -2790,6 +2794,7 @@ export default function App() {
                 outline: 'none',
                 textAlign: 'center',
                 letterSpacing: '3px',
+                boxSizing: 'border-box',
               }}
               autoFocus
             />
