@@ -2394,6 +2394,193 @@ const StakeVideoModal = ({ onComplete, tierName, isDark }) => {
   );
 };
 
+// Floating DexScreener Widget (bottom-left corner) - Miniature & Expandable
+const DexScreenerWidget = () => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [isMinimized, setIsMinimized] = React.useState(false);
+  const [activeChart, setActiveChart] = React.useState('dtgc');
+
+  const chartUrls = {
+    dtgc: 'https://dexscreener.com/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7?embed=1&theme=dark&trades=0&info=0',
+    urmom: 'https://dexscreener.com/pulsechain/0x0548656e272fec9534e180d3174cfc57ab6e10c0?embed=1&theme=dark&trades=0&info=0'
+  };
+
+  const directUrls = {
+    dtgc: 'https://dexscreener.com/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
+    urmom: 'https://dexscreener.com/pulsechain/0x0548656e272fec9534e180d3174cfc57ab6e10c0'
+  };
+
+  if (isMinimized) {
+    return (
+      <div
+        onClick={() => setIsMinimized(false)}
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          left: '20px',
+          width: '50px',
+          height: '50px',
+          background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+          border: '2px solid #D4AF37',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 9998,
+          boxShadow: '0 4px 20px rgba(212,175,55,0.3)',
+          transition: 'all 0.3s ease',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        title="Open DexScreener Chart"
+      >
+        <span style={{ fontSize: '1.5rem' }}>📊</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: '20px',
+      left: '20px',
+      width: isExpanded ? '500px' : '280px',
+      height: isExpanded ? '400px' : '220px',
+      background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+      border: '2px solid #D4AF37',
+      borderRadius: '16px',
+      overflow: 'hidden',
+      zIndex: 9998,
+      boxShadow: '0 10px 40px rgba(0,0,0,0.5), 0 0 20px rgba(212,175,55,0.2)',
+      transition: 'all 0.3s ease',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '6px 10px',
+        background: 'rgba(212,175,55,0.1)',
+        borderBottom: '1px solid rgba(212,175,55,0.3)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '0.9rem' }}>📊</span>
+          <span style={{ color: '#D4AF37', fontWeight: 'bold', fontSize: '0.75rem' }}>LIVE</span>
+        </div>
+        
+        {/* Token Toggle */}
+        <div style={{ display: 'flex', gap: '3px' }}>
+          <button
+            onClick={() => setActiveChart('dtgc')}
+            style={{
+              padding: '3px 8px',
+              fontSize: '0.65rem',
+              fontWeight: 'bold',
+              background: activeChart === 'dtgc' ? 'linear-gradient(135deg, #D4AF37, #F4D03F)' : 'rgba(255,255,255,0.1)',
+              color: activeChart === 'dtgc' ? '#000' : '#888',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            DTGC
+          </button>
+          <button
+            onClick={() => setActiveChart('urmom')}
+            style={{
+              padding: '3px 8px',
+              fontSize: '0.65rem',
+              fontWeight: 'bold',
+              background: activeChart === 'urmom' ? 'linear-gradient(135deg, #D4AF37, #F4D03F)' : 'rgba(255,255,255,0.1)',
+              color: activeChart === 'urmom' ? '#000' : '#888',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            URMOM
+          </button>
+        </div>
+
+        {/* Controls */}
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            onClick={() => window.open(directUrls[activeChart], '_blank')}
+            style={{
+              width: '22px',
+              height: '22px',
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              borderRadius: '4px',
+              color: '#888',
+              cursor: 'pointer',
+              fontSize: '0.7rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Open in DexScreener"
+          >
+            ↗
+          </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            style={{
+              width: '22px',
+              height: '22px',
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              borderRadius: '4px',
+              color: '#888',
+              cursor: 'pointer',
+              fontSize: '0.7rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title={isExpanded ? 'Shrink' : 'Expand'}
+          >
+            {isExpanded ? '⊖' : '⊕'}
+          </button>
+          <button
+            onClick={() => setIsMinimized(true)}
+            style={{
+              width: '22px',
+              height: '22px',
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              borderRadius: '4px',
+              color: '#888',
+              cursor: 'pointer',
+              fontSize: '0.7rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            title="Minimize"
+          >
+            _
+          </button>
+        </div>
+      </div>
+
+      {/* Chart iframe */}
+      <iframe
+        src={chartUrls[activeChart]}
+        style={{
+          width: '100%',
+          height: 'calc(100% - 34px)',
+          border: 'none',
+        }}
+        title={`${activeChart.toUpperCase()} DexScreener Chart`}
+      />
+    </div>
+  );
+};
+
 const Particles = () => {
   const particles = useMemo(() => 
     Array.from({ length: 12 }, (_, i) => ({
@@ -4112,18 +4299,45 @@ export default function App() {
                 </div>
               )}
 
-              {/* Video Showcase at Bottom of Stake Page */}
-              {VIDEOS_ENABLED && (
-              <div className="video-showcase">
-                <p className="video-label">✦ DTGC STAKING ✦</p>
-                <div className="video-container">
-                  <video autoPlay loop muted playsInline>
-                    <source src={VIDEOS.stake} type="video/quicktime" />
-                    <source src={VIDEOS.stake.replace('.mov', '.mp4')} type="video/mp4" />
-                  </video>
-                </div>
+              {/* DTGC Logo/Favicon at Bottom of Stake Page */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 20px',
+                marginTop: '20px',
+              }}>
+                <img 
+                  src="/favicon.png" 
+                  alt="DTGC Logo" 
+                  style={{
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    border: '3px solid var(--gold)',
+                    boxShadow: '0 0 30px rgba(212,175,55,0.4), 0 0 60px rgba(212,175,55,0.2)',
+                    animation: 'float 3s ease-in-out infinite',
+                  }}
+                />
+                <p style={{
+                  color: 'var(--gold)',
+                  fontFamily: 'Cinzel, serif',
+                  fontSize: '1.1rem',
+                  letterSpacing: '4px',
+                  marginTop: '16px',
+                  textTransform: 'uppercase',
+                }}>
+                  DT GOLD COIN
+                </p>
+                <p style={{
+                  color: 'var(--text-muted)',
+                  fontSize: '0.8rem',
+                  marginTop: '8px',
+                }}>
+                  Premium Staking on PulseChain
+                </p>
               </div>
-              )}
             </section>
           )}
 
@@ -5054,6 +5268,9 @@ export default function App() {
           <div className="footer-divider" />
           <p className="footer-text">© 2025 DT GOLD COIN • dtgc.io • Premium Staking on PulseChain • Diamond & Diamond+ LP Tiers 💎✨</p>
         </footer>
+
+        {/* DexScreener Widget */}
+        <DexScreenerWidget />
       </div>
 
       {/* Stake Modal */}
