@@ -2399,6 +2399,14 @@ const DexScreenerWidget = () => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isMinimized, setIsMinimized] = React.useState(false);
   const [activeChart, setActiveChart] = React.useState('dtgc');
+  const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+
+  // Detect mobile viewport
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const chartUrls = {
     dtgc: 'https://dexscreener.com/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7?embed=1&theme=dark&trades=0&info=0',
@@ -2440,16 +2448,20 @@ const DexScreenerWidget = () => {
     );
   }
 
+  // Mobile: smaller sizes, Desktop: normal sizes
+  const widgetWidth = isMobile ? (isExpanded ? '90vw' : '160px') : (isExpanded ? '500px' : '280px');
+  const widgetHeight = isMobile ? (isExpanded ? '300px' : '120px') : (isExpanded ? '400px' : '220px');
+
   return (
     <div style={{
       position: 'fixed',
-      bottom: '20px',
-      left: '20px',
-      width: isExpanded ? '500px' : '280px',
-      height: isExpanded ? '400px' : '220px',
+      bottom: isMobile ? '10px' : '20px',
+      left: isMobile ? '10px' : '20px',
+      width: widgetWidth,
+      height: widgetHeight,
       background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
       border: '2px solid #D4AF37',
-      borderRadius: '16px',
+      borderRadius: isMobile ? '12px' : '16px',
       overflow: 'hidden',
       zIndex: 9998,
       boxShadow: '0 10px 40px rgba(0,0,0,0.5), 0 0 20px rgba(212,175,55,0.2)',
@@ -4184,6 +4196,25 @@ export default function App() {
               <button className="theme-toggle" onClick={toggleTheme}>
                 {isDark ? '☀️' : '🌙'}
               </button>
+              {/* Change Address Button - only show when connected */}
+              {account && (
+                <button
+                  onClick={() => setShowWalletModal(true)}
+                  style={{
+                    padding: '6px 10px',
+                    background: 'transparent',
+                    border: '1px solid rgba(212,175,55,0.5)',
+                    borderRadius: '8px',
+                    color: '#D4AF37',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    marginRight: '8px',
+                  }}
+                  title="Change wallet address"
+                >
+                  🔄
+                </button>
+              )}
               <button
                 className={`connect-btn ${account ? 'connected' : ''}`}
                 onClick={account ? disconnectWallet : () => setShowWalletModal(true)}
@@ -4871,6 +4902,125 @@ export default function App() {
                       ✓ All tiers profitable • Only 3% total fees
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Active Positions (Mainnet) */}
+              {!TESTNET_MODE && account && stakedPositions.length > 0 && (
+                <div style={{
+                  maxWidth: '700px',
+                  margin: '40px auto 0',
+                  background: 'var(--bg-card)',
+                  borderRadius: '24px',
+                  padding: '30px',
+                  border: '1px solid var(--border-color)',
+                }}>
+                  <h3 style={{
+                    fontFamily: 'Cinzel, serif',
+                    fontSize: '1.2rem',
+                    letterSpacing: '3px',
+                    marginBottom: '20px',
+                    textAlign: 'center',
+                    color: 'var(--gold)',
+                  }}>📊 YOUR STAKED POSITIONS</h3>
+
+                  {stakedPositions.map((pos) => {
+                    const now = Date.now();
+                    const isLocked = now < pos.endTime;
+                    const daysLeft = Math.max(0, Math.ceil((pos.endTime - now) / (24 * 60 * 60 * 1000)));
+                    const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
+                    const effectiveApr = pos.apr * (pos.boostMultiplier || 1);
+                    const currentRewards = (pos.amount * (effectiveApr / 100) / 365) * daysStaked;
+                    const rewardValue = currentRewards * (livePrices.dtgc || 0);
+
+                    return (
+                      <div key={pos.id} style={{
+                        background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                        border: `1px solid ${isLocked ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
+                        borderRadius: '16px',
+                        padding: '20px',
+                        marginBottom: '15px',
+                      }}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px'}}>
+                          <div>
+                            <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '1.1rem', color: pos.isLP ? 'var(--diamond)' : 'var(--gold)'}}>
+                              {pos.isLP ? '💎 DIAMOND LP' : '🥇 DTGC STAKE'}
+                            </div>
+                            <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px'}}>
+                              Staked: <strong>{formatBalanceWithCurrency(pos.amount, pos.isLP ? 'lp' : 'dtgc')}</strong>
+                            </div>
+                            <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px'}}>
+                              APR: <strong>{effectiveApr.toFixed(1)}%</strong> {pos.boostMultiplier > 1 && `(${pos.boostMultiplier}x boost)`}
+                            </div>
+                            <div style={{fontSize: '0.8rem', color: isLocked ? '#FF6B6B' : '#4CAF50', marginTop: '4px'}}>
+                              {isLocked ? `🔒 ${daysLeft} days remaining` : '✅ Unlocked - Ready to claim!'}
+                            </div>
+                          </div>
+                          <div style={{textAlign: 'right'}}>
+                            <div style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>Rewards Accrued</div>
+                            <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50'}}>
+                              +{formatBalanceWithCurrency(currentRewards, 'dtgc')}
+                            </div>
+                            <div style={{fontSize: '0.7rem', color: '#4CAF50', opacity: 0.8, marginTop: '2px'}}>
+                              Growing in real-time
+                            </div>
+                            <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end'}}>
+                              {isLocked ? (
+                                <button
+                                  onClick={() => handleEmergencyWithdraw(pos.isLP)}
+                                  style={{
+                                    padding: '8px 16px',
+                                    background: 'linear-gradient(135deg, #FF6B6B, #FF8E53)',
+                                    border: 'none',
+                                    borderRadius: '20px',
+                                    fontWeight: 700,
+                                    fontSize: '0.7rem',
+                                    color: '#FFF',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  ⚠️ Emergency (12%)
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleClaimRewards(pos.isLP)}
+                                    style={{
+                                      padding: '8px 16px',
+                                      background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+                                      border: 'none',
+                                      borderRadius: '20px',
+                                      fontWeight: 700,
+                                      fontSize: '0.7rem',
+                                      color: '#FFF',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    💰 Claim Rewards
+                                  </button>
+                                  <button
+                                    onClick={() => handleUnstake(null, pos.isLP)}
+                                    style={{
+                                      padding: '8px 16px',
+                                      background: 'linear-gradient(135deg, #D4AF37, #B8860B)',
+                                      border: 'none',
+                                      borderRadius: '20px',
+                                      fontWeight: 700,
+                                      fontSize: '0.7rem',
+                                      color: '#FFF',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    🔓 Unstake All
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
