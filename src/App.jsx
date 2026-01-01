@@ -3359,12 +3359,19 @@ export default function App() {
           provider = new ethers.BrowserProvider(window.ethereum);
       }
 
+      // Request wallet to show account picker
+      const ethProvider = window.okxwallet || window.ethereum;
+      await ethProvider.request({
+        method: 'wallet_requestPermissions',
+        params: [{ eth_accounts: {} }],
+      });
+
       const accounts = await provider.send('eth_requestAccounts', []);
       const signer = await provider.getSigner();
       const network = await provider.getNetwork();
 
       if (Number(network.chainId) !== CHAIN_ID) {
-        await window.ethereum.request({
+        await ethProvider.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: '0x171' }],
         });
