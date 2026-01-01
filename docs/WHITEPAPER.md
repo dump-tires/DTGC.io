@@ -112,10 +112,11 @@ APRs automatically adjust based on market cap milestones to ensure long-term sus
 - EVM-compatible (PulseChain)
 
 ### 5.2 Contract Addresses
-- DTGC Token: `0x146a6F852D2B9a24e1078e6D2f86486D1C09165e`
-- Staking V2: `0x6cD09a7e50b1D7Cb91b4528BF2E1A7fe7D855432`
-- LP Staking V2: `0xFcFa619E40F7197eeB4Bb0cff7B8647e3a6d4332`
+- DTGC Token: `0xD0676B28a457371D58d47E5247b439114e40Eb0F`
+- Staking V2: `0x0c1984e3804Bd74DAaB66c4540bBeac751efB643`
+- LP Staking V2: `0x0b07eD8929884E9bBDEAD6B42465F2A265044f18`
 - DAO Treasury: `0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC`
+- DAO Voting: `0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470`
 
 ### 5.3 Audit Status
 Smart contract audit pending. Results will be published upon completion.
