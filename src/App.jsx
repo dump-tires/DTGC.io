@@ -2917,7 +2917,7 @@ export default function App() {
   const [selectedWalletType, setSelectedWalletType] = useState(null);
   const [walletStep, setWalletStep] = useState('select'); // 'select' or 'accounts'
 
-  // Currency display preference (units, usd, eur)
+  // Currency display preference (units, usd, eur, gbp, jpy)
   const [displayCurrency, setDisplayCurrency] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('dtgc-display-currency') || 'units';
@@ -2925,8 +2925,21 @@ export default function App() {
     return 'units';
   });
 
-  // EUR/USD exchange rate (approximate)
-  const EUR_USD_RATE = 0.92;
+  // Exchange rates (approximate - USD base)
+  const CURRENCY_RATES = {
+    EUR: 0.92,
+    GBP: 0.79,
+    JPY: 149.50,
+  };
+
+  // Metal prices state (per troy ounce in USD)
+  const [metalPrices, setMetalPrices] = useState({
+    gold: 2650.00,
+    silver: 31.50,
+    copper: 4.25,
+    loading: false,
+    lastUpdated: null,
+  });
 
   const [position, setPosition] = useState(null);
   const [lpPosition, setLpPosition] = useState(null);
@@ -3488,19 +3501,23 @@ export default function App() {
 
     const valueUsd = numBalance * priceUsd;
 
-    if (displayCurrency === 'usd') {
-      return `$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    } else if (displayCurrency === 'eur') {
-      const valueEur = valueUsd * EUR_USD_RATE;
-      return `€${valueEur.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    switch (displayCurrency) {
+      case 'usd':
+        return `$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'eur':
+        return `€${(valueUsd * CURRENCY_RATES.EUR).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'gbp':
+        return `£${(valueUsd * CURRENCY_RATES.GBP).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'jpy':
+        return `¥${(valueUsd * CURRENCY_RATES.JPY).toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+      default:
+        return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
     }
-
-    return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
   };
 
   // Toggle currency display
   const toggleCurrencyDisplay = () => {
-    const currencies = ['units', 'usd', 'eur'];
+    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy'];
     const currentIndex = currencies.indexOf(displayCurrency);
     const nextCurrency = currencies[(currentIndex + 1) % currencies.length];
     setDisplayCurrency(nextCurrency);
@@ -4140,6 +4157,30 @@ export default function App() {
             </nav>
 
             <div className="nav-right">
+              {/* Metal Prices Display */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginRight: '12px',
+                padding: '6px 12px',
+                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                borderRadius: '20px',
+                border: '1px solid rgba(212,175,55,0.3)',
+                fontSize: '0.7rem',
+              }}>
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600 }}>
+                  🥇 ${metalPrices.gold.toLocaleString()}
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600 }}>
+                  🥈 ${metalPrices.silver.toFixed(2)}
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
+                <span title="Copper /oz" style={{ color: '#B87333', fontWeight: 600 }}>
+                  🥉 ${metalPrices.copper.toFixed(2)}
+                </span>
+              </div>
               <button className="theme-toggle" onClick={toggleTheme}>
                 {isDark ? '☀️' : '🌙'}
               </button>
@@ -4235,7 +4276,7 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
               >
-                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : '💶 EUR'} ▼
+                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : '💴 JPY'} ▼
               </button>
 
               <div style={{
