@@ -4978,8 +4978,9 @@ export default function App() {
                   <div className="input-group">
                     <div className="input-header">
                       <span className="input-label">Amount</span>
-                      <span className="balance-display" onClick={() => setStakeAmount(isLP ? lpBalance : dtgcBalance)}>
-                        Balance: {formatNumber(parseFloat(isLP ? lpBalance : dtgcBalance))} {isLP ? 'LP' : 'DTGC'}
+                      <span className="balance-display" onClick={() => setStakeAmount(isLP ? lpBalance : dtgcBalance)} style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px'}}>
+                        <span>Balance: {formatNumber(parseFloat(isLP ? lpBalance : dtgcBalance))} {isLP ? 'LP' : 'DTGC'}</span>
+                        <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ ${formatNumber((parseFloat(isLP ? lpBalance : dtgcBalance) || 0) * (livePrices.dtgc || 0))} USD</span>
                       </span>
                     </div>
                     <div className="input-container">
@@ -5070,6 +5071,9 @@ export default function App() {
                             </div>
                             <div style={{fontSize: '0.8rem', color: isLocked ? '#FF6B6B' : '#4CAF50', marginTop: '4px'}}>
                               {isLocked ? `🔒 ${daysLeft} days remaining` : '✅ Unlocked - Ready to claim!'}
+                            </div>
+                            <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', fontStyle: 'italic'}}>
+                              📅 EES Penalty Removed: <strong style={{color: isLocked ? '#FFB74D' : '#4CAF50'}}>{new Date(pos.endTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong>
                             </div>
                           </div>
                           <div style={{textAlign: 'right'}}>
@@ -5180,10 +5184,13 @@ export default function App() {
                               {pos.tier} {pos.isLP ? '(LP)' : '(DTGC)'}
                             </div>
                             <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px'}}>
-                              Staked: <strong>{formatNumber(pos.amount)}</strong> • APR: <strong>{pos.apr}%</strong>
+                              Staked: <strong>{formatNumber(pos.amount)}</strong> ({formatNumber(pos.amount * (livePrices.dtgc || 0), 2)} USD) • APR: <strong>{pos.apr}%</strong>
                             </div>
                             <div style={{fontSize: '0.8rem', color: isLocked ? '#FF6B6B' : '#4CAF50', marginTop: '4px'}}>
                               {isLocked ? `🔒 ${daysLeft} days remaining` : '✅ Unlocked - Ready to claim!'}
+                            </div>
+                            <div style={{fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', fontStyle: 'italic'}}>
+                              📅 EES Penalty Removed: <strong style={{color: isLocked ? '#FFB74D' : '#4CAF50'}}>{new Date(pos.endTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</strong>
                             </div>
                           </div>
                           <div style={{textAlign: 'right'}}>

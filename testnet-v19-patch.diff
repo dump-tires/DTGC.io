@@ -1,0 +1,204 @@
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index 7df3cd90..1309a01a 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -47,74 +47,74 @@ const DTGC_TOKENOMICS = {
+   lpLocked: 87000000,        // 8.7% - LP Locked
+ };
+ 
+-// V18 PROFITABLE FEE STRUCTURE (Reduced for positive staker ROI)
++// V19 SUSTAINABLE FEE STRUCTURE (7.5% total for long-term sustainability)
+ const V5_FEES = {
+-  // Entry Tax: 1.5% total (reduced from 5%)
++  // Entry Tax: 3.75% total
+   entry: {
+-    total: 1.5,
+-    daoTreasury: 0.75,       // 0.75% DAO Treasury
+-    dev: 0.25,               // 0.25% Dev
+-    autoLP_DTGC_URMOM: 0.25, // 0.25% Auto LP DTGC/URMOM
+-    autoLP_DTGC_PLS: 0.15,   // 0.15% DTGC/PLS
+-    burn: 0.10,              // 0.10% DTGC Burn
++    total: 3.75,
++    daoTreasury: 1.875,      // 1.875% DAO Treasury (rewards)
++    dev: 0.625,              // 0.625% Dev
++    autoLP_DTGC_URMOM: 0.5,  // 0.5% Auto LP DTGC/URMOM
++    autoLP_DTGC_PLS: 0.5,    // 0.5% DTGC/PLS
++    burn: 0.25,              // 0.25% DTGC Burn
+   },
+-  // Exit Tax: 1.5% total (same breakdown)
++  // Exit Tax: 3.75% total (same breakdown)
+   exit: {
+-    total: 1.5,
+-    daoTreasury: 0.75,
+-    dev: 0.25,
+-    autoLP_DTGC_URMOM: 0.25,
+-    autoLP_DTGC_PLS: 0.15,
+-    burn: 0.10,
++    total: 3.75,
++    daoTreasury: 1.875,
++    dev: 0.625,
++    autoLP_DTGC_URMOM: 0.5,
++    autoLP_DTGC_PLS: 0.5,
++    burn: 0.25,
+   },
+-  // EES (Emergency End Stake): 12% total (reduced from 20%)
++  // EES (Emergency End Stake): 20% total
+   ees: {
+-    total: 12,
+-    dev: 3,              // 3% Dev
+-    dao: 7,              // 7% DAO
+-    autoLP: 2,           // 2% Auto LP
++    total: 20,
++    dev: 5,              // 5% Dev
++    dao: 12,             // 12% DAO
++    autoLP: 3,           // 3% Auto LP
+   },
+ };
+ 
+-// V18 PROFITABLE STAKING TIERS (All tiers positive ROI with 3% total fees)
++// V19 SUSTAINABLE STAKING TIERS (APRs reduced 30% for sustainability with 7.5% fees)
+ const V5_STAKING_TIERS = [
+-  { 
+-    id: 0, 
+-    name: 'SILVER', 
+-    icon: '🥈', 
+-    minInvest: 200, 
+-    lockDays: 60,  // Extended from 30 to 60 days
+-    holdDays: 60, 
+-    apr: 22,       // Increased from 15%
+-    bonus: 10, 
++  {
++    id: 0,
++    name: 'SILVER',
++    icon: '🥈',
++    minInvest: 200,
++    lockDays: 60,
++    holdDays: 60,
++    apr: 15.4,     // Reduced 30% from 22%
++    bonus: 10,
+     boost: 1,
+     asset: 'DTGC',
+     color: '#C0C0C0',
+     gradient: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)'
+   },
+-  { 
+-    id: 1, 
+-    name: 'GOLD', 
+-    icon: '🥇', 
+-    minInvest: 500, 
+-    lockDays: 90, 
+-    holdDays: 90, 
+-    apr: 24,       // Increased from 18%
+-    bonus: 10, 
++  {
++    id: 1,
++    name: 'GOLD',
++    icon: '🥇',
++    minInvest: 500,
++    lockDays: 90,
++    holdDays: 90,
++    apr: 16.8,     // Reduced 30% from 24%
++    bonus: 10,
+     boost: 1,
+     asset: 'DTGC',
+     color: '#D4AF37',
+     gradient: 'linear-gradient(135deg, #FFF1A8 0%, #D4AF37 50%, #B8860B 100%)'
+   },
+-  { 
+-    id: 2, 
+-    name: 'WHALE', 
+-    icon: '🐋', 
+-    minInvest: 10000, 
+-    lockDays: 180, 
+-    holdDays: 180, 
+-    apr: 26,       // Increased from 18%
+-    bonus: 10, 
++  {
++    id: 2,
++    name: 'WHALE',
++    icon: '🐋',
++    minInvest: 10000,
++    lockDays: 180,
++    holdDays: 180,
++    apr: 18.2,     // Reduced 30% from 26%
++    bonus: 10,
+     boost: 1,
+     asset: 'DTGC',
+     color: '#4169E1',
+@@ -130,8 +130,8 @@ const V5_DIAMOND_TIER = {
+   minInvest: 1000,
+   lockDays: 90,
+   holdDays: 90,
+-  apr: 40,
+-  effectiveApr: 40 * 1.5, // 60% effective
++  apr: 28,                   // Reduced 30% from 40%
++  effectiveApr: 28 * 1.5,    // 42% effective
+   bonus: 12,
+   boost: 1.5,
+   isLP: true,
+@@ -148,8 +148,8 @@ const V5_DIAMOND_PLUS_TIER = {
+   minInvest: 1000,
+   lockDays: 90,
+   holdDays: 90,
+-  apr: 50,
+-  effectiveApr: 50 * 2, // 100% effective!
++  apr: 35,                   // Reduced 30% from 50%
++  effectiveApr: 35 * 2,      // 70% effective!
+   bonus: 15,
+   boost: 2,
+   isLP: true,
+@@ -158,15 +158,18 @@ const V5_DIAMOND_PLUS_TIER = {
+   gradient: 'linear-gradient(135deg, #E1BEE7 0%, #9C27B0 50%, #7B1FA2 100%)'
+ };
+ 
+-// V5 Dynamic APR (reduces as TVL grows)
+-const TVL_PHASES = [
+-  { maxTVL: 50000000, multiplier: 1.0, name: "Genesis" },
+-  { maxTVL: 100000000, multiplier: 0.85, name: "Early" },
+-  { maxTVL: 200000000, multiplier: 0.7, name: "Growth" },
+-  { maxTVL: 350000000, multiplier: 0.5, name: "Mature" },
+-  { maxTVL: 500000000, multiplier: 0.35, name: "Saturated" },
++// V19 Dynamic APR (reduces as Market Cap grows - sustainable scaling)
++const MARKET_CAP_PHASES = [
++  { maxMarketCap: 10000000, multiplier: 1.0, name: "Genesis", description: "Full APR - Early adopters" },
++  { maxMarketCap: 25000000, multiplier: 0.85, name: "Growth", description: "85% APR - Building momentum" },
++  { maxMarketCap: 50000000, multiplier: 0.70, name: "Expansion", description: "70% APR - Scaling up" },
++  { maxMarketCap: 100000000, multiplier: 0.50, name: "Mature", description: "50% APR - Sustainable growth" },
++  { maxMarketCap: Infinity, multiplier: 0.35, name: "Scaled", description: "35% APR - Long-term stability" },
+ ];
+ 
++// Legacy TVL_PHASES for backwards compatibility
++const TVL_PHASES = MARKET_CAP_PHASES;
++
+ // ═══════════════════════════════════════════════════════════════
+ //                    LIVE BURN DATA (ACCURATE FROM DEXSCREENER)
+ // ═══════════════════════════════════════════════════════════════
+@@ -4065,14 +4068,14 @@ export default function App() {
+ 
+                   <div className="fee-breakdown">
+                     <div className="fee-title">TAX STRUCTURE <span style={{ fontSize: '0.7rem', color: 'var(--gold)', cursor: 'pointer' }} onClick={() => setActiveTab('whitepaper')}>📄 Details</span></div>
+-                    <div className="fee-row"><span>Entry Tax</span><span style={{color: '#4CAF50'}}>1.5%</span></div>
+-                    <div className="fee-row"><span>Exit Tax</span><span style={{color: '#4CAF50'}}>1.5%</span></div>
+-                    <div className="fee-row"><span>EES (Emergency End Stake)</span><span style={{color: '#FF5722'}}>12%</span></div>
++                    <div className="fee-row"><span>Entry Tax</span><span style={{color: '#4CAF50'}}>3.75%</span></div>
++                    <div className="fee-row"><span>Exit Tax</span><span style={{color: '#4CAF50'}}>3.75%</span></div>
++                    <div className="fee-row"><span>EES (Emergency End Stake)</span><span style={{color: '#FF5722'}}>20%</span></div>
+                     <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
+-                      Entry/Exit: 0.75% DAO • 0.25% Dev • 0.25% DTGC/URMOM LP • 0.15% DTGC/PLS LP • 0.1% Burn
++                      Entry/Exit: 1.875% DAO • 0.625% Dev • 1% Auto LP • 0.25% Burn
+                     </div>
+                     <div style={{ fontSize: '0.6rem', color: '#4CAF50', marginTop: '4px', textAlign: 'center' }}>
+-                      ✓ All tiers profitable • Only 3% total fees
++                      ✓ Sustainable tokenomics • 7.5% total fees (SIMULATED)
+                     </div>
+                   </div>
+                 </div>
+@@ -4608,7 +4611,7 @@ export default function App() {
+                     <div style={{marginTop: '8px'}}>
+                       <strong style={{color: '#4CAF50'}}>Entry Tax (1.5%):</strong> 0.75% DAO • 0.25% Dev • 0.25% DTGC/URMOM LP • 0.15% DTGC/PLS LP • 0.1% Burn<br/><br/>
+                       <strong style={{color: '#4CAF50'}}>Exit Tax (1.5%):</strong> Same breakdown • <strong>Only 3% total fees!</strong><br/><br/>
+-                      <strong style={{color: '#FF5722'}}>EES - Emergency End Stake (12%):</strong> 7% DAO • 3% Dev • 2% Auto LP
++                      <strong style={{color: '#FF5722'}}>EES - Emergency End Stake (20%):</strong> 12% DAO • 5% Dev • 3% Auto LP
+                     </div>
+                   </div>
+                 </div>
