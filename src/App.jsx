@@ -2877,8 +2877,20 @@ export default function App() {
   // Analytics Calculator State
   const [calcInvestment, setCalcInvestment] = useState('1000');
   const [calcTier, setCalcTier] = useState('gold');
-  const [calcPrice, setCalcPrice] = useState('0.0002');
+  const [calcBuyPrice, setCalcBuyPrice] = useState('0.0002');
+  const [calcExitPrice, setCalcExitPrice] = useState('0.0003');
   const [calcTimeframe, setCalcTimeframe] = useState('12'); // months
+  const [calcPriceDrop, setCalcPriceDrop] = useState('50'); // VaR price drop %
+
+  // Live crypto prices state
+  const [cryptoPrices, setCryptoPrices] = useState({
+    btc: 42000,
+    eth: 2200,
+    pls: 0.00003,
+    plsx: 0.00002,
+    loading: true,
+    lastUpdated: null,
+  });
 
   // Wallet selector modal
   const [showWalletModal, setShowWalletModal] = useState(false);
@@ -2902,6 +2914,7 @@ export default function App() {
     JPY: 149.50,
     SAR: 3.75,    // Saudi Riyal
     CNY: 7.24,    // Chinese Yuan
+    CZK: 23.50,   // Czech Koruna
   };
 
   // Metal prices state (per troy ounce in USD)
@@ -3204,6 +3217,44 @@ export default function App() {
     const interval = setInterval(fetchLivePrices, 60000); // Refresh every 60s
     return () => clearInterval(interval);
   }, [fetchLivePrices]);
+
+  // Fetch crypto prices (BTC, ETH, PLS, PLSX)
+  const fetchCryptoPrices = useCallback(async () => {
+    try {
+      // Fetch from CoinGecko for BTC/ETH
+      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
+      const cgData = await cgRes.json();
+
+      // Fetch PLS from DexScreener (PLS/DAI pair)
+      const plsRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x6753560538eca67617a9ce605b2a2c5b3494b666');
+      const plsData = await plsRes.json();
+      const plsPair = plsData?.pair || plsData?.pairs?.[0];
+
+      // Fetch PLSX from DexScreener
+      const plsxRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9');
+      const plsxData = await plsxRes.json();
+      const plsxPair = plsxData?.pair || plsxData?.pairs?.[0];
+
+      setCryptoPrices({
+        btc: cgData?.bitcoin?.usd || 42000,
+        eth: cgData?.ethereum?.usd || 2200,
+        pls: parseFloat(plsPair?.priceUsd) || 0.00003,
+        plsx: parseFloat(plsxPair?.priceUsd) || 0.00002,
+        loading: false,
+        lastUpdated: new Date(),
+      });
+    } catch (err) {
+      console.warn('Failed to fetch crypto prices:', err.message);
+      setCryptoPrices(prev => ({ ...prev, loading: false }));
+    }
+  }, []);
+
+  // Fetch crypto prices on mount and every 2 minutes
+  useEffect(() => {
+    fetchCryptoPrices();
+    const interval = setInterval(fetchCryptoPrices, 120000);
+    return () => clearInterval(interval);
+  }, [fetchCryptoPrices]);
 
   // Manual refresh with toast notification
   const manualRefreshPrices = async () => {
@@ -3651,6 +3702,8 @@ export default function App() {
         return `﷼${(valueUsd * CURRENCY_RATES.SAR).toLocaleString('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       case 'cny':
         return `¥${(valueUsd * CURRENCY_RATES.CNY).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'czk':
+        return `Kč${(valueUsd * CURRENCY_RATES.CZK).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       default:
         return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
     }
@@ -3665,6 +3718,7 @@ export default function App() {
       case 'jpy': return { value: valueUsd * CURRENCY_RATES.JPY, symbol: '¥', code: 'JPY' };
       case 'sar': return { value: valueUsd * CURRENCY_RATES.SAR, symbol: '﷼', code: 'SAR' };
       case 'cny': return { value: valueUsd * CURRENCY_RATES.CNY, symbol: '¥', code: 'CNY' };
+      case 'czk': return { value: valueUsd * CURRENCY_RATES.CZK, symbol: 'Kč', code: 'CZK' };
       default: return { value: valueUsd, symbol: '$', code: 'USD' };
     }
   };
@@ -3677,6 +3731,7 @@ export default function App() {
       case 'jpy': return value / CURRENCY_RATES.JPY;
       case 'sar': return value / CURRENCY_RATES.SAR;
       case 'cny': return value / CURRENCY_RATES.CNY;
+      case 'czk': return value / CURRENCY_RATES.CZK;
       default: return value;
     }
   };
@@ -3690,13 +3745,14 @@ export default function App() {
       case 'jpy': return '¥';
       case 'sar': return '﷼';
       case 'cny': return '¥';
+      case 'czk': return 'Kč';
       default: return '$';
     }
   };
 
   // Toggle currency display
   const toggleCurrencyDisplay = () => {
-    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy', 'sar', 'cny'];
+    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy', 'sar', 'cny', 'czk'];
     const currentIndex = currencies.indexOf(displayCurrency);
     const nextCurrency = currencies[(currentIndex + 1) % currencies.length];
     setDisplayCurrency(nextCurrency);
@@ -4542,29 +4598,73 @@ export default function App() {
             </nav>
 
             <div className="nav-right">
-              {/* Metal Prices Display */}
+              {/* Metal Prices Display with Gold Bar Icons */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                marginRight: '12px',
+                gap: '10px',
+                marginRight: '8px',
                 padding: '6px 12px',
                 background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
                 borderRadius: '20px',
                 border: '1px solid rgba(212,175,55,0.3)',
                 fontSize: '0.7rem',
               }}>
-                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600 }}>
-                  🥇 ${metalPrices.gold.toLocaleString()}
+                <span title="Gold /oz" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '9px',
+                    background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #B8860B 100%)',
+                    borderRadius: '2px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                  }}></span>
+                  <span style={{ color: '#FFD700', fontWeight: 600 }}>${metalPrices.gold.toLocaleString()}</span>
                 </span>
-                <span style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
-                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600 }}>
-                  🥈 ${metalPrices.silver.toFixed(2)}
+                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                <span title="Silver /oz" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '9px',
+                    background: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)',
+                    borderRadius: '2px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                  }}></span>
+                  <span style={{ color: '#C0C0C0', fontWeight: 600 }}>${metalPrices.silver.toFixed(2)}</span>
                 </span>
-                <span style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
-                <span title="Copper /oz" style={{ color: '#B87333', fontWeight: 600 }}>
-                  🥉 ${metalPrices.copper.toFixed(2)}
+                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                <span title="Copper /lb" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '9px',
+                    background: 'linear-gradient(135deg, #CD7F32 0%, #B87333 50%, #8B4513 100%)',
+                    borderRadius: '2px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                  }}></span>
+                  <span style={{ color: '#CD7F32', fontWeight: 600 }}>${metalPrices.copper.toFixed(2)}</span>
                 </span>
+              </div>
+              {/* Crypto Prices */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginRight: '8px',
+                padding: '6px 10px',
+                background: 'rgba(33,150,243,0.08)',
+                borderRadius: '20px',
+                border: '1px solid rgba(33,150,243,0.2)',
+                fontSize: '0.65rem',
+              }}>
+                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{cryptoPrices.btc.toLocaleString()}</span>
+                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
+                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(6)}</span>
+                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(6)}</span>
               </div>
               {/* Security & Audit Button */}
               <button
@@ -4697,7 +4797,7 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
               >
-                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : displayCurrency === 'jpy' ? '💴 JPY' : displayCurrency === 'sar' ? '🇸🇦 SAR' : '🇨🇳 CNY'} ▼
+                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : displayCurrency === 'jpy' ? '💴 JPY' : displayCurrency === 'sar' ? '🇸🇦 SAR' : displayCurrency === 'cny' ? '🇨🇳 CNY' : '🇨🇿 CZK'} ▼
               </button>
 
               <div style={{
@@ -6306,6 +6406,32 @@ export default function App() {
               <div className="section-header">
                 <h2 className="section-title" style={{ color: '#2196F3' }}>📊 DYNAMIC PORTFOLIO ANALYTICS</h2>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '8px' }}>Institutional-Grade Hedging & Rebalancing Insights</p>
+                {/* Currency Selector for Analytics */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Display Currency:</span>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    style={{
+                      padding: '8px 16px',
+                      background: 'rgba(33,150,243,0.1)',
+                      border: '1px solid rgba(33,150,243,0.4)',
+                      borderRadius: '8px',
+                      color: '#2196F3',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    <option value="usd">🇺🇸 USD ($)</option>
+                    <option value="eur">🇪🇺 EUR (€)</option>
+                    <option value="gbp">🇬🇧 GBP (£)</option>
+                    <option value="jpy">🇯🇵 JPY (¥)</option>
+                    <option value="sar">🇸🇦 SAR (﷼)</option>
+                    <option value="cny">🇨🇳 CNY (¥)</option>
+                    <option value="czk">🇨🇿 CZK (Kč)</option>
+                  </select>
+                </div>
                 <div className="section-divider" style={{ background: 'linear-gradient(90deg, transparent, #2196F3, transparent)' }} />
               </div>
 
@@ -6588,26 +6714,37 @@ export default function App() {
                 </h3>
 
                 {/* Input Fields */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
                   <div>
-                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>Investment Amount ($)</label>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>Investment ($)</label>
                     <input
                       type="number"
                       value={calcInvestment}
                       onChange={(e) => setCalcInvestment(e.target.value)}
-                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
                       placeholder="1000"
                     />
                   </div>
                   <div>
-                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>DTGC Price ($)</label>
+                    <label style={{ color: '#4CAF50', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>📈 Price at BUY ($)</label>
                     <input
                       type="number"
                       step="0.0001"
-                      value={calcPrice}
-                      onChange={(e) => setCalcPrice(e.target.value)}
-                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                      value={calcBuyPrice}
+                      onChange={(e) => setCalcBuyPrice(e.target.value)}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.4)', borderRadius: '8px', color: '#4CAF50', fontSize: '1rem', boxSizing: 'border-box' }}
                       placeholder="0.0002"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: '#2196F3', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>📉 Price at EXIT ($)</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={calcExitPrice}
+                      onChange={(e) => setCalcExitPrice(e.target.value)}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(33,150,243,0.1)', border: '1px solid rgba(33,150,243,0.4)', borderRadius: '8px', color: '#2196F3', fontSize: '1rem', boxSizing: 'border-box' }}
+                      placeholder="0.0003"
                     />
                   </div>
                   <div>
@@ -6615,21 +6752,21 @@ export default function App() {
                     <select
                       value={calcTier}
                       onChange={(e) => setCalcTier(e.target.value)}
-                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
                     >
-                      <option value="silver">🥈 Silver (15.4% APR, 60 days)</option>
-                      <option value="gold">🥇 Gold (16.8% APR, 90 days)</option>
-                      <option value="whale">🐋 Whale (18.2% APR, 180 days)</option>
-                      <option value="diamond">💎 Diamond LP (42% eff, 90 days)</option>
-                      <option value="diamondplus">💎✨ Diamond+ LP (70% eff, 90 days)</option>
+                      <option value="silver">🥈 Silver (15.4% APR, 60d)</option>
+                      <option value="gold">🥇 Gold (16.8% APR, 90d)</option>
+                      <option value="whale">🐋 Whale (18.2% APR, 180d)</option>
+                      <option value="diamond">💎 Diamond LP (42% eff)</option>
+                      <option value="diamondplus">💎✨ Diamond+ LP (70% eff)</option>
                     </select>
                   </div>
                   <div>
-                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>Timeframe (Months)</label>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>Timeframe</label>
                     <select
                       value={calcTimeframe}
                       onChange={(e) => setCalcTimeframe(e.target.value)}
-                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
                     >
                       <option value="3">3 Months</option>
                       <option value="6">6 Months</option>
@@ -6640,10 +6777,29 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Price Change Indicator */}
+                {(() => {
+                  const buyP = parseFloat(calcBuyPrice) || 0.0002;
+                  const exitP = parseFloat(calcExitPrice) || 0.0003;
+                  const priceChange = ((exitP - buyP) / buyP * 100);
+                  return (
+                    <div style={{ marginBottom: '16px', padding: '10px 16px', background: priceChange >= 0 ? 'rgba(76,175,80,0.1)' : 'rgba(244,67,54,0.1)', borderRadius: '8px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Price Change:</span>
+                      <span style={{ color: priceChange >= 0 ? '#4CAF50' : '#F44336', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                        {priceChange >= 0 ? '📈' : '📉'} {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(1)}%
+                      </span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                        (${buyP.toFixed(6)} → ${exitP.toFixed(6)})
+                      </span>
+                    </div>
+                  );
+                })()}
+
                 {/* Results */}
                 {(() => {
                   const investment = parseFloat(calcInvestment) || 0;
-                  const price = parseFloat(calcPrice) || 0.0002;
+                  const buyPrice = parseFloat(calcBuyPrice) || 0.0002;
+                  const exitPrice = parseFloat(calcExitPrice) || 0.0003;
                   const months = parseInt(calcTimeframe) || 12;
                   const tierData = {
                     silver: { apr: 15.4, lock: 60, name: 'Silver', icon: '🥈' },
@@ -6656,14 +6812,18 @@ export default function App() {
                   const entryFee = 0.0375;
                   const exitFee = 0.0375;
                   const afterEntry = investment * (1 - entryFee);
-                  const tokens = afterEntry / price;
+                  const tokens = afterEntry / buyPrice;
                   const monthlyRate = tierData.apr / 100 / 12;
-                  const grossReturn = afterEntry * Math.pow(1 + monthlyRate, months);
-                  const rewards = grossReturn - afterEntry;
-                  const afterExit = grossReturn * (1 - exitFee);
-                  const netProfit = afterExit - investment;
-                  const netAPR = ((afterExit / investment) ** (12 / months) - 1) * 100;
+                  const rewardTokens = tokens * (Math.pow(1 + monthlyRate, months) - 1);
+                  const totalTokens = tokens + rewardTokens;
+                  const grossValueAtExit = totalTokens * exitPrice;
+                  const afterExitFee = grossValueAtExit * (1 - exitFee);
+                  const netProfit = afterExitFee - investment;
+                  const priceGain = (exitPrice - buyPrice) / buyPrice * 100;
+                  const rewardValue = rewardTokens * exitPrice; // $ value of rewards
+                  const netAPR = ((afterExitFee / investment) ** (12 / months) - 1) * 100;
                   const lockPeriods = Math.ceil(months * 30 / tierData.lock);
+                  const totalFees = investment * entryFee + grossValueAtExit * exitFee;
 
                   return (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
@@ -6674,12 +6834,12 @@ export default function App() {
                       </div>
                       <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Gross Rewards</div>
-                        <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>${rewards.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>${rewardValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Before exit fee</div>
                       </div>
                       <div style={{ background: 'rgba(76,175,80,0.2)', borderRadius: '12px', padding: '16px', textAlign: 'center', border: '2px solid rgba(76,175,80,0.5)' }}>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Final Value</div>
-                        <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>${afterExit.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>${afterExitFee.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
                         <div style={{ color: '#4CAF50', fontSize: '0.7rem' }}>+${netProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })} profit</div>
                       </div>
                       <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
@@ -6694,7 +6854,7 @@ export default function App() {
                       </div>
                       <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Total Fees Paid</div>
-                        <div style={{ color: '#F44336', fontSize: '1.4rem', fontWeight: 'bold' }}>${(investment * entryFee + grossReturn * exitFee).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div style={{ color: '#F44336', fontSize: '1.4rem', fontWeight: 'bold' }}>${totalFees.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Entry + Exit</div>
                       </div>
                     </div>
@@ -6779,42 +6939,141 @@ export default function App() {
                 </p>
               </div>
 
-              {/* VaR Analysis */}
-              <div style={{ 
-                background: 'rgba(244,67,54,0.05)', 
-                border: '2px solid rgba(244,67,54,0.3)', 
-                borderRadius: '16px', 
-                padding: '24px' 
+              {/* VaR Analysis - Enhanced with Education */}
+              <div style={{
+                background: 'rgba(244,67,54,0.05)',
+                border: '2px solid rgba(244,67,54,0.3)',
+                borderRadius: '16px',
+                padding: '24px'
               }}>
                 <h3 style={{ color: '#F44336', fontSize: '1.2rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   ⚠️ VALUE AT RISK (VaR) ANALYSIS
                 </h3>
-                
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
-                  Maximum expected loss at 95% confidence level for $10,000 investment over 12 months:
+
+                {/* VaR Education Box */}
+                <div style={{ background: 'rgba(33,150,243,0.1)', border: '1px solid rgba(33,150,243,0.3)', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+                  <h4 style={{ color: '#2196F3', fontSize: '0.95rem', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    📚 What is Value at Risk (VaR)?
+                  </h4>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: '1.6', marginBottom: '10px' }}>
+                    <strong style={{ color: '#fff' }}>VaR measures your potential maximum loss</strong> over a specific time period at a given confidence level.
+                    It answers: "What's the most I could lose in a worst-case scenario?"
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '12px' }}>
+                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                      <div style={{ color: '#F44336', fontWeight: 'bold', fontSize: '0.85rem' }}>Price Drop Risk</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>If DTGC price falls, your token value decreases</div>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                      <div style={{ color: '#FF9800', fontWeight: 'bold', fontSize: '0.85rem' }}>Fee Impact</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>7.5% total fees (entry + exit) reduce net returns</div>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
+                      <div style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: '0.85rem' }}>APR Buffer</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Staking rewards help offset price drops</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manual Price Drop Entry */}
+                <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', justifyContent: 'center' }}>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    If DTGC price drops by:
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="range"
+                      min="10"
+                      max="90"
+                      step="5"
+                      value={calcPriceDrop}
+                      onChange={(e) => setCalcPriceDrop(e.target.value)}
+                      style={{ width: '120px', accentColor: '#F44336' }}
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={calcPriceDrop}
+                      onChange={(e) => setCalcPriceDrop(e.target.value)}
+                      style={{ width: '60px', padding: '8px', background: 'rgba(244,67,54,0.2)', border: '1px solid rgba(244,67,54,0.5)', borderRadius: '6px', color: '#F44336', fontSize: '1rem', textAlign: 'center', fontWeight: 'bold' }}
+                    />
+                    <span style={{ color: '#F44336', fontWeight: 'bold', fontSize: '1.1rem' }}>%</span>
+                  </div>
+                </div>
+
+                {/* Dynamic VaR Calculations */}
+                {(() => {
+                  const investment = parseFloat(calcInvestment) || 1000;
+                  const priceDrop = parseFloat(calcPriceDrop) || 50;
+                  const entryFee = 0.0375;
+                  const exitFee = 0.0375;
+                  const months = parseInt(calcTimeframe) || 12;
+                  const tierAPR = {
+                    silver: 15.4, gold: 16.8, whale: 18.2, diamond: 42, diamondplus: 70
+                  }[calcTier] || 16.8;
+
+                  // After entry fee
+                  const afterEntry = investment * (1 - entryFee);
+
+                  // Rewards earned (as % of principal)
+                  const rewardsEarned = afterEntry * (tierAPR / 100) * (months / 12);
+
+                  // Total value before price drop (principal + rewards)
+                  const totalBeforeDrop = afterEntry + rewardsEarned;
+
+                  // Value after price drop
+                  const valueAfterDrop = totalBeforeDrop * (1 - priceDrop / 100);
+
+                  // After exit fee
+                  const finalValue = valueAfterDrop * (1 - exitFee);
+
+                  // Net loss
+                  const netLoss = finalValue - investment;
+                  const lossPercent = (netLoss / investment * 100);
+
+                  // Breakeven price drop (where you get back your initial investment)
+                  const breakeven = ((1 - investment / (totalBeforeDrop * (1 - exitFee))) * 100);
+
+                  return (
+                    <>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px', textAlign: 'center' }}>
+                        With <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>${investment.toLocaleString()}</span> invested at <span style={{ color: '#2196F3', fontWeight: 'bold' }}>{tierAPR}% APR</span> for <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>{months} months</span>:
+                      </p>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                        <div style={{ background: 'rgba(244,67,54,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>Value After {priceDrop}% Drop</div>
+                          <div style={{ color: '#F44336', fontSize: '1.8rem', fontWeight: 'bold' }}>${finalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                          <div style={{ color: '#F44336', fontSize: '0.85rem' }}>{lossPercent >= 0 ? '+' : ''}{lossPercent.toFixed(1)}% net</div>
+                        </div>
+                        <div style={{ background: 'rgba(255,152,0,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>Net Gain/Loss</div>
+                          <div style={{ color: netLoss >= 0 ? '#4CAF50' : '#F44336', fontSize: '1.8rem', fontWeight: 'bold' }}>{netLoss >= 0 ? '+' : ''}{netLoss.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>After all fees</div>
+                        </div>
+                        <div style={{ background: 'rgba(76,175,80,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center', border: '2px solid rgba(76,175,80,0.5)' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>Breakeven Price Drop</div>
+                          <div style={{ color: '#4CAF50', fontSize: '1.8rem', fontWeight: 'bold' }}>{breakeven > 0 ? breakeven.toFixed(1) : '0'}%</div>
+                          <div style={{ color: '#4CAF50', fontSize: '0.85rem' }}>APR offsets this much drop</div>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '20px', padding: '12px', background: netLoss >= 0 ? 'rgba(76,175,80,0.1)' : 'rgba(244,67,54,0.1)', borderRadius: '8px', textAlign: 'center' }}>
+                        <span style={{ color: netLoss >= 0 ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>
+                          {netLoss >= 0
+                            ? `✅ At ${priceDrop}% price drop, you still profit $${netLoss.toFixed(0)} thanks to ${tierAPR}% APR!`
+                            : `⚠️ At ${priceDrop}% price drop, you lose $${Math.abs(netLoss).toFixed(0)} even with ${tierAPR}% APR rewards`
+                          }
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '16px', textAlign: 'center', fontStyle: 'italic' }}>
+                  * VaR calculations assume all rewards are reinvested. Actual results depend on market conditions and when you exit.
                 </p>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                  <div style={{ background: 'rgba(244,67,54,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>Unhedged (Single Only)</div>
-                    <div style={{ color: '#F44336', fontSize: '1.8rem', fontWeight: 'bold' }}>-$8,700</div>
-                    <div style={{ color: '#F44336', fontSize: '0.85rem' }}>(-87%)</div>
-                  </div>
-                  <div style={{ background: 'rgba(255,152,0,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>Partially Hedged (60/40)</div>
-                    <div style={{ color: '#FF9800', fontSize: '1.8rem', fontWeight: 'bold' }}>-$5,200</div>
-                    <div style={{ color: '#FF9800', fontSize: '0.85rem' }}>(-52%)</div>
-                  </div>
-                  <div style={{ background: 'rgba(76,175,80,0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center', border: '2px solid rgba(76,175,80,0.5)' }}>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>Optimal Hedge (40/30/30)</div>
-                    <div style={{ color: '#4CAF50', fontSize: '1.8rem', fontWeight: 'bold' }}>-$3,500</div>
-                    <div style={{ color: '#4CAF50', fontSize: '0.85rem' }}>(-35%) ✓ Best</div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: '20px', padding: '12px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px', textAlign: 'center' }}>
-                  <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>🛡️ Dynamic hedging reduces worst-case loss by 60% (from -87% to -35%)</span>
-                </div>
               </div>
 
             </section>
