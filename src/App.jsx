@@ -2948,6 +2948,7 @@ export default function App() {
   const [urmomBalance, setUrmomBalance] = useState('0');
   const [selectedTier, setSelectedTier] = useState(null);
   const [stakeAmount, setStakeAmount] = useState('');
+  const [stakeInputMode, setStakeInputMode] = useState('tokens'); // 'tokens' or 'currency'
   const [isLP, setIsLP] = useState(false);
 
   // Wallet selector modal
@@ -3609,14 +3610,28 @@ export default function App() {
 
   const handleStake = async () => {
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) return;
-    
-    const amount = parseFloat(stakeAmount);
+
+    // Convert currency to tokens if in currency mode
+    let amount = parseFloat(stakeAmount);
+    if (stakeInputMode === 'currency') {
+      const priceUsd = livePrices.dtgc || 0;
+      if (priceUsd <= 0) {
+        showToast('Unable to get token price. Please try again.', 'error');
+        return;
+      }
+      // Convert currency to USD first, then to tokens
+      const valueUsd = displayCurrency === 'eur' ? amount / CURRENCY_RATES.EUR :
+                      displayCurrency === 'gbp' ? amount / CURRENCY_RATES.GBP :
+                      displayCurrency === 'jpy' ? amount / CURRENCY_RATES.JPY : amount;
+      amount = valueUsd / priceUsd;
+    }
+
     const tierData = selectedTier === 4 ? V5_DIAMOND_PLUS_TIER : (selectedTier === 3 ? V5_DIAMOND_TIER : V5_STAKING_TIERS[selectedTier]);
-    
+
     // TESTNET MODE - Simulate staking
     if (TESTNET_MODE) {
       const balance = isLP ? parseFloat(lpBalance) : parseFloat(dtgcBalance);
-      
+
       if (amount > balance) {
         showToast(`Insufficient ${isLP ? 'LP' : 'DTGC'} balance!`, 'error');
         return;
@@ -3669,6 +3684,7 @@ export default function App() {
       setLoading(false);
       setModalType('end');
       setStakeAmount('');
+      setStakeInputMode('tokens');
       showToast(`✅ Staked ${formatNumber(stakedAmount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name} tier!`, 'success');
       return;
     }
@@ -3726,6 +3742,7 @@ export default function App() {
       setLoading(false);
       setModalType('end');
       setStakeAmount('');
+      setStakeInputMode('tokens');
       showToast(`✅ Successfully staked ${formatNumber(amount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name} tier!`, 'success');
 
       // Refresh balances
@@ -4978,24 +4995,118 @@ export default function App() {
                   <div className="input-group">
                     <div className="input-header">
                       <span className="input-label">Amount</span>
-                      <span className="balance-display" onClick={() => setStakeAmount(isLP ? lpBalance : dtgcBalance)} style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px'}}>
+                      <span className="balance-display" onClick={() => {
+                        if (stakeInputMode === 'tokens') {
+                          setStakeAmount(isLP ? lpBalance : dtgcBalance);
+                        } else {
+                          // Set max in currency value
+                          const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
+                          const priceUsd = livePrices.dtgc || 0;
+                          const valueUsd = maxTokens * priceUsd;
+                          const currencyValue = displayCurrency === 'eur' ? valueUsd * CURRENCY_RATES.EUR :
+                                               displayCurrency === 'gbp' ? valueUsd * CURRENCY_RATES.GBP :
+                                               displayCurrency === 'jpy' ? valueUsd * CURRENCY_RATES.JPY : valueUsd;
+                          setStakeAmount(currencyValue.toFixed(2));
+                        }
+                      }} style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px'}}>
                         <span>Balance: {formatNumber(parseFloat(isLP ? lpBalance : dtgcBalance))} {isLP ? 'LP' : 'DTGC'}</span>
                         <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ ${formatNumber((parseFloat(isLP ? lpBalance : dtgcBalance) || 0) * (livePrices.dtgc || 0))} USD</span>
                       </span>
                     </div>
                     <div className="input-container">
-                      <input
-                        type="number"
-                        className="stake-input"
-                        placeholder="0.00"
-                        value={stakeAmount}
-                        onChange={(e) => setStakeAmount(e.target.value)}
-                      />
+                      <div style={{position: 'relative', flex: 1, display: 'flex', alignItems: 'center'}}>
+                        {stakeInputMode === 'currency' && (
+                          <span style={{position: 'absolute', left: '12px', color: 'var(--gold)', fontWeight: 700, fontSize: '1.1rem'}}>
+                            {displayCurrency === 'usd' ? '$' : displayCurrency === 'eur' ? '€' : displayCurrency === 'gbp' ? '£' : displayCurrency === 'jpy' ? '¥' : '$'}
+                          </span>
+                        )}
+                        <input
+                          type="number"
+                          className="stake-input"
+                          placeholder="0.00"
+                          value={stakeAmount}
+                          onChange={(e) => setStakeAmount(e.target.value)}
+                          style={stakeInputMode === 'currency' ? {paddingLeft: '32px'} : {}}
+                        />
+                      </div>
                       <div className="input-suffix">
-                        <span className="token-badge">{isLP ? 'LP' : 'DTGC'}</span>
-                        <button className="max-btn" onClick={() => setStakeAmount(isLP ? lpBalance : dtgcBalance)}>MAX</button>
+                        <button
+                          onClick={() => {
+                            const newMode = stakeInputMode === 'tokens' ? 'currency' : 'tokens';
+                            // Convert current value when switching
+                            if (stakeAmount && parseFloat(stakeAmount) > 0) {
+                              const priceUsd = livePrices.dtgc || 0;
+                              if (newMode === 'currency' && priceUsd > 0) {
+                                // Converting from tokens to currency
+                                const tokens = parseFloat(stakeAmount);
+                                const valueUsd = tokens * priceUsd;
+                                const currencyValue = displayCurrency === 'eur' ? valueUsd * CURRENCY_RATES.EUR :
+                                                     displayCurrency === 'gbp' ? valueUsd * CURRENCY_RATES.GBP :
+                                                     displayCurrency === 'jpy' ? valueUsd * CURRENCY_RATES.JPY : valueUsd;
+                                setStakeAmount(currencyValue.toFixed(2));
+                              } else if (newMode === 'tokens' && priceUsd > 0) {
+                                // Converting from currency to tokens
+                                const currencyVal = parseFloat(stakeAmount);
+                                const valueUsd = displayCurrency === 'eur' ? currencyVal / CURRENCY_RATES.EUR :
+                                                displayCurrency === 'gbp' ? currencyVal / CURRENCY_RATES.GBP :
+                                                displayCurrency === 'jpy' ? currencyVal / CURRENCY_RATES.JPY : currencyVal;
+                                const tokens = valueUsd / priceUsd;
+                                setStakeAmount(tokens.toFixed(2));
+                              }
+                            }
+                            setStakeInputMode(newMode);
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            background: stakeInputMode === 'currency' ? 'linear-gradient(135deg, #4CAF50, #8BC34A)' : 'rgba(212,175,55,0.3)',
+                            border: '1px solid var(--gold)',
+                            borderRadius: '8px',
+                            color: '#FFF',
+                            fontWeight: 700,
+                            fontSize: '0.7rem',
+                            cursor: 'pointer',
+                            marginRight: '6px',
+                            transition: 'all 0.2s ease',
+                          }}
+                          title={stakeInputMode === 'tokens' ? 'Switch to currency input' : 'Switch to token input'}
+                        >
+                          {stakeInputMode === 'tokens' ? (isLP ? 'LP' : 'DTGC') : (displayCurrency === 'usd' ? 'USD' : displayCurrency === 'eur' ? 'EUR' : displayCurrency === 'gbp' ? 'GBP' : displayCurrency === 'jpy' ? 'JPY' : 'USD')}
+                        </button>
+                        <button className="max-btn" onClick={() => {
+                          if (stakeInputMode === 'tokens') {
+                            setStakeAmount(isLP ? lpBalance : dtgcBalance);
+                          } else {
+                            const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
+                            const priceUsd = livePrices.dtgc || 0;
+                            const valueUsd = maxTokens * priceUsd;
+                            const currencyValue = displayCurrency === 'eur' ? valueUsd * CURRENCY_RATES.EUR :
+                                                 displayCurrency === 'gbp' ? valueUsd * CURRENCY_RATES.GBP :
+                                                 displayCurrency === 'jpy' ? valueUsd * CURRENCY_RATES.JPY : valueUsd;
+                            setStakeAmount(currencyValue.toFixed(2));
+                          }
+                        }}>MAX</button>
                       </div>
                     </div>
+                    {/* Show conversion when in currency mode */}
+                    {stakeInputMode === 'currency' && stakeAmount && parseFloat(stakeAmount) > 0 && (
+                      <div style={{fontSize: '0.8rem', color: 'var(--gold)', marginTop: '8px', textAlign: 'right'}}>
+                        ≈ {formatNumber((() => {
+                          const currencyVal = parseFloat(stakeAmount) || 0;
+                          const priceUsd = livePrices.dtgc || 0;
+                          if (priceUsd <= 0) return 0;
+                          const valueUsd = displayCurrency === 'eur' ? currencyVal / CURRENCY_RATES.EUR :
+                                          displayCurrency === 'gbp' ? currencyVal / CURRENCY_RATES.GBP :
+                                          displayCurrency === 'jpy' ? currencyVal / CURRENCY_RATES.JPY : currencyVal;
+                          return valueUsd / priceUsd;
+                        })())} {isLP ? 'LP' : 'DTGC'} tokens
+                      </div>
+                    )}
+                    {/* Show USD value when in token mode */}
+                    {stakeInputMode === 'tokens' && stakeAmount && parseFloat(stakeAmount) > 0 && (
+                      <div style={{fontSize: '0.8rem', color: '#4CAF50', marginTop: '8px', textAlign: 'right'}}>
+                        ≈ ${formatNumber((parseFloat(stakeAmount) || 0) * (livePrices.dtgc || 0))} USD
+                      </div>
+                    )}
                   </div>
 
                   <button
