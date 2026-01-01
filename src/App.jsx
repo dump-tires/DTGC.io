@@ -4329,10 +4329,10 @@ export default function App() {
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Rewards</span>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4CAF50' }}>
-                          +{formatNumber(currentRewards)}
+                          +{formatNumber(currentRewards)} DTGC
                         </div>
                         <div style={{ fontSize: '0.6rem', color: '#4CAF50', opacity: 0.8 }}>
-                          {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValueUsd).value)}
+                          ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValueUsd).value)}
                         </div>
                       </div>
                     </div>
@@ -4608,20 +4608,20 @@ export default function App() {
                 border: '1px solid rgba(212,175,55,0.3)',
               }}>
                 <div style={{textAlign: 'center', padding: '10px 20px'}}>
-                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#E1BEE7'}}>{formatBalanceWithCurrency(plsBalance, 'pls')}</div>
-                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>PLS</div>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#E1BEE7'}}>{formatNumber(parseFloat(plsBalance))} PLS</div>
+                  <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(plsBalance) * 0.00003).value)}</div>
                 </div>
                 <div style={{textAlign: 'center', padding: '10px 20px'}}>
-                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FFD700'}}>{formatBalanceWithCurrency(dtgcBalance, 'dtgc')}</div>
-                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>DTGC</div>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FFD700'}}>{formatNumber(parseFloat(dtgcBalance))} DTGC</div>
+                  <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(dtgcBalance) * (livePrices.dtgc || 0)).value)}</div>
                 </div>
                 <div style={{textAlign: 'center', padding: '10px 20px'}}>
-                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FF9800'}}>{formatBalanceWithCurrency(urmomBalance, 'urmom')}</div>
-                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>URMOM</div>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FF9800'}}>{formatNumber(parseFloat(urmomBalance))} URMOM</div>
+                  <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(urmomBalance) * (livePrices.urmom || 0)).value)}</div>
                 </div>
                 <div style={{textAlign: 'center', padding: '10px 20px'}}>
-                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#00BCD4'}}>{formatBalanceWithCurrency(lpBalance, 'lp')}</div>
-                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>LP</div>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#00BCD4'}}>{formatNumber(parseFloat(lpBalance))} LP</div>
+                  <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
                 </div>
               </div>
             </div>
@@ -5390,7 +5390,10 @@ export default function App() {
                               {pos.isLP ? '💎 DIAMOND LP' : '🥇 DTGC STAKE'}
                             </div>
                             <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px'}}>
-                              Staked: <strong>{formatBalanceWithCurrency(pos.amount, pos.isLP ? 'lp' : 'dtgc')}</strong>
+                              Staked: <strong>{formatNumber(pos.amount)} {pos.isLP ? 'LP' : 'DTGC'}</strong>
+                              <span style={{fontSize: '0.75rem', color: '#4CAF50', marginLeft: '6px'}}>
+                                ({getCurrencySymbol()}{formatNumber(convertToCurrency(pos.amount * (livePrices.dtgc || 0) * (pos.isLP ? 2 : 1)).value)})
+                              </span>
                             </div>
                             <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px'}}>
                               APR: <strong>{effectiveApr.toFixed(1)}%</strong> {pos.boostMultiplier > 1 && `(${pos.boostMultiplier}x boost)`}
@@ -5405,10 +5408,10 @@ export default function App() {
                           <div style={{textAlign: 'right'}}>
                             <div style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>Rewards Accrued</div>
                             <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50'}}>
-                              +{formatBalanceWithCurrency(currentRewards, 'dtgc')}
+                              +{formatNumber(currentRewards)} DTGC
                             </div>
-                            <div style={{fontSize: '0.7rem', color: '#4CAF50', opacity: 0.8, marginTop: '2px'}}>
-                              Growing in real-time
+                            <div style={{fontSize: '0.75rem', color: '#4CAF50', opacity: 0.9}}>
+                              ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValue).value)}
                             </div>
                             <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end'}}>
                               {isLocked ? (
@@ -5510,7 +5513,13 @@ export default function App() {
                               {pos.tier} {pos.isLP ? '(LP)' : '(DTGC)'}
                             </div>
                             <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px'}}>
-                              Staked: <strong>{formatNumber(pos.amount)}</strong> ({formatNumber(pos.amount * (livePrices.dtgc || 0), 2)} USD) • APR: <strong>{pos.apr}%</strong>
+                              Staked: <strong>{formatNumber(pos.amount)} {pos.isLP ? 'LP' : 'DTGC'}</strong>
+                              <span style={{fontSize: '0.75rem', color: '#4CAF50', marginLeft: '6px'}}>
+                                ({getCurrencySymbol()}{formatNumber(convertToCurrency(pos.amount * (livePrices.dtgc || 0) * (pos.isLP ? 2 : 1)).value)})
+                              </span>
+                            </div>
+                            <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px'}}>
+                              APR: <strong>{pos.apr}%</strong>
                             </div>
                             <div style={{fontSize: '0.8rem', color: isLocked ? '#FF6B6B' : '#4CAF50', marginTop: '4px'}}>
                               {isLocked ? `🔒 ${daysLeft} days remaining` : '✅ Unlocked - Ready to claim!'}
@@ -5522,7 +5531,7 @@ export default function App() {
                           <div style={{textAlign: 'right'}}>
                             <div style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>Rewards Earned</div>
                             <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50'}}>+{formatNumber(currentRewards)} {pos.isLP ? 'LP' : 'DTGC'}</div>
-                            <div style={{fontSize: '0.85rem', color: '#4CAF50', opacity: 0.8}}>≈ ${formatNumber(currentRewards * livePrices.dtgc)}</div>
+                            <div style={{fontSize: '0.85rem', color: '#4CAF50', opacity: 0.8}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(currentRewards * (livePrices.dtgc || 0)).value)}</div>
                             <button
                               onClick={() => handleUnstake(pos.id)}
                               style={{
