@@ -3393,45 +3393,300 @@ export default function App() {
       showToast(`✅ Staked ${formatNumber(stakedAmount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name} tier!`, 'success');
       return;
     }
-    
-    // MAINNET - Real staking (implement later)
-    setModalType('start');
-    setModalOpen(true);
-    showToast('Mainnet staking coming soon!', 'info');
+
+    // MAINNET - Real staking
+    if (!signer || !account) {
+      showToast('Please connect your wallet first', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setModalType('start');
+      setModalOpen(true);
+
+      const amountWei = ethers.parseEther(amount.toString());
+
+      // Determine which token and contract to use
+      const tokenAddress = isLP ? CONTRACTS.LP_TOKEN : CONTRACTS.DTGC;
+      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
+      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+
+      // Step 1: Check and approve token spending
+      showToast('Step 1/2: Approving tokens...', 'info');
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+
+      const currentAllowance = await tokenContract.allowance(account, stakingAddress);
+      if (currentAllowance < amountWei) {
+        const approveTx = await tokenContract.approve(stakingAddress, ethers.MaxUint256);
+        await approveTx.wait();
+        showToast('Token approval confirmed!', 'success');
+      }
+
+      // Step 2: Stake tokens
+      showToast('Step 2/2: Staking tokens...', 'info');
+      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+
+      let stakeTx;
+      if (isLP) {
+        // LP Staking - just amount
+        stakeTx = await stakingContract.stake(amountWei);
+      } else {
+        // Regular Staking - amount and tier
+        stakeTx = await stakingContract.stake(amountWei, selectedTier);
+      }
+
+      await stakeTx.wait();
+
+      // Show stake video if enabled
+      if (VIDEOS_ENABLED) {
+        setStakingTierName(tierData.name);
+        setShowStakeVideo(true);
+      }
+
+      setLoading(false);
+      setModalType('end');
+      setStakeAmount('');
+      showToast(`✅ Successfully staked ${formatNumber(amount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name} tier!`, 'success');
+
+      // Refresh balances
+      const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+      const dtgcBal = await dtgcContract.balanceOf(account);
+      setDtgcBalance(ethers.formatEther(dtgcBal));
+
+      if (isLP) {
+        const lpContract = new ethers.Contract(CONTRACTS.LP_TOKEN, ERC20_ABI, provider);
+        const lpBal = await lpContract.balanceOf(account);
+        setLpBalance(ethers.formatEther(lpBal));
+      }
+
+    } catch (err) {
+      console.error('Staking error:', err);
+      setLoading(false);
+      setModalOpen(false);
+
+      if (err.code === 'ACTION_REJECTED') {
+        showToast('Transaction rejected by user', 'error');
+      } else if (err.message?.includes('insufficient')) {
+        showToast('Insufficient balance for transaction', 'error');
+      } else {
+        showToast(`Staking failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      }
+    }
   };
 
-  // Unstake function for testnet
+  // Unstake function
   const handleUnstake = async (positionId) => {
-    if (!TESTNET_MODE) return;
-    
-    const position = testnetBalances.positions.find(p => p.id === positionId);
-    if (!position) return;
-    
-    const now = Date.now();
-    const isEarly = now < position.endTime;
-    
-    // Calculate penalty if early
-    const penalty = isEarly ? position.amount * 0.20 : position.amount * 0.05;
-    const returnAmount = position.amount - penalty;
-    
-    // Calculate rewards (simplified: APR / 365 * days staked)
-    const daysStaked = (now - position.startTime) / (24 * 60 * 60 * 1000);
-    const rewards = (position.amount * (position.apr / 100) / 365) * daysStaked;
-    
-    const newBalances = {
-      ...testnetBalances,
-      dtgc: position.isLP ? testnetBalances.dtgc + rewards : testnetBalances.dtgc + returnAmount + rewards,
-      lp: position.isLP ? testnetBalances.lp + returnAmount : testnetBalances.lp,
-      stakedDTGC: position.isLP ? testnetBalances.stakedDTGC : testnetBalances.stakedDTGC - position.amount,
-      stakedLP: position.isLP ? testnetBalances.stakedLP - position.amount : testnetBalances.stakedLP,
-      positions: testnetBalances.positions.filter(p => p.id !== positionId),
-    };
-    
-    setTestnetBalances(newBalances);
-    localStorage.setItem('dtgc-testnet-balances', JSON.stringify(newBalances));
-    
-    showToast(`✅ Unstaked! Received ${formatNumber(returnAmount)} + ${formatNumber(rewards)} rewards${isEarly ? ' (12% early exit fee)' : ''}`, 'success');
+    // TESTNET MODE
+    if (TESTNET_MODE) {
+      const position = testnetBalances.positions.find(p => p.id === positionId);
+      if (!position) return;
+
+      const now = Date.now();
+      const isEarly = now < position.endTime;
+
+      // Calculate penalty if early
+      const penalty = isEarly ? position.amount * 0.20 : position.amount * 0.05;
+      const returnAmount = position.amount - penalty;
+
+      // Calculate rewards (simplified: APR / 365 * days staked)
+      const daysStaked = (now - position.startTime) / (24 * 60 * 60 * 1000);
+      const rewards = (position.amount * (position.apr / 100) / 365) * daysStaked;
+
+      const newBalances = {
+        ...testnetBalances,
+        dtgc: position.isLP ? testnetBalances.dtgc + rewards : testnetBalances.dtgc + returnAmount + rewards,
+        lp: position.isLP ? testnetBalances.lp + returnAmount : testnetBalances.lp,
+        stakedDTGC: position.isLP ? testnetBalances.stakedDTGC : testnetBalances.stakedDTGC - position.amount,
+        stakedLP: position.isLP ? testnetBalances.stakedLP - position.amount : testnetBalances.stakedLP,
+        positions: testnetBalances.positions.filter(p => p.id !== positionId),
+      };
+
+      setTestnetBalances(newBalances);
+      localStorage.setItem('dtgc-testnet-balances', JSON.stringify(newBalances));
+
+      showToast(`✅ Unstaked! Received ${formatNumber(returnAmount)} + ${formatNumber(rewards)} rewards${isEarly ? ' (12% early exit fee)' : ''}`, 'success');
+      return;
+    }
+
+    // MAINNET - Real unstaking
+    if (!signer || !account) {
+      showToast('Please connect your wallet first', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('Processing withdrawal...', 'info');
+
+      // Determine if this is LP or regular staking based on positionId
+      // For now, use regular staking contract - can be enhanced with position tracking
+      const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, signer);
+
+      const tx = await stakingContract.withdraw();
+      await tx.wait();
+
+      setLoading(false);
+      showToast('✅ Successfully withdrawn!', 'success');
+
+      // Refresh balances
+      const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+      const dtgcBal = await dtgcContract.balanceOf(account);
+      setDtgcBalance(ethers.formatEther(dtgcBal));
+
+    } catch (err) {
+      console.error('Unstake error:', err);
+      setLoading(false);
+
+      if (err.code === 'ACTION_REJECTED') {
+        showToast('Transaction rejected by user', 'error');
+      } else if (err.message?.includes('locked')) {
+        showToast('Position is still locked! Use Emergency Withdraw (20% fee)', 'error');
+      } else {
+        showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      }
+    }
   };
+
+  // Emergency withdraw (early exit with penalty)
+  const handleEmergencyWithdraw = async (isLP = false) => {
+    if (!signer || !account) {
+      showToast('Please connect your wallet first', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('Processing emergency withdrawal (20% fee)...', 'info');
+
+      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
+      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+
+      const tx = await stakingContract.emergencyWithdraw();
+      await tx.wait();
+
+      setLoading(false);
+      showToast('✅ Emergency withdrawal complete (20% fee applied)', 'success');
+
+      // Refresh balances
+      const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+      const dtgcBal = await dtgcContract.balanceOf(account);
+      setDtgcBalance(ethers.formatEther(dtgcBal));
+
+    } catch (err) {
+      console.error('Emergency withdraw error:', err);
+      setLoading(false);
+      showToast(`Emergency withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+    }
+  };
+
+  // Claim rewards function
+  const handleClaimRewards = async (isLP = false) => {
+    if (!signer || !account) {
+      showToast('Please connect your wallet first', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('Claiming rewards...', 'info');
+
+      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
+      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+
+      const tx = await stakingContract.claimRewards();
+      await tx.wait();
+
+      setLoading(false);
+      showToast('✅ Rewards claimed successfully!', 'success');
+
+      // Refresh DTGC balance
+      const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+      const dtgcBal = await dtgcContract.balanceOf(account);
+      setDtgcBalance(ethers.formatEther(dtgcBal));
+
+    } catch (err) {
+      console.error('Claim rewards error:', err);
+      setLoading(false);
+
+      if (err.code === 'ACTION_REJECTED') {
+        showToast('Transaction rejected by user', 'error');
+      } else if (err.message?.includes('no rewards')) {
+        showToast('No rewards to claim yet', 'info');
+      } else {
+        showToast(`Claim failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      }
+    }
+  };
+
+  // Fetch user's staked position from contract
+  const fetchStakedPosition = useCallback(async () => {
+    if (TESTNET_MODE || !account || !provider) return;
+
+    try {
+      // Fetch regular staking position
+      const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, provider);
+      const position = await stakingContract.getPosition(account);
+
+      // Fetch LP staking position
+      const lpStakingContract = new ethers.Contract(CONTRACTS.LP_STAKING_V2, LP_STAKING_V2_ABI, provider);
+      const lpPosition = await lpStakingContract.getPosition(account);
+
+      const positions = [];
+
+      // Parse regular staking position
+      if (position && position[6]) { // isActive
+        positions.push({
+          id: 'dtgc-stake',
+          type: 'DTGC',
+          isLP: false,
+          amount: parseFloat(ethers.formatEther(position[0])),
+          startTime: Number(position[1]) * 1000,
+          endTime: Number(position[2]) * 1000,
+          lockPeriod: Number(position[3]),
+          apr: Number(position[4]) / 100, // Convert from bps
+          bonus: parseFloat(ethers.formatEther(position[5])),
+          isActive: position[6],
+          timeRemaining: Number(position[7]),
+        });
+      }
+
+      // Parse LP staking position
+      if (lpPosition && lpPosition[6]) { // isActive
+        positions.push({
+          id: 'lp-stake',
+          type: 'LP',
+          isLP: true,
+          amount: parseFloat(ethers.formatEther(lpPosition[0])),
+          startTime: Number(lpPosition[1]) * 1000,
+          endTime: Number(lpPosition[2]) * 1000,
+          pendingReward: parseFloat(ethers.formatEther(lpPosition[3])),
+          pendingBonus: parseFloat(ethers.formatEther(lpPosition[4])),
+          boostMultiplier: Number(lpPosition[5]) / 100,
+          isActive: lpPosition[6],
+          timeRemaining: Number(lpPosition[7]),
+        });
+      }
+
+      setStakedPositions(positions);
+      console.log('📊 Staked positions loaded:', positions);
+
+    } catch (err) {
+      console.warn('Failed to fetch staked positions:', err.message);
+    }
+  }, [account, provider]);
+
+  // Fetch staked positions when account connects
+  useEffect(() => {
+    if (!TESTNET_MODE && account && provider) {
+      fetchStakedPosition();
+      // Refresh every 60 seconds
+      const interval = setInterval(fetchStakedPosition, 60000);
+      return () => clearInterval(interval);
+    }
+  }, [account, provider, fetchStakedPosition]);
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
