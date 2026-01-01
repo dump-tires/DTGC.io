@@ -2787,83 +2787,6 @@ export default function App() {
     }
   };
 
-  // Password Gate Screen
-  if (PASSWORD_ENABLED && !isAuthenticated) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'Arial, sans-serif',
-      }}>
-        <div style={{
-          background: 'rgba(26,35,39,0.95)',
-          border: '2px solid #D4AF37',
-          borderRadius: '20px',
-          padding: '40px',
-          maxWidth: '400px',
-          width: '90%',
-          textAlign: 'center',
-          boxShadow: '0 20px 60px rgba(212,175,55,0.2)',
-        }}>
-          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🔐</div>
-          <h1 style={{ color: '#D4AF37', fontSize: '1.8rem', marginBottom: '10px', fontWeight: 800 }}>
-            DT GOLD COIN
-          </h1>
-          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '30px', letterSpacing: '1px' }}>
-            MAINNET PREVIEW • RESTRICTED ACCESS
-          </p>
-          <form onSubmit={handlePasswordSubmit}>
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              placeholder="Enter password"
-              style={{
-                width: '100%',
-                padding: '15px 20px',
-                fontSize: '1rem',
-                background: 'rgba(0,0,0,0.5)',
-                border: passwordError ? '2px solid #F44336' : '2px solid rgba(212,175,55,0.3)',
-                borderRadius: '10px',
-                color: '#fff',
-                marginBottom: '15px',
-                outline: 'none',
-                textAlign: 'center',
-                letterSpacing: '3px',
-                boxSizing: 'border-box',
-              }}
-              autoFocus
-            />
-            {passwordError && (
-              <p style={{ color: '#F44336', fontSize: '0.85rem', marginBottom: '15px' }}>
-                ❌ Incorrect password
-              </p>
-            )}
-            <button type="submit" style={{
-              width: '100%',
-              padding: '15px 30px',
-              fontSize: '1rem',
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #D4AF37 0%, #F4D03F 100%)',
-              border: 'none',
-              borderRadius: '10px',
-              color: '#000',
-              cursor: 'pointer',
-            }}>
-              ENTER SITE
-            </button>
-          </form>
-          <p style={{ color: '#555', fontSize: '0.7rem', marginTop: '30px', letterSpacing: '1px' }}>
-            A dtgc.io contract on PulseChain
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('dtgc-theme') === 'dark';
@@ -2898,7 +2821,7 @@ export default function App() {
 
   // Intro video overlay (shows once per session)
   const [showIntro, setShowIntro] = useState(false); // Intro video disabled
-  
+
   const handleIntroComplete = () => {
     setShowIntro(false);
     if (typeof window !== 'undefined') {
@@ -3035,6 +2958,83 @@ export default function App() {
     circulating: SUPPLY_WALLETS.circulating.expected,
     lastUpdated: null,
   });
+
+  // Password Gate Screen
+  if (PASSWORD_ENABLED && !isAuthenticated) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'Arial, sans-serif',
+      }}>
+        <div style={{
+          background: 'rgba(26,35,39,0.95)',
+          border: '2px solid #D4AF37',
+          borderRadius: '20px',
+          padding: '40px',
+          maxWidth: '400px',
+          width: '90%',
+          textAlign: 'center',
+          boxShadow: '0 20px 60px rgba(212,175,55,0.2)',
+        }}>
+          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🔐</div>
+          <h1 style={{ color: '#D4AF37', fontSize: '1.8rem', marginBottom: '10px', fontWeight: 800 }}>
+            DT GOLD COIN
+          </h1>
+          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '30px', letterSpacing: '1px' }}>
+            MAINNET PREVIEW • RESTRICTED ACCESS
+          </p>
+          <form onSubmit={handlePasswordSubmit}>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              placeholder="Enter password"
+              style={{
+                width: '100%',
+                padding: '15px 20px',
+                fontSize: '1rem',
+                background: 'rgba(0,0,0,0.5)',
+                border: passwordError ? '2px solid #F44336' : '2px solid rgba(212,175,55,0.3)',
+                borderRadius: '10px',
+                color: '#fff',
+                marginBottom: '15px',
+                outline: 'none',
+                textAlign: 'center',
+                letterSpacing: '3px',
+                boxSizing: 'border-box',
+              }}
+              autoFocus
+            />
+            {passwordError && (
+              <p style={{ color: '#F44336', fontSize: '0.85rem', marginBottom: '15px' }}>
+                ❌ Incorrect password
+              </p>
+            )}
+            <button type="submit" style={{
+              width: '100%',
+              padding: '15px 30px',
+              fontSize: '1rem',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #D4AF37 0%, #F4D03F 100%)',
+              border: 'none',
+              borderRadius: '10px',
+              color: '#000',
+              cursor: 'pointer',
+            }}>
+              ENTER SITE
+            </button>
+          </form>
+          <p style={{ color: '#555', fontSize: '0.7rem', marginTop: '30px', letterSpacing: '1px' }}>
+            A dtgc.io contract on PulseChain
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Toast notification helper - defined early so all callbacks can use it
   const showToast = (message, type) => {
