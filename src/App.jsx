@@ -2867,6 +2867,23 @@ export default function App() {
     }
   };
 
+  // Force proper rendering after authentication
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Force scroll to top and trigger re-paint
+      window.scrollTo(0, 0);
+      document.body.style.overflow = 'auto';
+      document.body.style.visibility = 'visible';
+      document.documentElement.style.overflow = 'auto';
+
+      // Force layout recalculation
+      const forceRepaint = () => {
+        document.body.offsetHeight; // Trigger reflow
+      };
+      requestAnimationFrame(forceRepaint);
+    }
+  }, [isAuthenticated]);
+
   // Stake video modal
   const [showStakeVideo, setShowStakeVideo] = useState(false);
   const [stakingTierName, setStakingTierName] = useState('');
@@ -3255,6 +3272,62 @@ export default function App() {
     }
   };
 
+  // Disconnect wallet function
+  const disconnectWallet = () => {
+    setAccount(null);
+    setProvider(null);
+    setSigner(null);
+    setDtgcBalance('0');
+    setUrmomBalance('0');
+    setLpBalance('0');
+    setPlsBalance('0');
+    setStakedPositions([]);
+    showToast('Wallet disconnected', 'info');
+  };
+
+  // Fetch mainnet balances when account connects
+  useEffect(() => {
+    const fetchMainnetBalances = async () => {
+      if (TESTNET_MODE || !account || !provider) return;
+
+      try {
+        // Get PLS balance
+        const plsBal = await provider.getBalance(account);
+        setPlsBalance(ethers.formatEther(plsBal));
+
+        // Get DTGC balance
+        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+        const dtgcBal = await dtgcContract.balanceOf(account);
+        setDtgcBalance(ethers.formatEther(dtgcBal));
+
+        // Get URMOM balance
+        const urmomContract = new ethers.Contract(CONTRACTS.URMOM, ERC20_ABI, provider);
+        const urmomBal = await urmomContract.balanceOf(account);
+        setUrmomBalance(ethers.formatEther(urmomBal));
+
+        // Get LP balance
+        const lpContract = new ethers.Contract(CONTRACTS.LP_TOKEN, ERC20_ABI, provider);
+        const lpBal = await lpContract.balanceOf(account);
+        setLpBalance(ethers.formatEther(lpBal));
+
+        console.log('📊 Mainnet balances loaded:', {
+          pls: ethers.formatEther(plsBal),
+          dtgc: ethers.formatEther(dtgcBal),
+          urmom: ethers.formatEther(urmomBal),
+          lp: ethers.formatEther(lpBal)
+        });
+      } catch (err) {
+        console.error('Failed to fetch balances:', err);
+      }
+    };
+
+    fetchMainnetBalances();
+
+    // Refresh balances every 30 seconds
+    const interval = setInterval(fetchMainnetBalances, 30000);
+    return () => clearInterval(interval);
+  }, [account, provider]);
+
   const handleStake = async () => {
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) return;
     
@@ -3593,9 +3666,14 @@ export default function App() {
               <button className="theme-toggle" onClick={toggleTheme}>
                 {isDark ? '☀️' : '🌙'}
               </button>
-              <button className={`connect-btn ${account ? 'connected' : ''}`} onClick={connectWallet} disabled={loading}>
+              <button
+                className={`connect-btn ${account ? 'connected' : ''}`}
+                onClick={account ? disconnectWallet : connectWallet}
+                disabled={loading}
+                title={account ? 'Click to disconnect' : 'Connect your wallet'}
+              >
                 {loading && <span className="spinner" />}
-                {account ? formatAddress(account) : 'Connect'}
+                {account ? `🔌 ${formatAddress(account)}` : '🔗 Connect'}
               </button>
             </div>
           </div>
