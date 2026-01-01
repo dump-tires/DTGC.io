@@ -42,34 +42,40 @@ export const TOKENS = {
   },
 };
 
-// Staking Tiers
+// V19 Staking Tiers (Sustainable APRs - reduced 30%)
 export const STAKING_TIERS = [
   {
     id: 0,
-    name: 'Bronze',
-    icon: '🥉',
-    lockDays: 14,
-    apr: 2.5,
-    bonus: 0.5,
-    color: '#CD7F32',
-  },
-  {
-    id: 1,
     name: 'Silver',
     icon: '🥈',
-    lockDays: 30,
-    apr: 6,
-    bonus: 1.5,
+    minInvest: 200,
+    lockDays: 60,
+    apr: 15.4,    // Reduced 30% from 22%
+    bonus: 10,
+    boost: 1,
     color: '#C0C0C0',
   },
   {
-    id: 2,
+    id: 1,
     name: 'Gold',
     icon: '🥇',
+    minInvest: 500,
     lockDays: 90,
-    apr: 9,
-    bonus: 4,
+    apr: 16.8,    // Reduced 30% from 24%
+    bonus: 10,
+    boost: 1,
     color: '#FFD700',
+  },
+  {
+    id: 2,
+    name: 'Whale',
+    icon: '🐋',
+    minInvest: 10000,
+    lockDays: 180,
+    apr: 18.2,    // Reduced 30% from 26%
+    bonus: 10,
+    boost: 1,
+    color: '#4169E1',
   },
 ];
 
@@ -77,22 +83,44 @@ export const DIAMOND_TIER = {
   id: 3,
   name: 'Diamond',
   icon: '💎',
+  minInvest: 1000,
   lockDays: 90,
-  apr: 12,
-  bonus: 5,
+  apr: 28,        // Reduced 30% from 40%
+  effectiveApr: 42, // 28% × 1.5x boost
+  bonus: 12,
+  boost: 1.5,
   color: '#00BCD4',
   isLP: true,
+  lpPair: 'DTGC/PLS',
 };
 
-// Fee Structure
+export const DIAMOND_PLUS_TIER = {
+  id: 4,
+  name: 'Diamond+',
+  icon: '💎✨',
+  minInvest: 1000,
+  lockDays: 90,
+  apr: 35,        // Reduced 30% from 50%
+  effectiveApr: 70, // 35% × 2x boost
+  bonus: 15,
+  boost: 2,
+  color: '#9C27B0',
+  isLP: true,
+  lpPair: 'DTGC/URMOM',
+};
+
+// V19 Fee Structure (7.5% total for sustainability)
 export const FEES = {
-  ENTRY: 5,
-  EXIT: 5,
-  DEV_SHARE: 1,
-  DAO_SHARE: 4,
+  ENTRY: 3.75,
+  EXIT: 3.75,
+  ENTRY_DAO: 1.875,
+  ENTRY_DEV: 0.625,
+  ENTRY_LP: 1.0,
+  ENTRY_BURN: 0.25,
   EES_TOTAL: 20,
-  EES_DEV: 2,
-  EES_DAO_VOTING: 18,
+  EES_DEV: 5,
+  EES_DAO: 12,
+  EES_LP: 3,
 };
 
 // DAO Voting Options

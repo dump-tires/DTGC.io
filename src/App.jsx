@@ -2971,6 +2971,8 @@ export default function App() {
     EUR: 0.92,
     GBP: 0.79,
     JPY: 149.50,
+    SAR: 3.75,    // Saudi Riyal
+    CNY: 7.24,    // Chinese Yuan
   };
 
   // Metal prices state (per troy ounce in USD)
@@ -3551,14 +3553,56 @@ export default function App() {
         return `£${(valueUsd * CURRENCY_RATES.GBP).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       case 'jpy':
         return `¥${(valueUsd * CURRENCY_RATES.JPY).toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+      case 'sar':
+        return `﷼${(valueUsd * CURRENCY_RATES.SAR).toLocaleString('ar-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'cny':
+        return `¥${(valueUsd * CURRENCY_RATES.CNY).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       default:
         return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
     }
   };
 
+  // Helper function to convert USD to selected currency
+  const convertToCurrency = (valueUsd) => {
+    switch (displayCurrency) {
+      case 'usd': return { value: valueUsd, symbol: '$', code: 'USD' };
+      case 'eur': return { value: valueUsd * CURRENCY_RATES.EUR, symbol: '€', code: 'EUR' };
+      case 'gbp': return { value: valueUsd * CURRENCY_RATES.GBP, symbol: '£', code: 'GBP' };
+      case 'jpy': return { value: valueUsd * CURRENCY_RATES.JPY, symbol: '¥', code: 'JPY' };
+      case 'sar': return { value: valueUsd * CURRENCY_RATES.SAR, symbol: '﷼', code: 'SAR' };
+      case 'cny': return { value: valueUsd * CURRENCY_RATES.CNY, symbol: '¥', code: 'CNY' };
+      default: return { value: valueUsd, symbol: '$', code: 'USD' };
+    }
+  };
+
+  // Helper function to convert from selected currency to USD
+  const convertFromCurrency = (value) => {
+    switch (displayCurrency) {
+      case 'eur': return value / CURRENCY_RATES.EUR;
+      case 'gbp': return value / CURRENCY_RATES.GBP;
+      case 'jpy': return value / CURRENCY_RATES.JPY;
+      case 'sar': return value / CURRENCY_RATES.SAR;
+      case 'cny': return value / CURRENCY_RATES.CNY;
+      default: return value;
+    }
+  };
+
+  // Get currency symbol
+  const getCurrencySymbol = () => {
+    switch (displayCurrency) {
+      case 'usd': return '$';
+      case 'eur': return '€';
+      case 'gbp': return '£';
+      case 'jpy': return '¥';
+      case 'sar': return '﷼';
+      case 'cny': return '¥';
+      default: return '$';
+    }
+  };
+
   // Toggle currency display
   const toggleCurrencyDisplay = () => {
-    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy'];
+    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy', 'sar', 'cny'];
     const currentIndex = currencies.indexOf(displayCurrency);
     const nextCurrency = currencies[(currentIndex + 1) % currencies.length];
     setDisplayCurrency(nextCurrency);
@@ -3620,9 +3664,7 @@ export default function App() {
         return;
       }
       // Convert currency to USD first, then to tokens
-      const valueUsd = displayCurrency === 'eur' ? amount / CURRENCY_RATES.EUR :
-                      displayCurrency === 'gbp' ? amount / CURRENCY_RATES.GBP :
-                      displayCurrency === 'jpy' ? amount / CURRENCY_RATES.JPY : amount;
+      const valueUsd = convertFromCurrency(amount);
       amount = valueUsd / priceUsd;
     }
 
@@ -4193,6 +4235,189 @@ export default function App() {
           </div>
         )}
 
+        {/* FLOATING ACTIVE STAKE BOX - Top Left */}
+        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
+          <div style={{
+            position: 'fixed',
+            top: TESTNET_MODE ? '55px' : '15px',
+            left: '15px',
+            zIndex: 1500,
+            background: isDark ? 'rgba(15,15,15,0.95)' : 'rgba(255,255,255,0.95)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: '16px',
+            border: '2px solid var(--gold)',
+            padding: '12px 16px',
+            minWidth: '220px',
+            maxWidth: '280px',
+            boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '10px',
+              borderBottom: '1px solid rgba(212,175,55,0.3)',
+              paddingBottom: '8px',
+            }}>
+              <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '0.75rem', color: 'var(--gold)', letterSpacing: '1px' }}>
+                💎 ACTIVE STAKE
+              </span>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>LIVE</span>
+            </div>
+
+            {(() => {
+              const activePos = TESTNET_MODE
+                ? testnetBalances.positions?.[0]
+                : stakedPositions[0];
+
+              if (!activePos) return null;
+
+              const now = Date.now();
+              const isLocked = now < activePos.endTime;
+              const daysLeft = Math.max(0, Math.ceil((activePos.endTime - now) / (24 * 60 * 60 * 1000)));
+              const hoursLeft = Math.max(0, Math.ceil((activePos.endTime - now) / (1000 * 60 * 60)) % 24);
+              const daysStaked = Math.max(0, (now - activePos.startTime) / (24 * 60 * 60 * 1000));
+              const effectiveApr = activePos.apr * (activePos.boostMultiplier || activePos.boost || 1);
+              const currentRewards = (activePos.amount * (effectiveApr / 100) / 365) * daysStaked;
+              const tierName = activePos.tier || (activePos.isLP ? 'DIAMOND' : 'DTGC');
+
+              // Get tier info for proper APR display
+              const tierInfo = activePos.isLP
+                ? (activePos.tier?.includes('+') ? V5_DIAMOND_PLUS_TIER : V5_DIAMOND_TIER)
+                : V5_STAKING_TIERS.find(t => t.name === tierName) || V5_STAKING_TIERS[1];
+
+              const displayApr = effectiveApr || tierInfo?.apr || 0;
+              const stakeValueUsd = activePos.amount * (livePrices.dtgc || 0);
+              const rewardValueUsd = currentRewards * (livePrices.dtgc || 0);
+
+              return (
+                <>
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Tier</span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: activePos.isLP ? 'var(--diamond)' : 'var(--gold)' }}>
+                        {activePos.isLP ? '💎' : '🥇'} {tierName}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Staked</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {formatNumber(activePos.amount)} {activePos.isLP ? 'LP' : 'DTGC'}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: '#4CAF50' }}>
+                          {getCurrencySymbol()}{formatNumber(convertToCurrency(stakeValueUsd).value)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>APR</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4CAF50' }}>
+                        {displayApr.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Rewards</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4CAF50' }}>
+                          +{formatNumber(currentRewards)}
+                        </div>
+                        <div style={{ fontSize: '0.6rem', color: '#4CAF50', opacity: 0.8 }}>
+                          {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValueUsd).value)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: isLocked ? 'rgba(255,107,107,0.1)' : 'rgba(76,175,80,0.1)',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    marginBottom: '10px',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>EES Penalty Removed</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isLocked ? '#FF6B6B' : '#4CAF50' }}>
+                      {isLocked ? (
+                        <>⏳ {daysLeft}d {hoursLeft}h remaining</>
+                      ) : (
+                        <>✅ Unlocked!</>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      📅 {new Date(activePos.endTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+
+                  {isLocked ? (
+                    <button
+                      onClick={() => handleEmergencyWithdraw(activePos.isLP)}
+                      disabled={loading}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #FF6B6B, #FF8E53)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 700,
+                        fontSize: '0.7rem',
+                        color: '#FFF',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        opacity: loading ? 0.7 : 1,
+                      }}
+                    >
+                      ⚠️ Early Exit (20% EES Fee)
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleUnstake(activePos.id)}
+                      disabled={loading}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 700,
+                        fontSize: '0.7rem',
+                        color: '#FFF',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        opacity: loading ? 0.7 : 1,
+                      }}
+                    >
+                      ✅ Claim All
+                    </button>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Show count if multiple stakes */}
+            {(TESTNET_MODE ? testnetBalances.positions?.length : stakedPositions.length) > 1 && (
+              <div style={{
+                marginTop: '8px',
+                paddingTop: '8px',
+                borderTop: '1px solid rgba(212,175,55,0.2)',
+                fontSize: '0.65rem',
+                color: 'var(--text-muted)',
+                textAlign: 'center',
+              }}>
+                +{(TESTNET_MODE ? testnetBalances.positions?.length : stakedPositions.length) - 1} more stake(s) • View in Stake tab
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Navigation */}
         <header className={`nav-header ${scrolled ? 'scrolled' : ''}`} style={TESTNET_MODE ? {top: '40px'} : {}}>
           <div className="nav-content">
@@ -4369,7 +4594,7 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
               >
-                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : '💴 JPY'} ▼
+                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : displayCurrency === 'jpy' ? '💴 JPY' : displayCurrency === 'sar' ? '🇸🇦 SAR' : '🇨🇳 CNY'} ▼
               </button>
 
               <div style={{
@@ -5003,21 +5228,19 @@ export default function App() {
                           const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
                           const priceUsd = livePrices.dtgc || 0;
                           const valueUsd = maxTokens * priceUsd;
-                          const currencyValue = displayCurrency === 'eur' ? valueUsd * CURRENCY_RATES.EUR :
-                                               displayCurrency === 'gbp' ? valueUsd * CURRENCY_RATES.GBP :
-                                               displayCurrency === 'jpy' ? valueUsd * CURRENCY_RATES.JPY : valueUsd;
+                          const currencyValue = convertToCurrency(valueUsd).value;
                           setStakeAmount(currencyValue.toFixed(2));
                         }
                       }} style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px'}}>
                         <span>Balance: {formatNumber(parseFloat(isLP ? lpBalance : dtgcBalance))} {isLP ? 'LP' : 'DTGC'}</span>
-                        <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ ${formatNumber((parseFloat(isLP ? lpBalance : dtgcBalance) || 0) * (livePrices.dtgc || 0))} USD</span>
+                        <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency((parseFloat(isLP ? lpBalance : dtgcBalance) || 0) * (livePrices.dtgc || 0)).value)}</span>
                       </span>
                     </div>
                     <div className="input-container">
                       <div style={{position: 'relative', flex: 1, display: 'flex', alignItems: 'center'}}>
                         {stakeInputMode === 'currency' && (
                           <span style={{position: 'absolute', left: '12px', color: 'var(--gold)', fontWeight: 700, fontSize: '1.1rem'}}>
-                            {displayCurrency === 'usd' ? '$' : displayCurrency === 'eur' ? '€' : displayCurrency === 'gbp' ? '£' : displayCurrency === 'jpy' ? '¥' : '$'}
+                            {getCurrencySymbol()}
                           </span>
                         )}
                         <input
@@ -5040,16 +5263,12 @@ export default function App() {
                                 // Converting from tokens to currency
                                 const tokens = parseFloat(stakeAmount);
                                 const valueUsd = tokens * priceUsd;
-                                const currencyValue = displayCurrency === 'eur' ? valueUsd * CURRENCY_RATES.EUR :
-                                                     displayCurrency === 'gbp' ? valueUsd * CURRENCY_RATES.GBP :
-                                                     displayCurrency === 'jpy' ? valueUsd * CURRENCY_RATES.JPY : valueUsd;
+                                const currencyValue = convertToCurrency(valueUsd).value;
                                 setStakeAmount(currencyValue.toFixed(2));
                               } else if (newMode === 'tokens' && priceUsd > 0) {
                                 // Converting from currency to tokens
                                 const currencyVal = parseFloat(stakeAmount);
-                                const valueUsd = displayCurrency === 'eur' ? currencyVal / CURRENCY_RATES.EUR :
-                                                displayCurrency === 'gbp' ? currencyVal / CURRENCY_RATES.GBP :
-                                                displayCurrency === 'jpy' ? currencyVal / CURRENCY_RATES.JPY : currencyVal;
+                                const valueUsd = convertFromCurrency(currencyVal);
                                 const tokens = valueUsd / priceUsd;
                                 setStakeAmount(tokens.toFixed(2));
                               }
@@ -5070,7 +5289,7 @@ export default function App() {
                           }}
                           title={stakeInputMode === 'tokens' ? 'Switch to currency input' : 'Switch to token input'}
                         >
-                          {stakeInputMode === 'tokens' ? (isLP ? 'LP' : 'DTGC') : (displayCurrency === 'usd' ? 'USD' : displayCurrency === 'eur' ? 'EUR' : displayCurrency === 'gbp' ? 'GBP' : displayCurrency === 'jpy' ? 'JPY' : 'USD')}
+                          {stakeInputMode === 'tokens' ? (isLP ? 'LP' : 'DTGC') : displayCurrency.toUpperCase()}
                         </button>
                         <button className="max-btn" onClick={() => {
                           if (stakeInputMode === 'tokens') {
@@ -5079,9 +5298,7 @@ export default function App() {
                             const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
                             const priceUsd = livePrices.dtgc || 0;
                             const valueUsd = maxTokens * priceUsd;
-                            const currencyValue = displayCurrency === 'eur' ? valueUsd * CURRENCY_RATES.EUR :
-                                                 displayCurrency === 'gbp' ? valueUsd * CURRENCY_RATES.GBP :
-                                                 displayCurrency === 'jpy' ? valueUsd * CURRENCY_RATES.JPY : valueUsd;
+                            const currencyValue = convertToCurrency(valueUsd).value;
                             setStakeAmount(currencyValue.toFixed(2));
                           }
                         }}>MAX</button>
@@ -5094,17 +5311,15 @@ export default function App() {
                           const currencyVal = parseFloat(stakeAmount) || 0;
                           const priceUsd = livePrices.dtgc || 0;
                           if (priceUsd <= 0) return 0;
-                          const valueUsd = displayCurrency === 'eur' ? currencyVal / CURRENCY_RATES.EUR :
-                                          displayCurrency === 'gbp' ? currencyVal / CURRENCY_RATES.GBP :
-                                          displayCurrency === 'jpy' ? currencyVal / CURRENCY_RATES.JPY : currencyVal;
+                          const valueUsd = convertFromCurrency(currencyVal);
                           return valueUsd / priceUsd;
                         })())} {isLP ? 'LP' : 'DTGC'} tokens
                       </div>
                     )}
-                    {/* Show USD value when in token mode */}
+                    {/* Show selected currency value when in token mode */}
                     {stakeInputMode === 'tokens' && stakeAmount && parseFloat(stakeAmount) > 0 && (
                       <div style={{fontSize: '0.8rem', color: '#4CAF50', marginTop: '8px', textAlign: 'right'}}>
-                        ≈ ${formatNumber((parseFloat(stakeAmount) || 0) * (livePrices.dtgc || 0))} USD
+                        ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency((parseFloat(stakeAmount) || 0) * (livePrices.dtgc || 0)).value)}
                       </div>
                     )}
                   </div>
