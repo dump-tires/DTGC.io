@@ -3287,6 +3287,50 @@ export default function App() {
     showToast('🔄 Testnet reset! Fresh 100M PLS added.', 'info');
   }, [initTestnetBalances]);
 
+  // V19 Migration: Fix old stakes with incorrect APRs and lock periods
+  useEffect(() => {
+    if (!TESTNET_MODE || !testnetBalances?.positions?.length) return;
+
+    const V19_TIER_CONFIG = {
+      'SILVER': { apr: 15.4, lockDays: 60 },
+      'GOLD': { apr: 16.8, lockDays: 90 },
+      'WHALE': { apr: 18.2, lockDays: 180 },
+      'DIAMOND': { apr: 28, lockDays: 90, boost: 1.5 },
+      'DIAMOND+': { apr: 35, lockDays: 90, boost: 2 },
+    };
+
+    let needsMigration = false;
+    const migratedPositions = testnetBalances.positions.map(pos => {
+      const tierName = pos.tier?.toUpperCase() || (pos.isLP ? 'DIAMOND' : 'GOLD');
+      const tierConfig = V19_TIER_CONFIG[tierName];
+
+      if (!tierConfig) return pos;
+
+      // Check if this position has old/incorrect values
+      const correctApr = pos.isLP ? tierConfig.apr * (tierConfig.boost || 1) : tierConfig.apr;
+      const correctLockDays = tierConfig.lockDays;
+
+      if (pos.apr !== correctApr || pos.lockDays !== correctLockDays) {
+        needsMigration = true;
+        const newEndTime = pos.startTime + (correctLockDays * 24 * 60 * 60 * 1000);
+        return {
+          ...pos,
+          apr: correctApr,
+          lockDays: correctLockDays,
+          endTime: newEndTime,
+        };
+      }
+      return pos;
+    });
+
+    if (needsMigration) {
+      const newBalances = { ...testnetBalances, positions: migratedPositions };
+      setTestnetBalances(newBalances);
+      localStorage.setItem('dtgc-testnet-balances', JSON.stringify(newBalances));
+      console.log('✅ V19 Migration: Updated stakes to correct APRs and lock periods');
+    }
+  }, [testnetBalances?.positions?.length]);
+
   const toggleTheme = () => {
     setIsDark(!isDark);
     localStorage.setItem('dtgc-theme', !isDark ? 'dark' : 'light');
