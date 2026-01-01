@@ -3299,6 +3299,16 @@ export default function App() {
       let provider;
 
       switch (walletType) {
+        case 'internetmoney':
+          if (!window.ethereum) {
+            window.open('https://internetmoney.io/', '_blank');
+            showToast('Please install Internet Money Wallet', 'info');
+            setLoading(false);
+            return;
+          }
+          provider = new ethers.BrowserProvider(window.ethereum);
+          break;
+
         case 'metamask':
           if (!window.ethereum?.isMetaMask) {
             window.open('https://metamask.io/download/', '_blank');
@@ -3319,6 +3329,16 @@ export default function App() {
           provider = new ethers.BrowserProvider(window.ethereum);
           break;
 
+        case 'okx':
+          if (!window.okxwallet && !window.ethereum) {
+            window.open('https://www.okx.com/web3', '_blank');
+            showToast('Please install OKX Wallet', 'info');
+            setLoading(false);
+            return;
+          }
+          provider = new ethers.BrowserProvider(window.okxwallet || window.ethereum);
+          break;
+
         case 'coinbase':
           if (!window.ethereum?.isCoinbaseWallet && !window.coinbaseWalletExtension) {
             window.open('https://www.coinbase.com/wallet', '_blank');
@@ -3327,16 +3347,6 @@ export default function App() {
             return;
           }
           provider = new ethers.BrowserProvider(window.coinbaseWalletExtension || window.ethereum);
-          break;
-
-        case 'trustwallet':
-          if (!window.ethereum?.isTrust) {
-            window.open('https://trustwallet.com/', '_blank');
-            showToast('Please install Trust Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
           break;
 
         default:
@@ -5867,6 +5877,36 @@ export default function App() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <button
+                onClick={() => connectWalletType('internetmoney')}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  background: 'rgba(212,175,55,0.15)',
+                  border: '1px solid #D4AF37',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.3)';
+                  e.target.style.borderColor = '#FFD700';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.15)';
+                  e.target.style.borderColor = '#D4AF37';
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>💰</span>
+                <span style={{ fontWeight: 600 }}>Internet Money</span>
+                <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#D4AF37' }}>RECOMMENDED</span>
+              </button>
+
+              <button
                 onClick={() => connectWalletType('metamask')}
                 disabled={loading}
                 style={{
@@ -5925,6 +5965,35 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => connectWalletType('okx')}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.2)';
+                  e.target.style.borderColor = '#D4AF37';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255,255,255,0.05)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>⚫</span>
+                <span style={{ fontWeight: 600 }}>OKX Wallet</span>
+              </button>
+
+              <button
                 onClick={() => connectWalletType('coinbase')}
                 disabled={loading}
                 style={{
@@ -5951,35 +6020,6 @@ export default function App() {
               >
                 <span style={{ fontSize: '1.5rem' }}>🔵</span>
                 <span style={{ fontWeight: 600 }}>Coinbase Wallet</span>
-              </button>
-
-              <button
-                onClick={() => connectWalletType('trustwallet')}
-                disabled={loading}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  padding: '16px 20px',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '1rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(212,175,55,0.2)';
-                  e.target.style.borderColor = '#D4AF37';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(255,255,255,0.05)';
-                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
-                }}
-              >
-                <span style={{ fontSize: '1.5rem' }}>🛡️</span>
-                <span style={{ fontWeight: 600 }}>Trust Wallet</span>
               </button>
 
               <button
