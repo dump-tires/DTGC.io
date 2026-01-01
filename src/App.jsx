@@ -2913,8 +2913,11 @@ export default function App() {
 
   // Wallet selector modal
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [availableAccounts, setAvailableAccounts] = useState([]);
+  const [selectedWalletType, setSelectedWalletType] = useState(null);
+  const [walletStep, setWalletStep] = useState('select'); // 'select' or 'accounts'
 
-  // Currency display preference (units, usd, eur)
+  // Currency display preference (units, usd, eur, gbp, jpy)
   const [displayCurrency, setDisplayCurrency] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('dtgc-display-currency') || 'units';
@@ -2922,8 +2925,21 @@ export default function App() {
     return 'units';
   });
 
-  // EUR/USD exchange rate (approximate)
-  const EUR_USD_RATE = 0.92;
+  // Exchange rates (approximate - USD base)
+  const CURRENCY_RATES = {
+    EUR: 0.92,
+    GBP: 0.79,
+    JPY: 149.50,
+  };
+
+  // Metal prices state (per troy ounce in USD)
+  const [metalPrices, setMetalPrices] = useState({
+    gold: 2650.00,
+    silver: 31.50,
+    copper: 4.25,
+    loading: false,
+    lastUpdated: null,
+  });
 
   const [position, setPosition] = useState(null);
   const [lpPosition, setLpPosition] = useState(null);
@@ -3359,14 +3375,28 @@ export default function App() {
           provider = new ethers.BrowserProvider(window.ethereum);
       }
 
-      // Request wallet to show account picker
+      // Request accounts from the wallet
       const ethProvider = window.okxwallet || window.ethereum;
+
+      // Request permission to see all accounts
       await ethProvider.request({
         method: 'wallet_requestPermissions',
         params: [{ eth_accounts: {} }],
       });
 
       const accounts = await provider.send('eth_requestAccounts', []);
+
+      // If multiple accounts, show account selector
+      if (accounts.length > 1) {
+        setAvailableAccounts(accounts);
+        setSelectedWalletType(walletType);
+        setWalletStep('accounts');
+        setProvider(provider);
+        setLoading(false);
+        return;
+      }
+
+      // Single account - connect directly
       const signer = await provider.getSigner();
       const network = await provider.getNetwork();
 
@@ -3381,6 +3411,7 @@ export default function App() {
       setSigner(signer);
       setAccount(accounts[0]);
       setShowWalletModal(false);
+      setWalletStep('select');
       showToast(`${walletType.charAt(0).toUpperCase() + walletType.slice(1)} connected!`, 'success');
     } catch (err) {
       console.error(err);
@@ -3389,6 +3420,38 @@ export default function App() {
       } else {
         showToast('Connection failed', 'error');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Select a specific account from available accounts
+  const selectAccount = async (selectedAddress) => {
+    try {
+      setLoading(true);
+      const ethProvider = window.okxwallet || window.ethereum;
+
+      // Switch chain if needed
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== CHAIN_ID) {
+        await ethProvider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x171' }],
+        });
+      }
+
+      const signer = await provider.getSigner(selectedAddress);
+
+      setProvider(provider);
+      setSigner(signer);
+      setAccount(selectedAddress);
+      setShowWalletModal(false);
+      setWalletStep('select');
+      setAvailableAccounts([]);
+      showToast(`Connected to ${selectedAddress.slice(0, 6)}...${selectedAddress.slice(-4)}`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to connect account', 'error');
     } finally {
       setLoading(false);
     }
@@ -3404,6 +3467,9 @@ export default function App() {
     setLpBalance('0');
     setPlsBalance('0');
     setStakedPositions([]);
+    setAvailableAccounts([]);
+    setWalletStep('select');
+    setSelectedWalletType(null);
     showToast('Wallet disconnected', 'info');
   };
 
@@ -3435,19 +3501,23 @@ export default function App() {
 
     const valueUsd = numBalance * priceUsd;
 
-    if (displayCurrency === 'usd') {
-      return `$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    } else if (displayCurrency === 'eur') {
-      const valueEur = valueUsd * EUR_USD_RATE;
-      return `€${valueEur.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    switch (displayCurrency) {
+      case 'usd':
+        return `$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'eur':
+        return `€${(valueUsd * CURRENCY_RATES.EUR).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'gbp':
+        return `£${(valueUsd * CURRENCY_RATES.GBP).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'jpy':
+        return `¥${(valueUsd * CURRENCY_RATES.JPY).toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+      default:
+        return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
     }
-
-    return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
   };
 
   // Toggle currency display
   const toggleCurrencyDisplay = () => {
-    const currencies = ['units', 'usd', 'eur'];
+    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy'];
     const currentIndex = currencies.indexOf(displayCurrency);
     const nextCurrency = currencies[(currentIndex + 1) % currencies.length];
     setDisplayCurrency(nextCurrency);
@@ -3710,7 +3780,7 @@ export default function App() {
       if (err.code === 'ACTION_REJECTED') {
         showToast('Transaction rejected by user', 'error');
       } else if (err.message?.includes('locked')) {
-        showToast('Position is still locked! Use Emergency Withdraw (20% fee)', 'error');
+        showToast('Position is still locked! Use Emergency Withdraw (12% fee)', 'error');
       } else {
         showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
       }
@@ -3726,7 +3796,7 @@ export default function App() {
 
     try {
       setLoading(true);
-      showToast('Processing emergency withdrawal (20% fee)...', 'info');
+      showToast('Processing emergency withdrawal (12% fee)...', 'info');
 
       const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
       const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
@@ -3736,7 +3806,7 @@ export default function App() {
       await tx.wait();
 
       setLoading(false);
-      showToast('✅ Emergency withdrawal complete (20% fee applied)', 'success');
+      showToast('✅ Emergency withdrawal complete (12% fee applied)', 'success');
 
       // Refresh balances
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
@@ -4087,6 +4157,30 @@ export default function App() {
             </nav>
 
             <div className="nav-right">
+              {/* Metal Prices Display */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginRight: '12px',
+                padding: '6px 12px',
+                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                borderRadius: '20px',
+                border: '1px solid rgba(212,175,55,0.3)',
+                fontSize: '0.7rem',
+              }}>
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600 }}>
+                  🥇 ${metalPrices.gold.toLocaleString()}
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600 }}>
+                  🥈 ${metalPrices.silver.toFixed(2)}
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.3)' }}>|</span>
+                <span title="Copper /oz" style={{ color: '#B87333', fontWeight: 600 }}>
+                  🥉 ${metalPrices.copper.toFixed(2)}
+                </span>
+              </div>
               <button className="theme-toggle" onClick={toggleTheme}>
                 {isDark ? '☀️' : '🌙'}
               </button>
@@ -4182,7 +4276,7 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
               >
-                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : '💶 EUR'} ▼
+                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : '💴 JPY'} ▼
               </button>
 
               <div style={{
@@ -4844,7 +4938,7 @@ export default function App() {
                                 cursor: 'pointer',
                               }}
                             >
-                              {isLocked ? '⚠️ Early Unstake (20% Fee)' : '✅ Claim All'}
+                              {isLocked ? '⚠️ Early Unstake (12% Fee)' : '✅ Claim All'}
                             </button>
                           </div>
                         </div>
@@ -5879,9 +5973,83 @@ export default function App() {
               marginBottom: '24px',
               letterSpacing: '2px',
             }}>
-              Select Wallet
+              {walletStep === 'accounts' ? 'Select Account' : 'Select Wallet'}
             </h2>
 
+            {/* Account Selector Step */}
+            {walletStep === 'accounts' && availableAccounts.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ color: '#888', fontSize: '0.85rem', textAlign: 'center', marginBottom: '8px' }}>
+                  Choose which address to connect:
+                </p>
+                {availableAccounts.map((addr, index) => (
+                  <button
+                    key={addr}
+                    onClick={() => selectAccount(addr)}
+                    disabled={loading}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '16px 20px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '12px',
+                      color: '#fff',
+                      fontSize: '0.95rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(212,175,55,0.2)';
+                      e.target.style.borderColor = '#D4AF37';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.05)';
+                      e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                    }}
+                  >
+                    <span style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: `linear-gradient(135deg, hsl(${index * 60}, 70%, 50%), hsl(${index * 60 + 30}, 70%, 40%))`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                    }}>
+                      {index + 1}
+                    </span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>
+                      {addr.slice(0, 8)}...{addr.slice(-6)}
+                    </span>
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    setWalletStep('select');
+                    setAvailableAccounts([]);
+                  }}
+                  style={{
+                    marginTop: '8px',
+                    padding: '10px',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '8px',
+                    color: '#888',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  ← Back to Wallets
+                </button>
+              </div>
+            )}
+
+            {/* Wallet Selector Step */}
+            {walletStep === 'select' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <button
                 onClick={() => connectWalletType('internetmoney')}
@@ -6058,7 +6226,9 @@ export default function App() {
                 <span style={{ fontWeight: 600 }}>Other Wallet</span>
               </button>
             </div>
+            )}
 
+            {walletStep === 'select' && (
             <button
               onClick={() => setShowWalletModal(false)}
               style={{
@@ -6075,6 +6245,7 @@ export default function App() {
             >
               Cancel
             </button>
+            )}
           </div>
         </div>
       )}
