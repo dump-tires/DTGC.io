@@ -47,74 +47,74 @@ const DTGC_TOKENOMICS = {
   lpLocked: 87000000,        // 8.7% - LP Locked
 };
 
-// V18 PROFITABLE FEE STRUCTURE (Reduced for positive staker ROI)
+// V19 SUSTAINABLE FEE STRUCTURE (7.5% total for long-term sustainability)
 const V5_FEES = {
-  // Entry Tax: 1.5% total (reduced from 5%)
+  // Entry Tax: 3.75% total
   entry: {
-    total: 1.5,
-    daoTreasury: 0.75,       // 0.75% DAO Treasury
-    dev: 0.25,               // 0.25% Dev
-    autoLP_DTGC_URMOM: 0.25, // 0.25% Auto LP DTGC/URMOM
-    autoLP_DTGC_PLS: 0.15,   // 0.15% DTGC/PLS
-    burn: 0.10,              // 0.10% DTGC Burn
+    total: 3.75,
+    daoTreasury: 1.875,      // 1.875% DAO Treasury (rewards)
+    dev: 0.625,              // 0.625% Dev
+    autoLP_DTGC_URMOM: 0.5,  // 0.5% Auto LP DTGC/URMOM
+    autoLP_DTGC_PLS: 0.5,    // 0.5% DTGC/PLS
+    burn: 0.25,              // 0.25% DTGC Burn
   },
-  // Exit Tax: 1.5% total (same breakdown)
+  // Exit Tax: 3.75% total (same breakdown)
   exit: {
-    total: 1.5,
-    daoTreasury: 0.75,
-    dev: 0.25,
-    autoLP_DTGC_URMOM: 0.25,
-    autoLP_DTGC_PLS: 0.15,
-    burn: 0.10,
+    total: 3.75,
+    daoTreasury: 1.875,
+    dev: 0.625,
+    autoLP_DTGC_URMOM: 0.5,
+    autoLP_DTGC_PLS: 0.5,
+    burn: 0.25,
   },
-  // EES (Emergency End Stake): 12% total (reduced from 20%)
+  // EES (Emergency End Stake): 20% total
   ees: {
-    total: 12,
-    dev: 3,              // 3% Dev
-    dao: 7,              // 7% DAO
-    autoLP: 2,           // 2% Auto LP
+    total: 20,
+    dev: 5,              // 5% Dev
+    dao: 12,             // 12% DAO
+    autoLP: 3,           // 3% Auto LP
   },
 };
 
-// V18 PROFITABLE STAKING TIERS (All tiers positive ROI with 3% total fees)
+// V19 SUSTAINABLE STAKING TIERS (APRs reduced 30% for sustainability with 7.5% fees)
 const V5_STAKING_TIERS = [
-  { 
-    id: 0, 
-    name: 'SILVER', 
-    icon: '🥈', 
-    minInvest: 200, 
-    lockDays: 60,  // Extended from 30 to 60 days
-    holdDays: 60, 
-    apr: 22,       // Increased from 15%
-    bonus: 10, 
+  {
+    id: 0,
+    name: 'SILVER',
+    icon: '🥈',
+    minInvest: 200,
+    lockDays: 60,
+    holdDays: 60,
+    apr: 15.4,     // Reduced 30% from 22%
+    bonus: 10,
     boost: 1,
     asset: 'DTGC',
     color: '#C0C0C0',
     gradient: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)'
   },
-  { 
-    id: 1, 
-    name: 'GOLD', 
-    icon: '🥇', 
-    minInvest: 500, 
-    lockDays: 90, 
-    holdDays: 90, 
-    apr: 24,       // Increased from 18%
-    bonus: 10, 
+  {
+    id: 1,
+    name: 'GOLD',
+    icon: '🥇',
+    minInvest: 500,
+    lockDays: 90,
+    holdDays: 90,
+    apr: 16.8,     // Reduced 30% from 24%
+    bonus: 10,
     boost: 1,
     asset: 'DTGC',
     color: '#D4AF37',
     gradient: 'linear-gradient(135deg, #FFF1A8 0%, #D4AF37 50%, #B8860B 100%)'
   },
-  { 
-    id: 2, 
-    name: 'WHALE', 
-    icon: '🐋', 
-    minInvest: 10000, 
-    lockDays: 180, 
-    holdDays: 180, 
-    apr: 26,       // Increased from 18%
-    bonus: 10, 
+  {
+    id: 2,
+    name: 'WHALE',
+    icon: '🐋',
+    minInvest: 10000,
+    lockDays: 180,
+    holdDays: 180,
+    apr: 18.2,     // Reduced 30% from 26%
+    bonus: 10,
     boost: 1,
     asset: 'DTGC',
     color: '#4169E1',
@@ -130,8 +130,8 @@ const V5_DIAMOND_TIER = {
   minInvest: 1000,
   lockDays: 90,
   holdDays: 90,
-  apr: 40,
-  effectiveApr: 40 * 1.5, // 60% effective
+  apr: 28,                   // Reduced 30% from 40%
+  effectiveApr: 28 * 1.5,    // 42% effective
   bonus: 12,
   boost: 1.5,
   isLP: true,
@@ -148,8 +148,8 @@ const V5_DIAMOND_PLUS_TIER = {
   minInvest: 1000,
   lockDays: 90,
   holdDays: 90,
-  apr: 50,
-  effectiveApr: 50 * 2, // 100% effective!
+  apr: 35,                   // Reduced 30% from 50%
+  effectiveApr: 35 * 2,      // 70% effective!
   bonus: 15,
   boost: 2,
   isLP: true,
@@ -158,14 +158,41 @@ const V5_DIAMOND_PLUS_TIER = {
   gradient: 'linear-gradient(135deg, #E1BEE7 0%, #9C27B0 50%, #7B1FA2 100%)'
 };
 
-// V5 Dynamic APR (reduces as TVL grows)
-const TVL_PHASES = [
-  { maxTVL: 50000000, multiplier: 1.0, name: "Genesis" },
-  { maxTVL: 100000000, multiplier: 0.85, name: "Early" },
-  { maxTVL: 200000000, multiplier: 0.7, name: "Growth" },
-  { maxTVL: 350000000, multiplier: 0.5, name: "Mature" },
-  { maxTVL: 500000000, multiplier: 0.35, name: "Saturated" },
+// V19 Dynamic APR (reduces as Market Cap grows - sustainable scaling)
+const MARKET_CAP_PHASES = [
+  { maxMarketCap: 10000000, multiplier: 1.0, name: "Genesis", description: "Full APR - Early adopters" },
+  { maxMarketCap: 25000000, multiplier: 0.85, name: "Growth", description: "85% APR - Building momentum" },
+  { maxMarketCap: 50000000, multiplier: 0.70, name: "Expansion", description: "70% APR - Scaling up" },
+  { maxMarketCap: 100000000, multiplier: 0.50, name: "Mature", description: "50% APR - Sustainable growth" },
+  { maxMarketCap: Infinity, multiplier: 0.35, name: "Scaled", description: "35% APR - Long-term stability" },
 ];
+
+// Legacy TVL_PHASES for backwards compatibility
+const TVL_PHASES = MARKET_CAP_PHASES;
+
+// Helper function to get current phase based on market cap
+const getCurrentPhase = (marketCap) => {
+  for (const phase of MARKET_CAP_PHASES) {
+    if (marketCap < phase.maxMarketCap) {
+      return phase;
+    }
+  }
+  return MARKET_CAP_PHASES[MARKET_CAP_PHASES.length - 1];
+};
+
+// Calculate effective APR based on market cap phase
+const getEffectiveAPR = (baseAPR, marketCap) => {
+  const phase = getCurrentPhase(marketCap);
+  return baseAPR * phase.multiplier;
+};
+
+// Format market cap for display
+const formatMarketCap = (value) => {
+  if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+  if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
+  return `$${value.toFixed(2)}`;
+};
 
 // ═══════════════════════════════════════════════════════════════
 //                    LIVE BURN DATA (ACCURATE FROM DEXSCREENER)
@@ -2925,6 +2952,7 @@ export default function App() {
 
   // Wallet selector modal
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [availableAccounts, setAvailableAccounts] = useState([]);
   const [selectedWalletType, setSelectedWalletType] = useState(null);
   const [walletStep, setWalletStep] = useState('select'); // 'select' or 'accounts'
@@ -3756,7 +3784,7 @@ export default function App() {
       setTestnetBalances(newBalances);
       localStorage.setItem('dtgc-testnet-balances', JSON.stringify(newBalances));
 
-      showToast(`✅ Unstaked! Received ${formatNumber(returnAmount)} + ${formatNumber(rewards)} rewards${isEarly ? ' (12% early exit fee)' : ''}`, 'success');
+      showToast(`✅ Unstaked! Received ${formatNumber(returnAmount)} + ${formatNumber(rewards)} rewards${isEarly ? ' (20% early exit fee)' : ''}`, 'success');
       return;
     }
 
@@ -3792,7 +3820,7 @@ export default function App() {
       if (err.code === 'ACTION_REJECTED') {
         showToast('Transaction rejected by user', 'error');
       } else if (err.message?.includes('locked')) {
-        showToast('Position is still locked! Use Emergency Withdraw (12% fee)', 'error');
+        showToast('Position is still locked! Use Emergency Withdraw (20% fee)', 'error');
       } else {
         showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
       }
@@ -3808,7 +3836,7 @@ export default function App() {
 
     try {
       setLoading(true);
-      showToast('Processing emergency withdrawal (12% fee)...', 'info');
+      showToast('Processing emergency withdrawal (20% fee)...', 'info');
 
       const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
       const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
@@ -3818,7 +3846,7 @@ export default function App() {
       await tx.wait();
 
       setLoading(false);
-      showToast('✅ Emergency withdrawal complete (12% fee applied)', 'success');
+      showToast('✅ Emergency withdrawal complete (20% fee applied)', 'success');
 
       // Refresh balances
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
@@ -4193,6 +4221,23 @@ export default function App() {
                   🥉 ${metalPrices.copper.toFixed(2)}
                 </span>
               </div>
+              {/* Security & Audit Button */}
+              <button
+                onClick={() => setShowSecurityModal(true)}
+                style={{
+                  padding: '6px 10px',
+                  background: 'transparent',
+                  border: '1px solid rgba(76,175,80,0.5)',
+                  borderRadius: '8px',
+                  color: '#4CAF50',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  marginRight: '8px',
+                }}
+                title="Security & Audit Info"
+              >
+                🛡️
+              </button>
               <button className="theme-toggle" onClick={toggleTheme}>
                 {isDark ? '☀️' : '🌙'}
               </button>
@@ -4763,8 +4808,55 @@ export default function App() {
                 <p className="section-description">Choose your staking tier based on lock duration and desired APR</p>
               </div>
 
+              {/* Market Cap Phase Indicator */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.1) 0%, rgba(212,175,55,0.05) 100%)',
+                border: '1px solid rgba(212,175,55,0.3)',
+                borderRadius: '12px',
+                padding: '16px 24px',
+                marginBottom: '24px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '16px',
+              }}>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>CURRENT PHASE</div>
+                  <div style={{ color: '#D4AF37', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {getCurrentPhase(livePrices.dtgcMarketCap || 0).name.toUpperCase()}
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                    {getCurrentPhase(livePrices.dtgcMarketCap || 0).description}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>MARKET CAP</div>
+                  <div style={{ color: '#4CAF50', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {formatMarketCap(livePrices.dtgcMarketCap || 0)}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>APR MULTIPLIER</div>
+                  <div style={{ color: '#D4AF37', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {(getCurrentPhase(livePrices.dtgcMarketCap || 0).multiplier * 100).toFixed(0)}%
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>TOTAL FEES</div>
+                  <div style={{ color: '#FF9800', fontSize: '1rem', fontWeight: 'bold' }}>
+                    {V5_FEES.entry.total + V5_FEES.exit.total}% (IN/OUT)
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                    {V5_FEES.entry.total}% entry + {V5_FEES.exit.total}% exit
+                  </div>
+                </div>
+              </div>
+
               <div className="tiers-grid">
-                {V5_STAKING_TIERS.map((tier) => (
+                {V5_STAKING_TIERS.map((tier) => {
+                  const effectiveAPR = getEffectiveAPR(tier.apr, livePrices.dtgcMarketCap || 0);
+                  return (
                   <div
                     key={tier.id}
                     className={`tier-card ${selectedTier === tier.id && !isLP ? 'selected' : ''}`}
@@ -4775,8 +4867,11 @@ export default function App() {
                     <div className="tier-name" style={{ color: tier.color }}>{tier.name}</div>
                     <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${tier.minInvest.toLocaleString()}</div>
                     <div className="tier-apr-container">
-                      <div className="tier-apr gold-text">{tier.apr}%</div>
+                      <div className="tier-apr gold-text">{effectiveAPR.toFixed(1)}%</div>
                       <div className="tier-apr-label">APR</div>
+                      {effectiveAPR < tier.apr && (
+                        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>Base: {tier.apr}%</div>
+                      )}
                     </div>
                     <div className="tier-features">
                       <div className="tier-feature">
@@ -4790,8 +4885,14 @@ export default function App() {
                     </div>
                     <span className="tier-badge">DTGC</span>
                   </div>
-                ))}
+                  );
+                })}
 
+                {/* Diamond Tier with Dynamic APR */}
+                {(() => {
+                  const diamondEffectiveAPR = getEffectiveAPR(V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost, livePrices.dtgcMarketCap || 0);
+                  const diamondBaseAPR = V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost;
+                  return (
                 <div
                   className={`tier-card diamond ${isLP && selectedTier === 3 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(3); setIsLP(true); }}
@@ -4801,8 +4902,11 @@ export default function App() {
                   <div className="tier-subtitle">{V5_DIAMOND_TIER.lpPair} LP • {V5_DIAMOND_TIER.boost}x BOOST!</div>
                   <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${V5_DIAMOND_TIER.minInvest}</div>
                   <div className="tier-apr-container">
-                    <div className="tier-apr" style={{ color: 'var(--diamond-dark)' }}>{V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost}%</div>
+                    <div className="tier-apr" style={{ color: 'var(--diamond-dark)' }}>{diamondEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
+                    {diamondEffectiveAPR < diamondBaseAPR && (
+                      <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>Base: {diamondBaseAPR}%</div>
+                    )}
                   </div>
                   <div className="tier-features">
                     <div className="tier-feature">
@@ -4820,7 +4924,14 @@ export default function App() {
                   </div>
                   <span className="tier-badge lp">LP</span>
                 </div>
+                  );
+                })()}
 
+                {/* Diamond+ Tier with Dynamic APR */}
+                {(() => {
+                  const diamondPlusEffectiveAPR = getEffectiveAPR(V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost, livePrices.dtgcMarketCap || 0);
+                  const diamondPlusBaseAPR = V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost;
+                  return (
                 <div
                   className={`tier-card diamond-plus ${isLP && selectedTier === 4 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(4); setIsLP(true); }}
@@ -4831,8 +4942,11 @@ export default function App() {
                   <div className="tier-subtitle" style={{ color: '#9C27B0' }}>{V5_DIAMOND_PLUS_TIER.lpPair} LP • {V5_DIAMOND_PLUS_TIER.boost}x BOOST!</div>
                   <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${V5_DIAMOND_PLUS_TIER.minInvest}</div>
                   <div className="tier-apr-container">
-                    <div className="tier-apr" style={{ color: '#9C27B0', fontSize: '2.2rem' }}>{V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost}%</div>
+                    <div className="tier-apr" style={{ color: '#9C27B0', fontSize: '2.2rem' }}>{diamondPlusEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
+                    {diamondPlusEffectiveAPR < diamondPlusBaseAPR && (
+                      <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>Base: {diamondPlusBaseAPR}%</div>
+                    )}
                   </div>
                   <div className="tier-features">
                     <div className="tier-feature">
@@ -4850,6 +4964,8 @@ export default function App() {
                   </div>
                   <span className="tier-badge lp" style={{ background: 'linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%)' }}>LP+</span>
                 </div>
+                  );
+                })()}
               </div>
 
               {/* Staking Form */}
@@ -4892,14 +5008,14 @@ export default function App() {
 
                   <div className="fee-breakdown">
                     <div className="fee-title">TAX STRUCTURE <span style={{ fontSize: '0.7rem', color: 'var(--gold)', cursor: 'pointer' }} onClick={() => setActiveTab('whitepaper')}>📄 Details</span></div>
-                    <div className="fee-row"><span>Entry Tax</span><span style={{color: '#4CAF50'}}>1.5%</span></div>
-                    <div className="fee-row"><span>Exit Tax</span><span style={{color: '#4CAF50'}}>1.5%</span></div>
-                    <div className="fee-row"><span>EES (Emergency End Stake)</span><span style={{color: '#FF5722'}}>12%</span></div>
+                    <div className="fee-row"><span>Entry Tax</span><span style={{color: '#4CAF50'}}>3.75%</span></div>
+                    <div className="fee-row"><span>Exit Tax</span><span style={{color: '#4CAF50'}}>3.75%</span></div>
+                    <div className="fee-row"><span>EES (Emergency End Stake)</span><span style={{color: '#FF5722'}}>20%</span></div>
                     <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
-                      Entry/Exit: 0.75% DAO • 0.25% Dev • 0.25% DTGC/URMOM LP • 0.15% DTGC/PLS LP • 0.1% Burn
+                      Entry/Exit: 1.875% DAO • 0.625% Dev • 1% Auto LP • 0.25% Burn
                     </div>
                     <div style={{ fontSize: '0.6rem', color: '#4CAF50', marginTop: '4px', textAlign: 'center' }}>
-                      ✓ All tiers profitable • Only 3% total fees
+                      ✓ Sustainable tokenomics • 7.5% total fees
                     </div>
                   </div>
                 </div>
@@ -4979,7 +5095,7 @@ export default function App() {
                                     cursor: 'pointer',
                                   }}
                                 >
-                                  ⚠️ Emergency (12%)
+                                  ⚠️ Emergency (20%)
                                 </button>
                               ) : (
                                 <>
@@ -5088,7 +5204,7 @@ export default function App() {
                                 cursor: 'pointer',
                               }}
                             >
-                              {isLocked ? '⚠️ Early Unstake (12% Fee)' : '✅ Claim All'}
+                              {isLocked ? '⚠️ Early Unstake (20% Fee)' : '✅ Claim All'}
                             </button>
                           </div>
                         </div>
@@ -5537,35 +5653,40 @@ export default function App() {
                     </tbody>
                   </table>
                   <div className="wp-highlight">
-                    <strong>V18 Tax Structure (Optimized for Staker Profitability):</strong><br/>
+                    <strong>V19 Tax Structure (Sustainable Long-Term Tokenomics):</strong><br/>
                     <div style={{marginTop: '8px'}}>
-                      <strong style={{color: '#4CAF50'}}>Entry Tax (1.5%):</strong> 0.75% DAO • 0.25% Dev • 0.25% DTGC/URMOM LP • 0.15% DTGC/PLS LP • 0.1% Burn<br/><br/>
-                      <strong style={{color: '#4CAF50'}}>Exit Tax (1.5%):</strong> Same breakdown • <strong>Only 3% total fees!</strong><br/><br/>
-                      <strong style={{color: '#FF5722'}}>EES - Emergency End Stake (12%):</strong> 7% DAO • 3% Dev • 2% Auto LP
+                      <strong style={{color: '#4CAF50'}}>Entry Tax (3.75%):</strong> 1.875% DAO • 0.625% Dev • 1% Auto LP • 0.25% Burn<br/><br/>
+                      <strong style={{color: '#4CAF50'}}>Exit Tax (3.75%):</strong> Same breakdown • <strong>7.5% total fees for sustainability!</strong><br/><br/>
+                      <strong style={{color: '#FF5722'}}>EES - Emergency End Stake (20%):</strong> 12% DAO • 5% Dev • 3% Auto LP
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="wp-card">
-                <h3 className="wp-card-title gold-text">⭐ V18 Staking Tiers (All Profitable!)</h3>
+                <h3 className="wp-card-title gold-text">⭐ V19 Staking Tiers (Sustainable APRs)</h3>
                 <div className="wp-card-content">
                   <table className="tokenomics-table">
                     <thead>
-                      <tr><th>Tier</th><th>Min $</th><th>Lock</th><th>APR</th><th>Boost</th><th>Asset</th></tr>
+                      <tr><th>Tier</th><th>Min $</th><th>Lock</th><th>Base APR</th><th>Boost</th><th>Asset</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td>🥈 Silver</td><td>$200</td><td>60 days</td><td>22%</td><td>1x</td><td>DTGC</td></tr>
-                      <tr><td>🥇 Gold</td><td>$500</td><td>90 days</td><td>24%</td><td>1x</td><td>DTGC</td></tr>
-                      <tr><td>🐋 Whale</td><td>$10k</td><td>180 days</td><td>26%</td><td>1x</td><td>DTGC</td></tr>
-                      <tr style={{background: 'rgba(0, 188, 212, 0.1)'}}><td>💎 Diamond</td><td>$1,000</td><td>90 days</td><td style={{color: '#00BCD4', fontWeight: '700'}}>40%</td><td style={{color: '#4CAF50', fontWeight: '700'}}>1.5x</td><td>DTGC/PLS LP</td></tr>
-                      <tr style={{background: 'rgba(156, 39, 176, 0.15)'}}><td>💎✨ Diamond+</td><td>$1,000</td><td>90 days</td><td style={{color: '#9C27B0', fontWeight: '700'}}>50%</td><td style={{color: '#9C27B0', fontWeight: '700'}}>2x!</td><td>DTGC/URMOM LP</td></tr>
+                      <tr><td>🥈 Silver</td><td>$200</td><td>60 days</td><td>15.4%</td><td>1x</td><td>DTGC</td></tr>
+                      <tr><td>🥇 Gold</td><td>$500</td><td>90 days</td><td>16.8%</td><td>1x</td><td>DTGC</td></tr>
+                      <tr><td>🐋 Whale</td><td>$10k</td><td>180 days</td><td>18.2%</td><td>1x</td><td>DTGC</td></tr>
+                      <tr style={{background: 'rgba(0, 188, 212, 0.1)'}}><td>💎 Diamond</td><td>$1,000</td><td>90 days</td><td style={{color: '#00BCD4', fontWeight: '700'}}>28%</td><td style={{color: '#4CAF50', fontWeight: '700'}}>1.5x (42%)</td><td>DTGC/PLS LP</td></tr>
+                      <tr style={{background: 'rgba(156, 39, 176, 0.15)'}}><td>💎✨ Diamond+</td><td>$1,000</td><td>90 days</td><td style={{color: '#9C27B0', fontWeight: '700'}}>35%</td><td style={{color: '#9C27B0', fontWeight: '700'}}>2x (70%)</td><td>DTGC/URMOM LP</td></tr>
                     </tbody>
                   </table>
                   <div className="wp-highlight">
-                    <strong>✅ All Tiers Profitable!</strong> With only 3% total fees:<br/>
-                    Silver: <span style={{color: '#4CAF50'}}>+0.6% net</span> • Gold: <span style={{color: '#4CAF50'}}>+2.9% net</span> • Whale: <span style={{color: '#4CAF50'}}>+9.8% net</span><br/>
-                    Diamond: <span style={{color: '#00BCD4'}}>+11.8% net (60% eff)</span> • Diamond+: <span style={{color: '#9C27B0'}}>+21.7% net (100% eff)</span>
+                    <strong>✅ Sustainable Tokenomics!</strong> With 7.5% total fees and dynamic APR:<br/>
+                    <div style={{marginTop: '8px'}}>
+                      Silver (60d): <span style={{color: '#4CAF50'}}>+7.9% net/yr</span> • Gold (90d): <span style={{color: '#4CAF50'}}>+9.3% net/yr</span> • Whale (180d): <span style={{color: '#4CAF50'}}>+10.7% net/yr</span><br/>
+                      Diamond: <span style={{color: '#00BCD4'}}>+34.5% net/yr (42% eff)</span> • Diamond+: <span style={{color: '#9C27B0'}}>+62.5% net/yr (70% eff)</span>
+                    </div>
+                    <div style={{marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)'}}>
+                      *APRs adjust dynamically based on market cap milestones for long-term sustainability
+                    </div>
                   </div>
                 </div>
               </div>
@@ -6396,6 +6517,145 @@ export default function App() {
               Cancel
             </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Security & Audit Modal */}
+      {showSecurityModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          backdropFilter: 'blur(8px)',
+        }} onClick={() => setShowSecurityModal(false)}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+            border: '2px solid #4CAF50',
+            borderRadius: '20px',
+            padding: '32px',
+            maxWidth: '520px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(76,175,80,0.2)',
+          }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{
+              color: '#4CAF50',
+              fontFamily: 'Cinzel, serif',
+              fontSize: '1.5rem',
+              textAlign: 'center',
+              marginBottom: '24px',
+              letterSpacing: '2px',
+            }}>
+              🛡️ Security & Audit
+            </h2>
+
+            {/* Security Features */}
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ color: '#D4AF37', fontSize: '1rem', marginBottom: '12px', borderBottom: '1px solid rgba(212,175,55,0.3)', paddingBottom: '8px' }}>
+                Security Features
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px' }}>
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                  <span style={{ color: '#fff', fontSize: '0.85rem' }}>Non-custodial staking - You control your keys</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px' }}>
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                  <span style={{ color: '#fff', fontSize: '0.85rem' }}>Smart contract on PulseChain (EVM compatible)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px' }}>
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                  <span style={{ color: '#fff', fontSize: '0.85rem' }}>Time-locked positions with transparent unlock</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px' }}>
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                  <span style={{ color: '#fff', fontSize: '0.85rem' }}>Emergency withdraw function available</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px' }}>
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                  <span style={{ color: '#fff', fontSize: '0.85rem' }}>DAO Treasury governance controls</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px' }}>
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                  <span style={{ color: '#fff', fontSize: '0.85rem' }}>Dynamic APR scaling for sustainability</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Contract Addresses */}
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ color: '#D4AF37', fontSize: '1rem', marginBottom: '12px', borderBottom: '1px solid rgba(212,175,55,0.3)', paddingBottom: '8px' }}>
+                Verified Contracts
+              </h3>
+              <div style={{ fontSize: '0.75rem', color: '#888', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div><span style={{ color: '#D4AF37' }}>DTGC Token:</span> <span style={{ fontFamily: 'monospace' }}>0x146a...9165e</span></div>
+                <div><span style={{ color: '#D4AF37' }}>Staking V2:</span> <span style={{ fontFamily: 'monospace' }}>0x6cD0...55432</span></div>
+                <div><span style={{ color: '#D4AF37' }}>LP Staking V2:</span> <span style={{ fontFamily: 'monospace' }}>0xFcFa...d4332</span></div>
+                <div><span style={{ color: '#D4AF37' }}>DAO Treasury:</span> <span style={{ fontFamily: 'monospace' }}>0x2228...bFC</span></div>
+              </div>
+            </div>
+
+            {/* Audit Status */}
+            <div style={{ marginBottom: '24px' }}>
+              <h3 style={{ color: '#D4AF37', fontSize: '1rem', marginBottom: '12px', borderBottom: '1px solid rgba(212,175,55,0.3)', paddingBottom: '8px' }}>
+                Audit Status
+              </h3>
+              <div style={{
+                padding: '16px',
+                background: 'rgba(255,152,0,0.1)',
+                border: '1px solid rgba(255,152,0,0.3)',
+                borderRadius: '12px',
+                textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🔍</div>
+                <div style={{ color: '#FF9800', fontWeight: 600, marginBottom: '4px' }}>Audit In Progress</div>
+                <div style={{ color: '#888', fontSize: '0.8rem' }}>
+                  Smart contract audit pending. Results will be published here upon completion.
+                </div>
+              </div>
+            </div>
+
+            {/* Risk Disclaimer */}
+            <div style={{
+              padding: '12px',
+              background: 'rgba(244,67,54,0.1)',
+              border: '1px solid rgba(244,67,54,0.3)',
+              borderRadius: '8px',
+              marginBottom: '20px',
+            }}>
+              <div style={{ color: '#F44336', fontSize: '0.75rem', fontWeight: 600, marginBottom: '4px' }}>
+                ⚠️ Risk Disclaimer
+              </div>
+              <div style={{ color: '#888', fontSize: '0.7rem', lineHeight: 1.4 }}>
+                DeFi protocols carry inherent risks including smart contract vulnerabilities, market volatility, and impermanent loss for LP positions. Only stake what you can afford to lose. DYOR.
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSecurityModal(false)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#fff',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+              }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
