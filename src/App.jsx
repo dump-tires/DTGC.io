@@ -2911,6 +2911,20 @@ export default function App() {
   const [stakeAmount, setStakeAmount] = useState('');
   const [isLP, setIsLP] = useState(false);
 
+  // Wallet selector modal
+  const [showWalletModal, setShowWalletModal] = useState(false);
+
+  // Currency display preference (units, usd, eur)
+  const [displayCurrency, setDisplayCurrency] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('dtgc-display-currency') || 'units';
+    }
+    return 'units';
+  });
+
+  // EUR/USD exchange rate (approximate)
+  const EUR_USD_RATE = 0.92;
+
   const [position, setPosition] = useState(null);
   const [lpPosition, setLpPosition] = useState(null);
   const [stakedPositions, setStakedPositions] = useState([]);
@@ -3263,10 +3277,101 @@ export default function App() {
       setProvider(provider);
       setSigner(signer);
       setAccount(accounts[0]);
+      setShowWalletModal(false);
       showToast('Wallet connected', 'success');
     } catch (err) {
       console.error(err);
       showToast('Connection failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Connect specific wallet type
+  const connectWalletType = async (walletType) => {
+    if (TESTNET_MODE) {
+      connectWallet();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      let provider;
+
+      switch (walletType) {
+        case 'metamask':
+          if (!window.ethereum?.isMetaMask) {
+            window.open('https://metamask.io/download/', '_blank');
+            showToast('Please install MetaMask', 'info');
+            setLoading(false);
+            return;
+          }
+          provider = new ethers.BrowserProvider(window.ethereum);
+          break;
+
+        case 'rabby':
+          if (!window.ethereum) {
+            window.open('https://rabby.io/', '_blank');
+            showToast('Please install Rabby Wallet', 'info');
+            setLoading(false);
+            return;
+          }
+          provider = new ethers.BrowserProvider(window.ethereum);
+          break;
+
+        case 'coinbase':
+          if (!window.ethereum?.isCoinbaseWallet && !window.coinbaseWalletExtension) {
+            window.open('https://www.coinbase.com/wallet', '_blank');
+            showToast('Please install Coinbase Wallet', 'info');
+            setLoading(false);
+            return;
+          }
+          provider = new ethers.BrowserProvider(window.coinbaseWalletExtension || window.ethereum);
+          break;
+
+        case 'trustwallet':
+          if (!window.ethereum?.isTrust) {
+            window.open('https://trustwallet.com/', '_blank');
+            showToast('Please install Trust Wallet', 'info');
+            setLoading(false);
+            return;
+          }
+          provider = new ethers.BrowserProvider(window.ethereum);
+          break;
+
+        default:
+          // Generic - try any available provider
+          if (!window.ethereum) {
+            showToast('No wallet detected', 'error');
+            setLoading(false);
+            return;
+          }
+          provider = new ethers.BrowserProvider(window.ethereum);
+      }
+
+      const accounts = await provider.send('eth_requestAccounts', []);
+      const signer = await provider.getSigner();
+      const network = await provider.getNetwork();
+
+      if (Number(network.chainId) !== CHAIN_ID) {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x171' }],
+        });
+      }
+
+      setProvider(provider);
+      setSigner(signer);
+      setAccount(accounts[0]);
+      setShowWalletModal(false);
+      showToast(`${walletType.charAt(0).toUpperCase() + walletType.slice(1)} connected!`, 'success');
+    } catch (err) {
+      console.error(err);
+      if (err.code === 4001) {
+        showToast('Connection rejected by user', 'error');
+      } else {
+        showToast('Connection failed', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -3283,6 +3388,53 @@ export default function App() {
     setPlsBalance('0');
     setStakedPositions([]);
     showToast('Wallet disconnected', 'info');
+  };
+
+  // Format balance with currency conversion
+  const formatBalanceWithCurrency = (balance, tokenType = 'dtgc') => {
+    const numBalance = parseFloat(balance) || 0;
+
+    if (displayCurrency === 'units') {
+      return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
+    }
+
+    let priceUsd = 0;
+    switch (tokenType.toLowerCase()) {
+      case 'dtgc':
+        priceUsd = livePrices.dtgc || 0;
+        break;
+      case 'urmom':
+        priceUsd = livePrices.urmom || 0;
+        break;
+      case 'pls':
+        priceUsd = 0.00003; // Approximate PLS price
+        break;
+      case 'lp':
+        priceUsd = livePrices.dtgc * 2 || 0; // LP token approximate value
+        break;
+      default:
+        priceUsd = 0;
+    }
+
+    const valueUsd = numBalance * priceUsd;
+
+    if (displayCurrency === 'usd') {
+      return `$${valueUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else if (displayCurrency === 'eur') {
+      const valueEur = valueUsd * EUR_USD_RATE;
+      return `€${valueEur.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
+  };
+
+  // Toggle currency display
+  const toggleCurrencyDisplay = () => {
+    const currencies = ['units', 'usd', 'eur'];
+    const currentIndex = currencies.indexOf(displayCurrency);
+    const nextCurrency = currencies[(currentIndex + 1) % currencies.length];
+    setDisplayCurrency(nextCurrency);
+    localStorage.setItem('dtgc-display-currency', nextCurrency);
   };
 
   // Fetch mainnet balances when account connects
@@ -3923,7 +4075,7 @@ export default function App() {
               </button>
               <button
                 className={`connect-btn ${account ? 'connected' : ''}`}
-                onClick={account ? disconnectWallet : connectWallet}
+                onClick={account ? disconnectWallet : () => setShowWalletModal(true)}
                 disabled={loading}
                 title={account ? 'Click to disconnect' : 'Connect your wallet'}
               >
@@ -3987,7 +4139,65 @@ export default function App() {
               </div>
             </div>
           )}
-          
+
+          {/* Mainnet Balance Display */}
+          {!TESTNET_MODE && account && (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              marginBottom: '30px',
+            }}>
+              {/* Currency Toggle Button */}
+              <button
+                onClick={toggleCurrencyDisplay}
+                style={{
+                  marginBottom: '12px',
+                  padding: '8px 20px',
+                  background: 'linear-gradient(135deg, rgba(212,175,55,0.2) 0%, rgba(212,175,55,0.1) 100%)',
+                  border: '1px solid #D4AF37',
+                  borderRadius: '20px',
+                  color: '#D4AF37',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  letterSpacing: '1px',
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : '💶 EUR'} ▼
+              </button>
+
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '15px',
+                flexWrap: 'wrap',
+                padding: '20px',
+                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                borderRadius: '16px',
+                border: '1px solid rgba(212,175,55,0.3)',
+              }}>
+                <div style={{textAlign: 'center', padding: '10px 20px'}}>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#E1BEE7'}}>{formatBalanceWithCurrency(plsBalance, 'pls')}</div>
+                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>PLS</div>
+                </div>
+                <div style={{textAlign: 'center', padding: '10px 20px'}}>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FFD700'}}>{formatBalanceWithCurrency(dtgcBalance, 'dtgc')}</div>
+                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>DTGC</div>
+                </div>
+                <div style={{textAlign: 'center', padding: '10px 20px'}}>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FF9800'}}>{formatBalanceWithCurrency(urmomBalance, 'urmom')}</div>
+                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>URMOM</div>
+                </div>
+                <div style={{textAlign: 'center', padding: '10px 20px'}}>
+                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#00BCD4'}}>{formatBalanceWithCurrency(lpBalance, 'lp')}</div>
+                  <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', letterSpacing: '1px'}}>LP</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="hero-stats">
             <div className="hero-stat">
               <div className="hero-stat-value gold-text">{formatNumber(parseFloat(contractStats.totalStaked))}</div>
@@ -5619,6 +5829,208 @@ export default function App() {
         amount={stakeAmount}
         tier={isLP ? 'Diamond' : V5_STAKING_TIERS[selectedTier]?.name}
       />
+
+      {/* Wallet Selector Modal */}
+      {showWalletModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          backdropFilter: 'blur(8px)',
+        }} onClick={() => setShowWalletModal(false)}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+            border: '2px solid #D4AF37',
+            borderRadius: '20px',
+            padding: '32px',
+            maxWidth: '420px',
+            width: '90%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.2)',
+          }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{
+              color: '#D4AF37',
+              fontFamily: 'Cinzel, serif',
+              fontSize: '1.5rem',
+              textAlign: 'center',
+              marginBottom: '24px',
+              letterSpacing: '2px',
+            }}>
+              Select Wallet
+            </h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button
+                onClick={() => connectWalletType('metamask')}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.2)';
+                  e.target.style.borderColor = '#D4AF37';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255,255,255,0.05)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>🦊</span>
+                <span style={{ fontWeight: 600 }}>MetaMask</span>
+              </button>
+
+              <button
+                onClick={() => connectWalletType('rabby')}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.2)';
+                  e.target.style.borderColor = '#D4AF37';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255,255,255,0.05)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>🐰</span>
+                <span style={{ fontWeight: 600 }}>Rabby Wallet</span>
+              </button>
+
+              <button
+                onClick={() => connectWalletType('coinbase')}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.2)';
+                  e.target.style.borderColor = '#D4AF37';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255,255,255,0.05)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>🔵</span>
+                <span style={{ fontWeight: 600 }}>Coinbase Wallet</span>
+              </button>
+
+              <button
+                onClick={() => connectWalletType('trustwallet')}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.2)';
+                  e.target.style.borderColor = '#D4AF37';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255,255,255,0.05)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>🛡️</span>
+                <span style={{ fontWeight: 600 }}>Trust Wallet</span>
+              </button>
+
+              <button
+                onClick={() => connectWalletType('generic')}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.2)';
+                  e.target.style.borderColor = '#D4AF37';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255,255,255,0.05)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>🔗</span>
+                <span style={{ fontWeight: 600 }}>Other Wallet</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowWalletModal(false)}
+              style={{
+                width: '100%',
+                marginTop: '20px',
+                padding: '12px',
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '8px',
+                color: '#888',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
