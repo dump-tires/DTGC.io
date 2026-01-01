@@ -47,27 +47,27 @@ const DTGC_TOKENOMICS = {
   lpLocked: 87000000,        // 8.7% - LP Locked
 };
 
-// V18 PROFITABLE FEE STRUCTURE (Reduced for positive staker ROI)
+// V19 SUSTAINABLE FEE STRUCTURE (7.5% total for long-term sustainability)
 const V5_FEES = {
-  // Entry Tax: 1.5% total (reduced from 5%)
+  // Entry Tax: 3.75% total
   entry: {
-    total: 1.5,
-    daoTreasury: 0.75,       // 0.75% DAO Treasury
-    dev: 0.25,               // 0.25% Dev
-    autoLP_DTGC_URMOM: 0.25, // 0.25% Auto LP DTGC/URMOM
-    autoLP_DTGC_PLS: 0.15,   // 0.15% DTGC/PLS
-    burn: 0.10,              // 0.10% DTGC Burn
+    total: 3.75,
+    daoTreasury: 1.875,      // 1.875% DAO Treasury (rewards)
+    dev: 0.625,              // 0.625% Dev
+    autoLP_DTGC_URMOM: 0.5,  // 0.5% Auto LP DTGC/URMOM
+    autoLP_DTGC_PLS: 0.5,    // 0.5% DTGC/PLS
+    burn: 0.25,              // 0.25% DTGC Burn
   },
-  // Exit Tax: 1.5% total (same breakdown)
+  // Exit Tax: 3.75% total (same breakdown)
   exit: {
-    total: 1.5,
-    daoTreasury: 0.75,
-    dev: 0.25,
-    autoLP_DTGC_URMOM: 0.25,
-    autoLP_DTGC_PLS: 0.15,
-    burn: 0.10,
+    total: 3.75,
+    daoTreasury: 1.875,
+    dev: 0.625,
+    autoLP_DTGC_URMOM: 0.5,
+    autoLP_DTGC_PLS: 0.5,
+    burn: 0.25,
   },
-  // EES (Emergency End Stake): 12% total (reduced from 20%)
+  // EES (Emergency End Stake): 12% total
   ees: {
     total: 12,
     dev: 3,              // 3% Dev
@@ -76,45 +76,45 @@ const V5_FEES = {
   },
 };
 
-// V18 PROFITABLE STAKING TIERS (All tiers positive ROI with 3% total fees)
+// V19 SUSTAINABLE STAKING TIERS (APRs reduced 30% for sustainability with 7.5% fees)
 const V5_STAKING_TIERS = [
-  { 
-    id: 0, 
-    name: 'SILVER', 
-    icon: '🥈', 
-    minInvest: 200, 
-    lockDays: 60,  // Extended from 30 to 60 days
-    holdDays: 60, 
-    apr: 22,       // Increased from 15%
-    bonus: 10, 
+  {
+    id: 0,
+    name: 'SILVER',
+    icon: '🥈',
+    minInvest: 200,
+    lockDays: 60,
+    holdDays: 60,
+    apr: 15.4,     // Reduced 30% from 22%
+    bonus: 10,
     boost: 1,
     asset: 'DTGC',
     color: '#C0C0C0',
     gradient: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)'
   },
-  { 
-    id: 1, 
-    name: 'GOLD', 
-    icon: '🥇', 
-    minInvest: 500, 
-    lockDays: 90, 
-    holdDays: 90, 
-    apr: 24,       // Increased from 18%
-    bonus: 10, 
+  {
+    id: 1,
+    name: 'GOLD',
+    icon: '🥇',
+    minInvest: 500,
+    lockDays: 90,
+    holdDays: 90,
+    apr: 16.8,     // Reduced 30% from 24%
+    bonus: 10,
     boost: 1,
     asset: 'DTGC',
     color: '#D4AF37',
     gradient: 'linear-gradient(135deg, #FFF1A8 0%, #D4AF37 50%, #B8860B 100%)'
   },
-  { 
-    id: 2, 
-    name: 'WHALE', 
-    icon: '🐋', 
-    minInvest: 10000, 
-    lockDays: 180, 
-    holdDays: 180, 
-    apr: 26,       // Increased from 18%
-    bonus: 10, 
+  {
+    id: 2,
+    name: 'WHALE',
+    icon: '🐋',
+    minInvest: 10000,
+    lockDays: 180,
+    holdDays: 180,
+    apr: 18.2,     // Reduced 30% from 26%
+    bonus: 10,
     boost: 1,
     asset: 'DTGC',
     color: '#4169E1',
@@ -130,8 +130,8 @@ const V5_DIAMOND_TIER = {
   minInvest: 1000,
   lockDays: 90,
   holdDays: 90,
-  apr: 40,
-  effectiveApr: 40 * 1.5, // 60% effective
+  apr: 28,                   // Reduced 30% from 40%
+  effectiveApr: 28 * 1.5,    // 42% effective
   bonus: 12,
   boost: 1.5,
   isLP: true,
@@ -148,8 +148,8 @@ const V5_DIAMOND_PLUS_TIER = {
   minInvest: 1000,
   lockDays: 90,
   holdDays: 90,
-  apr: 50,
-  effectiveApr: 50 * 2, // 100% effective!
+  apr: 35,                   // Reduced 30% from 50%
+  effectiveApr: 35 * 2,      // 70% effective!
   bonus: 15,
   boost: 2,
   isLP: true,
@@ -158,14 +158,41 @@ const V5_DIAMOND_PLUS_TIER = {
   gradient: 'linear-gradient(135deg, #E1BEE7 0%, #9C27B0 50%, #7B1FA2 100%)'
 };
 
-// V5 Dynamic APR (reduces as TVL grows)
-const TVL_PHASES = [
-  { maxTVL: 50000000, multiplier: 1.0, name: "Genesis" },
-  { maxTVL: 100000000, multiplier: 0.85, name: "Early" },
-  { maxTVL: 200000000, multiplier: 0.7, name: "Growth" },
-  { maxTVL: 350000000, multiplier: 0.5, name: "Mature" },
-  { maxTVL: 500000000, multiplier: 0.35, name: "Saturated" },
+// V19 Dynamic APR (reduces as Market Cap grows - sustainable scaling)
+const MARKET_CAP_PHASES = [
+  { maxMarketCap: 10000000, multiplier: 1.0, name: "Genesis", description: "Full APR - Early adopters" },
+  { maxMarketCap: 25000000, multiplier: 0.85, name: "Growth", description: "85% APR - Building momentum" },
+  { maxMarketCap: 50000000, multiplier: 0.70, name: "Expansion", description: "70% APR - Scaling up" },
+  { maxMarketCap: 100000000, multiplier: 0.50, name: "Mature", description: "50% APR - Sustainable growth" },
+  { maxMarketCap: Infinity, multiplier: 0.35, name: "Scaled", description: "35% APR - Long-term stability" },
 ];
+
+// Legacy TVL_PHASES for backwards compatibility
+const TVL_PHASES = MARKET_CAP_PHASES;
+
+// Helper function to get current phase based on market cap
+const getCurrentPhase = (marketCap) => {
+  for (const phase of MARKET_CAP_PHASES) {
+    if (marketCap < phase.maxMarketCap) {
+      return phase;
+    }
+  }
+  return MARKET_CAP_PHASES[MARKET_CAP_PHASES.length - 1];
+};
+
+// Calculate effective APR based on market cap phase
+const getEffectiveAPR = (baseAPR, marketCap) => {
+  const phase = getCurrentPhase(marketCap);
+  return baseAPR * phase.multiplier;
+};
+
+// Format market cap for display
+const formatMarketCap = (value) => {
+  if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
+  if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+  if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
+  return `$${value.toFixed(2)}`;
+};
 
 // ═══════════════════════════════════════════════════════════════
 //                    LIVE BURN DATA (ACCURATE FROM DEXSCREENER)
@@ -4763,8 +4790,55 @@ export default function App() {
                 <p className="section-description">Choose your staking tier based on lock duration and desired APR</p>
               </div>
 
+              {/* Market Cap Phase Indicator */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.1) 0%, rgba(212,175,55,0.05) 100%)',
+                border: '1px solid rgba(212,175,55,0.3)',
+                borderRadius: '12px',
+                padding: '16px 24px',
+                marginBottom: '24px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '16px',
+              }}>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>CURRENT PHASE</div>
+                  <div style={{ color: '#D4AF37', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {getCurrentPhase(livePrices.dtgcMarketCap || 0).name.toUpperCase()}
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                    {getCurrentPhase(livePrices.dtgcMarketCap || 0).description}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>MARKET CAP</div>
+                  <div style={{ color: '#4CAF50', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {formatMarketCap(livePrices.dtgcMarketCap || 0)}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>APR MULTIPLIER</div>
+                  <div style={{ color: '#D4AF37', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {(getCurrentPhase(livePrices.dtgcMarketCap || 0).multiplier * 100).toFixed(0)}%
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>TOTAL FEES</div>
+                  <div style={{ color: '#FF9800', fontSize: '1rem', fontWeight: 'bold' }}>
+                    {V5_FEES.entry.total + V5_FEES.exit.total}% (IN/OUT)
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                    {V5_FEES.entry.total}% entry + {V5_FEES.exit.total}% exit
+                  </div>
+                </div>
+              </div>
+
               <div className="tiers-grid">
-                {V5_STAKING_TIERS.map((tier) => (
+                {V5_STAKING_TIERS.map((tier) => {
+                  const effectiveAPR = getEffectiveAPR(tier.apr, livePrices.dtgcMarketCap || 0);
+                  return (
                   <div
                     key={tier.id}
                     className={`tier-card ${selectedTier === tier.id && !isLP ? 'selected' : ''}`}
@@ -4775,8 +4849,11 @@ export default function App() {
                     <div className="tier-name" style={{ color: tier.color }}>{tier.name}</div>
                     <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${tier.minInvest.toLocaleString()}</div>
                     <div className="tier-apr-container">
-                      <div className="tier-apr gold-text">{tier.apr}%</div>
+                      <div className="tier-apr gold-text">{effectiveAPR.toFixed(1)}%</div>
                       <div className="tier-apr-label">APR</div>
+                      {effectiveAPR < tier.apr && (
+                        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>Base: {tier.apr}%</div>
+                      )}
                     </div>
                     <div className="tier-features">
                       <div className="tier-feature">
@@ -4790,8 +4867,14 @@ export default function App() {
                     </div>
                     <span className="tier-badge">DTGC</span>
                   </div>
-                ))}
+                  );
+                })}
 
+                {/* Diamond Tier with Dynamic APR */}
+                {(() => {
+                  const diamondEffectiveAPR = getEffectiveAPR(V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost, livePrices.dtgcMarketCap || 0);
+                  const diamondBaseAPR = V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost;
+                  return (
                 <div
                   className={`tier-card diamond ${isLP && selectedTier === 3 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(3); setIsLP(true); }}
@@ -4801,8 +4884,11 @@ export default function App() {
                   <div className="tier-subtitle">{V5_DIAMOND_TIER.lpPair} LP • {V5_DIAMOND_TIER.boost}x BOOST!</div>
                   <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${V5_DIAMOND_TIER.minInvest}</div>
                   <div className="tier-apr-container">
-                    <div className="tier-apr" style={{ color: 'var(--diamond-dark)' }}>{V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost}%</div>
+                    <div className="tier-apr" style={{ color: 'var(--diamond-dark)' }}>{diamondEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
+                    {diamondEffectiveAPR < diamondBaseAPR && (
+                      <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>Base: {diamondBaseAPR}%</div>
+                    )}
                   </div>
                   <div className="tier-features">
                     <div className="tier-feature">
@@ -4820,7 +4906,14 @@ export default function App() {
                   </div>
                   <span className="tier-badge lp">LP</span>
                 </div>
+                  );
+                })()}
 
+                {/* Diamond+ Tier with Dynamic APR */}
+                {(() => {
+                  const diamondPlusEffectiveAPR = getEffectiveAPR(V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost, livePrices.dtgcMarketCap || 0);
+                  const diamondPlusBaseAPR = V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost;
+                  return (
                 <div
                   className={`tier-card diamond-plus ${isLP && selectedTier === 4 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(4); setIsLP(true); }}
@@ -4831,8 +4924,11 @@ export default function App() {
                   <div className="tier-subtitle" style={{ color: '#9C27B0' }}>{V5_DIAMOND_PLUS_TIER.lpPair} LP • {V5_DIAMOND_PLUS_TIER.boost}x BOOST!</div>
                   <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${V5_DIAMOND_PLUS_TIER.minInvest}</div>
                   <div className="tier-apr-container">
-                    <div className="tier-apr" style={{ color: '#9C27B0', fontSize: '2.2rem' }}>{V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost}%</div>
+                    <div className="tier-apr" style={{ color: '#9C27B0', fontSize: '2.2rem' }}>{diamondPlusEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
+                    {diamondPlusEffectiveAPR < diamondPlusBaseAPR && (
+                      <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>Base: {diamondPlusBaseAPR}%</div>
+                    )}
                   </div>
                   <div className="tier-features">
                     <div className="tier-feature">
@@ -4850,6 +4946,8 @@ export default function App() {
                   </div>
                   <span className="tier-badge lp" style={{ background: 'linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%)' }}>LP+</span>
                 </div>
+                  );
+                })()}
               </div>
 
               {/* Staking Form */}
