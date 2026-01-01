@@ -4360,21 +4360,30 @@ export default function App() {
 
               if (!activePos) return null;
 
+              // V19 Tier Correction - Override old APRs and lock periods with correct values
+              const V19_CORRECTIONS = {
+                'SILVER': { apr: 15.4, lockDays: 60 },
+                'GOLD': { apr: 16.8, lockDays: 90 },
+                'WHALE': { apr: 18.2, lockDays: 180 },
+                'DIAMOND': { apr: 28, lockDays: 90, boost: 1.5 },
+                'DIAMOND+': { apr: 35, lockDays: 90, boost: 2 },
+              };
+
+              const tierName = (activePos.tier || (activePos.isLP ? 'DIAMOND' : 'GOLD')).toUpperCase();
+              const correction = V19_CORRECTIONS[tierName] || V19_CORRECTIONS['GOLD'];
+
+              // Use corrected V19 values
+              const correctedApr = activePos.isLP ? correction.apr * (correction.boost || 1) : correction.apr;
+              const correctedLockDays = correction.lockDays;
+              const correctedEndTime = activePos.startTime + (correctedLockDays * 24 * 60 * 60 * 1000);
+
               const now = Date.now();
-              const isLocked = now < activePos.endTime;
-              const daysLeft = Math.max(0, Math.ceil((activePos.endTime - now) / (24 * 60 * 60 * 1000)));
-              const hoursLeft = Math.max(0, Math.ceil((activePos.endTime - now) / (1000 * 60 * 60)) % 24);
+              const isLocked = now < correctedEndTime;
+              const daysLeft = Math.max(0, Math.ceil((correctedEndTime - now) / (24 * 60 * 60 * 1000)));
+              const hoursLeft = Math.max(0, Math.ceil((correctedEndTime - now) / (1000 * 60 * 60)) % 24);
               const daysStaked = Math.max(0, (now - activePos.startTime) / (24 * 60 * 60 * 1000));
-              const effectiveApr = activePos.apr * (activePos.boostMultiplier || activePos.boost || 1);
-              const currentRewards = (activePos.amount * (effectiveApr / 100) / 365) * daysStaked;
-              const tierName = activePos.tier || (activePos.isLP ? 'DIAMOND' : 'DTGC');
+              const currentRewards = (activePos.amount * (correctedApr / 100) / 365) * daysStaked;
 
-              // Get tier info for proper APR display
-              const tierInfo = activePos.isLP
-                ? (activePos.tier?.includes('+') ? V5_DIAMOND_PLUS_TIER : V5_DIAMOND_TIER)
-                : V5_STAKING_TIERS.find(t => t.name === tierName) || V5_STAKING_TIERS[1];
-
-              const displayApr = effectiveApr || tierInfo?.apr || 0;
               const stakeValueUsd = activePos.amount * (livePrices.dtgc || 0);
               const rewardValueUsd = currentRewards * (livePrices.dtgc || 0);
 
@@ -4407,7 +4416,7 @@ export default function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>APR</span>
                       <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4CAF50' }}>
-                        {displayApr.toFixed(1)}%
+                        {correctedApr.toFixed(1)}%
                       </span>
                     </div>
                   </div>
@@ -4443,7 +4452,7 @@ export default function App() {
                       )}
                     </div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      📅 {new Date(activePos.endTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      📅 {new Date(correctedEndTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
                   </div>
 
