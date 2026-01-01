@@ -3007,6 +3007,14 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('start');
 
+  // DTGC Burn tracking state (live from blockchain)
+  const [dtgcBurnData, setDtgcBurnData] = useState({
+    burned: 0,
+    lastUpdated: null,
+    loading: true,
+    recentBurns: [], // Array of recent burn events
+  });
+
   // Live prices state (fetched from DexScreener)
   const [livePrices, setLivePrices] = useState({
     urmom: BURN_STATS.urmomPrice,
@@ -3224,6 +3232,42 @@ export default function App() {
   // Calculate live burn value
   const liveBurnedUSD = (BURN_STATS.totalDeadWallet * livePrices.urmom).toFixed(2);
   const liveLPBurnedUSD = (totalLPUrmom * livePrices.urmom).toFixed(2);
+
+  // Fetch DTGC burns from blockchain
+  const fetchDtgcBurns = useCallback(async () => {
+    try {
+      const rpcProvider = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+      const dtgcContract = new ethers.Contract(
+        CONTRACTS.DTGC,
+        ['function balanceOf(address) view returns (uint256)'],
+        rpcProvider
+      );
+
+      // Fetch balance of burn address (0x...369)
+      const burnBalance = await dtgcContract.balanceOf(BURN_ADDRESS);
+      const burnedAmount = parseFloat(ethers.formatEther(burnBalance));
+
+      // Update state
+      setDtgcBurnData(prev => ({
+        ...prev,
+        burned: burnedAmount,
+        lastUpdated: new Date(),
+        loading: false,
+      }));
+
+      console.log(`🔥 DTGC Burned: ${formatNumber(burnedAmount)}`);
+    } catch (err) {
+      console.error('Failed to fetch DTGC burns:', err);
+      setDtgcBurnData(prev => ({ ...prev, loading: false }));
+    }
+  }, []);
+
+  // Fetch DTGC burns on mount and every 30 seconds
+  useEffect(() => {
+    fetchDtgcBurns();
+    const interval = setInterval(fetchDtgcBurns, 30000); // Every 30 seconds
+    return () => clearInterval(interval);
+  }, [fetchDtgcBurns]);
 
   // Initialize testnet balances
   const initTestnetBalances = useCallback(() => {
@@ -5772,8 +5816,12 @@ export default function App() {
                       border: '1px solid rgba(212,175,55,0.3)'
                     }}>
                       <div style={{fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', marginBottom: '8px'}}>DTGC BURNED</div>
-                      <div style={{fontSize: '1.8rem', fontWeight: '800', color: '#D4AF37'}}>{formatNumber(0)}</div>
-                      <div style={{fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)'}}>Coming soon...</div>
+                      <div style={{fontSize: '1.8rem', fontWeight: '800', color: '#D4AF37'}}>
+                        {dtgcBurnData.loading ? '⏳' : formatNumber(dtgcBurnData.burned)}
+                      </div>
+                      <div style={{fontSize: '0.65rem', color: dtgcBurnData.loading ? 'rgba(255,255,255,0.4)' : '#4CAF50'}}>
+                        {dtgcBurnData.loading ? 'Loading...' : '🟢 Live from chain'}
+                      </div>
                     </div>
                     <div style={{
                       background: 'rgba(0,0,0,0.3)',
@@ -5783,7 +5831,9 @@ export default function App() {
                       border: '1px solid rgba(212,175,55,0.3)'
                     }}>
                       <div style={{fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', marginBottom: '8px'}}>USD VALUE</div>
-                      <div style={{fontSize: '1.8rem', fontWeight: '800', color: '#4CAF50'}}>$0.00</div>
+                      <div style={{fontSize: '1.8rem', fontWeight: '800', color: '#4CAF50'}}>
+                        ${formatNumber(dtgcBurnData.burned * livePrices.dtgc, 2)}
+                      </div>
                       <div style={{fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)'}}>@ ${livePrices.dtgc.toFixed(7)}</div>
                     </div>
                     <div style={{
@@ -5794,15 +5844,46 @@ export default function App() {
                       border: '1px solid rgba(212,175,55,0.3)'
                     }}>
                       <div style={{fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', letterSpacing: '1px', marginBottom: '8px'}}>% OF SUPPLY</div>
-                      <div style={{fontSize: '1.8rem', fontWeight: '800', color: '#FF9800'}}>0.00%</div>
+                      <div style={{fontSize: '1.8rem', fontWeight: '800', color: '#FF9800'}}>
+                        {((dtgcBurnData.burned / DTGC_TOTAL_SUPPLY) * 100).toFixed(4)}%
+                      </div>
                       <div style={{fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)'}}>of 1B total</div>
                     </div>
                   </div>
-                  
+
+                  {/* Live burn calculation */}
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '12px 16px',
+                    background: 'rgba(76,175,80,0.1)',
+                    border: '1px solid rgba(76,175,80,0.3)',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                  }}>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                      <span style={{fontSize: '1.2rem'}}>🧮</span>
+                      <span style={{fontFamily: 'Cinzel, serif', fontSize: '0.75rem', letterSpacing: '1px', color: 'rgba(255,255,255,0.8)'}}>
+                        LIVE CALCULATION {dtgcBurnData.loading ? '⏳' : '🟢'}
+                      </span>
+                    </div>
+                    <div style={{fontFamily: 'monospace', fontSize: '0.8rem', color: '#D4AF37'}}>
+                      {formatNumber(dtgcBurnData.burned)} × ${livePrices.dtgc.toFixed(7)} = <strong style={{color: '#4CAF50', fontSize: '1rem'}}>${formatNumber(dtgcBurnData.burned * livePrices.dtgc, 2)}</strong>
+                    </div>
+                  </div>
+
                   <div style={{marginTop: '16px', padding: '12px', background: 'rgba(212,175,55,0.1)', borderRadius: '8px', textAlign: 'center'}}>
                     <span style={{fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)'}}>
                       Burn Address: <code style={{color: '#D4AF37'}}>{CONTRACT_ADDRESSES.burn}</code>
                     </span>
+                    {dtgcBurnData.lastUpdated && (
+                      <div style={{fontSize: '0.6rem', color: 'rgba(255,255,255,0.4)', marginTop: '4px'}}>
+                        Last updated: {dtgcBurnData.lastUpdated.toLocaleTimeString()} • Refreshes every 30s
+                      </div>
+                    )}
                   </div>
                 </div>
 
