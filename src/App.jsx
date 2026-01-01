@@ -2874,6 +2874,12 @@ export default function App() {
   const [stakeInputMode, setStakeInputMode] = useState('tokens'); // 'tokens' or 'currency'
   const [isLP, setIsLP] = useState(false);
 
+  // Analytics Calculator State
+  const [calcInvestment, setCalcInvestment] = useState('1000');
+  const [calcTier, setCalcTier] = useState('gold');
+  const [calcPrice, setCalcPrice] = useState('0.0002');
+  const [calcTimeframe, setCalcTimeframe] = useState('12'); // months
+
   // Wallet selector modal
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
@@ -6317,36 +6323,36 @@ export default function App() {
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                   {/* Conservative Strategy */}
-                  <div style={{ 
-                    background: 'rgba(76,175,80,0.1)', 
-                    border: '1px solid rgba(76,175,80,0.3)', 
-                    borderRadius: '12px', 
-                    padding: '16px' 
+                  <div style={{
+                    background: 'rgba(76,175,80,0.1)',
+                    border: '1px solid rgba(76,175,80,0.3)',
+                    borderRadius: '12px',
+                    padding: '16px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>🛡️ Conservative</span>
                       <span style={{ color: '#4CAF50', fontSize: '0.8rem' }}>Low Risk</span>
                     </div>
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                      <div>• 70% Single-Stake (Silver/Gold)</div>
-                      <div>• 30% Diamond LP</div>
+                      <div>• 70% Single-Stake (Silver 15.4% / Gold 16.8%)</div>
+                      <div>• 30% Diamond LP (42% eff)</div>
                       <div>• 0% Diamond+ LP</div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(76,175,80,0.2)' }}>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Expected APR:</span>
-                      <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>~33%</span>
+                      <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>~24%</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Variance Reduction:</span>
-                      <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>25%</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>After 7.5% Fees:</span>
+                      <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>~16.5% Net</span>
                     </div>
                   </div>
 
                   {/* Balanced Strategy */}
-                  <div style={{ 
-                    background: 'rgba(33,150,243,0.1)', 
-                    border: '2px solid rgba(33,150,243,0.5)', 
-                    borderRadius: '12px', 
+                  <div style={{
+                    background: 'rgba(33,150,243,0.1)',
+                    border: '2px solid rgba(33,150,243,0.5)',
+                    borderRadius: '12px',
                     padding: '16px',
                     position: 'relative'
                   }}>
@@ -6356,26 +6362,26 @@ export default function App() {
                       <span style={{ color: '#2196F3', fontSize: '0.8rem' }}>Optimal Risk/Reward</span>
                     </div>
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                      <div>• 40% Single-Stake (Gold/Whale)</div>
-                      <div>• 30% Diamond LP (DTGC/PLS)</div>
-                      <div>• 30% Diamond+ LP (DTGC/URMOM)</div>
+                      <div>• 40% Single-Stake (Gold 16.8% / Whale 18.2%)</div>
+                      <div>• 30% Diamond LP (42% eff)</div>
+                      <div>• 30% Diamond+ LP (70% eff)</div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(33,150,243,0.2)' }}>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Expected APR:</span>
-                      <span style={{ color: '#2196F3', fontWeight: 'bold' }}>~57%</span>
+                      <span style={{ color: '#2196F3', fontWeight: 'bold' }}>~40%</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Variance Reduction:</span>
-                      <span style={{ color: '#2196F3', fontWeight: 'bold' }}>50%</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>After 7.5% Fees:</span>
+                      <span style={{ color: '#2196F3', fontWeight: 'bold' }}>~32.5% Net</span>
                     </div>
                   </div>
 
                   {/* Aggressive Strategy */}
-                  <div style={{ 
-                    background: 'rgba(156,39,176,0.1)', 
-                    border: '1px solid rgba(156,39,176,0.3)', 
-                    borderRadius: '12px', 
-                    padding: '16px' 
+                  <div style={{
+                    background: 'rgba(156,39,176,0.1)',
+                    border: '1px solid rgba(156,39,176,0.3)',
+                    borderRadius: '12px',
+                    padding: '16px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>🚀 Aggressive</span>
@@ -6383,17 +6389,27 @@ export default function App() {
                     </div>
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
                       <div>• 0% Single-Stake</div>
-                      <div>• 50% Diamond LP (DTGC/PLS)</div>
-                      <div>• 50% Diamond+ LP (DTGC/URMOM)</div>
+                      <div>• 50% Diamond LP (42% eff)</div>
+                      <div>• 50% Diamond+ LP (70% eff)</div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(156,39,176,0.2)' }}>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Expected APR:</span>
-                      <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>~80%</span>
+                      <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>~56%</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Variance Reduction:</span>
-                      <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>62%</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>After 7.5% Fees:</span>
+                      <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>~48.5% Net</span>
                     </div>
+                  </div>
+                </div>
+
+                {/* V19 Fee Structure Info */}
+                <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(212,175,55,0.1)', borderRadius: '8px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', fontSize: '0.8rem' }}>
+                    <div><span style={{ color: 'var(--text-muted)' }}>Entry Fee:</span> <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>3.75%</span></div>
+                    <div><span style={{ color: 'var(--text-muted)' }}>Exit Fee:</span> <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>3.75%</span></div>
+                    <div><span style={{ color: 'var(--text-muted)' }}>Total:</span> <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>7.5%</span></div>
+                    <div><span style={{ color: 'var(--text-muted)' }}>EES Penalty:</span> <span style={{ color: '#F44336', fontWeight: 'bold' }}>20%</span></div>
                   </div>
                 </div>
               </div>
@@ -6559,64 +6575,207 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Investment Forecasts */}
-              <div style={{ 
-                background: 'linear-gradient(135deg, rgba(212,175,55,0.1), rgba(33,150,243,0.1))', 
-                border: '2px solid rgba(212,175,55,0.3)', 
-                borderRadius: '16px', 
-                padding: '24px', 
-                marginBottom: '24px' 
+              {/* DYNAMIC PERSONAL FORECASTING CALCULATOR */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(156,39,176,0.1))',
+                border: '2px solid rgba(212,175,55,0.5)',
+                borderRadius: '16px',
+                padding: '24px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ color: '#D4AF37', fontSize: '1.3rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🧮 PERSONAL STAKING CALCULATOR (V19)
+                </h3>
+
+                {/* Input Fields */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  <div>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>Investment Amount ($)</label>
+                    <input
+                      type="number"
+                      value={calcInvestment}
+                      onChange={(e) => setCalcInvestment(e.target.value)}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                      placeholder="1000"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>DTGC Price ($)</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      value={calcPrice}
+                      onChange={(e) => setCalcPrice(e.target.value)}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                      placeholder="0.0002"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>Staking Tier</label>
+                    <select
+                      value={calcTier}
+                      onChange={(e) => setCalcTier(e.target.value)}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                    >
+                      <option value="silver">🥈 Silver (15.4% APR, 60 days)</option>
+                      <option value="gold">🥇 Gold (16.8% APR, 90 days)</option>
+                      <option value="whale">🐋 Whale (18.2% APR, 180 days)</option>
+                      <option value="diamond">💎 Diamond LP (42% eff, 90 days)</option>
+                      <option value="diamondplus">💎✨ Diamond+ LP (70% eff, 90 days)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.8rem', display: 'block', marginBottom: '6px' }}>Timeframe (Months)</label>
+                    <select
+                      value={calcTimeframe}
+                      onChange={(e) => setCalcTimeframe(e.target.value)}
+                      style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '8px', color: '#fff', fontSize: '1rem' }}
+                    >
+                      <option value="3">3 Months</option>
+                      <option value="6">6 Months</option>
+                      <option value="12">12 Months</option>
+                      <option value="24">24 Months</option>
+                      <option value="36">36 Months</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Results */}
+                {(() => {
+                  const investment = parseFloat(calcInvestment) || 0;
+                  const price = parseFloat(calcPrice) || 0.0002;
+                  const months = parseInt(calcTimeframe) || 12;
+                  const tierData = {
+                    silver: { apr: 15.4, lock: 60, name: 'Silver', icon: '🥈' },
+                    gold: { apr: 16.8, lock: 90, name: 'Gold', icon: '🥇' },
+                    whale: { apr: 18.2, lock: 180, name: 'Whale', icon: '🐋' },
+                    diamond: { apr: 42, lock: 90, name: 'Diamond LP', icon: '💎' },
+                    diamondplus: { apr: 70, lock: 90, name: 'Diamond+ LP', icon: '💎✨' },
+                  }[calcTier];
+
+                  const entryFee = 0.0375;
+                  const exitFee = 0.0375;
+                  const afterEntry = investment * (1 - entryFee);
+                  const tokens = afterEntry / price;
+                  const monthlyRate = tierData.apr / 100 / 12;
+                  const grossReturn = afterEntry * Math.pow(1 + monthlyRate, months);
+                  const rewards = grossReturn - afterEntry;
+                  const afterExit = grossReturn * (1 - exitFee);
+                  const netProfit = afterExit - investment;
+                  const netAPR = ((afterExit / investment) ** (12 / months) - 1) * 100;
+                  const lockPeriods = Math.ceil(months * 30 / tierData.lock);
+
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Tokens Acquired</div>
+                        <div style={{ color: '#D4AF37', fontSize: '1.4rem', fontWeight: 'bold' }}>{tokens.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>DTGC</div>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Gross Rewards</div>
+                        <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>${rewards.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Before exit fee</div>
+                      </div>
+                      <div style={{ background: 'rgba(76,175,80,0.2)', borderRadius: '12px', padding: '16px', textAlign: 'center', border: '2px solid rgba(76,175,80,0.5)' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Final Value</div>
+                        <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>${afterExit.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div style={{ color: '#4CAF50', fontSize: '0.7rem' }}>+${netProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })} profit</div>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Effective Net APR</div>
+                        <div style={{ color: '#2196F3', fontSize: '1.4rem', fontWeight: 'bold' }}>{netAPR.toFixed(1)}%</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>After 7.5% fees</div>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Lock Periods</div>
+                        <div style={{ color: '#FF9800', fontSize: '1.4rem', fontWeight: 'bold' }}>{lockPeriods}x</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{tierData.lock} days each</div>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>Total Fees Paid</div>
+                        <div style={{ color: '#F44336', fontSize: '1.4rem', fontWeight: 'bold' }}>${(investment * entryFee + grossReturn * exitFee).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Entry + Exit</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '16px', textAlign: 'center', fontStyle: 'italic' }}>
+                  * Calculations assume continuous compounding and price stability. Actual results may vary.
+                </p>
+              </div>
+
+              {/* V19 Tier Reference Table */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.1), rgba(33,150,243,0.1))',
+                border: '2px solid rgba(212,175,55,0.3)',
+                borderRadius: '16px',
+                padding: '24px',
+                marginBottom: '24px'
               }}>
                 <h3 style={{ color: '#D4AF37', fontSize: '1.2rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  📈 PORTFOLIO FORECASTS: $10,000 INVESTMENT
+                  📈 V19 STAKING TIERS REFERENCE
                 </h3>
-                
+
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                     <thead>
                       <tr style={{ background: 'rgba(212,175,55,0.2)' }}>
-                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>Strategy</th>
-                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>6 Month</th>
-                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>12 Month</th>
-                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>24 Month</th>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>Tier</th>
+                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>Min Invest</th>
+                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>Lock Period</th>
+                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>Base APR</th>
+                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>Boost</th>
+                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid rgba(212,175,55,0.5)' }}>Effective APR</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>🛡️ Conservative (Silver 22%)</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$10,800</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$11,900</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$14,161</td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>🥈 Silver</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$200</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>60 days</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#C0C0C0' }}>15.4%</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>1x</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#C0C0C0', fontWeight: 'bold' }}>15.4%</td>
                       </tr>
-                      <tr style={{ background: 'rgba(33,150,243,0.1)' }}>
-                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontWeight: 'bold' }}>⚖️ Balanced Hedge (40/30/30)</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#2196F3', fontWeight: 'bold' }}>$12,850</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#2196F3', fontWeight: 'bold' }}>$16,512</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#2196F3', fontWeight: 'bold' }}>$27,286</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>🐋 Whale Only (26%)</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$11,300</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$12,600</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$15,876</td>
+                      <tr style={{ background: 'rgba(212,175,55,0.1)' }}>
+                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)', fontWeight: 'bold' }}>🥇 Gold</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$500</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>90 days</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#D4AF37' }}>16.8%</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>1x</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#D4AF37', fontWeight: 'bold' }}>16.8%</td>
                       </tr>
                       <tr>
-                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>💎 Diamond LP (60%)</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4' }}>$13,000</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4' }}>$16,000</td>
-                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4' }}>$25,600</td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>🐋 Whale</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$10,000</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>180 days</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#4169E1' }}>18.2%</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>1x</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#4169E1', fontWeight: 'bold' }}>18.2%</td>
                       </tr>
-                      <tr style={{ background: 'rgba(156,39,176,0.1)' }}>
-                        <td style={{ padding: '12px', fontWeight: 'bold' }}>💎✨ Diamond+ LP (100%)</td>
-                        <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0', fontWeight: 'bold' }}>$14,850</td>
-                        <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0', fontWeight: 'bold' }}>$20,700</td>
-                        <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0', fontWeight: 'bold' }}>$42,849</td>
+                      <tr style={{ background: 'rgba(0,188,212,0.1)' }}>
+                        <td style={{ padding: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>💎 Diamond LP</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>$1,000</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>90 days</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4' }}>28%</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4' }}>1.5x</td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4', fontWeight: 'bold' }}>42%</td>
+                      </tr>
+                      <tr style={{ background: 'rgba(156,39,176,0.15)' }}>
+                        <td style={{ padding: '12px', fontWeight: 'bold' }}>💎✨ Diamond+ LP</td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>$1,000</td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>90 days</td>
+                        <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0' }}>35%</td>
+                        <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0' }}>2x</td>
+                        <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0', fontWeight: 'bold' }}>70%</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '12px', textAlign: 'center', fontStyle: 'italic' }}>
-                  * Returns shown after 3% total fees. Assumes price stability and continuous compounding.
+                  * V19 Sustainable Tokenomics: 7.5% total fees (3.75% entry + 3.75% exit). EES penalty: 20% if withdrawn before lock period ends.
                 </p>
               </div>
 
