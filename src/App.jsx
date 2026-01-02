@@ -2853,7 +2853,7 @@ export default function App() {
 
       // Force layout recalculation
       const forceRepaint = () => {
-        document.body.offsetHeight; // Trigger reflow
+        void document.body.offsetHeight; // Trigger reflow
       };
       requestAnimationFrame(forceRepaint);
     }
