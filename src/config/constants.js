@@ -13,9 +13,9 @@ export const CONTRACTS = {
   LP_TOKEN: '0x670c972Bb5388E087a2934a063064d97278e01F3',        // DTGC/URMOM LP (Diamond+)
   LP_DTGC_PLS: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',     // DTGC/PLS LP (Diamond)
   LP_DTGC_URMOM: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM LP (Diamond+)
-  STAKING_V2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
-  LP_STAKING_V2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
-  DAO_VOTING: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
+  STAKING_V3: '0x0ba3d882f21b935412608d181501d59e99a8D0f9',
+  LP_STAKING_V3: '0x7C328FFF32AD66a03218D8A953435283782Bc84F',
+  DAO_VOTING_V3: '0x4828A40bEd10c373718cA10B53A34208636CD8C4',
   DAO_TREASURY: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
   DEV_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -86,35 +86,50 @@ export const ERC20_ABI = [
   'function allowance(address owner, address spender) view returns (uint256)',
 ];
 
-export const STAKING_V2_ABI = [
+// V3 Staking ABI (matches deployed contract)
+export const STAKING_V3_ABI = [
   'function stake(uint256 amount, uint8 tier) external',
-  'function unstake(uint256 stakeId) external',
-  'function emergencyUnstake(uint256 stakeId) external',
-  'function claimRewards(uint256 stakeId) external',
-  'function getStake(address user, uint256 stakeId) view returns (uint256 amount, uint256 startTime, uint256 endTime, uint8 tier, uint256 rewards, bool active)',
-  'function getUserStakes(address user) view returns (uint256[] memory)',
-  'function calculateRewards(address user, uint256 stakeId) view returns (uint256)',
+  'function withdraw() external',
+  'function emergencyWithdraw() external',
+  'function claimRewards() external',
+  'function getPosition(address user) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonusBps, uint8 tier, bool isActive, uint256 timeRemaining)',
+  'function calculateRewards(address user) view returns (uint256)',
   'function totalStaked() view returns (uint256)',
+  'function totalStakers() view returns (uint256)',
+  'function paused() view returns (bool)',
+  'function getTiers() view returns (string[3] memory names, uint256[3] memory minUsd, uint256[3] memory locks, uint256[3] memory aprs, uint256[3] memory bonuses)',
+];
+
+// V3 LP Staking ABI (matches deployed contract)
+export const LP_STAKING_V3_ABI = [
+  'function stake(uint256 amount, uint8 lpType) external',
+  'function withdraw() external',
+  'function emergencyWithdraw() external',
+  'function claimRewards() external',
+  'function getPosition(address user) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 timeRemaining)',
+  'function calculateRewards(address user) view returns (uint256)',
+  'function totalStaked() view returns (uint256)',
+  'function totalStakers() view returns (uint256)',
   'function paused() view returns (bool)',
 ];
 
-export const LP_STAKING_V2_ABI = [
-  'function stake(uint256 amount) external',
-  'function unstake(uint256 stakeId) external',
-  'function emergencyUnstake(uint256 stakeId) external',
-  'function claimRewards(uint256 stakeId) external',
-  'function getStake(address user, uint256 stakeId) view returns (uint256 amount, uint256 startTime, uint256 endTime, uint256 rewards, bool active)',
-  'function getUserStakes(address user) view returns (uint256[] memory)',
-  'function calculateRewards(address user, uint256 stakeId) view returns (uint256)',
-  'function totalStaked() view returns (uint256)',
-  'function paused() view returns (bool)',
-];
-
-export const DAO_VOTING_ABI = [
-  'function createProposal(string memory description, uint256 duration) external returns (uint256)',
-  'function vote(uint256 proposalId, uint8 option) external',
-  'function getProposal(uint256 proposalId) view returns (string memory description, uint256 startTime, uint256 endTime, uint256[] memory votes, bool executed)',
-  'function getActiveProposals() view returns (uint256[] memory)',
+// V3 DAO Voting ABI (matches deployed contract)
+export const DAO_VOTING_V3_ABI = [
+  'function createProposal(string calldata title, string calldata description) external returns (uint256)',
+  'function castVote(uint256 proposalId, uint8 voteType) external',
+  'function executeProposal(uint256 proposalId) external',
+  'function cancelProposal(uint256 proposalId) external',
+  'function delegate(address delegatee) external',
+  'function getProposalBasic(uint256 proposalId) view returns (uint256 id, address proposer, string memory title, uint256 forVotes, uint256 againstVotes)',
+  'function getProposalTiming(uint256 proposalId) view returns (uint256 startTime, uint256 endTime, uint256 abstainVotes, bool executed, bool cancelled)',
+  'function getProposalState(uint256 proposalId) view returns (uint8)',
+  'function getVotingPower(address account) view returns (uint256)',
+  'function getQuorum() view returns (uint256)',
   'function hasVoted(uint256 proposalId, address voter) view returns (bool)',
-  'function getVotingPower(address voter) view returns (uint256)',
+  'function proposalCount() view returns (uint256)',
 ];
+
+// Legacy V2 ABIs (keep for reference)
+export const STAKING_V2_ABI = STAKING_V3_ABI;
+export const LP_STAKING_V2_ABI = LP_STAKING_V3_ABI;
+export const DAO_VOTING_ABI = DAO_VOTING_V3_ABI;

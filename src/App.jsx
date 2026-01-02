@@ -5,9 +5,9 @@ import {
   TOKENS,
   STAKING_TIERS,
   DIAMOND_TIER,
-  STAKING_V2_ABI,
-  LP_STAKING_V2_ABI,
-  DAO_VOTING_ABI,
+  STAKING_V3_ABI,
+  LP_STAKING_V3_ABI,
+  DAO_VOTING_V3_ABI,
   ERC20_ABI,
   CHAIN_ID,
   EXPLORER,
@@ -373,9 +373,9 @@ const CONTRACT_ADDRESSES = {
   lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM LP (Diamond+)
   lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',    // DTGC/PLS LP (Diamond)
   daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
-  stakingV2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
-  lpStakingV2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
-  daoVoting: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
+  stakingV3: '0x0ba3d882f21b935412608d181501d59e99a8D0f9',    // NEW V3
+  lpStakingV3: '0x7C328FFF32AD66a03218D8A953435283782Bc84F',  // NEW V3
+  daoVotingV3: '0x4828A40bEd10c373718cA10B53A34208636CD8C4',  // NEW V3
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -3848,9 +3848,15 @@ export default function App() {
       const amountWei = ethers.parseEther(amount.toString());
 
       // Determine which token and contract to use
-      const tokenAddress = isLP ? CONTRACTS.LP_TOKEN : CONTRACTS.DTGC;
-      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
-      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      let tokenAddress;
+      if (isLP) {
+        // Use correct LP token based on tier
+        tokenAddress = selectedTier === 4 ? CONTRACT_ADDRESSES.lpDtgcUrmom : CONTRACT_ADDRESSES.lpDtgcPls;
+      } else {
+        tokenAddress = CONTRACTS.DTGC;
+      }
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
 
       // Step 1: Check and approve token spending
       showToast('Step 1/2: Approving tokens...', 'info');
@@ -3869,8 +3875,9 @@ export default function App() {
 
       let stakeTx;
       if (isLP) {
-        // LP Staking - just amount
-        stakeTx = await stakingContract.stake(amountWei);
+        // LP Staking - amount and lpType (0=Diamond/PLS, 1=Diamond+/URMOM)
+        const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
+        stakeTx = await stakingContract.stake(amountWei, lpType);
       } else {
         // Regular Staking - amount and tier
         stakeTx = await stakingContract.stake(amountWei, selectedTier);
@@ -3962,7 +3969,7 @@ export default function App() {
 
       // Determine if this is LP or regular staking based on positionId
       // For now, use regular staking contract - can be enhanced with position tracking
-      const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, signer);
+      const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, signer);
 
       const tx = await stakingContract.withdraw();
       await tx.wait();
@@ -4000,8 +4007,8 @@ export default function App() {
       setLoading(true);
       showToast('Processing emergency withdrawal (20% fee)...', 'info');
 
-      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
-      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
 
       const tx = await stakingContract.emergencyWithdraw();
@@ -4033,8 +4040,8 @@ export default function App() {
       setLoading(true);
       showToast('Claiming rewards...', 'info');
 
-      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
-      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
 
       const tx = await stakingContract.claimRewards();
@@ -4068,17 +4075,18 @@ export default function App() {
 
     try {
       // Fetch regular staking position
-      const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, provider);
+      const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, provider);
       const position = await stakingContract.getPosition(account);
 
       // Fetch LP staking position
-      const lpStakingContract = new ethers.Contract(CONTRACTS.LP_STAKING_V2, LP_STAKING_V2_ABI, provider);
+      const lpStakingContract = new ethers.Contract(CONTRACT_ADDRESSES.lpStakingV3, LP_STAKING_V3_ABI, provider);
       const lpPosition = await lpStakingContract.getPosition(account);
 
       const positions = [];
 
       // Parse regular staking position
-      if (position && position[6]) { // isActive
+      // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, bonusBps, tier, isActive, timeRemaining)
+      if (position && position[7]) { // isActive is at index 7
         positions.push({
           id: 'dtgc-stake',
           type: 'DTGC',
@@ -4088,14 +4096,16 @@ export default function App() {
           endTime: Number(position[2]) * 1000,
           lockPeriod: Number(position[3]),
           apr: Number(position[4]) / 100, // Convert from bps
-          bonus: parseFloat(ethers.formatEther(position[5])),
-          isActive: position[6],
-          timeRemaining: Number(position[7]),
+          bonus: Number(position[5]) / 100, // bonusBps
+          tier: Number(position[6]),
+          isActive: position[7],
+          timeRemaining: Number(position[8]),
         });
       }
 
       // Parse LP staking position
-      if (lpPosition && lpPosition[6]) { // isActive
+      // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
+      if (lpPosition && lpPosition[7]) { // isActive is at index 7
         positions.push({
           id: 'lp-stake',
           type: 'LP',
@@ -4103,11 +4113,12 @@ export default function App() {
           amount: parseFloat(ethers.formatEther(lpPosition[0])),
           startTime: Number(lpPosition[1]) * 1000,
           endTime: Number(lpPosition[2]) * 1000,
-          pendingReward: parseFloat(ethers.formatEther(lpPosition[3])),
-          pendingBonus: parseFloat(ethers.formatEther(lpPosition[4])),
-          boostMultiplier: Number(lpPosition[5]) / 100,
-          isActive: lpPosition[6],
-          timeRemaining: Number(lpPosition[7]),
+          lockPeriod: Number(lpPosition[3]),
+          apr: Number(lpPosition[4]) / 100, // aprBps
+          boostMultiplier: Number(lpPosition[5]) / 100, // boostBps
+          lpType: Number(lpPosition[6]), // 0=Diamond, 1=Diamond+
+          isActive: lpPosition[7],
+          timeRemaining: Number(lpPosition[8]),
         });
       }
 
