@@ -19,12 +19,12 @@ import {
 /*
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
-    ║     🏆 DTGC PREMIUM STAKING PLATFORM V18 DIAMOND+ 🏆         ║
+    ║     🏆 DTGC PREMIUM STAKING PLATFORM V19 - MAINNET 🏆        ║
     ║                                                               ║
-    ║     ✦ V18 Gold Paper Tokenomics (91% Controlled!)            ║
+    ║     ✦ V19 Gold Paper Tokenomics (91% Controlled!)            ║
+    ║     ✦ V3 Contracts Deployed & Live                           ║
     ║     ✦ Diamond (DTGC/PLS) + Diamond+ (DTGC/URMOM) LP Tiers    ║
-    ║     ✦ 3% Total Fees • All Tiers Profitable                   ║
-    ║     ✦ Gold Supply Dynamics + Live Holder Ticker              ║
+    ║     ✦ 7.5% Total Fees • Sustainable APRs                     ║
     ║     ✦ Live Prices from DexScreener                           ║
     ║                                                               ║
     ║                    dtgc.io                                    ║
