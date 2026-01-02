@@ -4627,73 +4627,48 @@ export default function App() {
               <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
             </nav>
 
-            <div className="nav-right">
-              {/* Metal Prices Display with Gold Bar Icons */}
+            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* Metal & Crypto Prices - Compact Single Row */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                marginRight: '8px',
-                padding: '6px 12px',
+                gap: '8px',
+                padding: '4px 10px',
                 background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
-                borderRadius: '20px',
-                border: '1px solid rgba(212,175,55,0.3)',
-                fontSize: '0.7rem',
+                borderRadius: '16px',
+                border: '1px solid rgba(212,175,55,0.2)',
+                fontSize: '0.6rem',
               }}>
-                <span title="Gold /oz" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{
-                    display: 'inline-block',
-                    width: '16px',
-                    height: '9px',
-                    background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #B8860B 100%)',
-                    borderRadius: '2px',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
-                  }}></span>
-                  <span style={{ color: '#FFD700', fontWeight: 600 }}>${metalPrices.gold.toLocaleString()}</span>
-                </span>
-                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
-                <span title="Silver /oz" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{
-                    display: 'inline-block',
-                    width: '16px',
-                    height: '9px',
-                    background: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)',
-                    borderRadius: '2px',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
-                  }}></span>
-                  <span style={{ color: '#C0C0C0', fontWeight: 600 }}>${metalPrices.silver.toFixed(2)}</span>
-                </span>
-                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
-                <span title="Copper /lb" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{
-                    display: 'inline-block',
-                    width: '16px',
-                    height: '9px',
-                    background: 'linear-gradient(135deg, #CD7F32 0%, #B87333 50%, #8B4513 100%)',
-                    borderRadius: '2px',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
-                  }}></span>
-                  <span style={{ color: '#CD7F32', fontWeight: 600 }}>${metalPrices.copper.toFixed(2)}</span>
-                </span>
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600 }}>🥇 ${metalPrices.gold.toLocaleString()}</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600 }}>🥈 ${metalPrices.silver.toFixed(0)}</span>
+                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600 }}>🥉 ${metalPrices.copper.toFixed(2)}</span>
               </div>
-              {/* Crypto Prices */}
+              {/* Crypto Prices - Compact */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                marginRight: '8px',
-                padding: '6px 10px',
+                padding: '4px 8px',
                 background: 'rgba(33,150,243,0.08)',
-                borderRadius: '20px',
-                border: '1px solid rgba(33,150,243,0.2)',
-                fontSize: '0.65rem',
+                borderRadius: '16px',
+                border: '1px solid rgba(33,150,243,0.15)',
+                fontSize: '0.55rem',
               }}>
-                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{cryptoPrices.btc.toLocaleString()}</span>
-                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{(cryptoPrices.btc/1000).toFixed(1)}K</span>
                 <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
-                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+              </div>
+              {/* PLS/PLSX Prices */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'rgba(0,212,170,0.08)',
+                borderRadius: '16px',
+                border: '1px solid rgba(0,212,170,0.15)',
+                fontSize: '0.55rem',
+              }}>
                 <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(6)}</span>
-                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
                 <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(6)}</span>
               </div>
               {/* Security & Audit Button */}
@@ -7688,4 +7663,3 @@ export default function App() {
     </ThemeContext.Provider>
   );
 }
-// v19 LP
