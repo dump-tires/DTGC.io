@@ -1,42 +1,78 @@
 // ═══════════════════════════════════════════════════════════════
-//                    DTGC MAINNET CONFIGURATION
+//                    DTGC MAINNET CONFIGURATION V19
 // ═══════════════════════════════════════════════════════════════
 
 // PulseChain Mainnet
 export const CHAIN_ID = 369;
 export const EXPLORER = 'https://scan.pulsechain.com';
 
-// Contract Addresses - MAINNET
+// Contract Addresses - MAINNET V19
 export const CONTRACTS = {
-  dtgc: '0x146a6F852D2B9a24e1078e6D2f86486D1C09165e',
-  urmom: '0x91dfC220a58bC484D2684F8723Cf50A62eA39B0C',
-  lp: '0xC02FFbE5d5f9E0A1b8947D7C234A8318FAE3DAD3',
-  lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',      // DTGC/PLS V2 LP
-  lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM V2 LP
-  stakingV2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
-  lpStakingV2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
-  daoVoting: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
-  daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
+  DTGC: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',
+  URMOM: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',
+  LP_TOKEN: '0x1891bD6A959B32977c438f3022678a8659364A72',        // DTGC/URMOM LP (Diamond+)
+  LP_DTGC_PLS: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',     // DTGC/PLS LP (Diamond)
+  LP_DTGC_URMOM: '0x1891bD6A959B32977c438f3022678a8659364A72',   // DTGC/URMOM LP (Diamond+)
+  STAKING_V2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
+  LP_STAKING_V2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
+  DAO_VOTING: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
+  DAO_TREASURY: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
+  DEV_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
 
 export const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
 
 export const TOKENS = {
-  dtgc: { address: CONTRACTS.dtgc, symbol: 'DTGC', decimals: 18, name: 'DT Gold Coin' },
-  urmom: { address: CONTRACTS.urmom, symbol: 'URMOM', decimals: 18, name: 'URMOM' },
-  lp: { address: CONTRACTS.lp, symbol: 'DTGC-URMOM LP', decimals: 18, name: 'DTGC/URMOM LP Token' },
+  dtgc: { address: CONTRACTS.DTGC, symbol: 'DTGC', decimals: 18, name: 'DT Gold Coin' },
+  urmom: { address: CONTRACTS.URMOM, symbol: 'URMOM', decimals: 18, name: 'URMOM' },
+  lpDtgcPls: { address: CONTRACTS.LP_DTGC_PLS, symbol: 'DTGC-PLS LP', decimals: 18, name: 'DTGC/PLS LP Token' },
+  lpDtgcUrmom: { address: CONTRACTS.LP_DTGC_URMOM, symbol: 'DTGC-URMOM LP', decimals: 18, name: 'DTGC/URMOM LP Token' },
 };
 
+// V19 Staking Tiers
 export const STAKING_TIERS = [
-  { id: 0, name: 'SILVER', minInvest: 200, lockDays: 60, apr: 22, boost: 1 },
-  { id: 1, name: 'GOLD', minInvest: 500, lockDays: 90, apr: 24, boost: 1 },
-  { id: 2, name: 'WHALE', minInvest: 10000, lockDays: 180, apr: 26, boost: 1 },
+  { id: 0, name: 'SILVER', minInvest: 200, lockDays: 60, apr: 15.4, boost: 1 },
+  { id: 1, name: 'GOLD', minInvest: 500, lockDays: 90, apr: 16.8, boost: 1 },
+  { id: 2, name: 'WHALE', minInvest: 10000, lockDays: 180, apr: 18.2, boost: 1 },
 ];
 
-export const DIAMOND_TIER = { id: 3, name: 'DIAMOND', minInvest: 1000, lockDays: 90, apr: 60, boost: 1.5, asset: 'DTGC/PLS LP' };
-export const DIAMOND_PLUS_TIER = { id: 4, name: 'DIAMOND+', minInvest: 1000, lockDays: 90, apr: 100, boost: 2, asset: 'DTGC/URMOM LP' };
+export const DIAMOND_TIER = { 
+  id: 3, 
+  name: 'DIAMOND', 
+  minInvest: 1000, 
+  lockDays: 90, 
+  apr: 28, 
+  boost: 1.5, 
+  effectiveApr: 42,
+  asset: 'DTGC/PLS LP',
+  lpAddress: '0xc33944a6020FB5620001A202Eaa67214A1AB9193'
+};
 
-export const FEES = { entry: 1.5, exit: 1.5, ees: 12 };
+export const DIAMOND_PLUS_TIER = { 
+  id: 4, 
+  name: 'DIAMOND+', 
+  minInvest: 1000, 
+  lockDays: 90, 
+  apr: 35, 
+  boost: 2, 
+  effectiveApr: 70,
+  asset: 'DTGC/URMOM LP',
+  lpAddress: '0x1891bD6A959B32977c438f3022678a8659364A72'
+};
+
+// V19 Fee Structure (7.5% Total)
+export const FEES = { 
+  entry: 3.75, 
+  exit: 3.75, 
+  ees: 20,
+  // Entry/Exit breakdown
+  daoFee: 1.875,
+  devFee: 0.625,
+  lpUrmomFee: 0.5,
+  lpPlsFee: 0.5,
+  burnFee: 0.25,
+};
+
 export const VOTING_OPTIONS = ['Yes', 'No', 'Abstain'];
 
 export const ERC20_ABI = [
@@ -59,6 +95,7 @@ export const STAKING_V2_ABI = [
   'function getUserStakes(address user) view returns (uint256[] memory)',
   'function calculateRewards(address user, uint256 stakeId) view returns (uint256)',
   'function totalStaked() view returns (uint256)',
+  'function paused() view returns (bool)',
 ];
 
 export const LP_STAKING_V2_ABI = [
@@ -70,6 +107,7 @@ export const LP_STAKING_V2_ABI = [
   'function getUserStakes(address user) view returns (uint256[] memory)',
   'function calculateRewards(address user, uint256 stakeId) view returns (uint256)',
   'function totalStaked() view returns (uint256)',
+  'function paused() view returns (bool)',
 ];
 
 export const DAO_VOTING_ABI = [

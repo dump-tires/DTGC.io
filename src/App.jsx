@@ -370,14 +370,14 @@ const SOCIAL_LINKS = {
 const CONTRACT_ADDRESSES = {
   dtgc: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',
   urmom: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',
-  lp: '0x1891bD6A959B32977c438f3022678a8659364A72',
-  lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',      // DTGC/PLS V2 LP
-  lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM V2 LP
+  lpDtgcUrmom: '0x1891bD6A959B32977c438f3022678a8659364A72',   // DTGC/URMOM LP (Diamond+)
+  lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',    // DTGC/PLS LP (Diamond)
   daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
   stakingV2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
   lpStakingV2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
   daoVoting: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
   burn: '0x0000000000000000000000000000000000000369',
+  devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -2869,6 +2869,8 @@ export default function App() {
 
   const [dtgcBalance, setDtgcBalance] = useState('0');
   const [lpBalance, setLpBalance] = useState('0');
+  const [lpDtgcPlsBalance, setLpDtgcPlsBalance] = useState('0');   // Diamond tier LP
+  const [lpDtgcUrmomBalance, setLpDtgcUrmomBalance] = useState('0'); // Diamond+ tier LP
   const [plsBalance, setPlsBalance] = useState('0');
   const [urmomBalance, setUrmomBalance] = useState('0');
   const [selectedTier, setSelectedTier] = useState(null);
@@ -3705,16 +3707,33 @@ export default function App() {
         const urmomBal = await urmomContract.balanceOf(account);
         setUrmomBalance(ethers.formatEther(urmomBal));
 
-        // Get LP balance
-        const lpContract = new ethers.Contract(CONTRACTS.LP_TOKEN, ERC20_ABI, provider);
-        const lpBal = await lpContract.balanceOf(account);
-        setLpBalance(ethers.formatEther(lpBal));
+        // Get DTGC/PLS LP balance (Diamond tier)
+        try {
+          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+          const lpPlsBal = await lpPlsContract.balanceOf(account);
+          setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
+        } catch (e) {
+          console.warn('Could not fetch DTGC/PLS LP balance:', e);
+          setLpDtgcPlsBalance('0');
+        }
+
+        // Get DTGC/URMOM LP balance (Diamond+ tier)
+        try {
+          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+          const lpUrmomBal = await lpUrmomContract.balanceOf(account);
+          setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
+          setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
+        } catch (e) {
+          console.warn('Could not fetch DTGC/URMOM LP balance:', e);
+          setLpDtgcUrmomBalance('0');
+        }
 
         console.log('📊 Mainnet balances loaded:', {
           pls: ethers.formatEther(plsBal),
           dtgc: ethers.formatEther(dtgcBal),
           urmom: ethers.formatEther(urmomBal),
-          lp: ethers.formatEther(lpBal)
+          lpDtgcPls: lpDtgcPlsBalance,
+          lpDtgcUrmom: lpDtgcUrmomBalance
         });
       } catch (err) {
         console.error('Failed to fetch balances:', err);
@@ -3748,10 +3767,18 @@ export default function App() {
 
     // TESTNET MODE - Simulate staking
     if (TESTNET_MODE) {
-      const balance = isLP ? parseFloat(lpBalance) : parseFloat(dtgcBalance);
+      const getBalance = () => {
+        if (!isLP) return parseFloat(dtgcBalance);
+        return selectedTier === 4 ? parseFloat(lpDtgcUrmomBalance) : parseFloat(lpDtgcPlsBalance);
+      };
+      const getLpName = () => {
+        if (!isLP) return 'DTGC';
+        return selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP';
+      };
+      const balance = getBalance();
 
       if (amount > balance) {
-        showToast(`Insufficient ${isLP ? 'LP' : 'DTGC'} balance!`, 'error');
+        showToast(`Insufficient ${getLpName()} balance!`, 'error');
         return;
       }
       
@@ -4825,9 +4852,15 @@ export default function App() {
                   <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FF9800'}}>{formatNumber(parseFloat(urmomBalance))} URMOM</div>
                   <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(urmomBalance) * (livePrices.urmom || 0)).value)}</div>
                 </div>
-                <div style={{textAlign: 'center', padding: '10px 20px'}}>
-                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#00BCD4'}}>{formatNumber(parseFloat(lpBalance))} LP</div>
-                  <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
+                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(0,188,212,0.1)', borderRadius: '8px', border: '1px solid rgba(0,188,212,0.3)'}}>
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#00BCD4'}}>{formatNumber(parseFloat(lpDtgcPlsBalance))} 💎</div>
+                  <div style={{fontSize: '0.65rem', color: '#00BCD4'}}>DTGC/PLS LP</div>
+                  <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcPlsBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
+                </div>
+                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(156,39,176,0.1)', borderRadius: '8px', border: '1px solid rgba(156,39,176,0.3)'}}>
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#9C27B0'}}>{formatNumber(parseFloat(lpDtgcUrmomBalance))} 💎✨</div>
+                  <div style={{fontSize: '0.65rem', color: '#9C27B0'}}>DTGC/URMOM LP</div>
+                  <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcUrmomBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
                 </div>
               </div>
             </div>
@@ -5499,19 +5532,28 @@ export default function App() {
                     <div className="input-header">
                       <span className="input-label">Amount</span>
                       <span className="balance-display" onClick={() => {
+                        // Get the correct balance based on tier
+                        const getBalance = () => {
+                          if (!isLP) return dtgcBalance;
+                          return selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance;
+                        };
+                        const getLpName = () => {
+                          if (!isLP) return 'DTGC';
+                          return selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP';
+                        };
                         if (stakeInputMode === 'tokens') {
-                          setStakeAmount(isLP ? lpBalance : dtgcBalance);
+                          setStakeAmount(getBalance());
                         } else {
                           // Set max in currency value
-                          const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
+                          const maxTokens = parseFloat(getBalance()) || 0;
                           const priceUsd = livePrices.dtgc || 0;
                           const valueUsd = maxTokens * priceUsd;
                           const currencyValue = convertToCurrency(valueUsd).value;
                           setStakeAmount(currencyValue.toFixed(2));
                         }
                       }} style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px'}}>
-                        <span>Balance: {formatNumber(parseFloat(isLP ? lpBalance : dtgcBalance))} {isLP ? 'LP' : 'DTGC'}</span>
-                        <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency((parseFloat(isLP ? lpBalance : dtgcBalance) || 0) * (livePrices.dtgc || 0)).value)}</span>
+                        <span>Balance: {formatNumber(parseFloat(isLP ? (selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance) : dtgcBalance))} {isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC'}</span>
+                        <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency((parseFloat(isLP ? (selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance) : dtgcBalance) || 0) * (livePrices.dtgc || 0)).value)}</span>
                       </span>
                     </div>
                     <div className="input-container">
@@ -5570,10 +5612,14 @@ export default function App() {
                           {stakeInputMode === 'tokens' ? (isLP ? 'LP' : 'DTGC') : displayCurrency.toUpperCase()}
                         </button>
                         <button className="max-btn" onClick={() => {
+                          const getBalance = () => {
+                            if (!isLP) return dtgcBalance;
+                            return selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance;
+                          };
                           if (stakeInputMode === 'tokens') {
-                            setStakeAmount(isLP ? lpBalance : dtgcBalance);
+                            setStakeAmount(getBalance());
                           } else {
-                            const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
+                            const maxTokens = parseFloat(getBalance()) || 0;
                             const priceUsd = livePrices.dtgc || 0;
                             const valueUsd = maxTokens * priceUsd;
                             const currencyValue = convertToCurrency(valueUsd).value;
