@@ -4915,10 +4915,6 @@ export default function App() {
               <div className="hero-stat-value gold-text">${formatNumber(parseFloat(liveBurnedUSD))}</div>
               <div className="hero-stat-label">Burned Value</div>
             </div>
-            <div className="hero-stat">
-              <div className="hero-stat-value" style={{color: '#4CAF50'}}>91%</div>
-              <div className="hero-stat-label">Project Supply</div>
-            </div>
           </div>
         </section>
 
@@ -5318,23 +5314,11 @@ export default function App() {
               borderRadius: '8px',
               padding: '12px 16px',
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'center',
               alignItems: 'center',
               flexWrap: 'wrap',
-              gap: '12px',
+              gap: '20px',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.75rem', color: '#888' }}>PROJECT SUPPLY:</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#4CAF50' }}>
-                  {(((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.75rem', color: '#888' }}>PUBLIC FLOAT:</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#FF9800' }}>
-                  8.3%
-                </span>
-              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.75rem', color: '#888' }}>MARKET CAP:</span>
                 <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#D4AF37' }}>
@@ -6008,46 +5992,6 @@ export default function App() {
                   </button>
                 </div>
               )}
-
-              {/* DTGC Logo/Favicon at Bottom of Stake Page */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '40px 20px',
-                marginTop: '20px',
-              }}>
-                <img 
-                  src="/favicon.png" 
-                  alt="DTGC Logo" 
-                  style={{
-                    width: '120px',
-                    height: '120px',
-                    borderRadius: '50%',
-                    border: '3px solid var(--gold)',
-                    boxShadow: '0 0 30px rgba(212,175,55,0.4), 0 0 60px rgba(212,175,55,0.2)',
-                    animation: 'float 3s ease-in-out infinite',
-                  }}
-                />
-                <p style={{
-                  color: 'var(--gold)',
-                  fontFamily: 'Cinzel, serif',
-                  fontSize: '1.1rem',
-                  letterSpacing: '4px',
-                  marginTop: '16px',
-                  textTransform: 'uppercase',
-                }}>
-                  DT GOLD COIN
-                </p>
-                <p style={{
-                  color: 'var(--text-muted)',
-                  fontSize: '0.8rem',
-                  marginTop: '8px',
-                }}>
-                  Premium Staking on PulseChain
-                </p>
-              </div>
             </section>
           )}
 
@@ -6462,7 +6406,7 @@ export default function App() {
                 <h3 className="wp-card-title gold-text">💰 V5 GOLD PAPER TOKENOMICS</h3>
                 <div className="wp-card-content">
                   <p><strong>Total Supply: 1,000,000,000 DTGC</strong></p>
-                  <p style={{color: 'var(--gold)', fontWeight: '600', marginBottom: '16px'}}>⚠️ 91% CONTROLLED • ONLY 9% FLOAT!</p>
+                  <p style={{color: 'var(--gold)', fontWeight: '600', marginBottom: '16px'}}>DTGC Tokenomics</p>
                   <table className="tokenomics-table">
                     <thead>
                       <tr><th>Allocation</th><th>Amount</th><th>Percentage</th></tr>
