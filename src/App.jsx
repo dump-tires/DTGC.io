@@ -6518,8 +6518,8 @@ export default function App() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Display Currency:</span>
                   <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
+                    value={displayCurrency}
+                    onChange={(e) => setDisplayCurrency(e.target.value)}
                     style={{
                       padding: '8px 16px',
                       background: 'rgba(33,150,243,0.1)',
