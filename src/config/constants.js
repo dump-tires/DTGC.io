@@ -1,177 +1,82 @@
 // ═══════════════════════════════════════════════════════════════
-//                    DTGC STAKING - CONSTANTS
-//                         dump.tires
+//                    DTGC MAINNET CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
 
-// Network
+// PulseChain Mainnet
 export const CHAIN_ID = 369;
-export const CHAIN_NAME = 'PulseChain';
-export const RPC_URL = 'https://rpc.pulsechain.com';
 export const EXPLORER = 'https://scan.pulsechain.com';
 
-// Contracts
+// Contract Addresses - MAINNET
 export const CONTRACTS = {
-  DTGC: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',
-  URMOM: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',
-  LP_TOKEN: '0x1891bD6A959B32977c438f3022678a8659364A72',
-  STAKING_V2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
-  LP_STAKING_V2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
-  DAO_VOTING: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
-  DAO_TREASURY: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
+  dtgc: '0x146a6F852D2B9a24e1078e6D2f86486D1C09165e',
+  urmom: '0x91dfC220a58bC484D2684F8723Cf50A62eA39B0C',
+  lp: '0xC02FFbE5d5f9E0A1b8947D7C234A8318FAE3DAD3',
+  lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',      // DTGC/PLS V2 LP
+  lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM V2 LP
+  stakingV2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
+  lpStakingV2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
+  daoVoting: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
+  daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
 };
 
-// Tokens
-export const TOKENS = {
-  DTGC: {
-    address: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',
-    decimals: 18,
-    symbol: 'DTGC',
-    name: 'DT Gold Coin',
-  },
-  URMOM: {
-    address: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',
-    decimals: 18,
-    symbol: 'URMOM',
-    name: 'URMOM',
-  },
-  LP: {
-    address: '0x1891bD6A959B32977c438f3022678a8659364A72',
-    decimals: 18,
-    symbol: 'PLP',
-    name: 'DTGC/URMOM LP',
-  },
-};
-
-// V19 Staking Tiers (Sustainable APRs - reduced 30%)
-export const STAKING_TIERS = [
-  {
-    id: 0,
-    name: 'Silver',
-    icon: '🥈',
-    minInvest: 200,
-    lockDays: 60,
-    apr: 15.4,    // Reduced 30% from 22%
-    bonus: 10,
-    boost: 1,
-    color: '#C0C0C0',
-  },
-  {
-    id: 1,
-    name: 'Gold',
-    icon: '🥇',
-    minInvest: 500,
-    lockDays: 90,
-    apr: 16.8,    // Reduced 30% from 24%
-    bonus: 10,
-    boost: 1,
-    color: '#FFD700',
-  },
-  {
-    id: 2,
-    name: 'Whale',
-    icon: '🐋',
-    minInvest: 10000,
-    lockDays: 180,
-    apr: 18.2,    // Reduced 30% from 26%
-    bonus: 10,
-    boost: 1,
-    color: '#4169E1',
-  },
-];
-
-export const DIAMOND_TIER = {
-  id: 3,
-  name: 'Diamond',
-  icon: '💎',
-  minInvest: 1000,
-  lockDays: 90,
-  apr: 28,        // Reduced 30% from 40%
-  effectiveApr: 42, // 28% × 1.5x boost
-  bonus: 12,
-  boost: 1.5,
-  color: '#00BCD4',
-  isLP: true,
-  lpPair: 'DTGC/PLS',
-};
-
-export const DIAMOND_PLUS_TIER = {
-  id: 4,
-  name: 'Diamond+',
-  icon: '💎✨',
-  minInvest: 1000,
-  lockDays: 90,
-  apr: 35,        // Reduced 30% from 50%
-  effectiveApr: 70, // 35% × 2x boost
-  bonus: 15,
-  boost: 2,
-  color: '#9C27B0',
-  isLP: true,
-  lpPair: 'DTGC/URMOM',
-};
-
-// V19 Fee Structure (7.5% total for sustainability)
-export const FEES = {
-  ENTRY: 3.75,
-  EXIT: 3.75,
-  ENTRY_DAO: 1.875,
-  ENTRY_DEV: 0.625,
-  ENTRY_LP: 1.0,
-  ENTRY_BURN: 0.25,
-  EES_TOTAL: 20,
-  EES_DEV: 5,
-  EES_DAO: 12,
-  EES_LP: 3,
-};
-
-// DAO Voting Options
-export const VOTING_OPTIONS = [
-  { id: 0, name: 'Buy and Burn', description: 'Purchase DTGC and send to burn address' },
-  { id: 1, name: 'Liquidity', description: 'Add to DTGC/URMOM liquidity pool' },
-  { id: 2, name: 'Treasury', description: 'Send to DAO Treasury for development' },
-  { id: 3, name: 'All of Above', description: 'Split equally between all options' },
-];
-
-// Burn Address
 export const BURN_ADDRESS = '0x0000000000000000000000000000000000000369';
 
-// ABIs
+export const TOKENS = {
+  dtgc: { address: CONTRACTS.dtgc, symbol: 'DTGC', decimals: 18, name: 'DT Gold Coin' },
+  urmom: { address: CONTRACTS.urmom, symbol: 'URMOM', decimals: 18, name: 'URMOM' },
+  lp: { address: CONTRACTS.lp, symbol: 'DTGC-URMOM LP', decimals: 18, name: 'DTGC/URMOM LP Token' },
+};
+
+export const STAKING_TIERS = [
+  { id: 0, name: 'SILVER', minInvest: 200, lockDays: 60, apr: 22, boost: 1 },
+  { id: 1, name: 'GOLD', minInvest: 500, lockDays: 90, apr: 24, boost: 1 },
+  { id: 2, name: 'WHALE', minInvest: 10000, lockDays: 180, apr: 26, boost: 1 },
+];
+
+export const DIAMOND_TIER = { id: 3, name: 'DIAMOND', minInvest: 1000, lockDays: 90, apr: 60, boost: 1.5, asset: 'DTGC/PLS LP' };
+export const DIAMOND_PLUS_TIER = { id: 4, name: 'DIAMOND+', minInvest: 1000, lockDays: 90, apr: 100, boost: 2, asset: 'DTGC/URMOM LP' };
+
+export const FEES = { entry: 1.5, exit: 1.5, ees: 12 };
+export const VOTING_OPTIONS = ['Yes', 'No', 'Abstain'];
+
+export const ERC20_ABI = [
+  'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+  'function name() view returns (string)',
+  'function totalSupply() view returns (uint256)',
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+];
+
 export const STAKING_V2_ABI = [
-  "function stake(uint256 amount, uint8 tier) external",
-  "function withdraw() external",
-  "function emergencyWithdraw() external",
-  "function claimRewards() external",
-  "function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonus, bool isActive, uint256 timeRemaining)",
-  "function calculateAllRewards(address user) external view returns (uint256 base, uint256 feeShare, uint256 bonus)",
-  "function getContractStats() external view returns (uint256 totalStaked, uint256 totalRewards, uint256 feePool, uint256 eesPool, uint256 stakers)",
-  "function canVote(address user) external view returns (bool)",
+  'function stake(uint256 amount, uint8 tier) external',
+  'function unstake(uint256 stakeId) external',
+  'function emergencyUnstake(uint256 stakeId) external',
+  'function claimRewards(uint256 stakeId) external',
+  'function getStake(address user, uint256 stakeId) view returns (uint256 amount, uint256 startTime, uint256 endTime, uint8 tier, uint256 rewards, bool active)',
+  'function getUserStakes(address user) view returns (uint256[] memory)',
+  'function calculateRewards(address user, uint256 stakeId) view returns (uint256)',
+  'function totalStaked() view returns (uint256)',
 ];
 
 export const LP_STAKING_V2_ABI = [
-  "function stake(uint256 amount) external",
-  "function withdraw() external",
-  "function emergencyWithdraw() external",
-  "function claimRewards() external",
-  "function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 pendingReward, uint256 pendingBonus, uint256 boostMultiplier, bool isActive, uint256 timeRemaining)",
-  "function getContractStats() external view returns (uint256 totalStaked, uint256 totalRewards, uint256 eesPool, uint256 apr, uint256 stakers)",
-  "function getBoostMultiplier(address user) external view returns (uint256)",
-  "function canVote(address user) external view returns (bool)",
+  'function stake(uint256 amount) external',
+  'function unstake(uint256 stakeId) external',
+  'function emergencyUnstake(uint256 stakeId) external',
+  'function claimRewards(uint256 stakeId) external',
+  'function getStake(address user, uint256 stakeId) view returns (uint256 amount, uint256 startTime, uint256 endTime, uint256 rewards, bool active)',
+  'function getUserStakes(address user) view returns (uint256[] memory)',
+  'function calculateRewards(address user, uint256 stakeId) view returns (uint256)',
+  'function totalStaked() view returns (uint256)',
 ];
 
 export const DAO_VOTING_ABI = [
-  "function vote(uint256 proposalId, uint8 option) external",
-  "function createProposal(uint256 amount) external",
-  "function executeProposal(uint256 proposalId) external",
-  "function getProposal(uint256 id) external view returns (uint256 amount, uint256 endTime, uint256[4] votes, uint256 totalVoters, bool executed, uint8 winner)",
-  "function getActiveProposal() external view returns (uint256)",
-  "function canVote(address user) external view returns (bool)",
-];
-
-export const ERC20_ABI = [
-  "function balanceOf(address account) external view returns (uint256)",
-  "function allowance(address owner, address spender) external view returns (uint256)",
-  "function approve(address spender, uint256 amount) external returns (bool)",
-  "function transfer(address to, uint256 amount) external returns (bool)",
-  "function decimals() external view returns (uint8)",
-  "function symbol() external view returns (string)",
-  "function totalSupply() external view returns (uint256)",
+  'function createProposal(string memory description, uint256 duration) external returns (uint256)',
+  'function vote(uint256 proposalId, uint8 option) external',
+  'function getProposal(uint256 proposalId) view returns (string memory description, uint256 startTime, uint256 endTime, uint256[] memory votes, bool executed)',
+  'function getActiveProposals() view returns (uint256[] memory)',
+  'function hasVoted(uint256 proposalId, address voter) view returns (bool)',
+  'function getVotingPower(address voter) view returns (uint256)',
 ];

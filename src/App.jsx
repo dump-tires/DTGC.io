@@ -371,6 +371,8 @@ const CONTRACT_ADDRESSES = {
   dtgc: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',
   urmom: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',
   lp: '0x1891bD6A959B32977c438f3022678a8659364A72',
+  lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',      // DTGC/PLS V2 LP
+  lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM V2 LP
   daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
   stakingV2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
   lpStakingV2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
@@ -3046,14 +3048,15 @@ export default function App() {
       // Process holders - filter out excluded wallets (DAO, Dev, LP, Burn)
       const holders = (data.items || [])
         .filter(item => !EXCLUDED_WALLETS.includes(item.address?.hash?.toLowerCase()))
-        .slice(0, 20) // Top 20 holders
+        .slice(0, 30) // Top 30 holders (~30% of active holders)
         .map((item, index) => ({
           address: `${item.address?.hash?.slice(0, 6)}...${item.address?.hash?.slice(-4)}`,
           fullAddress: item.address?.hash,
           balance: parseFloat(item.value) / 1e18, // Convert from wei
-          label: index < 3 ? `Whale ${index + 1}` : 
-                 index < 6 ? `Diamond ${index - 2}` : 
-                 `Holder ${index - 5}`,
+          label: index < 3 ? `🐋 Whale ${index + 1}` : 
+                 index < 8 ? `💎 Diamond ${index - 2}` : 
+                 index < 15 ? `🥇 Gold ${index - 7}` :
+                 `🥈 Holder ${index - 14}`,
         }));
 
       if (holders.length > 0) {
@@ -4598,31 +4601,73 @@ export default function App() {
             </nav>
 
             <div className="nav-right">
-              {/* Compact Stacked Prices Display */}
+              {/* Metal Prices Display with Gold Bar Icons */}
               <div style={{
                 display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
+                alignItems: 'center',
+                gap: '10px',
                 marginRight: '8px',
-                padding: '4px 8px',
-                background: 'rgba(0,0,0,0.3)',
-                borderRadius: '8px',
-                border: '1px solid rgba(212,175,55,0.2)',
-                fontSize: '0.55rem',
-                lineHeight: '1.2',
+                padding: '6px 12px',
+                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                borderRadius: '20px',
+                border: '1px solid rgba(212,175,55,0.3)',
+                fontSize: '0.7rem',
               }}>
-                {/* Metals Row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span title="Gold" style={{ color: '#FFD700' }}><span style={{ display: 'inline-block', width: '8px', height: '5px', background: 'linear-gradient(135deg, #FFD700, #B8860B)', borderRadius: '1px', marginRight: '2px' }}></span>${metalPrices.gold.toLocaleString()}</span>
-                  <span title="Silver" style={{ color: '#C0C0C0' }}><span style={{ display: 'inline-block', width: '8px', height: '5px', background: 'linear-gradient(135deg, #E8E8E8, #A8A8A8)', borderRadius: '1px', marginRight: '2px' }}></span>${metalPrices.silver.toFixed(0)}</span>
-                  <span title="Copper" style={{ color: '#CD7F32' }}><span style={{ display: 'inline-block', width: '8px', height: '5px', background: 'linear-gradient(135deg, #CD7F32, #8B4513)', borderRadius: '1px', marginRight: '2px' }}></span>${metalPrices.copper.toFixed(2)}</span>
-                </div>
-                {/* Crypto Row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span title="Bitcoin" style={{ color: '#F7931A' }}>₿{(cryptoPrices.btc/1000).toFixed(0)}k</span>
-                  <span title="Ethereum" style={{ color: '#627EEA' }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
-                  <span title="PulseChain" style={{ color: '#00D4AA' }}>PLS ${cryptoPrices.pls.toFixed(5)}</span>
-                </div>
+                <span title="Gold /oz" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '9px',
+                    background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #B8860B 100%)',
+                    borderRadius: '2px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                  }}></span>
+                  <span style={{ color: '#FFD700', fontWeight: 600 }}>${metalPrices.gold.toLocaleString()}</span>
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                <span title="Silver /oz" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '9px',
+                    background: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 50%, #A8A8A8 100%)',
+                    borderRadius: '2px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                  }}></span>
+                  <span style={{ color: '#C0C0C0', fontWeight: 600 }}>${metalPrices.silver.toFixed(2)}</span>
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
+                <span title="Copper /lb" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '9px',
+                    background: 'linear-gradient(135deg, #CD7F32 0%, #B87333 50%, #8B4513 100%)',
+                    borderRadius: '2px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                  }}></span>
+                  <span style={{ color: '#CD7F32', fontWeight: 600 }}>${metalPrices.copper.toFixed(2)}</span>
+                </span>
+              </div>
+              {/* Crypto Prices */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginRight: '8px',
+                padding: '6px 10px',
+                background: 'rgba(33,150,243,0.08)',
+                borderRadius: '20px',
+                border: '1px solid rgba(33,150,243,0.2)',
+                fontSize: '0.65rem',
+              }}>
+                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{cryptoPrices.btc.toLocaleString()}</span>
+                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
+                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(6)}</span>
+                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(6)}</span>
               </div>
               {/* Security & Audit Button */}
               <button
@@ -4816,6 +4861,78 @@ export default function App() {
               <div className="hero-stat-label">Project Supply</div>
             </div>
           </div>
+        </section>
+
+        {/* DTGC BURN BAR - LIVE */}
+        <section style={{
+          margin: '0 auto 20px',
+          maxWidth: '1200px',
+          padding: '0 20px',
+        }}>
+          <a 
+            href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.burn}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ textDecoration: 'none' }}
+          >
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(244,67,54,0.15) 0%, rgba(255,152,0,0.15) 100%)',
+              border: '1px solid rgba(244,67,54,0.4)',
+              borderRadius: '12px',
+              padding: '16px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '16px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '2rem' }}>🔥</span>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                    DTGC Burned Forever
+                  </div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#F44336' }}>
+                    {dtgcBurnData.loading ? '⏳ Loading...' : formatNumber(dtgcBurnData.burned)} DTGC
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#888' }}>Live USD Value</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#4CAF50' }}>
+                  ${formatNumber(dtgcBurnData.burned * livePrices.dtgc, 2)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#888' }}>% of Total Supply</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FF9800' }}>
+                  {((dtgcBurnData.burned / DTGC_TOTAL_SUPPLY) * 100).toFixed(4)}%
+                </div>
+              </div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                background: 'rgba(244,67,54,0.2)',
+                borderRadius: '20px',
+                border: '1px solid rgba(244,67,54,0.4)',
+              }}>
+                <span style={{ 
+                  width: '8px', 
+                  height: '8px', 
+                  borderRadius: '50%', 
+                  background: dtgcBurnData.loading ? '#FF9800' : '#4CAF50',
+                  animation: 'pulse 2s infinite'
+                }} />
+                <span style={{ fontSize: '0.75rem', color: dtgcBurnData.loading ? '#FF9800' : '#4CAF50' }}>
+                  {dtgcBurnData.loading ? 'LOADING' : 'LIVE'} • View on Explorer ↗
+                </span>
+              </div>
+            </div>
+          </a>
         </section>
 
         {/* GOLD SUPPLY DYNAMICS BOX */}
@@ -5150,7 +5267,7 @@ export default function App() {
                 justifyContent: 'center',
                 gap: '8px'
               }}>
-                📊 Top Holder Wallets (Excluding DAO/Dev) • Hover to Pause
+                📊 Top 30% Holder Wallets (Excluding DAO/Dev) • Hover to Pause
                 {liveHolders.loading ? (
                   <span style={{ color: '#FF9800' }}>⏳ Loading...</span>
                 ) : (
@@ -6342,7 +6459,8 @@ export default function App() {
                 {[
                   { label: '🪙 DTGC Token', addr: CONTRACT_ADDRESSES.dtgc },
                   { label: '👩 URMOM Token', addr: CONTRACT_ADDRESSES.urmom },
-                  { label: '💧 DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lp },
+                  { label: '💎 DTGC/PLS LP', addr: CONTRACT_ADDRESSES.lpDtgcPls },
+                  { label: '💎✨ DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lpDtgcUrmom },
                   { label: '✅ DTGC Staking V2', addr: CONTRACT_ADDRESSES.stakingV2 },
                   { label: '✅ LP Staking V2', addr: CONTRACT_ADDRESSES.lpStakingV2 },
                   { label: '🗳️ DAO Voting', addr: CONTRACT_ADDRESSES.daoVoting },
@@ -6368,8 +6486,8 @@ export default function App() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '16px' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Display Currency:</span>
                   <select
-                    value={displayCurrency}
-                    onChange={(e) => setDisplayCurrency(e.target.value)}
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
                     style={{
                       padding: '8px 16px',
                       background: 'rgba(33,150,243,0.1)',
