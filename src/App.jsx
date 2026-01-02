@@ -127,7 +127,7 @@ const V5_DIAMOND_TIER = {
   id: 3,
   name: 'DIAMOND',
   icon: '💎',
-  minInvest: 1000,
+  minInvest: 25000,
   lockDays: 90,
   holdDays: 90,
   apr: 28,                   // Reduced 30% from 40%
@@ -145,7 +145,7 @@ const V5_DIAMOND_PLUS_TIER = {
   id: 4,
   name: 'DIAMOND+',
   icon: '💎✨',
-  minInvest: 1000,
+  minInvest: 25000,
   lockDays: 90,
   holdDays: 90,
   apr: 35,                   // Reduced 30% from 50%
@@ -541,6 +541,15 @@ const getStyles = (isDark) => `
   @keyframes pulse-gold {
     0%, 100% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.3); }
     50% { box-shadow: 0 0 40px rgba(212, 175, 55, 0.6); }
+  }
+
+  @keyframes goldGlow {
+    0%, 100% { 
+      filter: drop-shadow(0 0 10px rgba(212,175,55,0.5)) drop-shadow(0 0 20px rgba(212,175,55,0.3)) drop-shadow(0 0 30px rgba(212,175,55,0.2));
+    }
+    50% { 
+      filter: drop-shadow(0 0 15px rgba(212,175,55,0.8)) drop-shadow(0 0 30px rgba(212,175,55,0.5)) drop-shadow(0 0 45px rgba(212,175,55,0.3));
+    }
   }
 
   @keyframes pulse {
@@ -4904,6 +4913,53 @@ export default function App() {
           </div>
         </section>
 
+        {/* CURRENCY SELECTOR */}
+        <section style={{
+          margin: '0 auto 12px',
+          maxWidth: '1200px',
+          padding: '0 20px',
+          display: 'flex',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '8px 16px',
+            background: 'rgba(212,175,55,0.1)',
+            borderRadius: '20px',
+            border: '1px solid rgba(212,175,55,0.3)',
+          }}>
+            <span style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 600 }}>💱 Display Currency:</span>
+            <select
+              value={displayCurrency}
+              onChange={(e) => {
+                setDisplayCurrency(e.target.value);
+                localStorage.setItem('dtgc-display-currency', e.target.value);
+              }}
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(0,0,0,0.3)',
+                border: '1px solid rgba(212,175,55,0.4)',
+                borderRadius: '8px',
+                color: '#D4AF37',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              <option value="units">🔢 Units (Tokens)</option>
+              <option value="usd">🇺🇸 USD ($)</option>
+              <option value="eur">🇪🇺 EUR (€)</option>
+              <option value="gbp">🇬🇧 GBP (£)</option>
+              <option value="jpy">🇯🇵 JPY (¥)</option>
+              <option value="sar">🇸🇦 SAR (﷼)</option>
+              <option value="cny">🇨🇳 CNY (¥)</option>
+              <option value="czk">🇨🇿 CZK (Kč)</option>
+            </select>
+          </div>
+        </section>
+
         {/* DTGC BURN BAR - LIVE */}
         <section style={{
           margin: '0 auto 20px',
@@ -7252,15 +7308,49 @@ export default function App() {
 
         {/* Footer */}
         <footer className="footer">
-          <div className="footer-logo gold-text">DTGC</div>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            marginBottom: '20px'
+          }}>
+            <div style={{
+              position: 'relative',
+              width: '80px',
+              height: '80px',
+              marginBottom: '12px'
+            }}>
+              <img 
+                src="/favicon1.png" 
+                alt="DTGC" 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.5)) drop-shadow(0 0 20px rgba(212,175,55,0.3)) drop-shadow(0 0 30px rgba(212,175,55,0.2))',
+                  animation: 'goldGlow 3s ease-in-out infinite'
+                }}
+              />
+              <div style={{
+                position: 'absolute',
+                inset: '-5px',
+                background: 'radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%)',
+                borderRadius: '50%',
+                animation: 'pulse 2s ease-in-out infinite',
+                zIndex: -1
+              }} />
+            </div>
+            <div className="footer-logo gold-text" style={{ fontSize: '1.8rem', textShadow: '0 0 20px rgba(212,175,55,0.5)' }}>DTGC</div>
+            <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px' }}>DT GOLD COIN • Premium DeFi</div>
+          </div>
           <div className="footer-links">
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV2}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking Contract</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV2}`} target="_blank" rel="noopener noreferrer" className="footer-link">LP Staking</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVoting}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking V3</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">LP Staking V3</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVotingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting V3</a>
             <a href={SOCIAL_LINKS.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
-          <p className="footer-text">© 2025 DT GOLD COIN • dtgc.io • Premium Staking on PulseChain • Diamond & Diamond+ LP Tiers 💎✨</p>
+          <p className="footer-text">© 2026 DT GOLD COIN • dtgc.io • Premium Staking on PulseChain • Diamond & Diamond+ LP Tiers 💎✨</p>
         </footer>
 
         {/* DexScreener Widget */}
