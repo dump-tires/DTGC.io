@@ -2877,6 +2877,10 @@ export default function App() {
   const [stakeAmount, setStakeAmount] = useState('');
   const [stakeInputMode, setStakeInputMode] = useState('tokens'); // 'tokens' or 'currency'
   const [isLP, setIsLP] = useState(false);
+  
+  // LP Staking Contract Rewards Remaining
+  const [stakingRewardsRemaining, setStakingRewardsRemaining] = useState('0');
+  const [lpStakingRewardsRemaining, setLpStakingRewardsRemaining] = useState('0');
 
   // Analytics Calculator State
   const [calcInvestment, setCalcInvestment] = useState('1000');
@@ -3726,6 +3730,24 @@ export default function App() {
         } catch (e) {
           console.warn('Could not fetch DTGC/URMOM LP balance:', e);
           setLpDtgcUrmomBalance('0');
+        }
+
+        // Get Staking Contract Rewards Remaining (DTGC balance in staking contract)
+        try {
+          const stakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.stakingV3);
+          setStakingRewardsRemaining(ethers.formatEther(stakingRewards));
+        } catch (e) {
+          console.warn('Could not fetch staking rewards:', e);
+          setStakingRewardsRemaining('0');
+        }
+
+        // Get LP Staking Contract Rewards Remaining (DTGC balance in LP staking contract)
+        try {
+          const lpStakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.lpStakingV3);
+          setLpStakingRewardsRemaining(ethers.formatEther(lpStakingRewards));
+        } catch (e) {
+          console.warn('Could not fetch LP staking rewards:', e);
+          setLpStakingRewardsRemaining('0');
         }
 
         console.log('📊 Mainnet balances loaded:', {
@@ -4650,9 +4672,9 @@ export default function App() {
                 border: '1px solid rgba(212,175,55,0.2)',
                 fontSize: '0.6rem',
               }}>
-                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600 }}>🥇 ${metalPrices.gold.toLocaleString()}</span>
-                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600 }}>🥈 ${metalPrices.silver.toFixed(0)}</span>
-                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600 }}>🥉 ${metalPrices.copper.toFixed(2)}</span>
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(0)}</span>
+                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
               </div>
               {/* Crypto Prices - Compact */}
               <div style={{
@@ -5191,7 +5213,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Circulating */}
+              {/* DAO Ecosystem (Dev + Treasury + LP Locked) */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(255,152,0,0.1) 0%, rgba(255,152,0,0.05) 100%)',
                 border: '1px solid rgba(255,152,0,0.3)',
@@ -5199,13 +5221,13 @@ export default function App() {
                 padding: '16px',
                 textAlign: 'center',
               }}>
-                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>💱</div>
-                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>CIRCULATING</div>
+                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🏦</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>DAO ECOSYSTEM</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF9800' }}>
-                  {formatNumber(supplyDynamics.circulating)}
+                  {formatNumber(supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#FF9800', fontWeight: 600 }}>
-                  {((supplyDynamics.circulating / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
+                  {(((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
                 </div>
                 <div style={{ 
                   height: '4px',
@@ -5215,12 +5237,13 @@ export default function App() {
                   marginTop: '4px'
                 }}>
                   <div style={{
-                    width: `${(supplyDynamics.circulating / DTGC_TOTAL_SUPPLY) * 100}%`,
+                    width: `${((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100}%`,
                     height: '100%',
                     background: '#FF9800',
                     borderRadius: '2px',
                   }} />
                 </div>
+                <div style={{ fontSize: '0.55rem', color: '#666', marginTop: '6px' }}>Dev + Treasury + LP</div>
               </div>
             </div>
 
@@ -5505,6 +5528,45 @@ export default function App() {
                 </div>
                   );
                 })()}
+              </div>
+
+              {/* LP Staking Rewards Remaining */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '12px',
+                marginTop: '16px',
+                marginBottom: '16px'
+              }}>
+                {/* Diamond (DTGC/PLS) Rewards */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(0,191,255,0.1) 0%, rgba(0,191,255,0.05) 100%)',
+                  border: '1px solid rgba(0,191,255,0.3)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '0.65rem', color: '#00BCD4', letterSpacing: '1px', marginBottom: '4px' }}>💎 DIAMOND REWARDS POOL</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#00BCD4' }}>
+                    {formatNumber(parseFloat(stakingRewardsRemaining) || 0)} DTGC
+                  </div>
+                  <div style={{ fontSize: '0.6rem', color: '#888', marginTop: '2px' }}>DTGC Staking Contract</div>
+                </div>
+
+                {/* Diamond+ (DTGC/URMOM) Rewards */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(156,39,176,0.05) 100%)',
+                  border: '1px solid rgba(156,39,176,0.3)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '0.65rem', color: '#9C27B0', letterSpacing: '1px', marginBottom: '4px' }}>💎✨ DIAMOND+ REWARDS POOL</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#9C27B0' }}>
+                    {formatNumber(parseFloat(lpStakingRewardsRemaining) || 0)} DTGC
+                  </div>
+                  <div style={{ fontSize: '0.6rem', color: '#888', marginTop: '2px' }}>LP Staking Contract</div>
+                </div>
               </div>
 
               {/* Staking Form */}
