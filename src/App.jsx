@@ -7271,17 +7271,32 @@ export default function App() {
             alignItems: 'center',
             marginBottom: '16px'
           }}>
-            <img 
-              src="/favicon1.png" 
-              alt="DTGC" 
-              style={{
-                width: '60px',
-                height: '60px',
-                objectFit: 'contain',
-                filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.5))',
-                marginBottom: '8px'
-              }}
-            />
+            <div style={{
+              position: 'relative',
+              width: '80px',
+              height: '80px',
+              marginBottom: '12px'
+            }}>
+              <img 
+                src="/favicon1.png" 
+                alt="DTGC" 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.6)) drop-shadow(0 0 20px rgba(212,175,55,0.4)) drop-shadow(0 0 30px rgba(212,175,55,0.2))',
+                  animation: 'goldGlow 3s ease-in-out infinite'
+                }}
+              />
+              <div style={{
+                position: 'absolute',
+                inset: '-10px',
+                background: 'radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%)',
+                borderRadius: '50%',
+                animation: 'pulse 2s ease-in-out infinite',
+                zIndex: -1
+              }} />
+            </div>
             <div style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 600, letterSpacing: '2px' }}>
               Premium Staking on PulseChain
             </div>
