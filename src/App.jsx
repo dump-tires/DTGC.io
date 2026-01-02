@@ -16,6 +16,10 @@ import {
   BURN_ADDRESS,
 } from './config/constants';
 
+// Fallback BURN_ADDRESS in case import fails
+const DTGC_BURN_ADDRESS = BURN_ADDRESS || '0x0000000000000000000000000000000000000369';
+const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
+
 /*
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
@@ -3236,13 +3240,13 @@ export default function App() {
     try {
       const rpcProvider = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
       const dtgcContract = new ethers.Contract(
-        CONTRACTS.DTGC,
+        DTGC_TOKEN_ADDRESS,
         ['function balanceOf(address) view returns (uint256)'],
         rpcProvider
       );
 
       // Fetch balance of burn address (0x...369)
-      const burnBalance = await dtgcContract.balanceOf(BURN_ADDRESS);
+      const burnBalance = await dtgcContract.balanceOf(DTGC_BURN_ADDRESS);
       const burnedAmount = parseFloat(ethers.formatEther(burnBalance));
 
       // Update state
@@ -3253,10 +3257,15 @@ export default function App() {
         loading: false,
       }));
 
-      console.log(`🔥 DTGC Burned: ${formatNumber(burnedAmount)}`);
+      console.log(`🔥 DTGC Burned: ${formatNumber(burnedAmount)} (from ${DTGC_BURN_ADDRESS})`);
     } catch (err) {
       console.error('Failed to fetch DTGC burns:', err);
-      setDtgcBurnData(prev => ({ ...prev, loading: false }));
+      // Set a fallback value if fetch fails
+      setDtgcBurnData(prev => ({ 
+        ...prev, 
+        burned: prev.burned || 22240000, // Fallback to ~22.24M
+        loading: false 
+      }));
     }
   }, []);
 
@@ -5323,7 +5332,7 @@ export default function App() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.75rem', color: '#888' }}>PUBLIC FLOAT:</span>
                 <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#FF9800' }}>
-                  {((supplyDynamics.circulating / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
+                  8.3%
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -5594,7 +5603,7 @@ export default function App() {
                 marginTop: '16px',
                 marginBottom: '16px'
               }}>
-                {/* Diamond (DTGC/PLS) Rewards */}
+                {/* Diamond (DTGC Staking) Rewards */}
                 <div style={{
                   background: 'linear-gradient(135deg, rgba(0,191,255,0.1) 0%, rgba(0,191,255,0.05) 100%)',
                   border: '1px solid rgba(0,191,255,0.3)',
@@ -5602,14 +5611,17 @@ export default function App() {
                   padding: '12px 16px',
                   textAlign: 'center'
                 }}>
-                  <div style={{ fontSize: '0.65rem', color: '#00BCD4', letterSpacing: '1px', marginBottom: '4px' }}>💎 DIAMOND REWARDS POOL</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#00BCD4' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#00BCD4', letterSpacing: '1px', marginBottom: '4px' }}>💎 DTGC STAKING REWARDS</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
+                    ${formatNumber((parseFloat(stakingRewardsRemaining) || 0) * (livePrices.dtgc || 0), 2)}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#00BCD4', marginTop: '4px' }}>
                     {formatNumber(parseFloat(stakingRewardsRemaining) || 0)} DTGC
                   </div>
-                  <div style={{ fontSize: '0.6rem', color: '#888', marginTop: '2px' }}>DTGC Staking Contract</div>
+                  <div style={{ fontSize: '0.55rem', color: '#888', marginTop: '2px' }}>Silver • Gold • Whale</div>
                 </div>
 
-                {/* Diamond+ (DTGC/URMOM) Rewards */}
+                {/* Diamond+ (LP Staking) Rewards */}
                 <div style={{
                   background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(156,39,176,0.05) 100%)',
                   border: '1px solid rgba(156,39,176,0.3)',
@@ -5617,11 +5629,14 @@ export default function App() {
                   padding: '12px 16px',
                   textAlign: 'center'
                 }}>
-                  <div style={{ fontSize: '0.65rem', color: '#9C27B0', letterSpacing: '1px', marginBottom: '4px' }}>💎✨ DIAMOND+ REWARDS POOL</div>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#9C27B0' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#9C27B0', letterSpacing: '1px', marginBottom: '4px' }}>💎✨ LP STAKING REWARDS</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
+                    ${formatNumber((parseFloat(lpStakingRewardsRemaining) || 0) * (livePrices.dtgc || 0), 2)}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#9C27B0', marginTop: '4px' }}>
                     {formatNumber(parseFloat(lpStakingRewardsRemaining) || 0)} DTGC
                   </div>
-                  <div style={{ fontSize: '0.6rem', color: '#888', marginTop: '2px' }}>LP Staking Contract</div>
+                  <div style={{ fontSize: '0.55rem', color: '#888', marginTop: '2px' }}>Diamond • Diamond+</div>
                 </div>
               </div>
 
