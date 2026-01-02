@@ -317,8 +317,6 @@ const SUPPLY_WALLETS = {
 // ═══════════════════════════════════════════════════════════════
 // Fetches live holder data from PulseChain Explorer API
 
-const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
-
 // PulseChain Explorer API (Blockscout-compatible)
 const PULSECHAIN_API = {
   // Primary: scan.pulsechain.com API
@@ -4777,7 +4775,7 @@ export default function App() {
         {/* Hero */}
         <section className="hero-section" style={TESTNET_MODE ? {paddingTop: '180px'} : {}}>
           <div className="hero-badge">
-            {TESTNET_MODE ? '🧪 V18 DIAMOND+ EDITION • TESTNET 🧪' : '🔴 LIVE • DT GOLD COIN • MAINNET'}
+            {TESTNET_MODE ? '🧪 TESTNET MODE • NOT REAL MONEY 🧪' : '🔴 LIVE • MAINNET'}
           </div>
           <h1 className="hero-title gold-text">DTGC STAKING</h1>
           <p className="hero-subtitle">Stake • Earn • Govern • Prosper</p>
@@ -7271,36 +7269,22 @@ export default function App() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            marginBottom: '20px'
+            marginBottom: '16px'
           }}>
-            <div style={{
-              position: 'relative',
-              width: '80px',
-              height: '80px',
-              marginBottom: '12px'
-            }}>
-              <img 
-                src="/favicon1.png" 
-                alt="DTGC" 
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.5)) drop-shadow(0 0 20px rgba(212,175,55,0.3)) drop-shadow(0 0 30px rgba(212,175,55,0.2))',
-                  animation: 'goldGlow 3s ease-in-out infinite'
-                }}
-              />
-              <div style={{
-                position: 'absolute',
-                inset: '-5px',
-                background: 'radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%)',
-                borderRadius: '50%',
-                animation: 'pulse 2s ease-in-out infinite',
-                zIndex: -1
-              }} />
+            <img 
+              src="/favicon1.png" 
+              alt="DTGC" 
+              style={{
+                width: '60px',
+                height: '60px',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.5))',
+                marginBottom: '8px'
+              }}
+            />
+            <div style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 600, letterSpacing: '2px' }}>
+              Premium Staking on PulseChain
             </div>
-            <div className="footer-logo gold-text" style={{ fontSize: '1.8rem', textShadow: '0 0 20px rgba(212,175,55,0.5)' }}>DTGC</div>
-            <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px' }}>DT GOLD COIN • Premium DeFi</div>
           </div>
           <div className="footer-links">
             <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking V3</a>
@@ -7309,7 +7293,7 @@ export default function App() {
             <a href={SOCIAL_LINKS.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
-          <p className="footer-text">© 2026 DT GOLD COIN • dtgc.io • Premium Staking on PulseChain • Diamond & Diamond+ LP Tiers 💎✨</p>
+          <p className="footer-text">© 2026 dtgc.io • Premium Staking on PulseChain</p>
         </footer>
 
         {/* DexScreener Widget */}
