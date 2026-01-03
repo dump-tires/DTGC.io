@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { ethers } from 'ethers';
+// WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
+// import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import {
   CONTRACTS,
   TOKENS,
@@ -15,6 +17,9 @@ import {
   VOTING_OPTIONS,
   BURN_ADDRESS,
 } from './config/constants';
+
+// WalletConnect Project ID - Get yours free at https://cloud.walletconnect.com/
+const WALLETCONNECT_PROJECT_ID = '2f5e5a5d8e8b9c0a1b2c3d4e5f6a7b8c'; // Replace with your project ID
 
 // Fallback BURN_ADDRESS in case import fails
 const DTGC_BURN_ADDRESS = BURN_ADDRESS || '0x0000000000000000000000000000000000000369';
@@ -325,15 +330,21 @@ const PULSECHAIN_API = {
   rpc: 'https://rpc.pulsechain.com',
 };
 
-// Wallets to EXCLUDE from ticker (DAO, Dev, LP, Burn addresses)
+// Wallets to EXCLUDE from ticker (DAO, Dev, LP, Burn, Staking Rewards)
 const EXCLUDED_WALLETS = [
   '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC', // DAO Treasury
-  '0x777d7f3ad24832975aec259ab7d7b57be4225abf', // Dev Wallet
+  '0x777d7f3ad24832975aec259ab7d7b57be4225abf', // Dev Wallet (main)
+  '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c', // Dev Wallet (secondary)
   '0x0000000000000000000000000000000000000369', // Burn address
   '0x000000000000000000000000000000000000dEaD', // Dead address
   '0x0000000000000000000000000000000000000000', // Zero address
   '0x1891bD6A959B32977c438f3022678a8659364A72', // LP Pool DTGC/URMOM
   '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7', // LP Pool DTGC/PLS
+  '0x670c972Bb5388E087a2934a063064d97278e01F3', // LP DTGC/URMOM (PulseX)
+  '0xc33944a6020FB5620001A202Eaa67214A1AB9193', // LP DTGC/PLS (PulseX)
+  '0x0ba3d882f21b935412608d181501d59e99a8D0f9', // DTGCStakingV3 Rewards
+  '0x7C328FFF32AD66a03218D8A953435283782Bc84F', // LPStakingV3 Rewards
+  '0x4828A40bEd10c373718cA10B53A34208636CD8C4', // DAOVotingV3
 ].map(addr => addr.toLowerCase());
 
 // Fallback data if API fails (placeholder)
@@ -3013,7 +3024,9 @@ export default function App() {
     totalHolders: 0,
     trackedBalance: 0,
     trackedPctOfFloat: 0,
-    publicFloat: DTGC_TOTAL_SUPPLY * 0.18,
+    trackedPctOfTotal: 0,
+    publicFloat: DTGC_TOTAL_SUPPLY * 0.09, // ~9% initial estimate
+    controlledSupply: DTGC_TOTAL_SUPPLY * 0.91,
     loading: true,
     lastUpdated: null,
     error: null,
@@ -3027,6 +3040,7 @@ export default function App() {
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
+  const [stakeWidgetMinimized, setStakeWidgetMinimized] = useState(false);
   const [modalType, setModalType] = useState('start');
 
   // DTGC Burn tracking state (live from blockchain)
@@ -3123,22 +3137,38 @@ export default function App() {
       
       const data = await response.json();
       
-      // Get all items and calculate total holders from API
+      // Get all items from first page
       const allItems = data.items || [];
-      const totalHolders = data.next_page_params ? 50 + allItems.length : allItems.length;
+      const totalHolders = data.next_page_params ? 100 : allItems.length;
       
-      // Calculate controlled supply (your 82%)
-      const controlledSupply = DTGC_TOTAL_SUPPLY * 0.82; // 82% controlled
-      const publicFloat = DTGC_TOTAL_SUPPLY - controlledSupply;
+      // Calculate ACTUAL controlled supply by summing excluded wallet balances from API
+      let controlledSupply = 0;
+      const excludedBalances = {};
       
-      // Process ALL holders - filter out only excluded wallets (DAO, Dev, LP, Burn, Rewards)
+      allItems.forEach(item => {
+        const addr = item.address?.hash?.toLowerCase();
+        if (EXCLUDED_WALLETS.includes(addr)) {
+          const balance = parseFloat(item.value) / 1e18;
+          controlledSupply += balance;
+          excludedBalances[addr] = balance;
+        }
+      });
+      
+      // If no excluded wallets found in first page, use known values
+      if (controlledSupply === 0) {
+        controlledSupply = 820000000 + 87000000; // ~907M (Dev + LP)
+      }
+      
+      // Calculate actual public float
+      const actualPublicFloat = DTGC_TOTAL_SUPPLY - controlledSupply;
+      
+      // Process ALL public holders - filter out excluded wallets
       const holders = allItems
         .filter(item => !EXCLUDED_WALLETS.includes(item.address?.hash?.toLowerCase()))
-        .map((item, index) => ({
+        .map((item) => ({
           address: `${item.address?.hash?.slice(0, 6)}...${item.address?.hash?.slice(-4)}`,
           fullAddress: item.address?.hash,
           balance: parseFloat(item.value) / 1e18,
-          label: 'Loading...',
         }))
         .slice(0, 50) // Top 50 public holders
         .map((item, index) => ({
@@ -3149,9 +3179,10 @@ export default function App() {
                  `🥈 Holder ${index - 14}`,
         }));
 
-      // Calculate tracked supply as % of PUBLIC FLOAT (not total supply)
+      // Calculate tracked supply as % of PUBLIC FLOAT
       const trackedBalance = holders.reduce((sum, h) => sum + h.balance, 0);
-      const trackedPctOfFloat = (trackedBalance / publicFloat * 100);
+      const trackedPctOfFloat = actualPublicFloat > 0 ? (trackedBalance / actualPublicFloat * 100) : 0;
+      const trackedPctOfTotal = (trackedBalance / DTGC_TOTAL_SUPPLY * 100);
 
       if (holders.length > 0) {
         setLiveHolders({
@@ -3159,12 +3190,17 @@ export default function App() {
           totalHolders: totalHolders,
           trackedBalance,
           trackedPctOfFloat,
-          publicFloat,
+          trackedPctOfTotal,
+          publicFloat: actualPublicFloat,
+          controlledSupply,
           loading: false,
           lastUpdated: new Date(),
           error: null,
         });
-        console.log('📊 Live holders updated:', holders.length, 'public wallets,', trackedPctOfFloat.toFixed(1), '% of float');
+        console.log('📊 Live holders:', holders.length, 'wallets |', 
+          'Tracked:', (trackedBalance/1e6).toFixed(2), 'M |',
+          'Float:', (actualPublicFloat/1e6).toFixed(2), 'M |',
+          '% of float:', trackedPctOfFloat.toFixed(1), '%');
       } else {
         throw new Error('No holder data received');
       }
@@ -3689,6 +3725,97 @@ export default function App() {
     setSelectedWalletType(null);
     showToast('Wallet disconnected', 'info');
   };
+
+  // WalletConnect v2 connection (requires @walletconnect/ethereum-provider package)
+  const connectWalletConnect = async () => {
+    if (TESTNET_MODE) {
+      connectWallet();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('Initializing WalletConnect...', 'info');
+
+      // Dynamic import for WalletConnect (install: npm install @walletconnect/ethereum-provider)
+      const { EthereumProvider } = await import('@walletconnect/ethereum-provider').catch(() => {
+        throw new Error('WalletConnect not installed. Run: npm install @walletconnect/ethereum-provider');
+      });
+
+      const wcProvider = await EthereumProvider.init({
+        projectId: WALLETCONNECT_PROJECT_ID,
+        chains: [CHAIN_ID], // PulseChain
+        showQrModal: true,
+        qrModalOptions: {
+          themeMode: 'dark',
+        },
+        metadata: {
+          name: 'DTGC Premium Staking',
+          description: 'Premium DeFi Staking on PulseChain',
+          url: window.location.origin,
+          icons: [`${window.location.origin}/favicon1.png`],
+        },
+        rpcMap: {
+          [CHAIN_ID]: 'https://rpc.pulsechain.com',
+        },
+      });
+
+      // Connect and open QR modal
+      await wcProvider.connect();
+
+      const ethersProvider = new ethers.BrowserProvider(wcProvider);
+      const signer = await ethersProvider.getSigner();
+      const address = await signer.getAddress();
+
+      setProvider(ethersProvider);
+      setSigner(signer);
+      setAccount(address);
+      setShowWalletModal(false);
+      showToast('Connected via WalletConnect!', 'success');
+
+      // Handle disconnect
+      wcProvider.on('disconnect', () => {
+        disconnectWallet();
+        showToast('WalletConnect disconnected', 'info');
+      });
+
+    } catch (err) {
+      console.error('WalletConnect error:', err);
+      if (err.message?.includes('not installed')) {
+        showToast('WalletConnect package needed. Use mobile deep links below.', 'error');
+      } else if (err.message?.includes('User rejected')) {
+        showToast('Connection cancelled', 'info');
+      } else {
+        showToast('WalletConnect failed. Try mobile deep links.', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mobile wallet deep links
+  const openInWalletBrowser = (walletType) => {
+    const currentUrl = window.location.href;
+    const host = window.location.host;
+    
+    const deepLinks = {
+      metamask: `https://metamask.app.link/dapp/${host}`,
+      trust: `trust://open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`,
+      rainbow: `https://rnbwapp.com/dapp?url=${encodeURIComponent(currentUrl)}`,
+      imtoken: `imtokenv2://navigate/DappView?url=${encodeURIComponent(currentUrl)}`,
+      coinbase: `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(currentUrl)}`,
+      tokenpocket: `tpoutside://open?url=${encodeURIComponent(currentUrl)}`,
+      okx: `okx://wallet/dapp/details?dappUrl=${encodeURIComponent(currentUrl)}`,
+    };
+
+    const link = deepLinks[walletType];
+    if (link) {
+      window.location.href = link;
+    }
+  };
+
+  // Check if running in mobile browser (not wallet browser)
+  const isMobileBrowser = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && !window.ethereum;
 
   // Format balance with currency conversion
   const formatBalanceWithCurrency = (balance, tokenType = 'dtgc') => {
@@ -4547,33 +4674,79 @@ export default function App() {
 
         {/* FLOATING ACTIVE STAKE BOX - Top Left */}
         {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
-          <div style={{
-            position: 'fixed',
-            top: TESTNET_MODE ? '55px' : '15px',
-            left: '15px',
-            zIndex: 1500,
-            background: isDark ? 'rgba(15,15,15,0.95)' : 'rgba(255,255,255,0.95)',
-            backdropFilter: 'blur(20px)',
-            borderRadius: '16px',
-            border: '2px solid var(--gold)',
-            padding: '12px 16px',
-            minWidth: '220px',
-            maxWidth: '280px',
-            boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '10px',
-              borderBottom: '1px solid rgba(212,175,55,0.3)',
-              paddingBottom: '8px',
-            }}>
-              <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '0.75rem', color: 'var(--gold)', letterSpacing: '1px' }}>
-                💎 ACTIVE STAKE
-              </span>
-              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>LIVE</span>
+          stakeWidgetMinimized ? (
+            // Minimized view - small icon
+            <div
+              onClick={() => setStakeWidgetMinimized(false)}
+              style={{
+                position: 'fixed',
+                top: TESTNET_MODE ? '55px' : '15px',
+                left: '15px',
+                width: '50px',
+                height: '50px',
+                background: 'linear-gradient(135deg, rgba(15,15,15,0.95), rgba(30,30,30,0.95))',
+                border: '2px solid var(--gold)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                zIndex: 1500,
+                boxShadow: '0 4px 20px rgba(212,175,55,0.3)',
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              title="Show Active Stake"
+            >
+              <span style={{ fontSize: '1.5rem' }}>💎</span>
             </div>
+          ) : (
+            // Expanded view - full widget
+            <div style={{
+              position: 'fixed',
+              top: TESTNET_MODE ? '55px' : '15px',
+              left: '15px',
+              zIndex: 1500,
+              background: isDark ? 'rgba(15,15,15,0.95)' : 'rgba(255,255,255,0.95)',
+              backdropFilter: 'blur(20px)',
+              borderRadius: '16px',
+              border: '2px solid var(--gold)',
+              padding: '12px 16px',
+              minWidth: '220px',
+              maxWidth: '280px',
+              boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '10px',
+                borderBottom: '1px solid rgba(212,175,55,0.3)',
+                paddingBottom: '8px',
+              }}>
+                <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '0.75rem', color: 'var(--gold)', letterSpacing: '1px' }}>
+                  💎 ACTIVE STAKE
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>LIVE</span>
+                  <button
+                    onClick={() => setStakeWidgetMinimized(true)}
+                    style={{
+                      background: 'rgba(212,175,55,0.2)',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '2px 6px',
+                      cursor: 'pointer',
+                      fontSize: '0.7rem',
+                      color: 'var(--gold)',
+                    }}
+                    title="Minimize"
+                  >
+                    ─
+                  </button>
+                </div>
+              </div>
 
             {(() => {
               const activePos = TESTNET_MODE
@@ -4735,6 +4908,7 @@ export default function App() {
               </div>
             )}
           </div>
+          )
         )}
 
         {/* Navigation */}
@@ -5519,13 +5693,13 @@ export default function App() {
                 padding: '0 40px'
               }}>
                 <span style={{ color: '#4CAF50' }}>
-                  💰 Top 50 Public Wallets: {(liveHolders.trackedPctOfFloat || 0).toFixed(1)}% of float
+                  💰 Top 50 Hold: {(liveHolders.trackedPctOfTotal || 0).toFixed(2)}% of total
                 </span>
                 <span style={{ color: '#FF9800' }}>
-                  📊 Public Float: {formatNumber(liveHolders.publicFloat || DTGC_TOTAL_SUPPLY * 0.18)} DTGC (18%)
+                  📊 Public Float: {formatNumber(liveHolders.publicFloat || 0)} DTGC ({((liveHolders.publicFloat || 0) / DTGC_TOTAL_SUPPLY * 100).toFixed(1)}%)
                 </span>
                 <span style={{ color: '#D4AF37' }}>
-                  🏆 Tracked: {formatNumber((liveHolders.holders || []).reduce((sum, w) => sum + w.balance, 0))} DTGC
+                  🏆 Tracked: {formatNumber(liveHolders.trackedBalance || 0)} DTGC
                 </span>
               </div>
             </div>
@@ -7559,6 +7733,47 @@ export default function App() {
             {/* Wallet Selector Step */}
             {walletStep === 'select' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              
+              {/* WalletConnect - Most Universal Option */}
+              <button
+                onClick={connectWalletConnect}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '18px 20px',
+                  background: 'linear-gradient(135deg, #3B99FC, #2D7DD2)',
+                  border: '2px solid #3B99FC',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 4px 15px rgba(59,153,252,0.3)',
+                }}
+              >
+                <span style={{ fontSize: '1.5rem' }}>🔗</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 700 }}>WalletConnect</div>
+                  <div style={{ fontSize: '0.7rem', opacity: 0.9 }}>Scan QR with any wallet app</div>
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: '0.7rem', background: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '6px' }}>📱 MOBILE</span>
+              </button>
+
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px', 
+                margin: '8px 0',
+                color: '#666',
+                fontSize: '0.8rem',
+              }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                <span>or connect directly</span>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+              </div>
+
               <button
                 onClick={() => connectWalletType('internetmoney')}
                 disabled={loading}
@@ -7733,6 +7948,165 @@ export default function App() {
                 <span style={{ fontSize: '1.5rem' }}>🔗</span>
                 <span style={{ fontWeight: 600 }}>Other Wallet</span>
               </button>
+
+              {/* Mobile Wallet Section */}
+              <div style={{
+                marginTop: '16px',
+                paddingTop: '16px',
+                borderTop: '1px solid rgba(212,175,55,0.3)',
+              }}>
+                <p style={{
+                  color: '#D4AF37',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  marginBottom: '12px',
+                }}>
+                  📱 On Mobile? Open in Wallet Browser
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => openInWalletBrowser('metamask')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #E27625, #CD6116)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🦊 MetaMask
+                  </button>
+                  <button
+                    onClick={() => openInWalletBrowser('trust')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #3375BB, #0500FF)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🛡️ Trust
+                  </button>
+                  <button
+                    onClick={() => openInWalletBrowser('coinbase')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #0052FF, #0033CC)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🔵 Coinbase
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => openInWalletBrowser('okx')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #121212, #333)',
+                      border: '1px solid #666',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    ⬛ OKX
+                  </button>
+                  <button
+                    onClick={() => openInWalletBrowser('rainbow')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #FF6B6B, #4ECDC4)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🌈 Rainbow
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      showToast('URL copied! Paste in your wallet browser', 'success');
+                    }}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'rgba(212,175,55,0.2)',
+                      border: '1px solid #D4AF37',
+                      borderRadius: '10px',
+                      color: '#D4AF37',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    📋 Copy URL
+                  </button>
+                </div>
+                <p style={{
+                  color: '#666',
+                  fontSize: '0.7rem',
+                  textAlign: 'center',
+                  marginTop: '12px',
+                  lineHeight: 1.4,
+                }}>
+                  Tap a button to open this dApp in your wallet's browser
+                </p>
+              </div>
             </div>
             )}
 
