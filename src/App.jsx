@@ -19,7 +19,7 @@ import {
 } from './config/constants';
 
 // WalletConnect Project ID - Get yours free at https://cloud.walletconnect.com/
-const WALLETCONNECT_PROJECT_ID = '2f5e5a5d8e8b9c0a1b2c3d4e5f6a7b8c'; // Replace with your project ID
+const WALLETCONNECT_PROJECT_ID = '10281b2ce43a6f7240ee415515ddb27a';
 
 // Fallback BURN_ADDRESS in case import fails
 const DTGC_BURN_ADDRESS = BURN_ADDRESS || '0x0000000000000000000000000000000000000369';
@@ -322,11 +322,12 @@ const SUPPLY_WALLETS = {
 // ═══════════════════════════════════════════════════════════════
 // Fetches live holder data from PulseChain Explorer API
 
-// PulseChain Explorer API (Blockscout-compatible)
+// PulseChain Explorer API (via Vercel serverless proxy to avoid CORS)
 const PULSECHAIN_API = {
-  // Primary: scan.pulsechain.com API
-  holders: `https://scan.pulsechain.com/api/v2/tokens/${DTGC_TOKEN_ADDRESS}/holders`,
-  // Alternative: direct RPC for balance checks
+  // Use local API route to proxy requests (avoids CORS issues)
+  holders: '/api/holders',
+  tokenInfo: '/api/token-info',
+  // Direct RPC for contract calls (doesn't have CORS issues)
   rpc: 'https://rpc.pulsechain.com',
 };
 
@@ -3020,13 +3021,16 @@ export default function App() {
 
   // Live holder wallets for ticker (fetched from PulseChain API)
   const [liveHolders, setLiveHolders] = useState({
-    holders: HOLDER_WALLETS,
-    totalHolders: 0,
-    trackedBalance: 0,
-    trackedPctOfFloat: 0,
-    trackedPctOfTotal: 0,
-    publicFloat: DTGC_TOTAL_SUPPLY * 0.09, // ~9% initial estimate
-    controlledSupply: DTGC_TOTAL_SUPPLY * 0.91,
+    holders: HOLDER_WALLETS.map((w, i) => ({
+      ...w,
+      label: i < 3 ? `🐋 Whale ${i + 1}` : i < 8 ? `💎 Diamond ${i - 2}` : `🥇 Gold ${i - 7}`,
+    })),
+    totalHolders: 50,
+    trackedBalance: HOLDER_WALLETS.reduce((sum, h) => sum + h.balance, 0), // ~7.2M from fallback
+    trackedPctOfFloat: 8.0, // Approximate
+    trackedPctOfTotal: 0.72, // 7.2M / 1B
+    publicFloat: DTGC_TOTAL_SUPPLY * 0.09, // ~90M (9%)
+    controlledSupply: DTGC_TOTAL_SUPPLY * 0.91, // ~910M (91%)
     loading: true,
     lastUpdated: null,
     error: null,
@@ -3126,28 +3130,37 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchSupplyDynamics]);
 
-  // Fetch live holder data from PulseChain Explorer API
+  // Fetch live holder data from our Vercel API route (proxies PulseChain API)
   const fetchLiveHolders = useCallback(async () => {
     try {
       const response = await fetch(PULSECHAIN_API.holders);
       
       if (!response.ok) {
-        throw new Error('API request failed');
+        throw new Error(`API returned ${response.status}`);
       }
       
       const data = await response.json();
       
-      // Get all items from first page
-      const allItems = data.items || [];
-      const totalHolders = data.next_page_params ? 100 : allItems.length;
+      // Handle Vercel API response format
+      if (!data.success && data.error) {
+        throw new Error(data.error);
+      }
+      
+      // Get items from either format (direct API or Vercel proxy)
+      const allItems = data.holders || data.items || [];
+      const totalHolders = data.totalHolders || (data.next_page_params ? 100 : allItems.length);
+      
+      if (allItems.length === 0) {
+        throw new Error('No items in API response');
+      }
       
       // Calculate ACTUAL controlled supply by summing excluded wallet balances from API
       let controlledSupply = 0;
       const excludedBalances = {};
       
       allItems.forEach(item => {
-        const addr = item.address?.hash?.toLowerCase();
-        if (EXCLUDED_WALLETS.includes(addr)) {
+        const addr = (item.address?.hash || item.address)?.toLowerCase();
+        if (addr && EXCLUDED_WALLETS.includes(addr)) {
           const balance = parseFloat(item.value) / 1e18;
           controlledSupply += balance;
           excludedBalances[addr] = balance;
@@ -3164,12 +3177,18 @@ export default function App() {
       
       // Process ALL public holders - filter out excluded wallets
       const holders = allItems
-        .filter(item => !EXCLUDED_WALLETS.includes(item.address?.hash?.toLowerCase()))
-        .map((item) => ({
-          address: `${item.address?.hash?.slice(0, 6)}...${item.address?.hash?.slice(-4)}`,
-          fullAddress: item.address?.hash,
-          balance: parseFloat(item.value) / 1e18,
-        }))
+        .filter(item => {
+          const addr = (item.address?.hash || item.address)?.toLowerCase();
+          return addr && !EXCLUDED_WALLETS.includes(addr);
+        })
+        .map((item) => {
+          const addr = item.address?.hash || item.address;
+          return {
+            address: `${addr?.slice(0, 6)}...${addr?.slice(-4)}`,
+            fullAddress: addr,
+            balance: parseFloat(item.value) / 1e18,
+          };
+        })
         .slice(0, 50) // Top 50 public holders
         .map((item, index) => ({
           ...item,
@@ -3179,36 +3198,51 @@ export default function App() {
                  `🥈 Holder ${index - 14}`,
         }));
 
+      if (holders.length === 0) {
+        throw new Error('All holders filtered out');
+      }
+
       // Calculate tracked supply as % of PUBLIC FLOAT
       const trackedBalance = holders.reduce((sum, h) => sum + h.balance, 0);
       const trackedPctOfFloat = actualPublicFloat > 0 ? (trackedBalance / actualPublicFloat * 100) : 0;
       const trackedPctOfTotal = (trackedBalance / DTGC_TOTAL_SUPPLY * 100);
 
-      if (holders.length > 0) {
-        setLiveHolders({
-          holders,
-          totalHolders: totalHolders,
-          trackedBalance,
-          trackedPctOfFloat,
-          trackedPctOfTotal,
-          publicFloat: actualPublicFloat,
-          controlledSupply,
-          loading: false,
-          lastUpdated: new Date(),
-          error: null,
-        });
-        console.log('📊 Live holders:', holders.length, 'wallets |', 
-          'Tracked:', (trackedBalance/1e6).toFixed(2), 'M |',
-          'Float:', (actualPublicFloat/1e6).toFixed(2), 'M |',
-          '% of float:', trackedPctOfFloat.toFixed(1), '%');
-      } else {
-        throw new Error('No holder data received');
-      }
+      setLiveHolders({
+        holders,
+        totalHolders: totalHolders,
+        trackedBalance,
+        trackedPctOfFloat,
+        trackedPctOfTotal,
+        publicFloat: actualPublicFloat,
+        controlledSupply,
+        loading: false,
+        lastUpdated: new Date(),
+        error: null,
+      });
+      console.log('📊 Live holders:', holders.length, 'wallets |', 
+        'Tracked:', (trackedBalance/1e6).toFixed(2), 'M |',
+        'Float:', (actualPublicFloat/1e6).toFixed(2), 'M |',
+        '% of float:', trackedPctOfFloat.toFixed(1), '%');
     } catch (err) {
       console.warn('⚠️ Holder API error, using fallback:', err.message);
+      
+      // Calculate stats from fallback data
+      const fallbackHolders = HOLDER_WALLETS.map((w, i) => ({
+        ...w,
+        label: i < 3 ? `🐋 Whale ${i + 1}` : i < 8 ? `💎 Diamond ${i - 2}` : `🥇 Gold ${i - 7}`,
+      }));
+      const fallbackTracked = fallbackHolders.reduce((sum, h) => sum + h.balance, 0);
+      const fallbackFloat = DTGC_TOTAL_SUPPLY * 0.09; // ~9% float estimate
+      
       setLiveHolders(prev => ({
         ...prev,
-        holders: prev.holders.length > 0 ? prev.holders : HOLDER_WALLETS,
+        holders: fallbackHolders,
+        totalHolders: prev.totalHolders || 50,
+        trackedBalance: fallbackTracked,
+        trackedPctOfFloat: (fallbackTracked / fallbackFloat * 100),
+        trackedPctOfTotal: (fallbackTracked / DTGC_TOTAL_SUPPLY * 100),
+        publicFloat: fallbackFloat,
+        controlledSupply: DTGC_TOTAL_SUPPLY * 0.91,
         loading: false,
         error: err.message,
       }));
