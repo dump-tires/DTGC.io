@@ -3619,7 +3619,18 @@ export default function App() {
 
     let needsMigration = false;
     const migratedPositions = testnetBalances.positions.map(pos => {
-      const tierName = pos.tier?.toUpperCase() || (pos.isLP ? 'DIAMOND' : 'GOLD');
+      // Handle tier as either string or number
+      const TIER_NAMES_MAP = ['SILVER', 'GOLD', 'WHALE'];
+      let tierName;
+      if (typeof pos.tier === 'string') {
+        tierName = pos.tier.toUpperCase();
+      } else if (typeof pos.tier === 'number') {
+        tierName = TIER_NAMES_MAP[pos.tier] || 'GOLD';
+      } else if (pos.isLP) {
+        tierName = pos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND';
+      } else {
+        tierName = 'GOLD';
+      }
       const tierConfig = V19_TIER_CONFIG[tierName];
 
       if (!tierConfig) return pos;
@@ -5667,7 +5678,18 @@ export default function App() {
                     const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
                     // Use V19 corrected APRs
                     const V19_APRS = { 'SILVER': 15.4, 'GOLD': 16.8, 'WHALE': 18.2, 'DIAMOND': 42, 'DIAMOND+': 70 };
-                    const tierName = pos.tier?.toUpperCase() || (pos.isLP ? (pos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND') : 'GOLD');
+                    // Handle tier as either string or number
+                    const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
+                    let tierName;
+                    if (typeof pos.tier === 'string') {
+                      tierName = pos.tier.toUpperCase();
+                    } else if (typeof pos.tier === 'number') {
+                      tierName = TIER_NAMES[pos.tier] || 'GOLD';
+                    } else if (pos.isLP) {
+                      tierName = pos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND';
+                    } else {
+                      tierName = 'GOLD';
+                    }
                     const apr = V19_APRS[tierName] || 16.8;
                     const rewards = (pos.amount * (apr / 100) / 365) * daysStaked;
                     return total + rewards;
