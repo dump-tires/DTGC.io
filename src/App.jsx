@@ -4354,32 +4354,49 @@ export default function App() {
       const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
       const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
 
+      console.log('🔄 Starting stake process...', { tokenAddress, stakingAddress, amount, amountWei: amountWei.toString() });
+
       // Step 1: Check and approve token spending
-      showToast('Step 1/2: Approving tokens...', 'info');
+      showToast('Step 1/2: Checking approval...', 'info');
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
 
       const currentAllowance = await tokenContract.allowance(account, stakingAddress);
+      console.log('📋 Current allowance:', currentAllowance.toString());
+      
       if (currentAllowance < amountWei) {
+        console.log('🔓 Requesting token approval...');
+        showToast('Step 1/2: Approve tokens in wallet...', 'info');
         const approveTx = await tokenContract.approve(stakingAddress, ethers.MaxUint256);
+        console.log('⏳ Approval tx sent:', approveTx.hash);
         await approveTx.wait();
+        console.log('✅ Approval confirmed!');
         showToast('Token approval confirmed!', 'success');
+      } else {
+        console.log('✅ Already approved, skipping approval step');
       }
 
       // Step 2: Stake tokens
-      showToast('Step 2/2: Staking tokens...', 'info');
+      console.log('🔄 Sending stake transaction...');
+      showToast('Step 2/2: Confirm stake in wallet...', 'info');
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
 
       let stakeTx;
       if (isLP) {
         // LP Staking - amount and lpType (0=Diamond/PLS, 1=Diamond+/URMOM)
         const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
+        console.log('📤 LP Stake params:', { amount: amountWei.toString(), lpType });
         stakeTx = await stakingContract.stake(amountWei, lpType);
       } else {
         // Regular Staking - amount and tier
+        console.log('📤 Stake params:', { amount: amountWei.toString(), tier: selectedTier });
         stakeTx = await stakingContract.stake(amountWei, selectedTier);
       }
 
+      console.log('⏳ Stake tx sent:', stakeTx.hash);
+      showToast(`Transaction sent! Waiting for confirmation...`, 'info');
+      
       await stakeTx.wait();
+      console.log('✅ Stake confirmed!');
 
       // Show stake video if enabled
       if (VIDEOS_ENABLED) {
@@ -4394,25 +4411,49 @@ export default function App() {
       showToast(`✅ Successfully staked ${formatNumber(amount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name} tier!`, 'success');
 
       // Refresh balances
-      const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
-      const dtgcBal = await dtgcContract.balanceOf(account);
-      setDtgcBalance(ethers.formatEther(dtgcBal));
+      try {
+        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+        const dtgcBal = await dtgcContract.balanceOf(account);
+        setDtgcBalance(ethers.formatEther(dtgcBal));
 
-      if (isLP) {
-        const lpContract = new ethers.Contract(CONTRACTS.LP_TOKEN, ERC20_ABI, provider);
-        const lpBal = await lpContract.balanceOf(account);
-        setLpBalance(ethers.formatEther(lpBal));
+        // Refresh correct LP balance based on tier
+        if (isLP) {
+          if (selectedTier === 4) {
+            // Diamond+ (DTGC/URMOM LP)
+            const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+            const lpBal = await lpUrmomContract.balanceOf(account);
+            setLpDtgcUrmomBalance(ethers.formatEther(lpBal));
+          } else {
+            // Diamond (DTGC/PLS LP)
+            const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+            const lpBal = await lpPlsContract.balanceOf(account);
+            setLpDtgcPlsBalance(ethers.formatEther(lpBal));
+          }
+        }
+      } catch (refreshErr) {
+        console.warn('Balance refresh error:', refreshErr);
       }
 
+      // Close modal after short delay to show success
+      setTimeout(() => {
+        setModalOpen(false);
+      }, 1500);
+
     } catch (err) {
-      console.error('Staking error:', err);
+      console.error('❌ Staking error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
       setLoading(false);
       setModalOpen(false);
 
-      if (err.code === 'ACTION_REJECTED') {
+      if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
         showToast('Transaction rejected by user', 'error');
       } else if (err.message?.includes('insufficient')) {
         showToast('Insufficient balance for transaction', 'error');
+      } else if (err.message?.includes('user rejected')) {
+        showToast('Transaction cancelled', 'info');
+      } else if (err.code === -32002) {
+        showToast('Please check your wallet for pending request', 'info');
       } else {
         showToast(`Staking failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
       }
