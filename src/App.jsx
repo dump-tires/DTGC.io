@@ -1011,6 +1011,62 @@ const getStyles = (isDark) => `
     .nav-content { flex-direction: column; gap: 14px; }
     .nav-links { display: none; }
     .main-content { padding: 0 20px 50px; }
+    .mobile-menu-toggle { display: flex !important; }
+  }
+
+  .mobile-menu-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: rgba(212,175,55,0.1);
+    border: 1px solid rgba(212,175,55,0.3);
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .mobile-menu-toggle:hover {
+    background: rgba(212,175,55,0.2);
+    border-color: var(--gold);
+  }
+
+  .mobile-nav-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-primary);
+    border-bottom: 2px solid var(--gold);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+
+  .mobile-nav-dropdown button {
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: rgba(212,175,55,0.1);
+    border: 1px solid rgba(212,175,55,0.2);
+    border-radius: 10px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: left;
+  }
+
+  .mobile-nav-dropdown button:hover,
+  .mobile-nav-dropdown button.active {
+    background: rgba(212,175,55,0.2);
+    border-color: var(--gold);
+    color: var(--gold);
   }
 
   .tier-card {
@@ -2868,6 +2924,7 @@ export default function App() {
   const [account, setAccount] = useState(null);
   const [activeTab, setActiveTab] = useState('stake');
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Testnet balances (stored in localStorage for persistence)
   const [testnetBalances, setTestnetBalances] = useState(() => {
@@ -2953,6 +3010,7 @@ export default function App() {
   // Live holder wallets for ticker (fetched from PulseChain API)
   const [liveHolders, setLiveHolders] = useState({
     holders: HOLDER_WALLETS,
+    totalHolders: 0,
     loading: true,
     lastUpdated: null,
     error: null,
@@ -3061,15 +3119,25 @@ export default function App() {
       }
       
       const data = await response.json();
+      const totalHolders = data.next_page_params ? 50 + (data.items?.length || 0) : (data.items?.length || 0);
       
-      // Process holders - filter out excluded wallets (DAO, Dev, LP, Burn)
+      // Get current DTGC price for $300 filter
+      const dtgcPrice = livePrices.dtgc || 0.0004627;
+      const minBalance = 300 / dtgcPrice; // Minimum tokens for $300 value
+      
+      // Process holders - filter out excluded wallets and those below $300
       const holders = (data.items || [])
         .filter(item => !EXCLUDED_WALLETS.includes(item.address?.hash?.toLowerCase()))
-        .slice(0, 30) // Top 30 holders (~30% of active holders)
         .map((item, index) => ({
           address: `${item.address?.hash?.slice(0, 6)}...${item.address?.hash?.slice(-4)}`,
           fullAddress: item.address?.hash,
-          balance: parseFloat(item.value) / 1e18, // Convert from wei
+          balance: parseFloat(item.value) / 1e18,
+          label: 'Loading...',
+        }))
+        .filter(item => item.balance >= minBalance) // Only wallets above $300
+        .slice(0, 50) // Top 50 holders above $300
+        .map((item, index) => ({
+          ...item,
           label: index < 3 ? `🐋 Whale ${index + 1}` : 
                  index < 8 ? `💎 Diamond ${index - 2}` : 
                  index < 15 ? `🥇 Gold ${index - 7}` :
@@ -3079,11 +3147,12 @@ export default function App() {
       if (holders.length > 0) {
         setLiveHolders({
           holders,
+          totalHolders: totalHolders,
           loading: false,
           lastUpdated: new Date(),
           error: null,
         });
-        console.log('📊 Live holders updated:', holders.length, 'wallets');
+        console.log('📊 Live holders updated:', holders.length, 'wallets above $300');
       } else {
         throw new Error('No holder data received');
       }
@@ -3096,7 +3165,7 @@ export default function App() {
         error: err.message,
       }));
     }
-  }, []);
+  }, [livePrices.dtgc]);
 
   // Fetch holders on mount and every 2 minutes
   useEffect(() => {
@@ -4665,7 +4734,26 @@ export default function App() {
                 <span className="logo-text gold-text">DTGC</span>
                 <span className="logo-tagline">dtgc.io</span>
               </div>
+              {/* Mobile Menu Toggle */}
+              <button 
+                className="mobile-menu-toggle"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? '✕' : '☰'}
+              </button>
             </div>
+
+            {/* Mobile Nav Dropdown */}
+            {mobileMenuOpen && (
+              <div className="mobile-nav-dropdown">
+                <button className={activeTab === 'stake' ? 'active' : ''} onClick={() => { setActiveTab('stake'); setMobileMenuOpen(false); }}>💰 Stake</button>
+                <button className={activeTab === 'burn' ? 'active' : ''} onClick={() => { setActiveTab('burn'); setMobileMenuOpen(false); }}>🔥 Burn Stats</button>
+                <button className={activeTab === 'vote' ? 'active' : ''} onClick={() => { setActiveTab('vote'); setMobileMenuOpen(false); }}>🗳️ DAO</button>
+                <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { setActiveTab('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
+                <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { setActiveTab('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
+                <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
+              </div>
+            )}
 
             <nav className="nav-links">
               <button className={`nav-link ${activeTab === 'stake' ? 'active' : ''}`} onClick={() => setActiveTab('stake')}>Stake</button>
@@ -5347,35 +5435,46 @@ export default function App() {
               <div style={{ 
                 fontSize: '0.6rem', 
                 color: '#666', 
-                textAlign: 'center', 
                 marginBottom: '6px',
                 letterSpacing: '1px',
                 textTransform: 'uppercase',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
+                justifyContent: 'space-between',
+                gap: '8px',
+                flexWrap: 'wrap'
               }}>
-                📊 Top 30% Holder Wallets (Excluding DAO/Dev) • Hover to Pause
-                {liveHolders.loading ? (
-                  <span style={{ color: '#FF9800' }}>⏳ Loading...</span>
-                ) : (
-                  <span style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    color: '#4CAF50' 
-                  }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  📊 Holders Above $300 • Hover to Pause
+                  {liveHolders.loading ? (
+                    <span style={{ color: '#FF9800' }}>⏳ Loading...</span>
+                  ) : (
                     <span style={{ 
-                      width: '6px', 
-                      height: '6px', 
-                      borderRadius: '50%', 
-                      background: '#4CAF50',
-                      animation: 'pulse 2s infinite'
-                    }} />
-                    LIVE
-                  </span>
-                )}
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '4px',
+                      color: '#4CAF50' 
+                    }}>
+                      <span style={{ 
+                        width: '6px', 
+                        height: '6px', 
+                        borderRadius: '50%', 
+                        background: '#4CAF50',
+                        animation: 'pulse 2s infinite'
+                      }} />
+                      LIVE
+                    </span>
+                  )}
+                </div>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  color: '#D4AF37',
+                  fontWeight: 600
+                }}>
+                  <span>Total Holders: {liveHolders.totalHolders || '...'}</span>
+                </div>
               </div>
               <div className="ticker-track">
                 {/* First set of items */}
@@ -5397,11 +5496,23 @@ export default function App() {
               </div>
               <div style={{ 
                 fontSize: '0.55rem', 
-                color: '#555', 
+                color: '#888', 
                 textAlign: 'center', 
-                marginTop: '6px'
+                marginTop: '8px',
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '20px',
+                flexWrap: 'wrap'
               }}>
-                Total Tracked: {formatNumber((liveHolders.holders || []).reduce((sum, w) => sum + w.balance, 0))} DTGC • {(liveHolders.holders || []).length} Wallets
+                <span style={{ color: '#4CAF50' }}>
+                  💰 Holders &gt;$300: {((liveHolders.holders || []).reduce((sum, w) => sum + w.balance, 0) / DTGC_TOTAL_SUPPLY * 100).toFixed(2)}% of supply
+                </span>
+                <span style={{ color: '#FF9800' }}>
+                  📉 Holders &lt;1.5%: {(100 - (liveHolders.holders || []).filter(w => w.balance / DTGC_TOTAL_SUPPLY >= 0.015).reduce((sum, w) => sum + w.balance, 0) / DTGC_TOTAL_SUPPLY * 100).toFixed(1)}% of supply
+                </span>
+                <span style={{ color: '#D4AF37' }}>
+                  🏆 Tracked: {formatNumber((liveHolders.holders || []).reduce((sum, w) => sum + w.balance, 0))} DTGC
+                </span>
               </div>
             </div>
           </div>
