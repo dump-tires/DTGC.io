@@ -6901,10 +6901,11 @@ export default function App() {
                   { label: '👩 URMOM Token', addr: CONTRACT_ADDRESSES.urmom },
                   { label: '💎 DTGC/PLS LP', addr: CONTRACT_ADDRESSES.lpDtgcPls },
                   { label: '💎✨ DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lpDtgcUrmom },
-                  { label: '✅ DTGC Staking V2', addr: CONTRACT_ADDRESSES.stakingV2 },
-                  { label: '✅ LP Staking V2', addr: CONTRACT_ADDRESSES.lpStakingV2 },
-                  { label: '🗳️ DAO Voting', addr: CONTRACT_ADDRESSES.daoVoting },
+                  { label: '✅ DTGC Staking V3', addr: CONTRACT_ADDRESSES.stakingV3 },
+                  { label: '✅ LP Staking V3', addr: CONTRACT_ADDRESSES.lpStakingV3 },
+                  { label: '🗳️ DAO Voting V3', addr: CONTRACT_ADDRESSES.daoVotingV3 },
                   { label: '🏛️ DAO Treasury', addr: CONTRACT_ADDRESSES.daoTreasury },
+                  { label: '👨‍💻 Dev Wallet', addr: CONTRACT_ADDRESSES.devWallet },
                   { label: '🔥 Burn Address', addr: CONTRACT_ADDRESSES.burn },
                 ].map((item, i) => (
                   <div key={i} className="contract-row">
