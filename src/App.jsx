@@ -3600,6 +3600,9 @@ export default function App() {
         initTestnetBalances();
       }
       
+      // Close wallet modal after testnet connection
+      setShowWalletModal(false);
+      
       showToast('🧪 TESTNET: Wallet connected with 100M PLS!', 'success');
       return;
     }
