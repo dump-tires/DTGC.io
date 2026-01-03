@@ -204,11 +204,20 @@ const getV19CorrectedAPR = (contractApr, tierName, isLP = false) => {
     'WHALE': 18.2,
     'DIAMOND': 42,      // 28% × 1.5x
     'DIAMOND+': 70,     // 35% × 2.0x
+    '0': 15.4,          // Numeric fallbacks
+    '1': 16.8,
+    '2': 18.2,
   };
   
   // If contract APR is absurdly high (>100%), use V19 corrected value
   if (contractApr > 100) {
-    const tier = (tierName || 'GOLD').toUpperCase();
+    let tier;
+    if (typeof tierName === 'number') {
+      const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
+      tier = TIER_NAMES[tierName] || 'GOLD';
+    } else {
+      tier = (tierName || 'GOLD').toString().toUpperCase();
+    }
     const correctedApr = V19_CORRECT_APRS[tier] || (isLP ? 42 : 16.8);
     console.log(`🔧 V19 APR Correction: ${contractApr}% → ${correctedApr}% for ${tier}`);
     return correctedApr;
@@ -3039,6 +3048,22 @@ export default function App() {
   const [position, setPosition] = useState(null);
   const [lpPosition, setLpPosition] = useState(null);
   const [stakedPositions, setStakedPositions] = useState([]);
+  
+  // Gold Records - Stake History
+  const [stakeHistory, setStakeHistory] = useState([]);
+  const [showGoldRecords, setShowGoldRecords] = useState(false);
+  
+  // Load stake history from localStorage on mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('dtgc-stake-history');
+    if (savedHistory) {
+      try {
+        setStakeHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.warn('Failed to load stake history:', e);
+      }
+    }
+  }, []);
   const [contractStats, setContractStats] = useState({ totalStaked: '0', stakers: '0' });
 
   // Live holder wallets for ticker (fetched from PulseChain API)
@@ -4243,6 +4268,27 @@ export default function App() {
       const daysStaked = (now - position.startTime) / (24 * 60 * 60 * 1000);
       const rewards = (position.amount * (position.apr / 100) / 365) * daysStaked;
 
+      // Save to stake history before removing
+      const historyEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        tier: position.tier || 'GOLD',
+        amount: position.amount,
+        startTime: position.startTime,
+        endTime: now,
+        apr: position.apr,
+        rewards: rewards,
+        penalty: isEarly ? penalty : 0,
+        returnAmount: returnAmount + rewards,
+        isLP: position.isLP,
+        exitType: isEarly ? 'early' : 'normal',
+        wallet: account,
+      };
+      
+      const existingHistory = JSON.parse(localStorage.getItem('dtgc-stake-history') || '[]');
+      existingHistory.unshift(historyEntry);
+      localStorage.setItem('dtgc-stake-history', JSON.stringify(existingHistory.slice(0, 50))); // Keep last 50
+      setStakeHistory(existingHistory.slice(0, 50));
+
       const newBalances = {
         ...testnetBalances,
         dtgc: position.isLP ? testnetBalances.dtgc + rewards : testnetBalances.dtgc + returnAmount + rewards,
@@ -4266,23 +4312,62 @@ export default function App() {
     }
 
     try {
+      // Save current position to history before unstaking
+      const currentPosition = stakedPositions.find(p => p.id === positionId) || stakedPositions[0];
+      
       setLoading(true);
       showToast('Processing withdrawal...', 'info');
 
       // Determine if this is LP or regular staking based on positionId
-      // For now, use regular staking contract - can be enhanced with position tracking
-      const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, signer);
+      const isLP = positionId === 'lp-stake' || currentPosition?.isLP;
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
 
       const tx = await stakingContract.withdraw();
       await tx.wait();
 
-      setLoading(false);
-      showToast('✅ Successfully withdrawn!', 'success');
+      // Save to stake history
+      if (currentPosition) {
+        const now = Date.now();
+        const daysStaked = Math.max(0, (now - currentPosition.startTime) / (24 * 60 * 60 * 1000));
+        const rewards = (currentPosition.amount * (currentPosition.apr / 100) / 365) * daysStaked;
+        
+        const historyEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          tier: currentPosition.tierName || currentPosition.tier || 'GOLD',
+          amount: currentPosition.amount,
+          startTime: currentPosition.startTime,
+          endTime: now,
+          apr: currentPosition.apr,
+          rewards: rewards,
+          penalty: 0,
+          returnAmount: currentPosition.amount + rewards,
+          isLP: currentPosition.isLP,
+          exitType: 'normal',
+          wallet: account,
+          txHash: tx.hash,
+        };
+        
+        const existingHistory = JSON.parse(localStorage.getItem('dtgc-stake-history') || '[]');
+        existingHistory.unshift(historyEntry);
+        localStorage.setItem('dtgc-stake-history', JSON.stringify(existingHistory.slice(0, 50)));
+        setStakeHistory(existingHistory.slice(0, 50));
+      }
 
-      // Refresh balances
+      // Clear the position immediately from state
+      setStakedPositions(prev => prev.filter(p => p.id !== positionId));
+      
+      setLoading(false);
+      showToast('✅ Successfully withdrawn! Check Gold Records for history.', 'success');
+
+      // Refresh balances and positions
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
       const dtgcBal = await dtgcContract.balanceOf(account);
       setDtgcBalance(ethers.formatEther(dtgcBal));
+      
+      // Re-fetch positions after a short delay
+      setTimeout(() => fetchStakedPosition(), 2000);
 
     } catch (err) {
       console.error('Unstake error:', err);
@@ -4306,6 +4391,9 @@ export default function App() {
     }
 
     try {
+      // Find current position
+      const currentPosition = stakedPositions.find(p => p.isLP === isLP);
+      
       setLoading(true);
       showToast('Processing emergency withdrawal (20% fee)...', 'info');
 
@@ -4316,13 +4404,48 @@ export default function App() {
       const tx = await stakingContract.emergencyWithdraw();
       await tx.wait();
 
+      // Save to stake history with penalty
+      if (currentPosition) {
+        const now = Date.now();
+        const daysStaked = Math.max(0, (now - currentPosition.startTime) / (24 * 60 * 60 * 1000));
+        const rewards = (currentPosition.amount * (currentPosition.apr / 100) / 365) * daysStaked;
+        const penalty = currentPosition.amount * 0.20; // 20% EES fee
+        
+        const historyEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          tier: currentPosition.tierName || currentPosition.tier || (isLP ? 'DIAMOND' : 'GOLD'),
+          amount: currentPosition.amount,
+          startTime: currentPosition.startTime,
+          endTime: now,
+          apr: currentPosition.apr,
+          rewards: rewards,
+          penalty: penalty,
+          returnAmount: currentPosition.amount - penalty + rewards,
+          isLP: isLP,
+          exitType: 'emergency',
+          wallet: account,
+          txHash: tx.hash,
+        };
+        
+        const existingHistory = JSON.parse(localStorage.getItem('dtgc-stake-history') || '[]');
+        existingHistory.unshift(historyEntry);
+        localStorage.setItem('dtgc-stake-history', JSON.stringify(existingHistory.slice(0, 50)));
+        setStakeHistory(existingHistory.slice(0, 50));
+      }
+
+      // Clear position from state
+      setStakedPositions(prev => prev.filter(p => p.isLP !== isLP));
+
       setLoading(false);
-      showToast('✅ Emergency withdrawal complete (20% fee applied)', 'success');
+      showToast('✅ Emergency withdrawal complete (20% fee applied). Check Gold Records.', 'success');
 
       // Refresh balances
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
       const dtgcBal = await dtgcContract.balanceOf(account);
       setDtgcBalance(ethers.formatEther(dtgcBal));
+      
+      // Re-fetch positions after delay
+      setTimeout(() => fetchStakedPosition(), 2000);
 
     } catch (err) {
       console.error('Emergency withdraw error:', err);
@@ -4831,7 +4954,19 @@ export default function App() {
                 'DIAMOND+': { apr: 35, lockDays: 90, boost: 2 },
               };
 
-              const tierName = (activePos.tier || (activePos.isLP ? 'DIAMOND' : 'GOLD')).toUpperCase();
+              // Convert tier number to name (0=SILVER, 1=GOLD, 2=WHALE)
+              const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
+              let tierName;
+              if (activePos.tierName) {
+                tierName = activePos.tierName.toUpperCase();
+              } else if (activePos.isLP) {
+                tierName = activePos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND';
+              } else if (typeof activePos.tier === 'number') {
+                tierName = TIER_NAMES[activePos.tier] || 'GOLD';
+              } else {
+                tierName = (activePos.tier || 'GOLD').toUpperCase();
+              }
+              
               const correction = V19_CORRECTIONS[tierName] || V19_CORRECTIONS['GOLD'];
 
               // Use corrected V19 values
@@ -6163,8 +6298,8 @@ export default function App() {
                     const isLocked = now < pos.endTime;
                     const daysLeft = Math.max(0, Math.ceil((pos.endTime - now) / (24 * 60 * 60 * 1000)));
                     const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
-                    // V19 APR Correction - Fix old contract's crazy APRs
-                    const correctedApr = getV19CorrectedAPR(pos.apr, pos.tier, pos.isLP);
+                    // V19 APR Correction - Fix old contract's crazy APRs (use tierName string, not tier number)
+                    const correctedApr = getV19CorrectedAPR(pos.apr, pos.tierName || pos.tier, pos.isLP);
                     const effectiveApr = correctedApr * (pos.boostMultiplier || 1);
                     const currentRewards = (pos.amount * (effectiveApr / 100) / 365) * daysStaked;
                     const rewardValue = currentRewards * (livePrices.dtgc || 0);
@@ -7682,6 +7817,227 @@ export default function App() {
 
         {/* DexScreener Widget */}
         <DexScreenerWidget />
+
+        {/* Gold Records - Stake History (Bottom Right) */}
+        <div
+          onClick={() => setShowGoldRecords(true)}
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            width: '60px',
+            height: '60px',
+            background: 'linear-gradient(135deg, #B8860B 0%, #DAA520 50%, #FFD700 100%)',
+            border: '3px solid #D4AF37',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            zIndex: 1500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '28px',
+            boxShadow: '0 4px 20px rgba(212,175,55,0.5), inset 0 2px 10px rgba(255,255,255,0.2)',
+            transition: 'all 0.3s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 30px rgba(212,175,55,0.7)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(212,175,55,0.5)';
+          }}
+          title="Gold Records - Stake History"
+        >
+          📜
+        </div>
+
+        {/* Gold Records Modal */}
+        {showGoldRecords && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            backdropFilter: 'blur(10px)',
+          }} onClick={() => setShowGoldRecords(false)}>
+            <div style={{
+              background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+              border: '2px solid #D4AF37',
+              borderRadius: '24px',
+              padding: '32px',
+              maxWidth: '700px',
+              width: '95%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 60px rgba(212,175,55,0.3)',
+            }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h2 style={{
+                  color: '#D4AF37',
+                  fontFamily: 'Cinzel, serif',
+                  fontSize: '1.8rem',
+                  letterSpacing: '3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}>
+                  📜 GOLD RECORDS
+                </h2>
+                <button
+                  onClick={() => setShowGoldRecords(false)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    fontSize: '1.5rem',
+                    cursor: 'pointer',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px', textAlign: 'center' }}>
+                Complete history of your staking activity
+              </p>
+
+              {stakeHistory.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '60px 20px',
+                  color: '#666',
+                }}>
+                  <div style={{ fontSize: '4rem', marginBottom: '16px', opacity: 0.5 }}>📦</div>
+                  <p style={{ fontSize: '1.1rem' }}>No stake history yet</p>
+                  <p style={{ fontSize: '0.85rem', marginTop: '8px' }}>Your completed stakes will appear here</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {stakeHistory.map((record) => (
+                    <div key={record.id} style={{
+                      background: record.exitType === 'emergency' 
+                        ? 'rgba(255,107,107,0.1)' 
+                        : 'rgba(76,175,80,0.1)',
+                      border: `1px solid ${record.exitType === 'emergency' ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
+                      borderRadius: '16px',
+                      padding: '20px',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                        <div>
+                          <div style={{ 
+                            fontFamily: 'Cinzel, serif', 
+                            fontWeight: 700, 
+                            fontSize: '1.1rem', 
+                            color: record.isLP ? '#9C27B0' : '#D4AF37',
+                            marginBottom: '8px',
+                          }}>
+                            {record.isLP ? '💎' : '🪙'} {record.tier} {record.isLP ? 'LP STAKE' : 'STAKE'}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            Amount: <strong>{formatNumber(record.amount)} {record.isLP ? 'LP' : 'DTGC'}</strong>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#4CAF50', marginTop: '4px' }}>
+                            Rewards: <strong>+{formatNumber(record.rewards)} DTGC</strong>
+                          </div>
+                          {record.penalty > 0 && (
+                            <div style={{ fontSize: '0.8rem', color: '#FF6B6B', marginTop: '4px' }}>
+                              Penalty: <strong>-{formatNumber(record.penalty)} DTGC</strong> (20% EES)
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                            📅 {new Date(record.startTime).toLocaleDateString()} → {new Date(record.endTime).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>APR</div>
+                          <div style={{ fontSize: '1rem', fontWeight: 700, color: '#D4AF37' }}>
+                            {record.apr?.toFixed(1)}%
+                          </div>
+                          <div style={{ 
+                            fontSize: '0.7rem', 
+                            marginTop: '8px',
+                            padding: '4px 8px',
+                            borderRadius: '8px',
+                            background: record.exitType === 'emergency' ? 'rgba(255,107,107,0.2)' : 'rgba(76,175,80,0.2)',
+                            color: record.exitType === 'emergency' ? '#FF6B6B' : '#4CAF50',
+                          }}>
+                            {record.exitType === 'emergency' ? '⚠️ Early Exit' : '✅ Completed'}
+                          </div>
+                          {record.txHash && (
+                            <a 
+                              href={`https://scan.pulsechain.com/tx/${record.txHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: '0.7rem', color: '#2196F3', marginTop: '8px', display: 'block' }}
+                            >
+                              View TX ↗
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        marginTop: '12px', 
+                        paddingTop: '12px', 
+                        borderTop: '1px solid rgba(255,255,255,0.1)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Net Return:</span>
+                        <span style={{ 
+                          fontSize: '1.1rem', 
+                          fontWeight: 800, 
+                          color: record.penalty > 0 ? '#FFB74D' : '#4CAF50',
+                        }}>
+                          {formatNumber(record.returnAmount)} {record.isLP ? 'LP + DTGC' : 'DTGC'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {stakeHistory.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('Clear all stake history? This cannot be undone.')) {
+                      localStorage.removeItem('dtgc-stake-history');
+                      setStakeHistory([]);
+                      showToast('Stake history cleared', 'success');
+                    }
+                  }}
+                  style={{
+                    marginTop: '24px',
+                    padding: '10px 20px',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,107,107,0.3)',
+                    borderRadius: '8px',
+                    color: '#FF6B6B',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'block',
+                    margin: '24px auto 0',
+                  }}
+                >
+                  🗑️ Clear History
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stake Modal */}
