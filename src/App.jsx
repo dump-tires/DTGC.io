@@ -5666,6 +5666,10 @@ export default function App() {
               <option value="sar">🇸🇦 SAR (﷼)</option>
               <option value="cny">🇨🇳 CNY (¥)</option>
               <option value="czk">🇨🇿 CZK (Kč)</option>
+              <option value="aud">🇦🇺 AUD (A$)</option>
+              <option value="ngn">🇳🇬 NGN (₦)</option>
+              <option value="cop">🇨🇴 COP ($)</option>
+              <option value="cad">🇨🇦 CAD (C$)</option>
             </select>
           </div>
         </section>
