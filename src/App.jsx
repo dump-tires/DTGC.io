@@ -195,6 +195,28 @@ const getEffectiveAPR = (baseAPR, marketCap) => {
   return baseAPR * phase.multiplier;
 };
 
+// V19 APR CORRECTION - Override old contract APRs with correct values
+// Old contracts stored crazy APRs like 7000%. This corrects them.
+const getV19CorrectedAPR = (contractApr, tierName, isLP = false) => {
+  const V19_CORRECT_APRS = {
+    'SILVER': 15.4,
+    'GOLD': 16.8,
+    'WHALE': 18.2,
+    'DIAMOND': 42,      // 28% × 1.5x
+    'DIAMOND+': 70,     // 35% × 2.0x
+  };
+  
+  // If contract APR is absurdly high (>100%), use V19 corrected value
+  if (contractApr > 100) {
+    const tier = (tierName || 'GOLD').toUpperCase();
+    const correctedApr = V19_CORRECT_APRS[tier] || (isLP ? 42 : 16.8);
+    console.log(`🔧 V19 APR Correction: ${contractApr}% → ${correctedApr}% for ${tier}`);
+    return correctedApr;
+  }
+  
+  return contractApr;
+};
+
 // Format market cap for display
 const formatMarketCap = (value) => {
   if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
@@ -4367,6 +4389,11 @@ export default function App() {
       // Parse regular staking position
       // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, bonusBps, tier, isActive, timeRemaining)
       if (position && position[7]) { // isActive is at index 7
+        const rawApr = Number(position[4]) / 100; // Convert from bps
+        const tierNum = Number(position[6]);
+        const tierNames = ['SILVER', 'GOLD', 'WHALE'];
+        const tierName = tierNames[tierNum] || 'GOLD';
+        
         positions.push({
           id: 'dtgc-stake',
           type: 'DTGC',
@@ -4375,9 +4402,10 @@ export default function App() {
           startTime: Number(position[1]) * 1000,
           endTime: Number(position[2]) * 1000,
           lockPeriod: Number(position[3]),
-          apr: Number(position[4]) / 100, // Convert from bps
+          apr: getV19CorrectedAPR(rawApr, tierName, false), // V19 CORRECTION APPLIED
           bonus: Number(position[5]) / 100, // bonusBps
-          tier: Number(position[6]),
+          tier: tierNum,
+          tierName: tierName,
           isActive: position[7],
           timeRemaining: Number(position[8]),
         });
@@ -4386,6 +4414,10 @@ export default function App() {
       // Parse LP staking position
       // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
       if (lpPosition && lpPosition[7]) { // isActive is at index 7
+        const rawLpApr = Number(lpPosition[4]) / 100; // aprBps
+        const lpTypeNum = Number(lpPosition[6]); // 0=Diamond, 1=Diamond+
+        const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+        
         positions.push({
           id: 'lp-stake',
           type: 'LP',
@@ -4394,9 +4426,10 @@ export default function App() {
           startTime: Number(lpPosition[1]) * 1000,
           endTime: Number(lpPosition[2]) * 1000,
           lockPeriod: Number(lpPosition[3]),
-          apr: Number(lpPosition[4]) / 100, // aprBps
+          apr: getV19CorrectedAPR(rawLpApr, lpTierName, true), // V19 CORRECTION APPLIED
           boostMultiplier: Number(lpPosition[5]) / 100, // boostBps
-          lpType: Number(lpPosition[6]), // 0=Diamond, 1=Diamond+
+          lpType: lpTypeNum,
+          tier: lpTierName,
           isActive: lpPosition[7],
           timeRemaining: Number(lpPosition[8]),
         });
@@ -6130,7 +6163,9 @@ export default function App() {
                     const isLocked = now < pos.endTime;
                     const daysLeft = Math.max(0, Math.ceil((pos.endTime - now) / (24 * 60 * 60 * 1000)));
                     const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
-                    const effectiveApr = pos.apr * (pos.boostMultiplier || 1);
+                    // V19 APR Correction - Fix old contract's crazy APRs
+                    const correctedApr = getV19CorrectedAPR(pos.apr, pos.tier, pos.isLP);
+                    const effectiveApr = correctedApr * (pos.boostMultiplier || 1);
                     const currentRewards = (pos.amount * (effectiveApr / 100) / 365) * daysStaked;
                     const rewardValue = currentRewards * (livePrices.dtgc || 0);
 
