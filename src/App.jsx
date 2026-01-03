@@ -8215,26 +8215,29 @@ export default function App() {
           bottom: 0,
           background: 'rgba(0,0,0,0.85)',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: window.innerWidth < 768 ? 'flex-start' : 'center',
           justifyContent: 'center',
+          paddingTop: window.innerWidth < 768 ? '60px' : '0',
           zIndex: 10000,
           backdropFilter: 'blur(8px)',
         }} onClick={() => setShowWalletModal(false)}>
           <div style={{
             background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
             border: '2px solid #D4AF37',
-            borderRadius: '20px',
-            padding: '32px',
-            maxWidth: '420px',
-            width: '90%',
+            borderRadius: window.innerWidth < 768 ? '16px' : '20px',
+            padding: window.innerWidth < 768 ? '20px' : '32px',
+            maxWidth: window.innerWidth < 768 ? '320px' : '420px',
+            width: window.innerWidth < 768 ? '85%' : '90%',
+            maxHeight: window.innerWidth < 768 ? '70vh' : '85vh',
+            overflowY: 'auto',
             boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.2)',
           }} onClick={(e) => e.stopPropagation()}>
             <h2 style={{
               color: '#D4AF37',
               fontFamily: 'Cinzel, serif',
-              fontSize: '1.5rem',
+              fontSize: window.innerWidth < 768 ? '1.2rem' : '1.5rem',
               textAlign: 'center',
-              marginBottom: '24px',
+              marginBottom: window.innerWidth < 768 ? '16px' : '24px',
               letterSpacing: '2px',
             }}>
               {walletStep === 'accounts' ? 'Select Account' : 'Select Wallet'}
