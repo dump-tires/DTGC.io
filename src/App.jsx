@@ -4378,7 +4378,17 @@ export default function App() {
       } else if (err.message?.includes('locked')) {
         showToast('Position is still locked! Use Emergency Withdraw (20% fee)', 'error');
       } else {
-        showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+        // Detect "no position" errors - means stale UI data from V2
+        const errorMsg = err.message?.toLowerCase() || '';
+        if (errorMsg.includes('revert') || errorMsg.includes('estimategas') || errorMsg.includes('no position')) {
+          showToast('⚠️ No active stake found on V3. Clearing stale data...', 'info');
+          setStakedPositions([]);
+          setTimeout(() => {
+            showToast('✅ Cleared. Your stake may have been on old V2 contracts.', 'success');
+          }, 1500);
+        } else {
+          showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+        }
       }
     }
   };
@@ -4450,7 +4460,29 @@ export default function App() {
     } catch (err) {
       console.error('Emergency withdraw error:', err);
       setLoading(false);
-      showToast(`Emergency withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      
+      // Detect "no position" or "nothing to withdraw" errors - means stale UI data
+      const errorMsg = (err.message || '').toLowerCase();
+      const errorData = (err.data || '').toLowerCase();
+      const isNoPositionError = errorMsg.includes('revert') || 
+                                errorMsg.includes('estimategas') || 
+                                errorMsg.includes('no position') || 
+                                errorMsg.includes('nothing') ||
+                                errorMsg.includes('missing') ||
+                                errorData.includes('revert') ||
+                                err.code === 'CALL_EXCEPTION' ||
+                                err.code === 'UNPREDICTABLE_GAS_LIMIT';
+      
+      if (isNoPositionError) {
+        showToast('⚠️ No active stake found on V3 contract. Clearing stale UI data...', 'info');
+        // Auto-clear the stale position
+        setStakedPositions([]);
+        setTimeout(() => {
+          showToast('✅ Stale data cleared. Your stake may have been on V2 contracts.', 'success');
+        }, 1500);
+      } else {
+        showToast(`Emergency withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      }
     }
   };
 
@@ -4494,6 +4526,31 @@ export default function App() {
     }
   };
 
+  // Force clear ALL stale stake data (for V2 -> V3 migration issues)
+  const forceClearStaleData = () => {
+    console.log('🧹 Force clearing all stale stake data...');
+    setStakedPositions([]);
+    localStorage.removeItem('dtgc-testnet-balances');
+    localStorage.removeItem('dtgc-stake-history');
+    
+    // Also clear testnet positions if in testnet mode
+    if (TESTNET_MODE) {
+      setTestnetBalances(prev => ({
+        ...prev,
+        positions: [],
+        stakedDTGC: 0,
+        stakedLP: 0,
+      }));
+    }
+    
+    showToast('✅ All stale stake data cleared!', 'success');
+    
+    // Re-fetch from blockchain after a delay
+    if (!TESTNET_MODE && account && provider) {
+      setTimeout(() => fetchStakedPosition(), 1500);
+    }
+  };
+
   // Fetch user's staked position from contract
   const fetchStakedPosition = useCallback(async () => {
     if (TESTNET_MODE || !account || !provider) return;
@@ -4511,7 +4568,9 @@ export default function App() {
 
       // Parse regular staking position
       // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, bonusBps, tier, isActive, timeRemaining)
-      if (position && position[7]) { // isActive is at index 7
+      // Only add if amount > 0 AND isActive is true
+      const amount = position ? parseFloat(ethers.formatEther(position[0])) : 0;
+      if (position && position[7] && amount > 0) { // isActive is at index 7
         const rawApr = Number(position[4]) / 100; // Convert from bps
         const tierNum = Number(position[6]);
         const tierNames = ['SILVER', 'GOLD', 'WHALE'];
@@ -4521,7 +4580,7 @@ export default function App() {
           id: 'dtgc-stake',
           type: 'DTGC',
           isLP: false,
-          amount: parseFloat(ethers.formatEther(position[0])),
+          amount: amount,
           startTime: Number(position[1]) * 1000,
           endTime: Number(position[2]) * 1000,
           lockPeriod: Number(position[3]),
@@ -4536,7 +4595,8 @@ export default function App() {
 
       // Parse LP staking position
       // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
-      if (lpPosition && lpPosition[7]) { // isActive is at index 7
+      const lpAmount = lpPosition ? parseFloat(ethers.formatEther(lpPosition[0])) : 0;
+      if (lpPosition && lpPosition[7] && lpAmount > 0) { // isActive is at index 7
         const rawLpApr = Number(lpPosition[4]) / 100; // aprBps
         const lpTypeNum = Number(lpPosition[6]); // 0=Diamond, 1=Diamond+
         const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
@@ -4545,7 +4605,7 @@ export default function App() {
           id: 'lp-stake',
           type: 'LP',
           isLP: true,
-          amount: parseFloat(ethers.formatEther(lpPosition[0])),
+          amount: lpAmount,
           startTime: Number(lpPosition[1]) * 1000,
           endTime: Number(lpPosition[2]) * 1000,
           lockPeriod: Number(lpPosition[3]),
@@ -4558,17 +4618,22 @@ export default function App() {
         });
       }
 
+      // Always set positions to what blockchain returns (even if empty)
       setStakedPositions(positions);
-      console.log('📊 Staked positions loaded:', positions);
+      console.log('📊 Staked positions from V3 contracts:', positions.length > 0 ? positions : 'No active positions');
 
     } catch (err) {
       console.warn('Failed to fetch staked positions:', err.message);
+      // On error, clear positions to avoid showing stale data
+      setStakedPositions([]);
     }
   }, [account, provider]);
 
   // Fetch staked positions when account connects
   useEffect(() => {
     if (!TESTNET_MODE && account && provider) {
+      // Clear any stale positions first, then fetch fresh from blockchain
+      setStakedPositions([]);
       fetchStakedPosition();
       // Refresh every 60 seconds
       const interval = setInterval(fetchStakedPosition, 60000);
@@ -4907,6 +4972,29 @@ export default function App() {
               maxWidth: '280px',
               boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
             }}>
+              {/* Clear Stale Data Button - for old V2 stakes */}
+              <button
+                onClick={() => {
+                  if (confirm('Clear stale stake data? Use this if you see old V2 stakes that no longer exist on V3 contracts.')) {
+                    forceClearStaleData();
+                  }
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '4px',
+                  right: '36px',
+                  background: 'rgba(255,107,107,0.2)',
+                  border: '1px solid rgba(255,107,107,0.4)',
+                  color: '#FF6B6B',
+                  fontSize: '0.6rem',
+                  cursor: 'pointer',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                }}
+                title="Clear stale V2 stake data"
+              >
+                🗑️ Clear
+              </button>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -5092,6 +5180,30 @@ export default function App() {
                       ✅ Claim All
                     </button>
                   )}
+                  
+                  {/* Clear Ghost Position Button (for V2 migration issues) */}
+                  <button
+                    onClick={() => {
+                      if (confirm('Clear this position from UI? Use this if you get errors trying to unstake (ghost V2 data).')) {
+                        setStakedPositions([]);
+                        showToast('🧹 Ghost position cleared from UI', 'success');
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      marginTop: '6px',
+                      padding: '6px 12px',
+                      background: 'transparent',
+                      border: '1px dashed rgba(255,255,255,0.2)',
+                      borderRadius: '8px',
+                      fontWeight: 500,
+                      fontSize: '0.6rem',
+                      color: 'rgba(255,255,255,0.5)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🧹 Clear Ghost (V2 Data)
+                  </button>
                 </>
               );
             })()}
@@ -6284,14 +6396,34 @@ export default function App() {
                   padding: '30px',
                   border: '1px solid var(--border-color)',
                 }}>
-                  <h3 style={{
-                    fontFamily: 'Cinzel, serif',
-                    fontSize: '1.2rem',
-                    letterSpacing: '3px',
-                    marginBottom: '20px',
-                    textAlign: 'center',
-                    color: 'var(--gold)',
-                  }}>📊 YOUR STAKED POSITIONS</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h3 style={{
+                      fontFamily: 'Cinzel, serif',
+                      fontSize: '1.2rem',
+                      letterSpacing: '3px',
+                      textAlign: 'center',
+                      color: 'var(--gold)',
+                      flex: 1,
+                    }}>📊 YOUR STAKED POSITIONS</h3>
+                    <button
+                      onClick={() => {
+                        if (confirm('Clear stale position data? Use this if you see old V2 stakes that no longer exist on the V3 contracts.')) {
+                          forceClearStaleData();
+                        }
+                      }}
+                      style={{
+                        background: 'rgba(255,107,107,0.1)',
+                        border: '1px solid rgba(255,107,107,0.3)',
+                        color: '#FF6B6B',
+                        fontSize: '0.7rem',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🗑️ Clear Stale
+                    </button>
+                  </div>
 
                   {stakedPositions.map((pos) => {
                     const now = Date.now();
@@ -6341,7 +6473,7 @@ export default function App() {
                             <div style={{fontSize: '0.75rem', color: '#4CAF50', opacity: 0.9}}>
                               ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValue).value)}
                             </div>
-                            <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end'}}>
+                            <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
                               {isLocked ? (
                                 <button
                                   onClick={() => handleEmergencyWithdraw(pos.isLP)}
@@ -6392,6 +6524,27 @@ export default function App() {
                                   </button>
                                 </>
                               )}
+                              {/* Ghost Clear Button */}
+                              <button
+                                onClick={() => {
+                                  if (confirm('Clear this position from UI? Use if you get errors (ghost V2 data).')) {
+                                    setStakedPositions(prev => prev.filter(p => p.id !== pos.id));
+                                    showToast('🧹 Position cleared from UI', 'success');
+                                  }
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  background: 'transparent',
+                                  border: '1px dashed rgba(255,255,255,0.3)',
+                                  borderRadius: '20px',
+                                  fontWeight: 500,
+                                  fontSize: '0.6rem',
+                                  color: 'rgba(255,255,255,0.5)',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                🧹 Clear Ghost
+                              </button>
                             </div>
                           </div>
                         </div>
