@@ -5524,7 +5524,18 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
               >
-                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : displayCurrency === 'jpy' ? '💴 JPY' : displayCurrency === 'sar' ? '🇸🇦 SAR' : displayCurrency === 'cny' ? '🇨🇳 CNY' : '🇨🇿 CZK'} ▼
+                {displayCurrency === 'units' ? '💰 UNITS' : 
+                 displayCurrency === 'usd' ? '💵 USD' : 
+                 displayCurrency === 'eur' ? '💶 EUR' : 
+                 displayCurrency === 'gbp' ? '💷 GBP' : 
+                 displayCurrency === 'jpy' ? '💴 JPY' : 
+                 displayCurrency === 'sar' ? '🇸🇦 SAR' : 
+                 displayCurrency === 'cny' ? '🇨🇳 CNY' : 
+                 displayCurrency === 'czk' ? '🇨🇿 CZK' :
+                 displayCurrency === 'aud' ? '🇦🇺 AUD' :
+                 displayCurrency === 'ngn' ? '🇳🇬 NGN' :
+                 displayCurrency === 'cop' ? '🇨🇴 COP' :
+                 displayCurrency === 'cad' ? '🇨🇦 CAD' : '💰 UNITS'} ▼
               </button>
 
               <div style={{
