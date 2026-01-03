@@ -153,7 +153,7 @@ const V5_DIAMOND_TIER = {
 const V5_DIAMOND_PLUS_TIER = {
   id: 4,
   name: 'DIAMOND+',
-  icon: '💎✨',
+  icon: '💜💎',
   minInvest: 25000,
   lockDays: 90,
   holdDays: 90,
@@ -3059,6 +3059,15 @@ export default function App() {
   const [calcTimeframe, setCalcTimeframe] = useState('12'); // months
   const [calcPriceDrop, setCalcPriceDrop] = useState('50'); // VaR price drop %
 
+  // Dynamic Stake Hedging Forecaster State
+  const [forecastInvestment, setForecastInvestment] = useState('10000');
+  const [forecastPriceChange, setForecastPriceChange] = useState('0'); // % change
+  const [forecastMonths, setForecastMonths] = useState('12');
+  const [forecastGoldPct, setForecastGoldPct] = useState('25');
+  const [forecastWhalePct, setForecastWhalePct] = useState('25');
+  const [forecastDiamondPct, setForecastDiamondPct] = useState('25');
+  const [forecastDiamondPlusPct, setForecastDiamondPlusPct] = useState('25');
+
   // Live crypto prices state
   const [cryptoPrices, setCryptoPrices] = useState({
     btc: 42000,
@@ -5157,13 +5166,27 @@ export default function App() {
               const stakeValueUsd = activePos.amount * (livePrices.dtgc || 0);
               const rewardValueUsd = currentRewards * (livePrices.dtgc || 0);
 
+              // Get tier-specific color
+              const getTierColor = (name) => {
+                switch(name) {
+                  case 'SILVER': return '#C0C0C0';
+                  case 'GOLD': return '#D4AF37';
+                  case 'WHALE': return '#2196F3';
+                  case 'DIAMOND': return '#00BCD4';
+                  case 'DIAMOND+': return '#9C27B0';
+                  default: return '#D4AF37';
+                }
+              };
+              const tierColor = getTierColor(tierName);
+              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜💎' : tierName === 'DIAMOND' ? '💎' : '🥇';
+
               return (
                 <>
                   <div style={{ marginBottom: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Tier</span>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: activePos.isLP ? 'var(--diamond)' : 'var(--gold)' }}>
-                        {activePos.isLP ? '💎' : '🥇'} {tierName}
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: tierColor }}>
+                        {tierIcon} {tierName}
                       </span>
                     </div>
                   </div>
@@ -5566,7 +5589,7 @@ export default function App() {
                   <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcPlsBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
                 </div>
                 <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(156,39,176,0.1)', borderRadius: '8px', border: '1px solid rgba(156,39,176,0.3)'}}>
-                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#9C27B0'}}>{formatNumber(parseFloat(lpDtgcUrmomBalance))} 💎✨</div>
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#9C27B0'}}>{formatNumber(parseFloat(lpDtgcUrmomBalance))} 💜💎</div>
                   <div style={{fontSize: '0.65rem', color: '#9C27B0'}}>DTGC/URMOM LP</div>
                   <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcUrmomBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
                 </div>
@@ -6320,7 +6343,7 @@ export default function App() {
                   padding: '12px 16px',
                   textAlign: 'center'
                 }}>
-                  <div style={{ fontSize: '0.65rem', color: '#9C27B0', letterSpacing: '1px', marginBottom: '4px' }}>💎✨ LP STAKING REWARDS</div>
+                  <div style={{ fontSize: '0.65rem', color: '#9C27B0', letterSpacing: '1px', marginBottom: '4px' }}>💜💎 LP STAKING REWARDS</div>
                   <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
                     ${formatNumber((parseFloat(lpStakingRewardsRemaining) || 0) * (livePrices.dtgc || 0), 2)}
                   </div>
@@ -7191,7 +7214,7 @@ export default function App() {
                       <tr><td>🥇 Gold</td><td>$500</td><td>90 days</td><td>16.8%</td><td>1x</td><td>DTGC</td></tr>
                       <tr><td>🐋 Whale</td><td>$10k</td><td>180 days</td><td>18.2%</td><td>1x</td><td>DTGC</td></tr>
                       <tr style={{background: 'rgba(0, 188, 212, 0.1)'}}><td>💎 Diamond</td><td>$1,000</td><td>90 days</td><td style={{color: '#00BCD4', fontWeight: '700'}}>28%</td><td style={{color: '#4CAF50', fontWeight: '700'}}>1.5x (42%)</td><td>DTGC/PLS LP</td></tr>
-                      <tr style={{background: 'rgba(156, 39, 176, 0.15)'}}><td>💎✨ Diamond+</td><td>$1,000</td><td>90 days</td><td style={{color: '#9C27B0', fontWeight: '700'}}>35%</td><td style={{color: '#9C27B0', fontWeight: '700'}}>2x (70%)</td><td>DTGC/URMOM LP</td></tr>
+                      <tr style={{background: 'rgba(156, 39, 176, 0.15)'}}><td>💜💎 Diamond+</td><td>$1,000</td><td>90 days</td><td style={{color: '#9C27B0', fontWeight: '700'}}>35%</td><td style={{color: '#9C27B0', fontWeight: '700'}}>2x (70%)</td><td>DTGC/URMOM LP</td></tr>
                     </tbody>
                   </table>
                   <div className="wp-highlight">
@@ -7319,7 +7342,7 @@ export default function App() {
                   { label: '🪙 DTGC Token', addr: CONTRACT_ADDRESSES.dtgc },
                   { label: '👩 URMOM Token', addr: CONTRACT_ADDRESSES.urmom },
                   { label: '💎 DTGC/PLS LP', addr: CONTRACT_ADDRESSES.lpDtgcPls },
-                  { label: '💎✨ DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lpDtgcUrmom },
+                  { label: '💜💎 DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lpDtgcUrmom },
                   { label: '✅ DTGC Staking V3', addr: CONTRACT_ADDRESSES.stakingV3 },
                   { label: '✅ LP Staking V3', addr: CONTRACT_ADDRESSES.lpStakingV3 },
                   { label: '🗳️ DAO Voting V3', addr: CONTRACT_ADDRESSES.daoVotingV3 },
@@ -7366,6 +7389,10 @@ export default function App() {
                     <option value="sar">🇸🇦 SAR (﷼)</option>
                     <option value="cny">🇨🇳 CNY (¥)</option>
                     <option value="czk">🇨🇿 CZK (Kč)</option>
+                    <option value="aud">🇦🇺 AUD (A$)</option>
+                    <option value="ngn">🇳🇬 NGN (₦)</option>
+                    <option value="cop">🇨🇴 COP ($)</option>
+                    <option value="cad">🇨🇦 CAD (C$)</option>
                   </select>
                 </div>
                 <div className="section-divider" style={{ background: 'linear-gradient(90deg, transparent, #2196F3, transparent)' }} />
@@ -7637,6 +7664,331 @@ export default function App() {
                 </div>
               </div>
 
+              {/* ═══════════════════════════════════════════════════════════════ */}
+              {/*     🎲 DYNAMIC STAKE HEDGING FORECASTER - "IT'S GAMBLING IF YOU CAN'T FORECAST FIRST" */}
+              {/* ═══════════════════════════════════════════════════════════════ */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(156,39,176,0.15), rgba(0,188,212,0.1))',
+                border: '3px solid #D4AF37',
+                borderRadius: '20px',
+                padding: '28px',
+                marginBottom: '24px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {/* Decorative corner */}
+                <div style={{ position: 'absolute', top: 0, right: 0, width: '120px', height: '120px', background: 'linear-gradient(135deg, transparent 50%, rgba(212,175,55,0.1) 50%)', pointerEvents: 'none' }} />
+                
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <h3 style={{ color: '#D4AF37', fontSize: '1.5rem', marginBottom: '8px', fontFamily: "'Cinzel', serif", letterSpacing: '2px' }}>
+                    🎯 DYNAMIC STAKE HEDGING FORECASTER
+                  </h3>
+                  <p style={{ color: '#9C27B0', fontSize: '1rem', fontWeight: 'bold', fontStyle: 'italic' }}>
+                    "It's gambling if you can't forecast first"
+                  </p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px' }}>
+                    Allocate your portfolio across tiers and simulate price scenarios before staking
+                  </p>
+                </div>
+
+                {/* Investment & Price Change Inputs */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  <div>
+                    <label style={{ color: '#D4AF37', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>💰 Total Investment ($)</label>
+                    <input
+                      type="number"
+                      value={forecastInvestment}
+                      onChange={(e) => setForecastInvestment(e.target.value)}
+                      style={{ width: '100%', padding: '14px', background: 'rgba(0,0,0,0.4)', border: '2px solid #D4AF37', borderRadius: '10px', color: '#D4AF37', fontSize: '1.2rem', fontWeight: 'bold', boxSizing: 'border-box' }}
+                      placeholder="10000"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>📅 Staking Period (Months)</label>
+                    <select
+                      value={forecastMonths}
+                      onChange={(e) => setForecastMonths(e.target.value)}
+                      style={{ width: '100%', padding: '14px', background: 'rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.3)', borderRadius: '10px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
+                    >
+                      <option value="3">3 Months</option>
+                      <option value="6">6 Months</option>
+                      <option value="12">12 Months</option>
+                      <option value="24">24 Months</option>
+                      <option value="36">36 Months</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ color: parseFloat(forecastPriceChange) >= 0 ? '#4CAF50' : '#F44336', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                      {parseFloat(forecastPriceChange) >= 0 ? '📈' : '📉'} Price Change at Exit (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={forecastPriceChange}
+                      onChange={(e) => setForecastPriceChange(e.target.value)}
+                      style={{ 
+                        width: '100%', 
+                        padding: '14px', 
+                        background: parseFloat(forecastPriceChange) >= 0 ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)', 
+                        border: `2px solid ${parseFloat(forecastPriceChange) >= 0 ? '#4CAF50' : '#F44336'}`, 
+                        borderRadius: '10px', 
+                        color: parseFloat(forecastPriceChange) >= 0 ? '#4CAF50' : '#F44336', 
+                        fontSize: '1.2rem', 
+                        fontWeight: 'bold', 
+                        boxSizing: 'border-box' 
+                      }}
+                      placeholder="0"
+                    />
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'center' }}>
+                      Use negative for price drop (e.g. -50)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tier Allocation Sliders */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h4 style={{ color: '#fff', fontSize: '1rem' }}>📊 Portfolio Allocation</h4>
+                    <span style={{ 
+                      color: (parseFloat(forecastGoldPct) + parseFloat(forecastWhalePct) + parseFloat(forecastDiamondPct) + parseFloat(forecastDiamondPlusPct)) === 100 ? '#4CAF50' : '#F44336',
+                      fontWeight: 'bold',
+                      fontSize: '0.9rem'
+                    }}>
+                      Total: {parseFloat(forecastGoldPct || 0) + parseFloat(forecastWhalePct || 0) + parseFloat(forecastDiamondPct || 0) + parseFloat(forecastDiamondPlusPct || 0)}%
+                      {(parseFloat(forecastGoldPct) + parseFloat(forecastWhalePct) + parseFloat(forecastDiamondPct) + parseFloat(forecastDiamondPlusPct)) !== 100 && ' ⚠️ Must = 100%'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                    {/* Gold Allocation */}
+                    <div style={{ background: 'rgba(212,175,55,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #D4AF37' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>🥇 Gold</span>
+                        <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>{forecastGoldPct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastGoldPct}
+                        onChange={(e) => setForecastGoldPct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#D4AF37' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>16.8% APR</span>
+                        <span>90 Days Lock</span>
+                      </div>
+                    </div>
+
+                    {/* Whale Allocation */}
+                    <div style={{ background: 'rgba(33,150,243,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #2196F3' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#2196F3', fontWeight: 'bold' }}>🐋 Whale</span>
+                        <span style={{ color: '#2196F3', fontWeight: 'bold' }}>{forecastWhalePct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastWhalePct}
+                        onChange={(e) => setForecastWhalePct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#2196F3' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>18.2% APR</span>
+                        <span>180 Days Lock</span>
+                      </div>
+                    </div>
+
+                    {/* Diamond Allocation */}
+                    <div style={{ background: 'rgba(0,188,212,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #00BCD4' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#00BCD4', fontWeight: 'bold' }}>💎 Diamond LP</span>
+                        <span style={{ color: '#00BCD4', fontWeight: 'bold' }}>{forecastDiamondPct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastDiamondPct}
+                        onChange={(e) => setForecastDiamondPct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#00BCD4' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>42% APR (1.5x)</span>
+                        <span>DTGC/PLS LP</span>
+                      </div>
+                    </div>
+
+                    {/* Diamond+ Allocation */}
+                    <div style={{ background: 'rgba(156,39,176,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #9C27B0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>💜💎 Diamond+ LP</span>
+                        <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>{forecastDiamondPlusPct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastDiamondPlusPct}
+                        onChange={(e) => setForecastDiamondPlusPct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#9C27B0' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>70% APR (2x)</span>
+                        <span>DTGC/URMOM LP</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Forecast Results */}
+                {(() => {
+                  const investment = parseFloat(forecastInvestment) || 0;
+                  const priceChange = parseFloat(forecastPriceChange) || 0;
+                  const months = parseFloat(forecastMonths) || 12;
+                  const goldPct = parseFloat(forecastGoldPct) || 0;
+                  const whalePct = parseFloat(forecastWhalePct) || 0;
+                  const diamondPct = parseFloat(forecastDiamondPct) || 0;
+                  const diamondPlusPct = parseFloat(forecastDiamondPlusPct) || 0;
+                  const totalPct = goldPct + whalePct + diamondPct + diamondPlusPct;
+
+                  if (totalPct !== 100 || investment <= 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                        {investment <= 0 ? 'Enter an investment amount' : 'Adjust allocations to total 100%'}
+                      </div>
+                    );
+                  }
+
+                  // Calculate allocations
+                  const goldAmt = investment * (goldPct / 100);
+                  const whaleAmt = investment * (whalePct / 100);
+                  const diamondAmt = investment * (diamondPct / 100);
+                  const diamondPlusAmt = investment * (diamondPlusPct / 100);
+
+                  // APRs and fees
+                  const APRS = { gold: 16.8, whale: 18.2, diamond: 42, diamondPlus: 70 };
+                  const ENTRY_FEE = 3.75 / 100;
+                  const EXIT_FEE = 3.75 / 100;
+
+                  // Calculate rewards for each tier (after entry fee)
+                  const calcTierResult = (amt, apr) => {
+                    const afterEntry = amt * (1 - ENTRY_FEE);
+                    const rewards = afterEntry * (apr / 100) * (months / 12);
+                    const totalBeforeExit = afterEntry + rewards;
+                    const afterExit = totalBeforeExit * (1 - EXIT_FEE);
+                    // Apply price change
+                    const finalValue = afterExit * (1 + priceChange / 100);
+                    return { afterEntry, rewards, afterExit, finalValue };
+                  };
+
+                  const goldResult = calcTierResult(goldAmt, APRS.gold);
+                  const whaleResult = calcTierResult(whaleAmt, APRS.whale);
+                  const diamondResult = calcTierResult(diamondAmt, APRS.diamond);
+                  const diamondPlusResult = calcTierResult(diamondPlusAmt, APRS.diamondPlus);
+
+                  const totalRewards = goldResult.rewards + whaleResult.rewards + diamondResult.rewards + diamondPlusResult.rewards;
+                  const totalFinalValue = goldResult.finalValue + whaleResult.finalValue + diamondResult.finalValue + diamondPlusResult.finalValue;
+                  const netGainLoss = totalFinalValue - investment;
+                  const netPercent = (netGainLoss / investment) * 100;
+                  const blendedAPR = ((goldPct/100)*APRS.gold + (whalePct/100)*APRS.whale + (diamondPct/100)*APRS.diamond + (diamondPlusPct/100)*APRS.diamondPlus);
+
+                  // Calculate breakeven price drop
+                  const rewardsOnly = totalRewards;
+                  const totalAfterFees = investment * (1 - ENTRY_FEE) * (1 - EXIT_FEE);
+                  const breakeven = ((rewardsOnly * (1 - EXIT_FEE)) / totalAfterFees) * 100;
+
+                  return (
+                    <>
+                      {/* Results Header */}
+                      <div style={{ 
+                        background: netGainLoss >= 0 ? 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.1))' : 'linear-gradient(135deg, rgba(244,67,54,0.2), rgba(244,67,54,0.1))',
+                        borderRadius: '16px',
+                        padding: '20px',
+                        marginBottom: '20px',
+                        border: `2px solid ${netGainLoss >= 0 ? '#4CAF50' : '#F44336'}`,
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '8px' }}>
+                          📊 Projected Portfolio Value After {months} Months
+                        </div>
+                        <div style={{ color: netGainLoss >= 0 ? '#4CAF50' : '#F44336', fontSize: '2.5rem', fontWeight: 'bold' }}>
+                          ${totalFinalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </div>
+                        <div style={{ color: netGainLoss >= 0 ? '#4CAF50' : '#F44336', fontSize: '1.2rem', fontWeight: 'bold', marginTop: '8px' }}>
+                          {netGainLoss >= 0 ? '📈' : '📉'} {netGainLoss >= 0 ? '+' : ''}${netGainLoss.toLocaleString(undefined, { maximumFractionDigits: 0 })} ({netPercent >= 0 ? '+' : ''}{netPercent.toFixed(1)}%)
+                        </div>
+                        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                          <span style={{ color: '#D4AF37' }}>Blended APR: <b>{blendedAPR.toFixed(1)}%</b></span>
+                          <span style={{ color: '#4CAF50' }}>Total Rewards: <b>${totalRewards.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b></span>
+                          <span style={{ color: '#2196F3' }}>Breakeven Drop: <b>{breakeven.toFixed(1)}%</b></span>
+                        </div>
+                      </div>
+
+                      {/* Tier Breakdown */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                        {goldPct > 0 && (
+                          <div style={{ background: 'rgba(212,175,55,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #D4AF37' }}>
+                            <div style={{ color: '#D4AF37', fontWeight: 'bold', marginBottom: '8px' }}>🥇 Gold ({goldPct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${goldAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${goldResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: goldResult.finalValue >= goldAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${goldResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                        {whalePct > 0 && (
+                          <div style={{ background: 'rgba(33,150,243,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #2196F3' }}>
+                            <div style={{ color: '#2196F3', fontWeight: 'bold', marginBottom: '8px' }}>🐋 Whale ({whalePct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${whaleAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${whaleResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: whaleResult.finalValue >= whaleAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${whaleResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                        {diamondPct > 0 && (
+                          <div style={{ background: 'rgba(0,188,212,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #00BCD4' }}>
+                            <div style={{ color: '#00BCD4', fontWeight: 'bold', marginBottom: '8px' }}>💎 Diamond ({diamondPct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${diamondAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${diamondResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: diamondResult.finalValue >= diamondAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${diamondResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                        {diamondPlusPct > 0 && (
+                          <div style={{ background: 'rgba(156,39,176,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #9C27B0' }}>
+                            <div style={{ color: '#9C27B0', fontWeight: 'bold', marginBottom: '8px' }}>💜💎 Diamond+ ({diamondPlusPct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${diamondPlusAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${diamondPlusResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: diamondPlusResult.finalValue >= diamondPlusAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${diamondPlusResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Scenario Quick Buttons */}
+                      <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <button onClick={() => setForecastPriceChange('-50')} style={{ padding: '8px 16px', background: 'rgba(244,67,54,0.2)', border: '1px solid #F44336', borderRadius: '20px', color: '#F44336', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>📉 -50% Crash</button>
+                        <button onClick={() => setForecastPriceChange('-25')} style={{ padding: '8px 16px', background: 'rgba(255,152,0,0.2)', border: '1px solid #FF9800', borderRadius: '20px', color: '#FF9800', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>📉 -25% Dip</button>
+                        <button onClick={() => setForecastPriceChange('0')} style={{ padding: '8px 16px', background: 'rgba(158,158,158,0.2)', border: '1px solid #9E9E9E', borderRadius: '20px', color: '#9E9E9E', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>➡️ Flat</button>
+                        <button onClick={() => setForecastPriceChange('50')} style={{ padding: '8px 16px', background: 'rgba(76,175,80,0.2)', border: '1px solid #4CAF50', borderRadius: '20px', color: '#4CAF50', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>📈 +50% Pump</button>
+                        <button onClick={() => setForecastPriceChange('100')} style={{ padding: '8px 16px', background: 'rgba(33,150,243,0.2)', border: '1px solid #2196F3', borderRadius: '20px', color: '#2196F3', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>🚀 +100% Moon</button>
+                      </div>
+
+                      {/* Strategy Insight */}
+                      <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(212,175,55,0.1)', borderRadius: '12px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                        <div style={{ color: '#D4AF37', fontWeight: 'bold', marginBottom: '8px' }}>💡 Strategy Insight</div>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
+                          {priceChange < -30 
+                            ? `⚠️ In a ${Math.abs(priceChange)}% crash, your ${blendedAPR.toFixed(1)}% blended APR helps offset losses. Higher LP allocation (Diamond/Diamond+) provides more protection through higher yields.`
+                            : priceChange < 0
+                            ? `📊 With a ${Math.abs(priceChange)}% dip, your staking rewards can help recover losses. Your breakeven is at ${breakeven.toFixed(1)}% price drop.`
+                            : priceChange === 0
+                            ? `✨ With flat prices, you earn pure ${blendedAPR.toFixed(1)}% APR returns. Consider increasing Diamond+ for maximum yield.`
+                            : `🚀 In a ${priceChange}% pump, your ${totalRewards.toLocaleString(undefined, {maximumFractionDigits: 0})} rewards compound with price gains for ${netPercent.toFixed(1)}% total return!`
+                          }
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
               {/* DYNAMIC PERSONAL FORECASTING CALCULATOR */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(156,39,176,0.1))',
@@ -7694,7 +8046,7 @@ export default function App() {
                       <option value="gold">🥇 Gold (16.8% APR, 90d)</option>
                       <option value="whale">🐋 Whale (18.2% APR, 180d)</option>
                       <option value="diamond">💎 Diamond LP (42% eff)</option>
-                      <option value="diamondplus">💎✨ Diamond+ LP (70% eff)</option>
+                      <option value="diamondplus">💜💎 Diamond+ LP (70% eff)</option>
                     </select>
                   </div>
                   <div>
@@ -7742,7 +8094,7 @@ export default function App() {
                     gold: { apr: 16.8, lock: 90, name: 'Gold', icon: '🥇' },
                     whale: { apr: 18.2, lock: 180, name: 'Whale', icon: '🐋' },
                     diamond: { apr: 42, lock: 90, name: 'Diamond LP', icon: '💎' },
-                    diamondplus: { apr: 70, lock: 90, name: 'Diamond+ LP', icon: '💎✨' },
+                    diamondplus: { apr: 70, lock: 90, name: 'Diamond+ LP', icon: '💜💎' },
                   }[calcTier];
 
                   const entryFee = 0.0375;
@@ -7860,7 +8212,7 @@ export default function App() {
                         <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4', fontWeight: 'bold' }}>42%</td>
                       </tr>
                       <tr style={{ background: 'rgba(156,39,176,0.15)' }}>
-                        <td style={{ padding: '12px', fontWeight: 'bold' }}>💎✨ Diamond+ LP</td>
+                        <td style={{ padding: '12px', fontWeight: 'bold' }}>💜💎 Diamond+ LP</td>
                         <td style={{ padding: '12px', textAlign: 'center' }}>$1,000</td>
                         <td style={{ padding: '12px', textAlign: 'center' }}>90 days</td>
                         <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0' }}>35%</td>
