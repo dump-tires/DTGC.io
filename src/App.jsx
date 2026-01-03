@@ -3718,115 +3718,106 @@ export default function App() {
       return;
     }
 
+    // Check if any wallet provider exists
+    if (!window.ethereum) {
+      // Only redirect to download if NO wallet is installed at all
+      const downloadUrls = {
+        internetmoney: 'https://internetmoney.io/',
+        metamask: 'https://metamask.io/download/',
+        rabby: 'https://rabby.io/',
+        okx: 'https://www.okx.com/web3',
+        coinbase: 'https://www.coinbase.com/wallet',
+      };
+      window.open(downloadUrls[walletType] || 'https://metamask.io/download/', '_blank');
+      showToast('No wallet detected. Please install a Web3 wallet.', 'info');
+      return;
+    }
+
     try {
       setLoading(true);
-      let provider;
-
-      switch (walletType) {
-        case 'internetmoney':
-          if (!window.ethereum) {
-            window.open('https://internetmoney.io/', '_blank');
-            showToast('Please install Internet Money Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
-          break;
-
-        case 'metamask':
-          if (!window.ethereum?.isMetaMask) {
-            window.open('https://metamask.io/download/', '_blank');
-            showToast('Please install MetaMask', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
-          break;
-
-        case 'rabby':
-          if (!window.ethereum) {
-            window.open('https://rabby.io/', '_blank');
-            showToast('Please install Rabby Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
-          break;
-
-        case 'okx':
-          if (!window.okxwallet && !window.ethereum) {
-            window.open('https://www.okx.com/web3', '_blank');
-            showToast('Please install OKX Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.okxwallet || window.ethereum);
-          break;
-
-        case 'coinbase':
-          if (!window.ethereum?.isCoinbaseWallet && !window.coinbaseWalletExtension) {
-            window.open('https://www.coinbase.com/wallet', '_blank');
-            showToast('Please install Coinbase Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.coinbaseWalletExtension || window.ethereum);
-          break;
-
-        default:
-          // Generic - try any available provider
-          if (!window.ethereum) {
-            showToast('No wallet detected', 'error');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // Use the appropriate provider
+      let ethProvider = window.ethereum;
+      
+      // Check for specific wallet providers (but don't fail if not found)
+      if (walletType === 'okx' && window.okxwallet) {
+        ethProvider = window.okxwallet;
+      } else if (walletType === 'coinbase' && window.coinbaseWalletExtension) {
+        ethProvider = window.coinbaseWalletExtension;
       }
-
-      // Request accounts from the wallet
-      const ethProvider = window.okxwallet || window.ethereum;
-
-      // Request permission to see all accounts
-      await ethProvider.request({
-        method: 'wallet_requestPermissions',
-        params: [{ eth_accounts: {} }],
-      });
-
-      const accounts = await provider.send('eth_requestAccounts', []);
-
-      // If multiple accounts, show account selector
-      if (accounts.length > 1) {
-        setAvailableAccounts(accounts);
-        setSelectedWalletType(walletType);
-        setWalletStep('accounts');
-        setProvider(provider);
-        setLoading(false);
-        return;
-      }
-
-      // Single account - connect directly
-      const signer = await provider.getSigner();
-      const network = await provider.getNetwork();
-
-      if (Number(network.chainId) !== CHAIN_ID) {
-        await ethProvider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x171' }],
+      
+      // For wallets like Rabby that can have multiple providers
+      if (window.ethereum.providers?.length) {
+        // Try to find the specific wallet provider
+        const specificProvider = window.ethereum.providers.find(p => {
+          if (walletType === 'metamask') return p.isMetaMask;
+          if (walletType === 'coinbase') return p.isCoinbaseWallet;
+          if (walletType === 'rabby') return p.isRabby;
+          return false;
         });
+        if (specificProvider) {
+          ethProvider = specificProvider;
+        }
       }
 
+      // Create ethers provider
+      const provider = new ethers.BrowserProvider(ethProvider);
+
+      // Simply request accounts - this triggers the wallet popup
+      const accounts = await provider.send('eth_requestAccounts', []);
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned');
+      }
+
+      // Check network and switch if needed
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== CHAIN_ID) {
+        try {
+          await ethProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x171' }], // PulseChain
+          });
+        } catch (switchError) {
+          // If chain doesn't exist, add it
+          if (switchError.code === 4902) {
+            await ethProvider.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x171',
+                chainName: 'PulseChain',
+                nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                rpcUrls: ['https://rpc.pulsechain.com'],
+                blockExplorerUrls: ['https://otter.pulsechain.com'],
+              }],
+            });
+          } else {
+            console.warn('Could not switch chain:', switchError);
+          }
+        }
+      }
+
+      // Get signer
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      // Update state
       setProvider(provider);
       setSigner(signer);
-      setAccount(accounts[0]);
+      setAccount(address);
       setShowWalletModal(false);
-      setWalletStep('select');
-      showToast(`${walletType.charAt(0).toUpperCase() + walletType.slice(1)} connected!`, 'success');
+      
+      showToast(`✅ ${walletType.charAt(0).toUpperCase() + walletType.slice(1)} connected!`, 'success');
+
     } catch (err) {
-      console.error(err);
-      if (err.code === 4001) {
-        showToast('Connection rejected by user', 'error');
+      console.error('Wallet connection error:', err);
+      
+      if (err.code === 4001 || err.message?.includes('rejected')) {
+        showToast('Connection rejected by user', 'info');
+      } else if (err.code === -32002) {
+        showToast('Please check your wallet - connection pending', 'info');
       } else {
-        showToast('Connection failed', 'error');
+        showToast('Connection failed. Please try again.', 'error');
       }
     } finally {
       setLoading(false);
@@ -3892,10 +3883,17 @@ export default function App() {
       setLoading(true);
       showToast('Initializing WalletConnect...', 'info');
 
-      // Dynamic import for WalletConnect (install: npm install @walletconnect/ethereum-provider)
-      const { EthereumProvider } = await import('@walletconnect/ethereum-provider').catch(() => {
-        throw new Error('WalletConnect not installed. Run: npm install @walletconnect/ethereum-provider');
-      });
+      // Check if package is available
+      let EthereumProvider;
+      try {
+        const module = await import('@walletconnect/ethereum-provider');
+        EthereumProvider = module.EthereumProvider;
+      } catch (importErr) {
+        // Package not installed - show helpful message
+        showToast('📱 Use mobile deep links below to connect', 'info');
+        setLoading(false);
+        return;
+      }
 
       const wcProvider = await EthereumProvider.init({
         projectId: WALLETCONNECT_PROJECT_ID,
@@ -3926,7 +3924,7 @@ export default function App() {
       setSigner(signer);
       setAccount(address);
       setShowWalletModal(false);
-      showToast('Connected via WalletConnect!', 'success');
+      showToast('✅ Connected via WalletConnect!', 'success');
 
       // Handle disconnect
       wcProvider.on('disconnect', () => {
@@ -3936,12 +3934,78 @@ export default function App() {
 
     } catch (err) {
       console.error('WalletConnect error:', err);
-      if (err.message?.includes('not installed')) {
-        showToast('WalletConnect package needed. Use mobile deep links below.', 'error');
-      } else if (err.message?.includes('User rejected')) {
+      if (err.message?.includes('User rejected') || err.code === 4001) {
         showToast('Connection cancelled', 'info');
       } else {
-        showToast('WalletConnect failed. Try mobile deep links.', 'error');
+        showToast('WalletConnect failed. Use browser wallet or mobile links.', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quick connect - uses any available provider
+  const connectAnyWallet = async () => {
+    if (TESTNET_MODE) {
+      connectWallet();
+      return;
+    }
+
+    if (!window.ethereum) {
+      showToast('No wallet detected. Please install MetaMask or another Web3 wallet.', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send('eth_requestAccounts', []);
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts');
+      }
+
+      // Check/switch network
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== CHAIN_ID) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x171' }],
+          });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x171',
+                chainName: 'PulseChain',
+                nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                rpcUrls: ['https://rpc.pulsechain.com'],
+                blockExplorerUrls: ['https://otter.pulsechain.com'],
+              }],
+            });
+          }
+        }
+      }
+
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      setProvider(provider);
+      setSigner(signer);
+      setAccount(address);
+      setShowWalletModal(false);
+      showToast('✅ Wallet connected!', 'success');
+
+    } catch (err) {
+      console.error('Connection error:', err);
+      if (err.code === 4001 || err.message?.includes('rejected')) {
+        showToast('Connection rejected', 'info');
+      } else if (err.code === -32002) {
+        showToast('Check your wallet - connection request pending', 'info');
+      } else {
+        showToast('Connection failed', 'error');
       }
     } finally {
       setLoading(false);
@@ -5583,16 +5647,40 @@ export default function App() {
                   <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FF9800'}}>{formatNumber(parseFloat(urmomBalance))} URMOM</div>
                   <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(urmomBalance) * (livePrices.urmom || 0)).value)}</div>
                 </div>
-                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(0,188,212,0.1)', borderRadius: '8px', border: '1px solid rgba(0,188,212,0.3)'}}>
+                {/* Blue Diamond LP (DTGC/PLS) */}
+                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(0,188,212,0.15)', borderRadius: '8px', border: '2px solid #00BCD4'}}>
                   <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#00BCD4'}}>{formatNumber(parseFloat(lpDtgcPlsBalance))} 💎</div>
-                  <div style={{fontSize: '0.65rem', color: '#00BCD4'}}>DTGC/PLS LP</div>
+                  <div style={{fontSize: '0.65rem', color: '#00BCD4', fontWeight: 600}}>DTGC/PLS LP</div>
                   <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcPlsBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
                 </div>
-                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(156,39,176,0.1)', borderRadius: '8px', border: '1px solid rgba(156,39,176,0.3)'}}>
+                {/* Purple Diamond+ LP (DTGC/URMOM) */}
+                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(156,39,176,0.15)', borderRadius: '8px', border: '2px solid #9C27B0'}}>
                   <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#9C27B0'}}>{formatNumber(parseFloat(lpDtgcUrmomBalance))} 💜💎</div>
-                  <div style={{fontSize: '0.65rem', color: '#9C27B0'}}>DTGC/URMOM LP</div>
+                  <div style={{fontSize: '0.65rem', color: '#9C27B0', fontWeight: 600}}>DTGC/URMOM LP</div>
                   <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcUrmomBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
                 </div>
+                {/* Green Pending Rewards */}
+                {(() => {
+                  // Calculate total pending rewards from all staked positions
+                  const totalPendingRewards = stakedPositions.reduce((total, pos) => {
+                    const now = Date.now();
+                    const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
+                    // Use V19 corrected APRs
+                    const V19_APRS = { 'SILVER': 15.4, 'GOLD': 16.8, 'WHALE': 18.2, 'DIAMOND': 42, 'DIAMOND+': 70 };
+                    const tierName = pos.tier?.toUpperCase() || (pos.isLP ? (pos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND') : 'GOLD');
+                    const apr = V19_APRS[tierName] || 16.8;
+                    const rewards = (pos.amount * (apr / 100) / 365) * daysStaked;
+                    return total + rewards;
+                  }, 0);
+                  const rewardsValueUsd = totalPendingRewards * (livePrices.dtgc || 0);
+                  return (
+                    <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(76,175,80,0.15)', borderRadius: '8px', border: '2px solid #4CAF50'}}>
+                      <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#4CAF50'}}>+{formatNumber(totalPendingRewards)} 🎁</div>
+                      <div style={{fontSize: '0.65rem', color: '#4CAF50', fontWeight: 600}}>PENDING REWARDS</div>
+                      <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(rewardsValueUsd).value)}</div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -8738,31 +8826,32 @@ export default function App() {
             {walletStep === 'select' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               
-              {/* WalletConnect - Most Universal Option */}
+              {/* QUICK CONNECT - Primary CTA */}
               <button
-                onClick={connectWalletConnect}
+                onClick={connectAnyWallet}
                 disabled={loading}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '16px',
-                  padding: '18px 20px',
-                  background: 'linear-gradient(135deg, #3B99FC, #2D7DD2)',
-                  border: '2px solid #3B99FC',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  fontSize: '1rem',
-                  cursor: 'pointer',
+                  padding: '20px 24px',
+                  background: 'linear-gradient(135deg, #D4AF37, #B8860B)',
+                  border: '2px solid #FFD700',
+                  borderRadius: '14px',
+                  color: '#000',
+                  fontSize: '1.1rem',
+                  cursor: loading ? 'wait' : 'pointer',
                   transition: 'all 0.3s ease',
-                  boxShadow: '0 4px 15px rgba(59,153,252,0.3)',
+                  boxShadow: '0 6px 20px rgba(212,175,55,0.4)',
+                  fontWeight: 700,
                 }}
               >
-                <span style={{ fontSize: '1.5rem' }}>🔗</span>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontWeight: 700 }}>WalletConnect</div>
-                  <div style={{ fontSize: '0.7rem', opacity: 0.9 }}>Scan QR with any wallet app</div>
+                <span style={{ fontSize: '1.8rem' }}>⚡</span>
+                <div style={{ textAlign: 'left', flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>Quick Connect</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: 500 }}>Auto-detect your browser wallet</div>
                 </div>
-                <span style={{ marginLeft: 'auto', fontSize: '0.7rem', background: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '6px' }}>📱 MOBILE</span>
+                <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '4px 10px', borderRadius: '8px' }}>RECOMMENDED</span>
               </button>
 
               <div style={{ 
@@ -8774,8 +8863,47 @@ export default function App() {
                 fontSize: '0.8rem',
               }}>
                 <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
-                <span>or connect directly</span>
+                <span>or choose specific wallet</span>
                 <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+              </div>
+
+              {/* WalletConnect - Mobile Option */}
+              <button
+                onClick={connectWalletConnect}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '14px 18px',
+                  background: 'linear-gradient(135deg, #3B99FC, #2D7DD2)',
+                  border: '1px solid #3B99FC',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>🔗</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 600 }}>WalletConnect</div>
+                  <div style={{ fontSize: '0.65rem', opacity: 0.9 }}>Scan QR with mobile wallet</div>
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: '0.65rem', background: 'rgba(255,255,255,0.2)', padding: '3px 6px', borderRadius: '4px' }}>📱</span>
+              </button>
+
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px', 
+                margin: '4px 0',
+                color: '#555',
+                fontSize: '0.75rem',
+              }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
+                <span>browser extensions</span>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
               </div>
 
               <button
@@ -8785,25 +8913,25 @@ export default function App() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '16px',
-                  padding: '16px 20px',
-                  background: 'rgba(212,175,55,0.15)',
-                  border: '1px solid #D4AF37',
+                  padding: '14px 18px',
+                  background: 'rgba(212,175,55,0.1)',
+                  border: '1px solid rgba(212,175,55,0.5)',
                   borderRadius: '12px',
                   color: '#fff',
-                  fontSize: '1rem',
+                  fontSize: '0.95rem',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(212,175,55,0.3)';
-                  e.target.style.borderColor = '#FFD700';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(212,175,55,0.15)';
+                  e.target.style.background = 'rgba(212,175,55,0.25)';
                   e.target.style.borderColor = '#D4AF37';
                 }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.1)';
+                  e.target.style.borderColor = 'rgba(212,175,55,0.5)';
+                }}
               >
-                <span style={{ fontSize: '1.5rem' }}>💰</span>
+                <span style={{ fontSize: '1.3rem' }}>💰</span>
                 <span style={{ fontWeight: 600 }}>Internet Money</span>
                 <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#D4AF37' }}>RECOMMENDED</span>
               </button>
