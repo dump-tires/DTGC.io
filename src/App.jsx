@@ -3011,6 +3011,9 @@ export default function App() {
   const [liveHolders, setLiveHolders] = useState({
     holders: HOLDER_WALLETS,
     totalHolders: 0,
+    trackedBalance: 0,
+    trackedPctOfFloat: 0,
+    publicFloat: DTGC_TOTAL_SUPPLY * 0.18,
     loading: true,
     lastUpdated: null,
     error: null,
@@ -3119,14 +3122,17 @@ export default function App() {
       }
       
       const data = await response.json();
-      const totalHolders = data.next_page_params ? 50 + (data.items?.length || 0) : (data.items?.length || 0);
       
-      // Get current DTGC price for $300 filter
-      const dtgcPrice = livePrices.dtgc || 0.0004627;
-      const minBalance = 300 / dtgcPrice; // Minimum tokens for $300 value
+      // Get all items and calculate total holders from API
+      const allItems = data.items || [];
+      const totalHolders = data.next_page_params ? 50 + allItems.length : allItems.length;
       
-      // Process holders - filter out excluded wallets and those below $300
-      const holders = (data.items || [])
+      // Calculate controlled supply (your 82%)
+      const controlledSupply = DTGC_TOTAL_SUPPLY * 0.82; // 82% controlled
+      const publicFloat = DTGC_TOTAL_SUPPLY - controlledSupply;
+      
+      // Process ALL holders - filter out only excluded wallets (DAO, Dev, LP, Burn, Rewards)
+      const holders = allItems
         .filter(item => !EXCLUDED_WALLETS.includes(item.address?.hash?.toLowerCase()))
         .map((item, index) => ({
           address: `${item.address?.hash?.slice(0, 6)}...${item.address?.hash?.slice(-4)}`,
@@ -3134,8 +3140,7 @@ export default function App() {
           balance: parseFloat(item.value) / 1e18,
           label: 'Loading...',
         }))
-        .filter(item => item.balance >= minBalance) // Only wallets above $300
-        .slice(0, 50) // Top 50 holders above $300
+        .slice(0, 50) // Top 50 public holders
         .map((item, index) => ({
           ...item,
           label: index < 3 ? `🐋 Whale ${index + 1}` : 
@@ -3144,15 +3149,22 @@ export default function App() {
                  `🥈 Holder ${index - 14}`,
         }));
 
+      // Calculate tracked supply as % of PUBLIC FLOAT (not total supply)
+      const trackedBalance = holders.reduce((sum, h) => sum + h.balance, 0);
+      const trackedPctOfFloat = (trackedBalance / publicFloat * 100);
+
       if (holders.length > 0) {
         setLiveHolders({
           holders,
           totalHolders: totalHolders,
+          trackedBalance,
+          trackedPctOfFloat,
+          publicFloat,
           loading: false,
           lastUpdated: new Date(),
           error: null,
         });
-        console.log('📊 Live holders updated:', holders.length, 'wallets above $300');
+        console.log('📊 Live holders updated:', holders.length, 'public wallets,', trackedPctOfFloat.toFixed(1), '% of float');
       } else {
         throw new Error('No holder data received');
       }
@@ -3165,7 +3177,7 @@ export default function App() {
         error: err.message,
       }));
     }
-  }, [livePrices.dtgc]);
+  }, []);
 
   // Fetch holders on mount and every 2 minutes
   useEffect(() => {
@@ -5442,10 +5454,11 @@ export default function App() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '8px',
-                flexWrap: 'wrap'
+                flexWrap: 'wrap',
+                padding: '0 60px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  📊 Holders Above $300 • Hover to Pause
+                  📊 PUBLIC HOLDERS • Hover to Pause
                   {liveHolders.loading ? (
                     <span style={{ color: '#FF9800' }}>⏳ Loading...</span>
                   ) : (
@@ -5501,14 +5514,15 @@ export default function App() {
                 marginTop: '8px',
                 display: 'flex',
                 justifyContent: 'center',
-                gap: '20px',
-                flexWrap: 'wrap'
+                gap: '30px',
+                flexWrap: 'wrap',
+                padding: '0 40px'
               }}>
                 <span style={{ color: '#4CAF50' }}>
-                  💰 Holders &gt;$300: {((liveHolders.holders || []).reduce((sum, w) => sum + w.balance, 0) / DTGC_TOTAL_SUPPLY * 100).toFixed(2)}% of supply
+                  💰 Top 50 Public Wallets: {(liveHolders.trackedPctOfFloat || 0).toFixed(1)}% of float
                 </span>
                 <span style={{ color: '#FF9800' }}>
-                  📉 Holders &lt;1.5%: {(100 - (liveHolders.holders || []).filter(w => w.balance / DTGC_TOTAL_SUPPLY >= 0.015).reduce((sum, w) => sum + w.balance, 0) / DTGC_TOTAL_SUPPLY * 100).toFixed(1)}% of supply
+                  📊 Public Float: {formatNumber(liveHolders.publicFloat || DTGC_TOTAL_SUPPLY * 0.18)} DTGC (18%)
                 </span>
                 <span style={{ color: '#D4AF37' }}>
                   🏆 Tracked: {formatNumber((liveHolders.holders || []).reduce((sum, w) => sum + w.balance, 0))} DTGC
