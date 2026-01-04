@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DTGC</string>
+    <string name="title_activity_main">DTGC</string>
+    <string name="package_name">io.dtgc.app</string>
+    <string name="custom_url_scheme">io.dtgc.app</string>
+</resources>
