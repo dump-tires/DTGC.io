@@ -7,8 +7,8 @@ import {
   TOKENS,
   STAKING_TIERS,
   DIAMOND_TIER,
-  STAKING_V3_ABI,
-  LP_STAKING_V3_ABI,
+  STAKING_V3_ABI as IMPORTED_STAKING_V3_ABI,
+  LP_STAKING_V3_ABI as IMPORTED_LP_STAKING_V3_ABI,
   DAO_VOTING_V3_ABI,
   ERC20_ABI,
   CHAIN_ID,
@@ -17,6 +17,41 @@ import {
   VOTING_OPTIONS,
   BURN_ADDRESS,
 } from './config/constants';
+
+// ═══════════════════════════════════════════════════════════════
+// FALLBACK ABIs - Use these if imports don't have the right structure
+// ═══════════════════════════════════════════════════════════════
+const FALLBACK_STAKING_V3_ABI = [
+  'function stake(uint256 amount, uint8 tier) external',
+  'function withdraw() external',
+  'function emergencyWithdraw() external',
+  'function claimRewards() external',
+  'function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonusBps, uint8 tier, bool isActive, uint256 timeRemaining)',
+  'function calculateRewards(address user) external view returns (uint256)',
+  'function totalStaked() external view returns (uint256)',
+];
+
+const FALLBACK_LP_STAKING_V3_ABI = [
+  'function stake(uint256 amount, uint8 lpType) external',
+  'function withdraw() external',
+  'function emergencyWithdraw() external',
+  'function claimRewards() external',
+  'function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 timeRemaining)',
+  'function calculateRewards(address user) external view returns (uint256)',
+  'function totalStaked() external view returns (uint256)',
+  // Alternative function signatures that might exist
+  'function getUserStakes(address user) external view returns (uint256[])',
+  'function stakes(address user, uint256 index) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive)',
+  'function stakeCount(address user) external view returns (uint256)',
+];
+
+// Use imported ABIs if they exist and have getPosition, otherwise use fallbacks
+const STAKING_V3_ABI = IMPORTED_STAKING_V3_ABI || FALLBACK_STAKING_V3_ABI;
+const LP_STAKING_V3_ABI = IMPORTED_LP_STAKING_V3_ABI || FALLBACK_LP_STAKING_V3_ABI;
+
+// Log which ABIs we're using
+console.log('📝 Staking V3 ABI:', STAKING_V3_ABI?.length ? `${STAKING_V3_ABI.length} functions` : 'MISSING!');
+console.log('📝 LP Staking V3 ABI:', LP_STAKING_V3_ABI?.length ? `${LP_STAKING_V3_ABI.length} functions` : 'MISSING!');
 
 // WalletConnect Project ID - Get yours free at https://cloud.walletconnect.com/
 const WALLETCONNECT_PROJECT_ID = '10281b2ce43a6f7240ee415515ddb27a';
@@ -3139,6 +3174,97 @@ export default function App() {
   const [lpPosition, setLpPosition] = useState(null);
   const [stakedPositions, setStakedPositions] = useState([]);
   
+  // ═══════════════════════════════════════════════════════════════
+  // DEBUG: Expose contract inspection to browser console
+  // Call: window.dtgcDebug.checkLPStake('0xYourAddress') from console
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    window.dtgcDebug = {
+      contracts: CONTRACT_ADDRESSES,
+      
+      // Direct LP contract check
+      checkLPStake: async (userAddress) => {
+        const addr = userAddress || account;
+        if (!addr) {
+          console.log('❌ No address provided. Usage: window.dtgcDebug.checkLPStake("0xYourAddress")');
+          return;
+        }
+        
+        console.log('🔍 Checking LP stake for:', addr);
+        const rpc = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+        const lpContract = new ethers.Contract(
+          CONTRACT_ADDRESSES.lpStakingV3,
+          FALLBACK_LP_STAKING_V3_ABI,
+          rpc
+        );
+        
+        try {
+          const position = await lpContract.getPosition(addr);
+          console.log('📋 LP Position raw result:');
+          console.log('  [0] Amount:', ethers.formatEther(position[0]), 'LP');
+          console.log('  [1] StartTime:', new Date(Number(position[1]) * 1000).toLocaleString());
+          console.log('  [2] UnlockTime:', new Date(Number(position[2]) * 1000).toLocaleString());
+          console.log('  [3] LockPeriod:', Number(position[3]), 'seconds');
+          console.log('  [4] APR bps:', Number(position[4]));
+          console.log('  [5] Boost bps:', Number(position[5]));
+          console.log('  [6] LP Type:', Number(position[6]), Number(position[6]) === 1 ? '(Diamond+)' : '(Diamond)');
+          console.log('  [7] isActive:', position[7]);
+          console.log('  [8] TimeRemaining:', Number(position[8]), 'seconds');
+          return position;
+        } catch (err) {
+          console.error('❌ getPosition Error:', err.message);
+          
+          // Try alternative methods
+          console.log('🔄 Trying alternative contract methods...');
+          try {
+            const balance = await lpContract.totalStaked();
+            console.log('📊 Contract total staked:', ethers.formatEther(balance), 'LP');
+          } catch (e) {
+            console.log('  totalStaked() not available');
+          }
+        }
+      },
+      
+      // Check DTGC stake
+      checkDTGCStake: async (userAddress) => {
+        const addr = userAddress || account;
+        if (!addr) {
+          console.log('❌ No address provided. Usage: window.dtgcDebug.checkDTGCStake("0xYourAddress")');
+          return;
+        }
+        
+        console.log('🔍 Checking DTGC stake for:', addr);
+        const rpc = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+        const contract = new ethers.Contract(
+          CONTRACT_ADDRESSES.stakingV3,
+          FALLBACK_STAKING_V3_ABI,
+          rpc
+        );
+        
+        try {
+          const position = await contract.getPosition(addr);
+          console.log('📋 DTGC Position:');
+          console.log('  [0] Amount:', ethers.formatEther(position[0]), 'DTGC');
+          console.log('  [6] Tier:', Number(position[6]), ['SILVER', 'GOLD', 'WHALE'][Number(position[6])]);
+          console.log('  [7] isActive:', position[7]);
+          return position;
+        } catch (err) {
+          console.error('❌ Error:', err.message);
+        }
+      },
+      
+      // Get current app state
+      getState: () => ({
+        account,
+        stakedPositions,
+        lpDtgcPlsBalance,
+        lpDtgcUrmomBalance,
+      }),
+    };
+    
+    console.log('🛠️ Debug tools ready! Try: window.dtgcDebug.checkLPStake("0xC1CD5a70815E2874D2db038F398f2D8939d8E87C")');
+  }, [account, stakedPositions, lpDtgcPlsBalance, lpDtgcUrmomBalance]);
+  
   // Gold Records - Stake History
   const [stakeHistory, setStakeHistory] = useState([]);
   const [showGoldRecords, setShowGoldRecords] = useState(false);
@@ -5068,12 +5194,56 @@ export default function App() {
       // Fetch regular staking position
       const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, provider);
       const position = await stakingContract.getPosition(account);
-      console.log('📋 Raw DTGC position from contract:', position);
+      
+      // Log ALL values from DTGC position
+      console.log('📋 Raw DTGC position - ALL VALUES:');
+      for (let i = 0; i < 10; i++) {
+        try {
+          const val = position[i];
+          console.log(`  [${i}]:`, val?.toString ? val.toString() : val);
+        } catch (e) { break; }
+      }
 
       // Fetch LP staking position
       const lpStakingContract = new ethers.Contract(CONTRACT_ADDRESSES.lpStakingV3, LP_STAKING_V3_ABI, provider);
-      const lpPosition = await lpStakingContract.getPosition(account);
-      console.log('📋 Raw LP position from contract:', lpPosition);
+      
+      // Try getPosition first
+      let lpPosition;
+      try {
+        lpPosition = await lpStakingContract.getPosition(account);
+        console.log('📋 Raw LP position - ALL VALUES:');
+        for (let i = 0; i < 12; i++) {
+          try {
+            const val = lpPosition[i];
+            console.log(`  [${i}]:`, val?.toString ? val.toString() : val);
+          } catch (e) { break; }
+        }
+      } catch (lpErr) {
+        console.error('❌ LP getPosition failed:', lpErr.message);
+      }
+      
+      // Also try alternative functions that might exist
+      try {
+        const userStakes = await lpStakingContract.getUserStakes(account);
+        console.log('📋 LP getUserStakes result:', userStakes);
+      } catch (e) {
+        console.log('ℹ️ No getUserStakes function on LP contract');
+      }
+      
+      try {
+        const stakeCount = await lpStakingContract.stakeCount ? await lpStakingContract.stakeCount(account) : null;
+        console.log('📋 LP stakeCount:', stakeCount?.toString());
+      } catch (e) {
+        console.log('ℹ️ No stakeCount function on LP contract');
+      }
+      
+      // Check if there's a stakes mapping we can read
+      try {
+        const stake0 = await lpStakingContract.stakes ? await lpStakingContract.stakes(account, 0) : null;
+        console.log('📋 LP stakes(account, 0):', stake0);
+      } catch (e) {
+        console.log('ℹ️ No stakes mapping or index 0 empty');
+      }
 
       const positions = [];
 
@@ -5081,7 +5251,12 @@ export default function App() {
       // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, bonusBps, tier, isActive, timeRemaining)
       const amount = position ? parseFloat(ethers.formatEther(position[0])) : 0;
       const dtgcIsActive = position ? position[7] : false;
-      console.log('💰 DTGC stake check:', { amount, isActive: dtgcIsActive, rawAmount: position?.[0]?.toString() });
+      console.log('💰 DTGC stake check:', { 
+        amount, 
+        isActive: dtgcIsActive, 
+        rawAmount: position?.[0]?.toString(),
+        rawIsActive: position?.[7]?.toString ? position[7].toString() : position?.[7]
+      });
       
       if (position && dtgcIsActive && amount > 0) {
         const rawApr = Number(position[4]) / 100; // Convert from bps
@@ -5107,18 +5282,43 @@ export default function App() {
         positions.push(dtgcPosition);
         console.log('✅ Added DTGC position:', dtgcPosition);
       } else {
-        console.log('⚠️ No active DTGC stake found');
+        console.log('⚠️ No active DTGC stake found (amount:', amount, ', isActive:', dtgcIsActive, ')');
       }
 
       // Parse LP staking position
-      // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
-      const lpAmount = lpPosition ? parseFloat(ethers.formatEther(lpPosition[0])) : 0;
-      const lpIsActive = lpPosition ? lpPosition[7] : false;
-      console.log('💎 LP stake check:', { lpAmount, isActive: lpIsActive, rawAmount: lpPosition?.[0]?.toString(), lpType: lpPosition?.[6]?.toString() });
+      // Try different index patterns since contract might be different
+      let lpAmount = 0;
+      let lpIsActive = false;
+      let lpTypeNum = 0;
       
-      if (lpPosition && lpIsActive && lpAmount > 0) {
-        const rawLpApr = Number(lpPosition[4]) / 100;
-        const lpTypeNum = Number(lpPosition[6]); // 0=Diamond, 1=Diamond+
+      if (lpPosition) {
+        // Standard V3 format: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
+        lpAmount = parseFloat(ethers.formatEther(lpPosition[0] || 0n));
+        
+        // isActive could be at index 7 or elsewhere
+        // Check if it's a boolean or needs conversion
+        const possibleIsActive = lpPosition[7];
+        if (typeof possibleIsActive === 'boolean') {
+          lpIsActive = possibleIsActive;
+        } else if (possibleIsActive !== undefined) {
+          lpIsActive = possibleIsActive.toString() === 'true' || possibleIsActive === 1n || possibleIsActive === 1;
+        }
+        
+        lpTypeNum = Number(lpPosition[6] || 0);
+      }
+      
+      console.log('💎 LP stake check:', { 
+        lpAmount, 
+        isActive: lpIsActive, 
+        lpType: lpTypeNum,
+        rawAmount: lpPosition?.[0]?.toString(),
+        rawIsActive: lpPosition?.[7]?.toString ? lpPosition[7].toString() : lpPosition?.[7],
+        rawLpType: lpPosition?.[6]?.toString ? lpPosition[6].toString() : lpPosition?.[6]
+      });
+      
+      // Try to add LP position if it has any amount, even if isActive seems false
+      if (lpPosition && lpAmount > 0) {
+        const rawLpApr = Number(lpPosition[4] || 0) / 100;
         const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
         
         const lpStakePosition = {
@@ -5126,21 +5326,21 @@ export default function App() {
           type: 'LP',
           isLP: true,
           amount: lpAmount,
-          startTime: Number(lpPosition[1]) * 1000,
-          endTime: Number(lpPosition[2]) * 1000,
-          lockPeriod: Number(lpPosition[3]),
+          startTime: Number(lpPosition[1] || 0) * 1000,
+          endTime: Number(lpPosition[2] || 0) * 1000,
+          lockPeriod: Number(lpPosition[3] || 0),
           apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
-          boostMultiplier: Number(lpPosition[5]) / 100,
+          boostMultiplier: Number(lpPosition[5] || 0) / 100,
           lpType: lpTypeNum,
           tier: lpTierName,
           tierName: lpTierName,
-          isActive: lpIsActive,
-          timeRemaining: Number(lpPosition[8]),
+          isActive: lpIsActive || lpAmount > 0, // Force active if amount > 0
+          timeRemaining: Number(lpPosition[8] || 0),
         };
         positions.push(lpStakePosition);
         console.log('✅ Added LP position:', lpStakePosition);
       } else {
-        console.log('⚠️ No active LP stake found');
+        console.log('⚠️ No LP stake found (lpAmount:', lpAmount, ')');
       }
 
       // Always set positions to what blockchain returns
