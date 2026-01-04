@@ -3181,6 +3181,7 @@ export default function App() {
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [stakeWidgetMinimized, setStakeWidgetMinimized] = useState(false);
+  const [selectedStakeIndex, setSelectedStakeIndex] = useState(0); // For multi-stake toggle in hero
   const [modalType, setModalType] = useState('start');
 
   // DTGC Burn tracking state (live from blockchain)
@@ -4904,6 +4905,7 @@ export default function App() {
           boostMultiplier: Number(lpPosition[5]) / 100, // boostBps
           lpType: lpTypeNum,
           tier: lpTierName,
+          tierName: lpTierName, // Added for consistent tier detection
           isActive: lpPosition[7],
           timeRemaining: Number(lpPosition[8]),
         });
@@ -5218,37 +5220,75 @@ export default function App() {
           </div>
         )}
 
-        {/* FLOATING ACTIVE STAKE BOX - Top Left */}
+        {/* FLOATING ACTIVE STAKE BOX - Top Left with Multi-Stake Toggle */}
         {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
           stakeWidgetMinimized ? (
-            // Minimized view - small icon
+            // Minimized view - show all stake diamonds in a row
             <div
-              onClick={() => setStakeWidgetMinimized(false)}
               style={{
                 position: 'fixed',
                 top: TESTNET_MODE ? '55px' : '15px',
                 left: '15px',
-                width: '50px',
-                height: '50px',
-                background: 'linear-gradient(135deg, rgba(15,15,15,0.95), rgba(30,30,30,0.95))',
-                border: '2px solid var(--gold)',
-                borderRadius: '50%',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
+                gap: '8px',
                 zIndex: 1500,
-                boxShadow: '0 4px 20px rgba(212,175,55,0.3)',
-                transition: 'all 0.3s ease',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              title="Show Active Stake"
             >
-              <span style={{ fontSize: '1.5rem' }}>💎</span>
+              {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
+                // Get tier color for each diamond
+                let diamondColor, diamondIcon;
+                if (pos.isLP) {
+                  if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+                    diamondColor = '#9C27B0';
+                    diamondIcon = '💜💎';
+                  } else {
+                    diamondColor = '#00BCD4';
+                    diamondIcon = '💎';
+                  }
+                } else {
+                  const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
+                  if (tierNum === 0 || pos.tierName === 'SILVER') {
+                    diamondColor = '#C0C0C0';
+                    diamondIcon = '🥈';
+                  } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                    diamondColor = '#2196F3';
+                    diamondIcon = '🐋';
+                  } else {
+                    diamondColor = '#FFD700';
+                    diamondIcon = '🥇';
+                  }
+                }
+                return (
+                  <div
+                    key={pos.id || idx}
+                    onClick={() => {
+                      setSelectedStakeIndex(idx);
+                      setStakeWidgetMinimized(false);
+                    }}
+                    style={{
+                      width: '50px',
+                      height: '50px',
+                      background: `linear-gradient(135deg, rgba(15,15,15,0.95), rgba(30,30,30,0.95))`,
+                      border: `2px solid ${diamondColor}`,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: `0 4px 20px ${diamondColor}40`,
+                      transition: 'all 0.3s ease',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    title={`View Stake #${idx + 1}`}
+                  >
+                    <span style={{ fontSize: '1.3rem' }}>{diamondIcon}</span>
+                  </div>
+                );
+              })}
             </div>
           ) : (
-            // Expanded view - full widget
+            // Expanded view - full widget with diamond selector
             <div style={{
               position: 'fixed',
               top: TESTNET_MODE ? '55px' : '15px',
@@ -5259,72 +5299,95 @@ export default function App() {
               borderRadius: '16px',
               border: '2px solid var(--gold)',
               padding: '12px 16px',
-              minWidth: '220px',
-              maxWidth: '280px',
+              minWidth: '240px',
+              maxWidth: '300px',
               boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
             }}>
-              {/* Clear Stale Data Button - for old V2 stakes */}
-              <button
-                onClick={() => {
-                  if (window.confirm('Clear stale stake data? Use this if you see old V2 stakes that no longer exist on V3 contracts.')) {
-                    forceClearStaleData();
-                  }
-                }}
-                style={{
-                  position: 'absolute',
-                  top: '4px',
-                  right: '36px',
-                  background: 'rgba(255,107,107,0.2)',
-                  border: '1px solid rgba(255,107,107,0.4)',
-                  color: '#FF6B6B',
-                  fontSize: '0.6rem',
-                  cursor: 'pointer',
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                }}
-                title="Clear stale V2 stake data"
-              >
-                🗑️ Clear
-              </button>
+              {/* Diamond Selector Row */}
               <div style={{
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                justifyContent: 'center',
+                gap: '8px',
                 marginBottom: '10px',
+                paddingBottom: '10px',
                 borderBottom: '1px solid rgba(212,175,55,0.3)',
-                paddingBottom: '8px',
               }}>
-                <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '0.75rem', color: 'var(--gold)', letterSpacing: '1px' }}>
-                  💎 ACTIVE STAKE
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>LIVE</span>
-                  <button
-                    onClick={() => setStakeWidgetMinimized(true)}
-                    style={{
-                      background: 'rgba(212,175,55,0.2)',
-                      border: 'none',
-                      borderRadius: '4px',
-                      padding: '2px 6px',
-                      cursor: 'pointer',
-                      fontSize: '0.7rem',
-                      color: 'var(--gold)',
-                    }}
-                    title="Minimize"
-                  >
-                    ─
-                  </button>
+                {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
+                  // Get tier color for each diamond
+                  let diamondColor, diamondIcon;
+                  if (pos.isLP) {
+                    if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+                      diamondColor = '#9C27B0';
+                      diamondIcon = '💜💎';
+                    } else {
+                      diamondColor = '#00BCD4';
+                      diamondIcon = '💎';
+                    }
+                  } else {
+                    const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
+                    if (tierNum === 0 || pos.tierName === 'SILVER') {
+                      diamondColor = '#C0C0C0';
+                      diamondIcon = '🥈';
+                    } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                      diamondColor = '#2196F3';
+                      diamondIcon = '🐋';
+                    } else {
+                      diamondColor = '#FFD700';
+                      diamondIcon = '🥇';
+                    }
+                  }
+                  const isSelected = idx === selectedStakeIndex;
+                  return (
+                    <div
+                      key={pos.id || idx}
+                      onClick={() => setSelectedStakeIndex(idx)}
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        background: isSelected ? `${diamondColor}30` : 'transparent',
+                        border: `2px solid ${isSelected ? diamondColor : 'rgba(255,255,255,0.2)'}`,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        transform: isSelected ? 'scale(1.1)' : 'scale(1)',
+                      }}
+                      title={`Stake #${idx + 1}`}
+                    >
+                      <span style={{ fontSize: '1rem' }}>{diamondIcon}</span>
+                    </div>
+                  );
+                })}
+                {/* Minimize button */}
+                <div
+                  onClick={() => setStakeWidgetMinimized(true)}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    marginLeft: '8px',
+                  }}
+                  title="Minimize"
+                >
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>─</span>
                 </div>
               </div>
 
             {(() => {
-              const activePos = TESTNET_MODE
-                ? testnetBalances.positions?.[0]
-                : stakedPositions[0];
+              const positions = TESTNET_MODE ? testnetBalances.positions : stakedPositions;
+              const activePos = positions[selectedStakeIndex] || positions[0];
 
               if (!activePos) return null;
 
-              // V19 Tier Correction - Override old APRs and lock periods with correct values
+              // V19 Tier Correction
               const V19_CORRECTIONS = {
                 'SILVER': { apr: 15.4, lockDays: 60 },
                 'GOLD': { apr: 16.8, lockDays: 90 },
@@ -5333,7 +5396,6 @@ export default function App() {
                 'DIAMOND+': { apr: 35, lockDays: 90, boost: 2 },
               };
 
-              // Convert tier number to name (0=SILVER, 1=GOLD, 2=WHALE)
               const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
               let tierName;
               if (activePos.tierName) {
@@ -5347,8 +5409,6 @@ export default function App() {
               }
               
               const correction = V19_CORRECTIONS[tierName] || V19_CORRECTIONS['GOLD'];
-
-              // Use corrected V19 values
               const correctedApr = activePos.isLP ? correction.apr * (correction.boost || 1) : correction.apr;
               const correctedLockDays = correction.lockDays;
               const correctedEndTime = activePos.startTime + (correctedLockDays * 24 * 60 * 60 * 1000);
@@ -5363,7 +5423,6 @@ export default function App() {
               const stakeValueUsd = activePos.amount * (livePrices.dtgc || 0);
               const rewardValueUsd = currentRewards * (livePrices.dtgc || 0);
 
-              // Get tier-specific color
               const getTierColor = (name) => {
                 switch(name) {
                   case 'SILVER': return '#C0C0C0';
@@ -5405,7 +5464,7 @@ export default function App() {
                   <div style={{ marginBottom: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>APR</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4CAF50' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: tierColor }}>
                         {correctedApr.toFixed(1)}%
                       </span>
                     </div>
@@ -5415,10 +5474,10 @@ export default function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Rewards</span>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4CAF50' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4CAF50' }}>
                           +{formatNumber(currentRewards)} DTGC
                         </div>
-                        <div style={{ fontSize: '0.6rem', color: '#4CAF50', opacity: 0.8 }}>
+                        <div style={{ fontSize: '0.65rem', color: '#4CAF50' }}>
                           ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValueUsd).value)}
                         </div>
                       </div>
@@ -5426,23 +5485,19 @@ export default function App() {
                   </div>
 
                   <div style={{
+                    marginBottom: '10px',
+                    padding: '8px',
                     background: isLocked ? 'rgba(255,107,107,0.1)' : 'rgba(76,175,80,0.1)',
                     borderRadius: '8px',
-                    padding: '8px',
-                    marginBottom: '10px',
+                    border: `1px solid ${isLocked ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>EES Penalty Removed</span>
-                    </div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isLocked ? '#FF6B6B' : '#4CAF50' }}>
-                      {isLocked ? (
-                        <>⏳ {daysLeft}d {hoursLeft}h remaining</>
-                      ) : (
-                        <>✅ Unlocked!</>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      📅 {new Date(correctedEndTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', color: isLocked ? '#FF6B6B' : '#4CAF50' }}>
+                        {isLocked ? '🔒 Locked' : '✅ Unlocked'}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isLocked ? '#FF6B6B' : '#4CAF50' }}>
+                        {isLocked ? `${daysLeft}d ${hoursLeft}h` : 'Ready!'}
+                      </span>
                     </div>
                   </div>
 
@@ -5485,47 +5540,9 @@ export default function App() {
                       ✅ Claim All
                     </button>
                   )}
-                  
-                  {/* Clear Ghost Position Button (for V2 migration issues) */}
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Clear this position from UI? Use this if you get errors trying to unstake (ghost V2 data).')) {
-                        setStakedPositions([]);
-                        showToast('🧹 Ghost position cleared from UI', 'success');
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      marginTop: '6px',
-                      padding: '6px 12px',
-                      background: 'transparent',
-                      border: '1px dashed rgba(255,255,255,0.2)',
-                      borderRadius: '8px',
-                      fontWeight: 500,
-                      fontSize: '0.6rem',
-                      color: 'rgba(255,255,255,0.5)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🧹 Clear Ghost (V2 Data)
-                  </button>
                 </>
               );
             })()}
-
-            {/* Show count if multiple stakes */}
-            {(TESTNET_MODE ? testnetBalances.positions?.length : stakedPositions.length) > 1 && (
-              <div style={{
-                marginTop: '8px',
-                paddingTop: '8px',
-                borderTop: '1px solid rgba(212,175,55,0.2)',
-                fontSize: '0.65rem',
-                color: 'var(--text-muted)',
-                textAlign: 'center',
-              }}>
-                +{(TESTNET_MODE ? testnetBalances.positions?.length : stakedPositions.length) - 1} more stake(s) • View in Stake tab
-              </div>
-            )}
           </div>
           )
         )}
@@ -6806,18 +6823,54 @@ export default function App() {
                     const currentRewards = (pos.amount * (effectiveApr / 100) / 365) * daysStaked;
                     const rewardValue = currentRewards * (livePrices.dtgc || 0);
 
+                    // Determine tier display info
+                    let displayTierName, displayTierIcon, displayTierColor, displayBorderColor;
+                    if (pos.isLP) {
+                      if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+                        displayTierName = 'DIAMOND+ LP';
+                        displayTierIcon = '💜💎';
+                        displayTierColor = '#9C27B0';
+                        displayBorderColor = 'rgba(156,39,176,0.5)';
+                      } else {
+                        displayTierName = 'DIAMOND LP';
+                        displayTierIcon = '💎';
+                        displayTierColor = '#00BCD4';
+                        displayBorderColor = 'rgba(0,188,212,0.5)';
+                      }
+                    } else {
+                      // Regular DTGC stakes
+                      const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
+                      if (tierNum === 0 || pos.tierName === 'SILVER') {
+                        displayTierName = 'SILVER';
+                        displayTierIcon = '🥈';
+                        displayTierColor = '#C0C0C0';
+                        displayBorderColor = 'rgba(192,192,192,0.5)';
+                      } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                        displayTierName = 'WHALE';
+                        displayTierIcon = '🐋';
+                        displayTierColor = '#2196F3';
+                        displayBorderColor = 'rgba(33,150,243,0.5)';
+                      } else {
+                        displayTierName = 'GOLD';
+                        displayTierIcon = '🥇';
+                        displayTierColor = '#FFD700';
+                        displayBorderColor = 'rgba(255,215,0,0.5)';
+                      }
+                    }
+
                     return (
                       <div key={pos.id} style={{
-                        background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
-                        border: `1px solid ${isLocked ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
+                        background: isDark ? `linear-gradient(135deg, rgba(${displayTierColor === '#9C27B0' ? '156,39,176' : displayTierColor === '#00BCD4' ? '0,188,212' : displayTierColor === '#C0C0C0' ? '192,192,192' : displayTierColor === '#2196F3' ? '33,150,243' : '255,215,0'},0.1) 0%, rgba(0,0,0,0.2) 100%)` : `rgba(${displayTierColor === '#9C27B0' ? '156,39,176' : displayTierColor === '#00BCD4' ? '0,188,212' : displayTierColor === '#C0C0C0' ? '192,192,192' : displayTierColor === '#2196F3' ? '33,150,243' : '255,215,0'},0.05)`,
+                        border: `2px solid ${displayBorderColor}`,
+                        borderLeft: `4px solid ${displayTierColor}`,
                         borderRadius: '16px',
                         padding: '20px',
                         marginBottom: '15px',
                       }}>
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px'}}>
                           <div>
-                            <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '1.1rem', color: pos.isLP ? 'var(--diamond)' : 'var(--gold)'}}>
-                              {pos.isLP ? '💎 DIAMOND LP' : '🥇 DTGC STAKE'}
+                            <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '1.1rem', color: displayTierColor}}>
+                              {displayTierIcon} {displayTierName}
                             </div>
                             <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px'}}>
                               Staked: <strong>{formatNumber(pos.amount)} {pos.isLP ? 'LP' : 'DTGC'}</strong>
@@ -6826,7 +6879,7 @@ export default function App() {
                               </span>
                             </div>
                             <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px'}}>
-                              APR: <strong>{effectiveApr.toFixed(1)}%</strong> {pos.boostMultiplier > 1 && `(${pos.boostMultiplier}x boost)`}
+                              APR: <strong style={{color: displayTierColor}}>{effectiveApr.toFixed(1)}%</strong> {pos.boostMultiplier > 1 && `(${pos.boostMultiplier}x boost)`}
                             </div>
                             <div style={{fontSize: '0.8rem', color: isLocked ? '#FF6B6B' : '#4CAF50', marginTop: '4px'}}>
                               {isLocked ? `🔒 ${daysLeft} days remaining` : '✅ Unlocked - Ready to claim!'}
