@@ -3919,9 +3919,39 @@ export default function App() {
         const module = await import('@walletconnect/ethereum-provider');
         EthereumProvider = module.EthereumProvider;
       } catch (importErr) {
-        // Package not installed - show helpful message
-        showToast('📱 Use mobile deep links below to connect', 'info');
+        // Package not installed - show mobile options
+        console.log('WalletConnect package not installed, showing mobile options');
         setLoading(false);
+        
+        // For mobile users, show deep link options
+        if (isMobileBrowser) {
+          showToast('📱 Opening wallet selector...', 'info');
+          // Show a simple alert with options
+          const choice = window.confirm(
+            'Choose your wallet:\n\n' +
+            '• OK = MetaMask\n' +
+            '• Cancel = Other wallet (Trust/Rainbow/Coinbase)\n\n' +
+            'Your wallet will open and load this site.'
+          );
+          if (choice) {
+            openInWalletBrowser('metamask');
+          } else {
+            // Show more options
+            const wallet = window.prompt(
+              'Enter wallet name:\n' +
+              '1 = Trust Wallet\n' +
+              '2 = Rainbow\n' +
+              '3 = Coinbase\n' +
+              '4 = OKX'
+            );
+            if (wallet === '1') openInWalletBrowser('trust');
+            else if (wallet === '2') openInWalletBrowser('rainbow');
+            else if (wallet === '3') openInWalletBrowser('coinbase');
+            else if (wallet === '4') openInWalletBrowser('okx');
+          }
+        } else {
+          showToast('💡 On desktop? Use MetaMask/Internet Money extension. On mobile? Tap a wallet below.', 'info');
+        }
         return;
       }
 
@@ -4205,9 +4235,10 @@ export default function App() {
         setUrmomBalance(ethers.formatEther(urmomBal));
 
         // Get DTGC/PLS LP balance (Diamond tier)
+        let lpPlsBal = 0n;
         try {
           const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
-          const lpPlsBal = await lpPlsContract.balanceOf(account);
+          lpPlsBal = await lpPlsContract.balanceOf(account);
           setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
         } catch (e) {
           console.warn('Could not fetch DTGC/PLS LP balance:', e);
@@ -4215,9 +4246,10 @@ export default function App() {
         }
 
         // Get DTGC/URMOM LP balance (Diamond+ tier)
+        let lpUrmomBal = 0n;
         try {
           const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
-          const lpUrmomBal = await lpUrmomContract.balanceOf(account);
+          lpUrmomBal = await lpUrmomContract.balanceOf(account);
           setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
           setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
         } catch (e) {
@@ -4247,8 +4279,8 @@ export default function App() {
           pls: ethers.formatEther(plsBal),
           dtgc: ethers.formatEther(dtgcBal),
           urmom: ethers.formatEther(urmomBal),
-          lpDtgcPls: lpDtgcPlsBalance,
-          lpDtgcUrmom: lpDtgcUrmomBalance
+          lpDtgcPls: ethers.formatEther(lpPlsBal || 0n),
+          lpDtgcUrmom: ethers.formatEther(lpUrmomBal || 0n)
         });
       } catch (err) {
         console.error('Failed to fetch balances:', err);
@@ -4355,6 +4387,40 @@ export default function App() {
       return;
     }
 
+    // Check balance before proceeding
+    const walletBalance = isLP 
+      ? (selectedTier === 4 ? parseFloat(lpDtgcUrmomBalance) : parseFloat(lpDtgcPlsBalance))
+      : parseFloat(dtgcBalance);
+    
+    if (walletBalance <= 0) {
+      showToast(`❌ You have no ${isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC'} tokens to stake!`, 'error');
+      return;
+    }
+    
+    if (amount > walletBalance) {
+      showToast(`❌ Insufficient balance! You have ${formatNumber(walletBalance)} ${isLP ? 'LP' : 'DTGC'}`, 'error');
+      return;
+    }
+
+    // Check if user already has an active LP stake (contract may only allow 1)
+    if (isLP) {
+      const existingLpStake = stakedPositions.find(p => p.isLP);
+      if (existingLpStake) {
+        showToast(`⚠️ You already have an active LP stake (${formatNumber(existingLpStake.amount)} LP). Unstake first or wait for lock to expire.`, 'warning');
+        console.warn('🚫 User already has LP stake:', existingLpStake);
+        return;
+      }
+    }
+
+    console.log('💰 Pre-flight checks passed:', { 
+      walletBalance, 
+      stakingAmount: amount, 
+      isLP, 
+      selectedTier,
+      tokenType: isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC',
+      existingPositions: stakedPositions.length
+    });
+
     try {
       setLoading(true);
       setModalType('start');
@@ -4373,7 +4439,15 @@ export default function App() {
       const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
       const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
 
-      console.log('🔄 Starting stake process...', { tokenAddress, stakingAddress, amount, amountWei: amountWei.toString() });
+      console.log('🔄 Starting stake process...', { 
+        tokenAddress, 
+        stakingAddress, 
+        amount, 
+        amountWei: amountWei.toString(),
+        isLP: isLP,
+        selectedTier: selectedTier,
+        tierName: tierData.name
+      });
 
       // Step 1: Check and approve token spending
       showToast('Step 1/2: Checking approval...', 'info');
@@ -4407,19 +4481,36 @@ export default function App() {
           const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
           console.log('📤 LP Stake params:', { amount: amountWei.toString(), lpType, contract: stakingAddress });
           
-          // Try to estimate gas first to catch any revert reasons
+          // Estimate gas and add 50% buffer for safety
+          let gasLimit = 300000n; // Default fallback
           try {
             const gasEstimate = await stakingContract.stake.estimateGas(amountWei, lpType);
-            console.log('⛽ Gas estimate:', gasEstimate.toString());
+            gasLimit = (gasEstimate * 150n) / 100n; // Add 50% buffer
+            console.log('⛽ Gas estimate:', gasEstimate.toString(), '→ Using limit:', gasLimit.toString());
           } catch (gasErr) {
-            console.error('⛽ Gas estimation failed:', gasErr.message || gasErr);
-            console.error('⛽ This might indicate the transaction will fail');
+            console.error('⛽ Gas estimation failed - transaction will likely revert!');
+            console.error('⛽ Error:', gasErr.message || gasErr);
+            console.error('⛽ Reason:', gasErr.reason || 'unknown');
+            
+            // Try to extract revert reason
+            let revertReason = 'Unknown contract error';
+            if (gasErr.reason) revertReason = gasErr.reason;
+            else if (gasErr.data?.message) revertReason = gasErr.data.message;
+            else if (gasErr.error?.message) revertReason = gasErr.error.message;
+            else if (gasErr.message?.includes('execution reverted')) {
+              const match = gasErr.message.match(/reason="([^"]+)"/);
+              if (match) revertReason = match[1];
+            }
+            
+            showToast(`❌ Contract rejected: ${revertReason}`, 'error');
+            setLoading(false);
+            return;
           }
           
-          console.log('📤 Calling stake function... (waiting for wallet response)');
+          console.log('📤 Calling stake function with explicit gas... (waiting for wallet response)');
           
           // Wrap in timeout to handle wallets that don't return properly
-          const stakePromise = stakingContract.stake(amountWei, lpType);
+          const stakePromise = stakingContract.stake(amountWei, lpType, { gasLimit });
           const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('TIMEOUT_CHECK_CHAIN')), 120000) // 2 min timeout
           );
@@ -4455,16 +4546,33 @@ export default function App() {
           // Regular Staking - amount and tier
           console.log('📤 Stake params:', { amount: amountWei.toString(), tier: selectedTier, contract: stakingAddress });
           
-          // Try to estimate gas first
+          // Estimate gas and add 50% buffer for safety
+          let gasLimit = 250000n; // Default fallback
           try {
             const gasEstimate = await stakingContract.stake.estimateGas(amountWei, selectedTier);
-            console.log('⛽ Gas estimate:', gasEstimate.toString());
+            gasLimit = (gasEstimate * 150n) / 100n; // Add 50% buffer
+            console.log('⛽ Gas estimate:', gasEstimate.toString(), '→ Using limit:', gasLimit.toString());
           } catch (gasErr) {
-            console.error('⛽ Gas estimation failed:', gasErr.message || gasErr);
+            console.error('⛽ Gas estimation failed - transaction will likely revert!');
+            console.error('⛽ Error:', gasErr.message || gasErr);
+            
+            // Try to extract revert reason
+            let revertReason = 'Unknown contract error';
+            if (gasErr.reason) revertReason = gasErr.reason;
+            else if (gasErr.data?.message) revertReason = gasErr.data.message;
+            else if (gasErr.error?.message) revertReason = gasErr.error.message;
+            else if (gasErr.message?.includes('execution reverted')) {
+              const match = gasErr.message.match(/reason="([^"]+)"/);
+              if (match) revertReason = match[1];
+            }
+            
+            showToast(`❌ Contract rejected: ${revertReason}`, 'error');
+            setLoading(false);
+            return;
           }
           
-          console.log('📤 Calling stake function... (waiting for wallet response)');
-          stakeTx = await stakingContract.stake(amountWei, selectedTier);
+          console.log('📤 Calling stake function with explicit gas... (waiting for wallet response)');
+          stakeTx = await stakingContract.stake(amountWei, selectedTier, { gasLimit });
           console.log('✅ Stake call returned successfully');
         }
       } catch (stakeCallErr) {
@@ -4528,17 +4636,51 @@ export default function App() {
       setLoading(false);
       setModalOpen(false);
 
+      // Parse error for user-friendly message
+      console.error('❌ Full stake error:', err);
+      
+      let errorMessage = 'Unknown error';
+      
+      // Check for common error patterns
       if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
-        showToast('Transaction rejected by user', 'error');
-      } else if (err.message?.includes('insufficient')) {
-        showToast('Insufficient balance for transaction', 'error');
+        showToast('Transaction rejected by user', 'info');
+        return;
       } else if (err.message?.includes('user rejected')) {
         showToast('Transaction cancelled', 'info');
+        return;
       } else if (err.code === -32002) {
         showToast('Please check your wallet for pending request', 'info');
-      } else {
-        showToast(`Staking failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+        return;
       }
+      
+      // Try to extract revert reason
+      if (err.reason) {
+        errorMessage = err.reason;
+      } else if (err.data?.message) {
+        errorMessage = err.data.message;
+      } else if (err.error?.message) {
+        errorMessage = err.error.message;
+      } else if (err.message) {
+        // Parse common contract revert messages
+        const msg = err.message.toLowerCase();
+        if (msg.includes('already staked') || msg.includes('active stake')) {
+          errorMessage = 'You already have an active stake in this tier';
+        } else if (msg.includes('insufficient') || msg.includes('exceeds balance')) {
+          errorMessage = 'Insufficient token balance';
+        } else if (msg.includes('not enough') || msg.includes('empty')) {
+          errorMessage = 'Reward pool may be empty - contact admin';
+        } else if (msg.includes('paused')) {
+          errorMessage = 'Contract is currently paused';
+        } else if (msg.includes('minimum')) {
+          errorMessage = 'Amount below minimum stake requirement';
+        } else if (msg.includes('transfer failed')) {
+          errorMessage = 'Token transfer failed - check approval';
+        } else {
+          errorMessage = err.message.slice(0, 80);
+        }
+      }
+      
+      showToast(`❌ Staking failed: ${errorMessage}`, 'error');
     }
   };
 
@@ -4848,27 +4990,33 @@ export default function App() {
     if (TESTNET_MODE || !account || !provider) return;
 
     try {
+      console.log('🔍 Fetching staked positions for:', account);
+      
       // Fetch regular staking position
       const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, provider);
       const position = await stakingContract.getPosition(account);
+      console.log('📋 Raw DTGC position from contract:', position);
 
       // Fetch LP staking position
       const lpStakingContract = new ethers.Contract(CONTRACT_ADDRESSES.lpStakingV3, LP_STAKING_V3_ABI, provider);
       const lpPosition = await lpStakingContract.getPosition(account);
+      console.log('📋 Raw LP position from contract:', lpPosition);
 
       const positions = [];
 
       // Parse regular staking position
       // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, bonusBps, tier, isActive, timeRemaining)
-      // Only add if amount > 0 AND isActive is true
       const amount = position ? parseFloat(ethers.formatEther(position[0])) : 0;
-      if (position && position[7] && amount > 0) { // isActive is at index 7
+      const dtgcIsActive = position ? position[7] : false;
+      console.log('💰 DTGC stake check:', { amount, isActive: dtgcIsActive, rawAmount: position?.[0]?.toString() });
+      
+      if (position && dtgcIsActive && amount > 0) {
         const rawApr = Number(position[4]) / 100; // Convert from bps
         const tierNum = Number(position[6]);
         const tierNames = ['SILVER', 'GOLD', 'WHALE'];
         const tierName = tierNames[tierNum] || 'GOLD';
         
-        positions.push({
+        const dtgcPosition = {
           id: 'dtgc-stake',
           type: 'DTGC',
           isLP: false,
@@ -4876,24 +5024,31 @@ export default function App() {
           startTime: Number(position[1]) * 1000,
           endTime: Number(position[2]) * 1000,
           lockPeriod: Number(position[3]),
-          apr: getV19CorrectedAPR(rawApr, tierName, false), // V19 CORRECTION APPLIED
-          bonus: Number(position[5]) / 100, // bonusBps
+          apr: getV19CorrectedAPR(rawApr, tierName, false),
+          bonus: Number(position[5]) / 100,
           tier: tierNum,
           tierName: tierName,
-          isActive: position[7],
+          isActive: dtgcIsActive,
           timeRemaining: Number(position[8]),
-        });
+        };
+        positions.push(dtgcPosition);
+        console.log('✅ Added DTGC position:', dtgcPosition);
+      } else {
+        console.log('⚠️ No active DTGC stake found');
       }
 
       // Parse LP staking position
       // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
       const lpAmount = lpPosition ? parseFloat(ethers.formatEther(lpPosition[0])) : 0;
-      if (lpPosition && lpPosition[7] && lpAmount > 0) { // isActive is at index 7
-        const rawLpApr = Number(lpPosition[4]) / 100; // aprBps
+      const lpIsActive = lpPosition ? lpPosition[7] : false;
+      console.log('💎 LP stake check:', { lpAmount, isActive: lpIsActive, rawAmount: lpPosition?.[0]?.toString(), lpType: lpPosition?.[6]?.toString() });
+      
+      if (lpPosition && lpIsActive && lpAmount > 0) {
+        const rawLpApr = Number(lpPosition[4]) / 100;
         const lpTypeNum = Number(lpPosition[6]); // 0=Diamond, 1=Diamond+
         const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
         
-        positions.push({
+        const lpStakePosition = {
           id: 'lp-stake',
           type: 'LP',
           isLP: true,
@@ -4901,23 +5056,28 @@ export default function App() {
           startTime: Number(lpPosition[1]) * 1000,
           endTime: Number(lpPosition[2]) * 1000,
           lockPeriod: Number(lpPosition[3]),
-          apr: getV19CorrectedAPR(rawLpApr, lpTierName, true), // V19 CORRECTION APPLIED
-          boostMultiplier: Number(lpPosition[5]) / 100, // boostBps
+          apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
+          boostMultiplier: Number(lpPosition[5]) / 100,
           lpType: lpTypeNum,
           tier: lpTierName,
-          tierName: lpTierName, // Added for consistent tier detection
-          isActive: lpPosition[7],
+          tierName: lpTierName,
+          isActive: lpIsActive,
           timeRemaining: Number(lpPosition[8]),
-        });
+        };
+        positions.push(lpStakePosition);
+        console.log('✅ Added LP position:', lpStakePosition);
+      } else {
+        console.log('⚠️ No active LP stake found');
       }
 
-      // Always set positions to what blockchain returns (even if empty)
+      // Always set positions to what blockchain returns
       setStakedPositions(positions);
       console.log('📊 Staked positions from V3 contracts:', positions.length > 0 ? positions : 'No active positions');
+      console.log('📊 Total positions found:', positions.length);
 
     } catch (err) {
-      console.warn('Failed to fetch staked positions:', err.message);
-      // On error, clear positions to avoid showing stale data
+      console.error('❌ Failed to fetch staked positions:', err);
+      console.error('❌ Error details:', err.message);
       setStakedPositions([]);
     }
   }, [account, provider]);
@@ -5360,6 +5520,28 @@ export default function App() {
                     </div>
                   );
                 })}
+                {/* Refresh button */}
+                <div
+                  onClick={() => {
+                    showToast('🔄 Refreshing positions...', 'info');
+                    fetchStakedPosition();
+                  }}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    background: 'rgba(76,175,80,0.2)',
+                    border: '1px solid rgba(76,175,80,0.4)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    marginLeft: '8px',
+                  }}
+                  title="Refresh Positions"
+                >
+                  <span style={{ fontSize: '0.9rem' }}>🔄</span>
+                </div>
                 {/* Minimize button */}
                 <div
                   onClick={() => setStakeWidgetMinimized(true)}
@@ -5373,7 +5555,7 @@ export default function App() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    marginLeft: '8px',
+                    marginLeft: '4px',
                   }}
                   title="Minimize"
                 >
