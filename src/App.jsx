@@ -9681,7 +9681,6 @@ export default function App() {
               >
                 <span style={{ fontSize: '1.3rem' }}>💰</span>
                 <span style={{ fontWeight: 600 }}>Internet Money</span>
-                <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#D4AF37' }}>RECOMMENDED</span>
               </button>
 
               <button
@@ -9692,8 +9691,8 @@ export default function App() {
                   alignItems: 'center',
                   gap: '16px',
                   padding: '16px 20px',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(76,175,80,0.15)',
+                  border: '2px solid #4CAF50',
                   borderRadius: '12px',
                   color: '#fff',
                   fontSize: '1rem',
@@ -9701,16 +9700,19 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(212,175,55,0.2)';
-                  e.target.style.borderColor = '#D4AF37';
+                  e.target.style.background = 'rgba(76,175,80,0.3)';
+                  e.target.style.borderColor = '#66BB6A';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(255,255,255,0.05)';
-                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                  e.target.style.background = 'rgba(76,175,80,0.15)';
+                  e.target.style.borderColor = '#4CAF50';
                 }}
               >
                 <span style={{ fontSize: '1.5rem' }}>🦊</span>
-                <span style={{ fontWeight: 600 }}>MetaMask</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                  <span style={{ fontWeight: 600 }}>MetaMask</span>
+                  <span style={{ fontSize: '0.7rem', color: '#4CAF50', fontWeight: 500 }}>✓ Recommended for Diamond LP Stakes</span>
+                </div>
               </button>
 
               <button
