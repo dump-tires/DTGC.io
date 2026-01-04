@@ -1047,9 +1047,27 @@ const getStyles = (isDark) => `
     gap: 20px;
   }
 
-  @media (max-width: 1200px) { .tiers-grid { grid-template-columns: repeat(2, 1fr); } }
+  /* Responsive tier rows */
+  .tier-row-top {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .tier-row-diamonds {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 1200px) { 
+    .tiers-grid { grid-template-columns: repeat(2, 1fr); }
+  }
   @media (max-width: 768px) { 
     .tiers-grid { grid-template-columns: 1fr; }
+    .tier-row-top { grid-template-columns: 1fr; }
     .hero-title { font-size: 2.2rem; }
     .nav-content { flex-direction: column; gap: 14px; }
     .nav-links { display: none; }
@@ -6349,7 +6367,13 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="tiers-grid">
+              {/* ROW 1: Silver, Gold, Whale (3 cards) */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '16px',
+                marginBottom: '16px'
+              }}>
                 {V5_STAKING_TIERS.map((tier) => {
                   const effectiveAPR = getEffectiveAPR(tier.apr, livePrices.dtgcMarketCap || 0);
                   return (
@@ -6383,7 +6407,15 @@ export default function App() {
                   </div>
                   );
                 })}
+              </div>
 
+              {/* ROW 2: Diamond & Diamond+ LP Tiers (centered) */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '20px',
+                flexWrap: 'wrap'
+              }}>
                 {/* Diamond Tier with Dynamic APR */}
                 {(() => {
                   const diamondEffectiveAPR = getEffectiveAPR(V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost, livePrices.dtgcMarketCap || 0);
@@ -6392,6 +6424,7 @@ export default function App() {
                 <div
                   className={`tier-card diamond ${isLP && selectedTier === 3 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(3); setIsLP(true); }}
+                  style={{ flex: '0 1 280px', maxWidth: '320px' }}
                 >
                   <div className="tier-icon">{V5_DIAMOND_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_TIER.color }}>{V5_DIAMOND_TIER.name}</div>
@@ -6431,7 +6464,7 @@ export default function App() {
                 <div
                   className={`tier-card diamond-plus ${isLP && selectedTier === 4 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(4); setIsLP(true); }}
-                  style={{ background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(123,31,162,0.15) 100%)', border: '2px solid #9C27B0' }}
+                  style={{ flex: '0 1 280px', maxWidth: '320px', background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(123,31,162,0.15) 100%)', border: '2px solid #9C27B0' }}
                 >
                   <div className="tier-icon" style={{ fontSize: '2.5rem' }}>{V5_DIAMOND_PLUS_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_PLUS_TIER.color }}>{V5_DIAMOND_PLUS_TIER.name}</div>
