@@ -6156,7 +6156,7 @@ export default function App() {
                 fontSize: '0.6rem',
               }}>
                 <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
-                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(0)}</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(2)}</span>
                 <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
               </div>
               {/* Crypto Prices - Compact */}
@@ -6184,8 +6184,8 @@ export default function App() {
                 border: '1px solid rgba(0,212,170,0.15)',
                 fontSize: '0.55rem',
               }}>
-                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(6)}</span>
-                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(6)}</span>
+                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
+                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
               </div>
               {/* Security & Audit Button */}
               <button
