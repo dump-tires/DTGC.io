@@ -3902,6 +3902,56 @@ export default function App() {
     showToast('Wallet disconnected', 'info');
   };
 
+  // Switch wallet - prompts user to select a different account
+  const switchWallet = async () => {
+    if (!window.ethereum) {
+      showToast('No wallet detected', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('🔄 Select account in your wallet...', 'info');
+
+      // Request permission to access accounts - this opens the account picker
+      await window.ethereum.request({
+        method: 'wallet_requestPermissions',
+        params: [{ eth_accounts: {} }]
+      });
+
+      // Get the newly selected accounts
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts'
+      });
+
+      if (accounts && accounts.length > 0) {
+        const newAccount = accounts[0];
+        
+        // Update provider and signer for new account
+        const newProvider = new ethers.BrowserProvider(window.ethereum);
+        const newSigner = await newProvider.getSigner();
+        
+        setAccount(newAccount);
+        setProvider(newProvider);
+        setSigner(newSigner);
+        
+        // Clear old positions so they refresh for new account
+        setStakedPositions([]);
+        
+        showToast(`✅ Switched to ${newAccount.slice(0,6)}...${newAccount.slice(-4)}`, 'success');
+      }
+    } catch (err) {
+      console.error('Switch wallet error:', err);
+      if (err.code === 4001) {
+        showToast('Account switch cancelled', 'info');
+      } else {
+        showToast('Could not switch accounts', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // WalletConnect v2 connection (requires @walletconnect/ethereum-provider package)
   const connectWalletConnect = async () => {
     if (TESTNET_MODE) {
@@ -5851,15 +5901,52 @@ export default function App() {
                   🔄
                 </button>
               )}
-              <button
-                className={`connect-btn ${account ? 'connected' : ''}`}
-                onClick={account ? disconnectWallet : () => setShowWalletModal(true)}
-                disabled={loading}
-                title={account ? 'Click to disconnect' : 'Connect your wallet'}
-              >
-                {loading && <span className="spinner" />}
-                {account ? `🔌 ${formatAddress(account)}` : '🔗 Connect'}
-              </button>
+              {/* Wallet Connection Buttons */}
+              {account ? (
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  {/* Switch Account Button */}
+                  <button
+                    onClick={switchWallet}
+                    disabled={loading}
+                    style={{
+                      padding: '8px 10px',
+                      background: 'rgba(76,175,80,0.2)',
+                      border: '1px solid rgba(76,175,80,0.5)',
+                      borderRadius: '8px 0 0 8px',
+                      color: '#4CAF50',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: loading ? 'wait' : 'pointer',
+                    }}
+                    title="Switch to different wallet account"
+                  >
+                    🔀
+                  </button>
+                  {/* Connected Address & Disconnect */}
+                  <button
+                    className="connect-btn connected"
+                    onClick={disconnectWallet}
+                    disabled={loading}
+                    style={{
+                      borderRadius: '0 8px 8px 0',
+                    }}
+                    title="Click to disconnect"
+                  >
+                    {loading && <span className="spinner" />}
+                    🔌 {formatAddress(account)}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="connect-btn"
+                  onClick={() => setShowWalletModal(true)}
+                  disabled={loading}
+                  title="Connect your wallet"
+                >
+                  {loading && <span className="spinner" />}
+                  🔗 Connect
+                </button>
+              )}
             </div>
           </div>
         </header>
