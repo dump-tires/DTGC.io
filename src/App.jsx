@@ -4397,21 +4397,53 @@ export default function App() {
       console.log('🔄 Sending stake transaction...');
       showToast('Step 2/2: Confirm stake in wallet...', 'info');
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+      console.log('📜 Contract address:', stakingAddress);
+      console.log('📜 Contract methods:', Object.keys(stakingContract.interface.functions || {}));
 
       let stakeTx;
-      if (isLP) {
-        // LP Staking - amount and lpType (0=Diamond/PLS, 1=Diamond+/URMOM)
-        const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
-        console.log('📤 LP Stake params:', { amount: amountWei.toString(), lpType });
-        stakeTx = await stakingContract.stake(amountWei, lpType);
-      } else {
-        // Regular Staking - amount and tier
-        console.log('📤 Stake params:', { amount: amountWei.toString(), tier: selectedTier });
-        stakeTx = await stakingContract.stake(amountWei, selectedTier);
+      try {
+        if (isLP) {
+          // LP Staking - amount and lpType (0=Diamond/PLS, 1=Diamond+/URMOM)
+          const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
+          console.log('📤 LP Stake params:', { amount: amountWei.toString(), lpType, contract: stakingAddress });
+          
+          // Try to estimate gas first to catch any revert reasons
+          try {
+            const gasEstimate = await stakingContract.stake.estimateGas(amountWei, lpType);
+            console.log('⛽ Gas estimate:', gasEstimate.toString());
+          } catch (gasErr) {
+            console.error('⛽ Gas estimation failed:', gasErr.message || gasErr);
+            console.error('⛽ This might indicate the transaction will fail');
+          }
+          
+          console.log('📤 Calling stake function...');
+          stakeTx = await stakingContract.stake(amountWei, lpType);
+        } else {
+          // Regular Staking - amount and tier
+          console.log('📤 Stake params:', { amount: amountWei.toString(), tier: selectedTier, contract: stakingAddress });
+          
+          // Try to estimate gas first
+          try {
+            const gasEstimate = await stakingContract.stake.estimateGas(amountWei, selectedTier);
+            console.log('⛽ Gas estimate:', gasEstimate.toString());
+          } catch (gasErr) {
+            console.error('⛽ Gas estimation failed:', gasErr.message || gasErr);
+          }
+          
+          console.log('📤 Calling stake function...');
+          stakeTx = await stakingContract.stake(amountWei, selectedTier);
+        }
+        console.log('✅ Stake call returned, tx:', stakeTx);
+      } catch (stakeCallErr) {
+        console.error('❌ Stake call failed:', stakeCallErr);
+        console.error('❌ Error code:', stakeCallErr.code);
+        console.error('❌ Error reason:', stakeCallErr.reason);
+        console.error('❌ Error data:', stakeCallErr.data);
+        throw stakeCallErr;
       }
 
       console.log('⏳ Stake tx sent:', stakeTx.hash);
-      showToast(`Transaction sent! Waiting for confirmation...`, 'info');
+      showToast(`Transaction sent! Hash: ${stakeTx.hash.slice(0,10)}...`, 'info');
       
       await stakeTx.wait();
       console.log('✅ Stake confirmed!');
