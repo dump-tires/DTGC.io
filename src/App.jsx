@@ -4398,7 +4398,6 @@ export default function App() {
       showToast('Step 2/2: Confirm stake in wallet...', 'info');
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
       console.log('📜 Contract address:', stakingAddress);
-      console.log('📜 Contract methods:', Object.keys(stakingContract.interface.functions || {}));
 
       let stakeTx;
       try {
@@ -4416,8 +4415,41 @@ export default function App() {
             console.error('⛽ This might indicate the transaction will fail');
           }
           
-          console.log('📤 Calling stake function...');
-          stakeTx = await stakingContract.stake(amountWei, lpType);
+          console.log('📤 Calling stake function... (waiting for wallet response)');
+          
+          // Wrap in timeout to handle wallets that don't return properly
+          const stakePromise = stakingContract.stake(amountWei, lpType);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('TIMEOUT_CHECK_CHAIN')), 120000) // 2 min timeout
+          );
+          
+          try {
+            stakeTx = await Promise.race([stakePromise, timeoutPromise]);
+            console.log('✅ Stake call returned successfully');
+          } catch (raceErr) {
+            if (raceErr.message === 'TIMEOUT_CHECK_CHAIN') {
+              console.warn('⚠️ Wallet response timeout - transaction may have succeeded!');
+              showToast('⚠️ Wallet timeout - check your wallet/blockchain for tx status', 'warning');
+              setLoading(false);
+              setModalOpen(false);
+              // Refresh balances to check if stake went through
+              setTimeout(async () => {
+                try {
+                  if (selectedTier === 4) {
+                    const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+                    const lpBal = await lpUrmomContract.balanceOf(account);
+                    setLpDtgcUrmomBalance(ethers.formatEther(lpBal));
+                  } else {
+                    const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+                    const lpBal = await lpPlsContract.balanceOf(account);
+                    setLpDtgcPlsBalance(ethers.formatEther(lpBal));
+                  }
+                } catch (e) { console.warn('Balance refresh error:', e); }
+              }, 3000);
+              return;
+            }
+            throw raceErr;
+          }
         } else {
           // Regular Staking - amount and tier
           console.log('📤 Stake params:', { amount: amountWei.toString(), tier: selectedTier, contract: stakingAddress });
@@ -4430,15 +4462,14 @@ export default function App() {
             console.error('⛽ Gas estimation failed:', gasErr.message || gasErr);
           }
           
-          console.log('📤 Calling stake function...');
+          console.log('📤 Calling stake function... (waiting for wallet response)');
           stakeTx = await stakingContract.stake(amountWei, selectedTier);
+          console.log('✅ Stake call returned successfully');
         }
-        console.log('✅ Stake call returned, tx:', stakeTx);
       } catch (stakeCallErr) {
         console.error('❌ Stake call failed:', stakeCallErr);
         console.error('❌ Error code:', stakeCallErr.code);
         console.error('❌ Error reason:', stakeCallErr.reason);
-        console.error('❌ Error data:', stakeCallErr.data);
         throw stakeCallErr;
       }
 
