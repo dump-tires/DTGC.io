@@ -3423,6 +3423,18 @@ export default function App() {
     }
   }, []);
   const [contractStats, setContractStats] = useState({ totalStaked: '0', stakers: '0' });
+  
+  // V4 Protocol Stats - Live tracking of all stakes
+  const [v4Stats, setV4Stats] = useState({
+    dtgcTotalStaked: 0,
+    lpTotalStaked: 0,
+    silverStakes: 0,
+    goldStakes: 0,
+    whaleStakes: 0,
+    diamondStakes: 0,
+    diamondPlusStakes: 0,
+    totalActiveStakes: 0,
+  });
 
   // Live holder wallets for ticker (fetched from PulseChain API)
   const [liveHolders, setLiveHolders] = useState({
@@ -5600,20 +5612,19 @@ export default function App() {
               });
             }
             
-            setStakedPositions(positions);
-            console.log('📊 V4 Total positions found:', positions.length);
-            return; // Success with V4!
+            console.log('📊 V4 positions found:', positions.length);
+            // DON'T return - continue to also fetch V3 stakes!
             
           } catch (v4Err) {
-            console.warn('⚠️ V4 fetch failed, falling back to V3:', v4Err.message);
+            console.warn('⚠️ V4 fetch failed, will try V3:', v4Err.message);
             // Fall through to V3 logic
           }
         }
         
         // ═══════════════════════════════════════════════════════════════
-        // V3 FALLBACK MODE (single stake per type)
+        // ALSO FETCH V3 STAKES (combine with V4)
         // ═══════════════════════════════════════════════════════════════
-        console.log('📦 Using V3 contracts (single stake per type)');
+        console.log('📦 Also checking V3 contracts for legacy stakes...');
         
         // Fetch regular staking position
         const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, activeProvider);
@@ -5630,7 +5641,7 @@ export default function App() {
           const tierName = tierNames[tierNum] || 'GOLD';
           
           positions.push({
-            id: 'dtgc-stake-0',
+            id: 'v3-dtgc-stake-0',
             stakeIndex: 0,
             type: 'DTGC',
             isLP: false,
@@ -5645,6 +5656,7 @@ export default function App() {
             isActive: dtgcIsActive,
             timeRemaining: Number(position[8]),
             isV4: false,
+            isV3: true,
           });
           console.log('✅ Added V3 DTGC position');
         }
@@ -5674,7 +5686,7 @@ export default function App() {
             const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
             
             positions.push({
-              id: 'lp-stake-0',
+              id: 'v3-lp-stake-0',
               stakeIndex: 0,
               type: 'LP',
               isLP: true,
@@ -5690,13 +5702,14 @@ export default function App() {
               isActive: lpIsActive || lpAmount > 0,
               timeRemaining: Number(lpPosition[8] || 0),
               isV4: false,
+              isV3: true,
             });
             console.log('✅ Added V3 LP position');
           }
         }
 
         setStakedPositions(positions);
-        console.log('📊 V3 Total positions found:', positions.length);
+        console.log('📊 Total positions (V3+V4):', positions.length);
         return; // Success!
 
       } catch (err) {
@@ -5723,6 +5736,56 @@ export default function App() {
       return () => clearInterval(interval);
     }
   }, [account, provider, fetchStakedPosition]);
+
+  // Calculate V4 Protocol Stats from stakedPositions
+  useEffect(() => {
+    if (stakedPositions.length > 0) {
+      const stats = {
+        dtgcTotalStaked: 0,
+        lpTotalStaked: 0,
+        silverStakes: 0,
+        goldStakes: 0,
+        whaleStakes: 0,
+        diamondStakes: 0,
+        diamondPlusStakes: 0,
+        totalActiveStakes: stakedPositions.length,
+      };
+      
+      stakedPositions.forEach(pos => {
+        if (pos.isLP) {
+          stats.lpTotalStaked += pos.amount;
+          if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+            stats.diamondPlusStakes++;
+          } else {
+            stats.diamondStakes++;
+          }
+        } else {
+          stats.dtgcTotalStaked += pos.amount;
+          if (pos.tier === 0 || pos.tierName === 'SILVER') {
+            stats.silverStakes++;
+          } else if (pos.tier === 2 || pos.tierName === 'WHALE') {
+            stats.whaleStakes++;
+          } else {
+            stats.goldStakes++;
+          }
+        }
+      });
+      
+      setV4Stats(stats);
+      console.log('📊 V4 Stats updated:', stats);
+    } else {
+      setV4Stats({
+        dtgcTotalStaked: 0,
+        lpTotalStaked: 0,
+        silverStakes: 0,
+        goldStakes: 0,
+        whaleStakes: 0,
+        diamondStakes: 0,
+        diamondPlusStakes: 0,
+        totalActiveStakes: 0,
+      });
+    }
+  }, [stakedPositions]);
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
@@ -6815,6 +6878,81 @@ export default function App() {
               <div className="hero-stat-label">Burned Value</div>
             </div>
           </div>
+          
+          {/* V4 LIVE STAKE TRACKER */}
+          {account && v4Stats.totalActiveStakes > 0 && (
+            <div style={{
+              margin: '20px auto 0',
+              maxWidth: '800px',
+              padding: '16px 24px',
+              background: 'linear-gradient(135deg, rgba(76,175,80,0.1) 0%, rgba(46,125,50,0.15) 100%)',
+              border: '2px solid rgba(76,175,80,0.4)',
+              borderRadius: '16px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '20px',
+              alignItems: 'center',
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#4CAF50', letterSpacing: '1px', marginBottom: '4px' }}>📊 YOUR V4 STAKES</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#4CAF50' }}>{v4Stats.totalActiveStakes}</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Active Positions</div>
+              </div>
+              
+              <div style={{ height: '40px', width: '1px', background: 'rgba(76,175,80,0.3)' }} />
+              
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {v4Stats.silverStakes > 0 && (
+                  <div style={{ textAlign: 'center', padding: '6px 12px', background: 'rgba(192,192,192,0.1)', borderRadius: '8px', border: '1px solid rgba(192,192,192,0.3)' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#C0C0C0' }}>🥈 {v4Stats.silverStakes}</div>
+                    <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>Silver</div>
+                  </div>
+                )}
+                {v4Stats.goldStakes > 0 && (
+                  <div style={{ textAlign: 'center', padding: '6px 12px', background: 'rgba(255,215,0,0.1)', borderRadius: '8px', border: '1px solid rgba(255,215,0,0.3)' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#FFD700' }}>🥇 {v4Stats.goldStakes}</div>
+                    <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>Gold</div>
+                  </div>
+                )}
+                {v4Stats.whaleStakes > 0 && (
+                  <div style={{ textAlign: 'center', padding: '6px 12px', background: 'rgba(33,150,243,0.1)', borderRadius: '8px', border: '1px solid rgba(33,150,243,0.3)' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#2196F3' }}>🐋 {v4Stats.whaleStakes}</div>
+                    <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>Whale</div>
+                  </div>
+                )}
+                {v4Stats.diamondStakes > 0 && (
+                  <div style={{ textAlign: 'center', padding: '6px 12px', background: 'rgba(0,188,212,0.1)', borderRadius: '8px', border: '1px solid rgba(0,188,212,0.3)' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#00BCD4' }}>💎 {v4Stats.diamondStakes}</div>
+                    <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>Diamond</div>
+                  </div>
+                )}
+                {v4Stats.diamondPlusStakes > 0 && (
+                  <div style={{ textAlign: 'center', padding: '6px 12px', background: 'rgba(156,39,176,0.1)', borderRadius: '8px', border: '1px solid rgba(156,39,176,0.3)' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#9C27B0' }}>💜 {v4Stats.diamondPlusStakes}</div>
+                    <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>Diamond+</div>
+                  </div>
+                )}
+              </div>
+              
+              <div style={{ height: '40px', width: '1px', background: 'rgba(76,175,80,0.3)' }} />
+              
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#D4AF37', letterSpacing: '1px', marginBottom: '4px' }}>💰 STAKED VALUE</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#D4AF37' }}>
+                  {formatNumber(v4Stats.dtgcTotalStaked)} DTGC
+                </div>
+                <div style={{ fontSize: '0.7rem', color: '#4CAF50' }}>
+                  ≈ ${formatNumber(v4Stats.dtgcTotalStaked * (livePrices.dtgc || 0))}
+                </div>
+                {v4Stats.lpTotalStaked > 0 && (
+                  <div style={{ fontSize: '0.65rem', color: '#00BCD4', marginTop: '2px' }}>
+                    + {formatNumber(v4Stats.lpTotalStaked)} LP
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
         {/* CURRENCY SELECTOR */}
@@ -7916,7 +8054,22 @@ export default function App() {
                             fontWeight: 700,
                             color: '#FFF',
                             letterSpacing: '0.5px',
-                          }}>V4</div>
+                          }}>V4 ✨</div>
+                        )}
+                        {/* V3 Badge */}
+                        {pos.isV3 && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: 'linear-gradient(135deg, #FF9800, #F57C00)',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '0.6rem',
+                            fontWeight: 700,
+                            color: '#FFF',
+                            letterSpacing: '0.5px',
+                          }}>V3 Legacy</div>
                         )}
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px'}}>
                           <div>
@@ -7948,6 +8101,70 @@ export default function App() {
                               ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValue).value)}
                             </div>
                             <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
+                              {/* V4 Claim Rewards (anytime for Gold/Whale/Diamond+ only) */}
+                              {pos.isV4 && !isLocked && (
+                                <button
+                                  onClick={() => handleClaimRewards(pos.isLP, pos.id)}
+                                  style={{
+                                    padding: '8px 16px',
+                                    background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+                                    border: 'none',
+                                    borderRadius: '20px',
+                                    fontWeight: 700,
+                                    fontSize: '0.7rem',
+                                    color: '#FFF',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  🎁 Claim Rewards
+                                </button>
+                              )}
+                              {/* V4 Claim for Gold/Whale/Diamond+ tiers (even when locked) - NOT Silver or Diamond */}
+                              {pos.isV4 && isLocked && 
+                               pos.tier !== 0 && pos.tierName !== 'SILVER' && 
+                               pos.lpType !== 0 && pos.tierName !== 'DIAMOND' && (
+                                <button
+                                  onClick={() => handleClaimRewards(pos.isLP, pos.id)}
+                                  style={{
+                                    padding: '8px 16px',
+                                    background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+                                    border: 'none',
+                                    borderRadius: '20px',
+                                    fontWeight: 700,
+                                    fontSize: '0.7rem',
+                                    color: '#FFF',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  🎁 Claim Rewards
+                                </button>
+                              )}
+                              {/* V4 Silver tier locked message */}
+                              {pos.isV4 && isLocked && (pos.tier === 0 || pos.tierName === 'SILVER') && (
+                                <div style={{
+                                  padding: '8px 12px',
+                                  background: 'rgba(192,192,192,0.2)',
+                                  border: '1px dashed rgba(192,192,192,0.5)',
+                                  borderRadius: '20px',
+                                  fontSize: '0.65rem',
+                                  color: '#C0C0C0',
+                                }}>
+                                  🥈 Silver claims after unlock
+                                </div>
+                              )}
+                              {/* V4 Diamond tier locked message */}
+                              {pos.isV4 && isLocked && (pos.lpType === 0 || pos.tierName === 'DIAMOND') && pos.isLP && (
+                                <div style={{
+                                  padding: '8px 12px',
+                                  background: 'rgba(0,188,212,0.2)',
+                                  border: '1px dashed rgba(0,188,212,0.5)',
+                                  borderRadius: '20px',
+                                  fontSize: '0.65rem',
+                                  color: '#00BCD4',
+                                }}>
+                                  💎 Diamond claims after unlock
+                                </div>
+                              )}
                               {isLocked ? (
                                 <button
                                   onClick={() => handleEmergencyWithdraw(pos.isLP, pos.id)}
@@ -7966,21 +8183,24 @@ export default function App() {
                                 </button>
                               ) : (
                                 <>
-                                  <button
-                                    onClick={() => handleClaimRewards(pos.isLP, pos.id)}
-                                    style={{
-                                      padding: '8px 16px',
-                                      background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
-                                      border: 'none',
-                                      borderRadius: '20px',
-                                      fontWeight: 700,
-                                      fontSize: '0.7rem',
-                                      color: '#FFF',
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    {pos.isV4 ? '🎁 Claim Rewards' : '💰 Claim Rewards'}
-                                  </button>
+                                  {/* V3 Claim Rewards (only when unlocked) */}
+                                  {pos.isV3 && (
+                                    <button
+                                      onClick={() => handleClaimRewards(pos.isLP, pos.id)}
+                                      style={{
+                                        padding: '8px 16px',
+                                        background: 'linear-gradient(135deg, #FF9800, #F57C00)',
+                                        border: 'none',
+                                        borderRadius: '20px',
+                                        fontWeight: 700,
+                                        fontSize: '0.7rem',
+                                        color: '#FFF',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      💰 Claim V3 Rewards
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => handleUnstake(pos.id)}
                                     style={{
