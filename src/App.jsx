@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { ethers } from 'ethers';
+// WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
+// import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import {
   CONTRACTS,
   TOKENS,
   STAKING_TIERS,
   DIAMOND_TIER,
-  STAKING_V2_ABI,
-  LP_STAKING_V2_ABI,
-  DAO_VOTING_ABI,
+  STAKING_V3_ABI as IMPORTED_STAKING_V3_ABI,
+  LP_STAKING_V3_ABI as IMPORTED_LP_STAKING_V3_ABI,
+  DAO_VOTING_V3_ABI,
   ERC20_ABI,
   CHAIN_ID,
   EXPLORER,
@@ -16,15 +18,57 @@ import {
   BURN_ADDRESS,
 } from './config/constants';
 
+// ═══════════════════════════════════════════════════════════════
+// FALLBACK ABIs - Use these if imports don't have the right structure
+// ═══════════════════════════════════════════════════════════════
+const FALLBACK_STAKING_V3_ABI = [
+  'function stake(uint256 amount, uint8 tier) external',
+  'function withdraw() external',
+  'function emergencyWithdraw() external',
+  'function claimRewards() external',
+  'function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonusBps, uint8 tier, bool isActive, uint256 timeRemaining)',
+  'function calculateRewards(address user) external view returns (uint256)',
+  'function totalStaked() external view returns (uint256)',
+];
+
+const FALLBACK_LP_STAKING_V3_ABI = [
+  'function stake(uint256 amount, uint8 lpType) external',
+  'function withdraw() external',
+  'function emergencyWithdraw() external',
+  'function claimRewards() external',
+  'function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 timeRemaining)',
+  'function calculateRewards(address user) external view returns (uint256)',
+  'function totalStaked() external view returns (uint256)',
+  // Alternative function signatures that might exist
+  'function getUserStakes(address user) external view returns (uint256[])',
+  'function stakes(address user, uint256 index) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive)',
+  'function stakeCount(address user) external view returns (uint256)',
+];
+
+// Use imported ABIs if they exist and have getPosition, otherwise use fallbacks
+const STAKING_V3_ABI = IMPORTED_STAKING_V3_ABI || FALLBACK_STAKING_V3_ABI;
+const LP_STAKING_V3_ABI = IMPORTED_LP_STAKING_V3_ABI || FALLBACK_LP_STAKING_V3_ABI;
+
+// Log which ABIs we're using
+console.log('📝 Staking V3 ABI:', STAKING_V3_ABI?.length ? `${STAKING_V3_ABI.length} functions` : 'MISSING!');
+console.log('📝 LP Staking V3 ABI:', LP_STAKING_V3_ABI?.length ? `${LP_STAKING_V3_ABI.length} functions` : 'MISSING!');
+
+// WalletConnect Project ID - Get yours free at https://cloud.walletconnect.com/
+const WALLETCONNECT_PROJECT_ID = '10281b2ce43a6f7240ee415515ddb27a';
+
+// Fallback BURN_ADDRESS in case import fails
+const DTGC_BURN_ADDRESS = BURN_ADDRESS || '0x0000000000000000000000000000000000000369';
+const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
+
 /*
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
-    ║     🏆 DTGC PREMIUM STAKING PLATFORM V18 DIAMOND+ 🏆         ║
+    ║     🏆 DTGC PREMIUM STAKING PLATFORM V19 - MAINNET 🏆        ║
     ║                                                               ║
-    ║     ✦ V18 Gold Paper Tokenomics (91% Controlled!)            ║
+    ║     ✦ V19 Gold Paper Tokenomics (91% Controlled!)            ║
+    ║     ✦ V3 Contracts Deployed & Live                           ║
     ║     ✦ Diamond (DTGC/PLS) + Diamond+ (DTGC/URMOM) LP Tiers    ║
-    ║     ✦ 3% Total Fees • All Tiers Profitable                   ║
-    ║     ✦ Gold Supply Dynamics + Live Holder Ticker              ║
+    ║     ✦ 7.5% Total Fees • Sustainable APRs                     ║
     ║     ✦ Live Prices from DexScreener                           ║
     ║                                                               ║
     ║                    dtgc.io                                    ║
@@ -127,7 +171,7 @@ const V5_DIAMOND_TIER = {
   id: 3,
   name: 'DIAMOND',
   icon: '💎',
-  minInvest: 1000,
+  minInvest: 25000,
   lockDays: 90,
   holdDays: 90,
   apr: 28,                   // Reduced 30% from 40%
@@ -144,8 +188,8 @@ const V5_DIAMOND_TIER = {
 const V5_DIAMOND_PLUS_TIER = {
   id: 4,
   name: 'DIAMOND+',
-  icon: '💎✨',
-  minInvest: 1000,
+  icon: '💜💎',
+  minInvest: 25000,
   lockDays: 90,
   holdDays: 90,
   apr: 35,                   // Reduced 30% from 50%
@@ -184,6 +228,37 @@ const getCurrentPhase = (marketCap) => {
 const getEffectiveAPR = (baseAPR, marketCap) => {
   const phase = getCurrentPhase(marketCap);
   return baseAPR * phase.multiplier;
+};
+
+// V19 APR CORRECTION - Override old contract APRs with correct values
+// Old contracts stored crazy APRs like 7000%. This corrects them.
+const getV19CorrectedAPR = (contractApr, tierName, isLP = false) => {
+  const V19_CORRECT_APRS = {
+    'SILVER': 15.4,
+    'GOLD': 16.8,
+    'WHALE': 18.2,
+    'DIAMOND': 42,      // 28% × 1.5x
+    'DIAMOND+': 70,     // 35% × 2.0x
+    '0': 15.4,          // Numeric fallbacks
+    '1': 16.8,
+    '2': 18.2,
+  };
+  
+  // If contract APR is absurdly high (>100%), use V19 corrected value
+  if (contractApr > 100) {
+    let tier;
+    if (typeof tierName === 'number') {
+      const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
+      tier = TIER_NAMES[tierName] || 'GOLD';
+    } else {
+      tier = (tierName || 'GOLD').toString().toUpperCase();
+    }
+    const correctedApr = V19_CORRECT_APRS[tier] || (isLP ? 42 : 16.8);
+    console.log(`🔧 V19 APR Correction: ${contractApr}% → ${correctedApr}% for ${tier}`);
+    return correctedApr;
+  }
+  
+  return contractApr;
 };
 
 // Format market cap for display
@@ -313,25 +388,30 @@ const SUPPLY_WALLETS = {
 // ═══════════════════════════════════════════════════════════════
 // Fetches live holder data from PulseChain Explorer API
 
-const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
-
-// PulseChain Explorer API (Blockscout-compatible)
+// PulseChain Explorer API (via Vercel serverless proxy to avoid CORS)
 const PULSECHAIN_API = {
-  // Primary: scan.pulsechain.com API
-  holders: `https://scan.pulsechain.com/api/v2/tokens/${DTGC_TOKEN_ADDRESS}/holders`,
-  // Alternative: direct RPC for balance checks
+  // Use local API route to proxy requests (avoids CORS issues)
+  holders: '/api/holders',
+  tokenInfo: '/api/token-info',
+  // Direct RPC for contract calls (doesn't have CORS issues)
   rpc: 'https://rpc.pulsechain.com',
 };
 
-// Wallets to EXCLUDE from ticker (DAO, Dev, LP, Burn addresses)
+// Wallets to EXCLUDE from ticker (DAO, Dev, LP, Burn, Staking Rewards)
 const EXCLUDED_WALLETS = [
   '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC', // DAO Treasury
-  '0x777d7f3ad24832975aec259ab7d7b57be4225abf', // Dev Wallet
+  '0x777d7f3ad24832975aec259ab7d7b57be4225abf', // Dev Wallet (main)
+  '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c', // Dev Wallet (secondary)
   '0x0000000000000000000000000000000000000369', // Burn address
   '0x000000000000000000000000000000000000dEaD', // Dead address
   '0x0000000000000000000000000000000000000000', // Zero address
   '0x1891bD6A959B32977c438f3022678a8659364A72', // LP Pool DTGC/URMOM
   '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7', // LP Pool DTGC/PLS
+  '0x670c972Bb5388E087a2934a063064d97278e01F3', // LP DTGC/URMOM (PulseX)
+  '0xc33944a6020FB5620001A202Eaa67214A1AB9193', // LP DTGC/PLS (PulseX)
+  '0x0ba3d882f21b935412608d181501d59e99a8D0f9', // DTGCStakingV3 Rewards
+  '0x7C328FFF32AD66a03218D8A953435283782Bc84F', // LPStakingV3 Rewards
+  '0x4828A40bEd10c373718cA10B53A34208636CD8C4', // DAOVotingV3
 ].map(addr => addr.toLowerCase());
 
 // Fallback data if API fails (placeholder)
@@ -370,12 +450,14 @@ const SOCIAL_LINKS = {
 const CONTRACT_ADDRESSES = {
   dtgc: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',
   urmom: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',
-  lp: '0x1891bD6A959B32977c438f3022678a8659364A72',
+  lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM LP (Diamond+)
+  lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',    // DTGC/PLS LP (Diamond)
   daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
-  stakingV2: '0x0c1984e3804Bd74DAaB66c4540bBeac751efB643',
-  lpStakingV2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
-  daoVoting: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
+  stakingV3: '0x0ba3d882f21b935412608d181501d59e99a8D0f9',    // NEW V3
+  lpStakingV3: '0x7C328FFF32AD66a03218D8A953435283782Bc84F',  // NEW V3
+  daoVotingV3: '0x4828A40bEd10c373718cA10B53A34208636CD8C4',  // NEW V3
   burn: '0x0000000000000000000000000000000000000369',
+  devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -539,6 +621,15 @@ const getStyles = (isDark) => `
   @keyframes pulse-gold {
     0%, 100% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.3); }
     50% { box-shadow: 0 0 40px rgba(212, 175, 55, 0.6); }
+  }
+
+  @keyframes goldGlow {
+    0%, 100% { 
+      filter: drop-shadow(0 0 10px rgba(212,175,55,0.5)) drop-shadow(0 0 20px rgba(212,175,55,0.3)) drop-shadow(0 0 30px rgba(212,175,55,0.2));
+    }
+    50% { 
+      filter: drop-shadow(0 0 15px rgba(212,175,55,0.8)) drop-shadow(0 0 30px rgba(212,175,55,0.5)) drop-shadow(0 0 45px rgba(212,175,55,0.3));
+    }
   }
 
   @keyframes pulse {
@@ -991,13 +1082,87 @@ const getStyles = (isDark) => `
     gap: 20px;
   }
 
-  @media (max-width: 1200px) { .tiers-grid { grid-template-columns: repeat(2, 1fr); } }
+  /* Responsive tier rows */
+  .tier-row-top {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .tier-row-diamonds {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 1200px) { 
+    .tiers-grid { grid-template-columns: repeat(2, 1fr); }
+  }
   @media (max-width: 768px) { 
     .tiers-grid { grid-template-columns: 1fr; }
+    .tier-row-top { grid-template-columns: 1fr; }
     .hero-title { font-size: 2.2rem; }
     .nav-content { flex-direction: column; gap: 14px; }
     .nav-links { display: none; }
     .main-content { padding: 0 20px 50px; }
+    .mobile-menu-toggle { display: flex !important; }
+  }
+
+  .mobile-menu-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: rgba(212,175,55,0.1);
+    border: 1px solid rgba(212,175,55,0.3);
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .mobile-menu-toggle:hover {
+    background: rgba(212,175,55,0.2);
+    border-color: var(--gold);
+  }
+
+  .mobile-nav-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-primary);
+    border-bottom: 2px solid var(--gold);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+
+  .mobile-nav-dropdown button {
+    width: 100%;
+    padding: 14px 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: rgba(212,175,55,0.1);
+    border: 1px solid rgba(212,175,55,0.2);
+    border-radius: 10px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: left;
+  }
+
+  .mobile-nav-dropdown button:hover,
+  .mobile-nav-dropdown button.active {
+    background: rgba(212,175,55,0.2);
+    border-color: var(--gold);
+    color: var(--gold);
   }
 
   .tier-card {
@@ -2279,6 +2444,64 @@ const getStyles = (isDark) => `
     margin-bottom: 24px;
     letter-spacing: 1px;
   }
+
+  /* Mobile Wallet Modal Styles */
+  .wallet-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(8px);
+  }
+
+  .wallet-modal-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%);
+    border: 2px solid #D4AF37;
+    border-radius: 20px;
+    padding: 32px;
+    max-width: 420px;
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.2);
+  }
+
+  .wallet-modal-title {
+    color: #D4AF37;
+    font-family: 'Cinzel', serif;
+    font-size: 1.5rem;
+    text-align: center;
+    margin-bottom: 24px;
+    letter-spacing: 2px;
+  }
+
+  @media (max-width: 768px) {
+    .wallet-modal-overlay {
+      align-items: flex-start;
+      padding-top: 40px;
+    }
+    .wallet-modal-content {
+      max-width: 300px;
+      width: 85%;
+      padding: 20px;
+      border-radius: 16px;
+      max-height: 60vh;
+    }
+    .wallet-modal-title {
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+    }
+    .wallet-option-btn {
+      padding: 12px 16px !important;
+      font-size: 0.85rem !important;
+    }
+  }
 `;
 
 // ═══════════════════════════════════════════════════════════════
@@ -2840,7 +3063,7 @@ export default function App() {
 
       // Force layout recalculation
       const forceRepaint = () => {
-        document.body.offsetHeight; // Trigger reflow
+        void document.body.offsetHeight; // Trigger reflow
       };
       requestAnimationFrame(forceRepaint);
     }
@@ -2855,6 +3078,7 @@ export default function App() {
   const [account, setAccount] = useState(null);
   const [activeTab, setActiveTab] = useState('stake');
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Testnet balances (stored in localStorage for persistence)
   const [testnetBalances, setTestnetBalances] = useState(() => {
@@ -2867,12 +3091,19 @@ export default function App() {
 
   const [dtgcBalance, setDtgcBalance] = useState('0');
   const [lpBalance, setLpBalance] = useState('0');
+  const [lpDtgcPlsBalance, setLpDtgcPlsBalance] = useState('0');   // Diamond tier LP
+  const [lpDtgcUrmomBalance, setLpDtgcUrmomBalance] = useState('0'); // Diamond+ tier LP
   const [plsBalance, setPlsBalance] = useState('0');
   const [urmomBalance, setUrmomBalance] = useState('0');
   const [selectedTier, setSelectedTier] = useState(null);
   const [stakeAmount, setStakeAmount] = useState('');
   const [stakeInputMode, setStakeInputMode] = useState('tokens'); // 'tokens' or 'currency'
   const [isLP, setIsLP] = useState(false);
+  const [gasSpeed, setGasSpeed] = useState('fast'); // 'normal', 'fast', 'urgent'
+  
+  // LP Staking Contract Rewards Remaining
+  const [stakingRewardsRemaining, setStakingRewardsRemaining] = useState('0');
+  const [lpStakingRewardsRemaining, setLpStakingRewardsRemaining] = useState('0');
 
   // Analytics Calculator State
   const [calcInvestment, setCalcInvestment] = useState('1000');
@@ -2881,6 +3112,15 @@ export default function App() {
   const [calcExitPrice, setCalcExitPrice] = useState('0.0003');
   const [calcTimeframe, setCalcTimeframe] = useState('12'); // months
   const [calcPriceDrop, setCalcPriceDrop] = useState('50'); // VaR price drop %
+
+  // Dynamic Stake Hedging Forecaster State
+  const [forecastInvestment, setForecastInvestment] = useState('10000');
+  const [forecastPriceChange, setForecastPriceChange] = useState('0'); // % change
+  const [forecastMonths, setForecastMonths] = useState('12');
+  const [forecastGoldPct, setForecastGoldPct] = useState('25');
+  const [forecastWhalePct, setForecastWhalePct] = useState('25');
+  const [forecastDiamondPct, setForecastDiamondPct] = useState('25');
+  const [forecastDiamondPlusPct, setForecastDiamondPlusPct] = useState('25');
 
   // Live crypto prices state
   const [cryptoPrices, setCryptoPrices] = useState({
@@ -2915,6 +3155,10 @@ export default function App() {
     SAR: 3.75,    // Saudi Riyal
     CNY: 7.24,    // Chinese Yuan
     CZK: 23.50,   // Czech Koruna
+    AUD: 1.55,    // Australian Dollar
+    NGN: 1550,    // Nigerian Naira
+    COP: 4100,    // Colombian Peso
+    CAD: 1.36,    // Canadian Dollar
   };
 
   // Metal prices state (per troy ounce in USD)
@@ -2926,14 +3170,201 @@ export default function App() {
     lastUpdated: null,
   });
 
+  // Fetch live metal prices from free API
+  const fetchMetalPrices = useCallback(async () => {
+    setMetalPrices(prev => ({ ...prev, loading: true }));
+    
+    try {
+      // Use MetalPriceAPI free tier (or fallback to multiple sources)
+      // Primary: Fetch from metals.live (free, no API key needed)
+      const response = await fetch('https://api.metals.live/v1/spot');
+      const data = await response.json();
+      
+      // metals.live returns array: [{gold: price}, {silver: price}, {platinum: price}, {palladium: price}]
+      // Or object with metal prices
+      let goldPrice = 2650, silverPrice = 31.50, copperPrice = 4.25;
+      
+      if (Array.isArray(data)) {
+        // Format: [{gold: 2650.00}, {silver: 31.50}, ...]
+        data.forEach(item => {
+          if (item.gold) goldPrice = parseFloat(item.gold);
+          if (item.silver) silverPrice = parseFloat(item.silver);
+          if (item.copper) copperPrice = parseFloat(item.copper);
+        });
+      } else if (data.gold || data.silver) {
+        // Format: {gold: 2650.00, silver: 31.50, ...}
+        goldPrice = parseFloat(data.gold) || goldPrice;
+        silverPrice = parseFloat(data.silver) || silverPrice;
+        copperPrice = parseFloat(data.copper) || copperPrice;
+      }
+      
+      setMetalPrices({
+        gold: goldPrice,
+        silver: silverPrice,
+        copper: copperPrice,
+        loading: false,
+        lastUpdated: new Date(),
+      });
+      
+      console.log('🥇 Metal prices updated:', { gold: goldPrice, silver: silverPrice, copper: copperPrice });
+    } catch (err) {
+      console.warn('Primary metals API failed, trying backup...', err.message);
+      
+      // Backup: Try alternative free API
+      try {
+        const backupRes = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+        const backupData = await backupRes.json();
+        
+        // goldprice.org format: {items: [{xauPrice: gold, xagPrice: silver}]}
+        if (backupData?.items?.[0]) {
+          const item = backupData.items[0];
+          setMetalPrices({
+            gold: parseFloat(item.xauPrice) || 2650,
+            silver: parseFloat(item.xagPrice) || 31.50,
+            copper: 4.25, // goldprice.org doesn't have copper
+            loading: false,
+            lastUpdated: new Date(),
+          });
+          console.log('🥇 Metal prices updated (backup):', { gold: item.xauPrice, silver: item.xagPrice });
+        }
+      } catch (backupErr) {
+        console.warn('Backup metals API also failed:', backupErr.message);
+        setMetalPrices(prev => ({ ...prev, loading: false }));
+      }
+    }
+  }, []);
+
+  // Fetch metal prices on mount and every 5 minutes
+  useEffect(() => {
+    fetchMetalPrices();
+    const interval = setInterval(fetchMetalPrices, 300000); // Refresh every 5 min
+    return () => clearInterval(interval);
+  }, [fetchMetalPrices]);
+
   const [position, setPosition] = useState(null);
   const [lpPosition, setLpPosition] = useState(null);
   const [stakedPositions, setStakedPositions] = useState([]);
+  
+  // ═══════════════════════════════════════════════════════════════
+  // DEBUG: Expose contract inspection to browser console
+  // Call: window.dtgcDebug.checkLPStake('0xYourAddress') from console
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    window.dtgcDebug = {
+      contracts: CONTRACT_ADDRESSES,
+      
+      // Direct LP contract check
+      checkLPStake: async (userAddress) => {
+        const addr = userAddress || account;
+        if (!addr) {
+          console.log('❌ No address provided. Usage: window.dtgcDebug.checkLPStake("0xYourAddress")');
+          return;
+        }
+        
+        console.log('🔍 Checking LP stake for:', addr);
+        const rpc = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+        const lpContract = new ethers.Contract(
+          CONTRACT_ADDRESSES.lpStakingV3,
+          FALLBACK_LP_STAKING_V3_ABI,
+          rpc
+        );
+        
+        try {
+          const position = await lpContract.getPosition(addr);
+          console.log('📋 LP Position raw result:');
+          console.log('  [0] Amount:', ethers.formatEther(position[0]), 'LP');
+          console.log('  [1] StartTime:', new Date(Number(position[1]) * 1000).toLocaleString());
+          console.log('  [2] UnlockTime:', new Date(Number(position[2]) * 1000).toLocaleString());
+          console.log('  [3] LockPeriod:', Number(position[3]), 'seconds');
+          console.log('  [4] APR bps:', Number(position[4]));
+          console.log('  [5] Boost bps:', Number(position[5]));
+          console.log('  [6] LP Type:', Number(position[6]), Number(position[6]) === 1 ? '(Diamond+)' : '(Diamond)');
+          console.log('  [7] isActive:', position[7]);
+          console.log('  [8] TimeRemaining:', Number(position[8]), 'seconds');
+          return position;
+        } catch (err) {
+          console.error('❌ getPosition Error:', err.message);
+          
+          // Try alternative methods
+          console.log('🔄 Trying alternative contract methods...');
+          try {
+            const balance = await lpContract.totalStaked();
+            console.log('📊 Contract total staked:', ethers.formatEther(balance), 'LP');
+          } catch (e) {
+            console.log('  totalStaked() not available');
+          }
+        }
+      },
+      
+      // Check DTGC stake
+      checkDTGCStake: async (userAddress) => {
+        const addr = userAddress || account;
+        if (!addr) {
+          console.log('❌ No address provided. Usage: window.dtgcDebug.checkDTGCStake("0xYourAddress")');
+          return;
+        }
+        
+        console.log('🔍 Checking DTGC stake for:', addr);
+        const rpc = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+        const contract = new ethers.Contract(
+          CONTRACT_ADDRESSES.stakingV3,
+          FALLBACK_STAKING_V3_ABI,
+          rpc
+        );
+        
+        try {
+          const position = await contract.getPosition(addr);
+          console.log('📋 DTGC Position:');
+          console.log('  [0] Amount:', ethers.formatEther(position[0]), 'DTGC');
+          console.log('  [6] Tier:', Number(position[6]), ['SILVER', 'GOLD', 'WHALE'][Number(position[6])]);
+          console.log('  [7] isActive:', position[7]);
+          return position;
+        } catch (err) {
+          console.error('❌ Error:', err.message);
+        }
+      },
+      
+      // Get current app state
+      getState: () => ({
+        account,
+        stakedPositions,
+        lpDtgcPlsBalance,
+        lpDtgcUrmomBalance,
+      }),
+    };
+    
+    console.log('🛠️ Debug tools ready! Try: window.dtgcDebug.checkLPStake("0xC1CD5a70815E2874D2db038F398f2D8939d8E87C")');
+  }, [account, stakedPositions, lpDtgcPlsBalance, lpDtgcUrmomBalance]);
+  
+  // Gold Records - Stake History
+  const [stakeHistory, setStakeHistory] = useState([]);
+  const [showGoldRecords, setShowGoldRecords] = useState(false);
+  
+  // Load stake history from localStorage on mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('dtgc-stake-history');
+    if (savedHistory) {
+      try {
+        setStakeHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.warn('Failed to load stake history:', e);
+      }
+    }
+  }, []);
   const [contractStats, setContractStats] = useState({ totalStaked: '0', stakers: '0' });
 
   // Live holder wallets for ticker (fetched from PulseChain API)
   const [liveHolders, setLiveHolders] = useState({
-    holders: HOLDER_WALLETS,
+    holders: HOLDER_WALLETS.map((w, i) => ({
+      ...w,
+      label: i < 3 ? `🐋 Whale ${i + 1}` : i < 8 ? `💎 Diamond ${i - 2}` : `🥇 Gold ${i - 7}`,
+    })),
+    totalHolders: 50,
+    trackedBalance: HOLDER_WALLETS.reduce((sum, h) => sum + h.balance, 0), // ~7.2M from fallback
+    trackedPctOfFloat: 8.0, // Approximate
+    trackedPctOfTotal: 0.72, // 7.2M / 1B
+    publicFloat: DTGC_TOTAL_SUPPLY * 0.09, // ~90M (9%)
+    controlledSupply: DTGC_TOTAL_SUPPLY * 0.91, // ~910M (91%)
     loading: true,
     lastUpdated: null,
     error: null,
@@ -2947,6 +3378,8 @@ export default function App() {
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
+  const [stakeWidgetMinimized, setStakeWidgetMinimized] = useState(false);
+  const [selectedStakeIndex, setSelectedStakeIndex] = useState(0); // For multi-stake toggle in hero
   const [modalType, setModalType] = useState('start');
 
   // DTGC Burn tracking state (live from blockchain)
@@ -2977,83 +3410,6 @@ export default function App() {
     circulating: SUPPLY_WALLETS.circulating.expected,
     lastUpdated: null,
   });
-
-  // Password Gate Screen
-  if (PASSWORD_ENABLED && !isAuthenticated) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'Arial, sans-serif',
-      }}>
-        <div style={{
-          background: 'rgba(26,35,39,0.95)',
-          border: '2px solid #D4AF37',
-          borderRadius: '20px',
-          padding: '40px',
-          maxWidth: '400px',
-          width: '90%',
-          textAlign: 'center',
-          boxShadow: '0 20px 60px rgba(212,175,55,0.2)',
-        }}>
-          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🔐</div>
-          <h1 style={{ color: '#D4AF37', fontSize: '1.8rem', marginBottom: '10px', fontWeight: 800 }}>
-            DT GOLD COIN
-          </h1>
-          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '30px', letterSpacing: '1px' }}>
-            MAINNET PREVIEW • RESTRICTED ACCESS
-          </p>
-          <form onSubmit={handlePasswordSubmit}>
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              placeholder="Enter password"
-              style={{
-                width: '100%',
-                padding: '15px 20px',
-                fontSize: '1rem',
-                background: 'rgba(0,0,0,0.5)',
-                border: passwordError ? '2px solid #F44336' : '2px solid rgba(212,175,55,0.3)',
-                borderRadius: '10px',
-                color: '#fff',
-                marginBottom: '15px',
-                outline: 'none',
-                textAlign: 'center',
-                letterSpacing: '3px',
-                boxSizing: 'border-box',
-              }}
-              autoFocus
-            />
-            {passwordError && (
-              <p style={{ color: '#F44336', fontSize: '0.85rem', marginBottom: '15px' }}>
-                ❌ Incorrect password
-              </p>
-            )}
-            <button type="submit" style={{
-              width: '100%',
-              padding: '15px 30px',
-              fontSize: '1rem',
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #D4AF37 0%, #F4D03F 100%)',
-              border: 'none',
-              borderRadius: '10px',
-              color: '#000',
-              cursor: 'pointer',
-            }}>
-              ENTER SITE
-            </button>
-          </form>
-          <p style={{ color: '#555', fontSize: '0.7rem', marginTop: '30px', letterSpacing: '1px' }}>
-            A dtgc.io contract on PulseChain
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   // Toast notification helper - defined early so all callbacks can use it
   const showToast = (message, type) => {
@@ -3109,46 +3465,119 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchSupplyDynamics]);
 
-  // Fetch live holder data from PulseChain Explorer API
+  // Fetch live holder data from our Vercel API route (proxies PulseChain API)
   const fetchLiveHolders = useCallback(async () => {
     try {
       const response = await fetch(PULSECHAIN_API.holders);
       
       if (!response.ok) {
-        throw new Error('API request failed');
+        throw new Error(`API returned ${response.status}`);
       }
       
       const data = await response.json();
       
-      // Process holders - filter out excluded wallets (DAO, Dev, LP, Burn)
-      const holders = (data.items || [])
-        .filter(item => !EXCLUDED_WALLETS.includes(item.address?.hash?.toLowerCase()))
-        .slice(0, 20) // Top 20 holders
+      // Handle Vercel API response format
+      if (!data.success && data.error) {
+        throw new Error(data.error);
+      }
+      
+      // Get items from either format (direct API or Vercel proxy)
+      const allItems = data.holders || data.items || [];
+      const totalHolders = data.totalHolders || (data.next_page_params ? 100 : allItems.length);
+      
+      if (allItems.length === 0) {
+        throw new Error('No items in API response');
+      }
+      
+      // Calculate ACTUAL controlled supply by summing excluded wallet balances from API
+      let controlledSupply = 0;
+      const excludedBalances = {};
+      
+      allItems.forEach(item => {
+        const addr = (item.address?.hash || item.address)?.toLowerCase();
+        if (addr && EXCLUDED_WALLETS.includes(addr)) {
+          const balance = parseFloat(item.value) / 1e18;
+          controlledSupply += balance;
+          excludedBalances[addr] = balance;
+        }
+      });
+      
+      // If no excluded wallets found in first page, use known values
+      if (controlledSupply === 0) {
+        controlledSupply = 820000000 + 87000000; // ~907M (Dev + LP)
+      }
+      
+      // Calculate actual public float
+      const actualPublicFloat = DTGC_TOTAL_SUPPLY - controlledSupply;
+      
+      // Process ALL public holders - filter out excluded wallets
+      const holders = allItems
+        .filter(item => {
+          const addr = (item.address?.hash || item.address)?.toLowerCase();
+          return addr && !EXCLUDED_WALLETS.includes(addr);
+        })
+        .map((item) => {
+          const addr = item.address?.hash || item.address;
+          return {
+            address: `${addr?.slice(0, 6)}...${addr?.slice(-4)}`,
+            fullAddress: addr,
+            balance: parseFloat(item.value) / 1e18,
+          };
+        })
+        .slice(0, 50) // Top 50 public holders
         .map((item, index) => ({
-          address: `${item.address?.hash?.slice(0, 6)}...${item.address?.hash?.slice(-4)}`,
-          fullAddress: item.address?.hash,
-          balance: parseFloat(item.value) / 1e18, // Convert from wei
-          label: index < 3 ? `Whale ${index + 1}` : 
-                 index < 6 ? `Diamond ${index - 2}` : 
-                 `Holder ${index - 5}`,
+          ...item,
+          label: index < 3 ? `🐋 Whale ${index + 1}` : 
+                 index < 8 ? `💎 Diamond ${index - 2}` : 
+                 index < 15 ? `🥇 Gold ${index - 7}` :
+                 `🥈 Holder ${index - 14}`,
         }));
 
-      if (holders.length > 0) {
-        setLiveHolders({
-          holders,
-          loading: false,
-          lastUpdated: new Date(),
-          error: null,
-        });
-        console.log('📊 Live holders updated:', holders.length, 'wallets');
-      } else {
-        throw new Error('No holder data received');
+      if (holders.length === 0) {
+        throw new Error('All holders filtered out');
       }
+
+      // Calculate tracked supply as % of PUBLIC FLOAT
+      const trackedBalance = holders.reduce((sum, h) => sum + h.balance, 0);
+      const trackedPctOfFloat = actualPublicFloat > 0 ? (trackedBalance / actualPublicFloat * 100) : 0;
+      const trackedPctOfTotal = (trackedBalance / DTGC_TOTAL_SUPPLY * 100);
+
+      setLiveHolders({
+        holders,
+        totalHolders: totalHolders,
+        trackedBalance,
+        trackedPctOfFloat,
+        trackedPctOfTotal,
+        publicFloat: actualPublicFloat,
+        controlledSupply,
+        loading: false,
+        lastUpdated: new Date(),
+        error: null,
+      });
+      console.log('📊 Live holders:', holders.length, 'wallets |', 
+        'Tracked:', (trackedBalance/1e6).toFixed(2), 'M |',
+        'Float:', (actualPublicFloat/1e6).toFixed(2), 'M |',
+        '% of float:', trackedPctOfFloat.toFixed(1), '%');
     } catch (err) {
       console.warn('⚠️ Holder API error, using fallback:', err.message);
+      
+      // Calculate stats from fallback data
+      const fallbackHolders = HOLDER_WALLETS.map((w, i) => ({
+        ...w,
+        label: i < 3 ? `🐋 Whale ${i + 1}` : i < 8 ? `💎 Diamond ${i - 2}` : `🥇 Gold ${i - 7}`,
+      }));
+      const fallbackTracked = fallbackHolders.reduce((sum, h) => sum + h.balance, 0);
+      const fallbackFloat = DTGC_TOTAL_SUPPLY * 0.09; // ~9% float estimate
+      
       setLiveHolders(prev => ({
         ...prev,
-        holders: prev.holders.length > 0 ? prev.holders : HOLDER_WALLETS,
+        holders: fallbackHolders,
+        totalHolders: prev.totalHolders || 50,
+        trackedBalance: fallbackTracked,
+        trackedPctOfFloat: (fallbackTracked / fallbackFloat * 100),
+        trackedPctOfTotal: (fallbackTracked / DTGC_TOTAL_SUPPLY * 100),
+        publicFloat: fallbackFloat,
+        controlledSupply: DTGC_TOTAL_SUPPLY * 0.91,
         loading: false,
         error: err.message,
       }));
@@ -3222,26 +3651,57 @@ export default function App() {
   const fetchCryptoPrices = useCallback(async () => {
     try {
       // Fetch from CoinGecko for BTC/ETH
-      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
+      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,pulsechain&vs_currencies=usd');
       const cgData = await cgRes.json();
 
-      // Fetch PLS from DexScreener (PLS/DAI pair)
-      const plsRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x6753560538eca67617a9ce605b2a2c5b3494b666');
-      const plsData = await plsRes.json();
-      const plsPair = plsData?.pair || plsData?.pairs?.[0];
+      // Fetch PLS from DexScreener - use WPLS/DAI pair (most liquid)
+      // Primary: WPLS/DAI pair
+      let plsPrice = 0.00003;
+      try {
+        const plsRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0xA1077a294dDE1B09bB078844df40758a5D0f9a27');
+        const plsData = await plsRes.json();
+        // Get best pair by liquidity
+        if (plsData?.pairs?.length > 0) {
+          const bestPair = plsData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          plsPrice = parseFloat(bestPair?.priceUsd) || plsPrice;
+        }
+      } catch (e) {
+        console.warn('PLS price fetch failed:', e.message);
+      }
 
-      // Fetch PLSX from DexScreener
-      const plsxRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9');
-      const plsxData = await plsxRes.json();
-      const plsxPair = plsxData?.pair || plsxData?.pairs?.[0];
+      // Fetch PLSX from DexScreener - search by token address
+      let plsxPrice = 0.00002;
+      try {
+        const plsxRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x95B303987A60C71504D99Aa1b13B4DA07b0790ab');
+        const plsxData = await plsxRes.json();
+        // Get best pair by liquidity
+        if (plsxData?.pairs?.length > 0) {
+          const bestPair = plsxData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          plsxPrice = parseFloat(bestPair?.priceUsd) || plsxPrice;
+        }
+      } catch (e) {
+        console.warn('PLSX price fetch failed:', e.message);
+      }
+
+      // Use CoinGecko PLS price as fallback/primary if available
+      if (cgData?.pulsechain?.usd) {
+        plsPrice = cgData.pulsechain.usd;
+      }
 
       setCryptoPrices({
         btc: cgData?.bitcoin?.usd || 42000,
         eth: cgData?.ethereum?.usd || 2200,
-        pls: parseFloat(plsPair?.priceUsd) || 0.00003,
-        plsx: parseFloat(plsxPair?.priceUsd) || 0.00002,
+        pls: plsPrice,
+        plsx: plsxPrice,
         loading: false,
         lastUpdated: new Date(),
+      });
+      
+      console.log('💰 Crypto prices updated:', { 
+        btc: cgData?.bitcoin?.usd, 
+        eth: cgData?.ethereum?.usd, 
+        pls: plsPrice, 
+        plsx: plsxPrice 
       });
     } catch (err) {
       console.warn('Failed to fetch crypto prices:', err.message);
@@ -3295,13 +3755,13 @@ export default function App() {
     try {
       const rpcProvider = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
       const dtgcContract = new ethers.Contract(
-        CONTRACTS.DTGC,
+        DTGC_TOKEN_ADDRESS,
         ['function balanceOf(address) view returns (uint256)'],
         rpcProvider
       );
 
       // Fetch balance of burn address (0x...369)
-      const burnBalance = await dtgcContract.balanceOf(BURN_ADDRESS);
+      const burnBalance = await dtgcContract.balanceOf(DTGC_BURN_ADDRESS);
       const burnedAmount = parseFloat(ethers.formatEther(burnBalance));
 
       // Update state
@@ -3312,10 +3772,15 @@ export default function App() {
         loading: false,
       }));
 
-      console.log(`🔥 DTGC Burned: ${formatNumber(burnedAmount)}`);
+      console.log(`🔥 DTGC Burned: ${formatNumber(burnedAmount)} (from ${DTGC_BURN_ADDRESS})`);
     } catch (err) {
       console.error('Failed to fetch DTGC burns:', err);
-      setDtgcBurnData(prev => ({ ...prev, loading: false }));
+      // Set a fallback value if fetch fails
+      setDtgcBurnData(prev => ({ 
+        ...prev, 
+        burned: prev.burned || 22240000, // Fallback to ~22.24M
+        loading: false 
+      }));
     }
   }, []);
 
@@ -3402,7 +3867,18 @@ export default function App() {
 
     let needsMigration = false;
     const migratedPositions = testnetBalances.positions.map(pos => {
-      const tierName = pos.tier?.toUpperCase() || (pos.isLP ? 'DIAMOND' : 'GOLD');
+      // Handle tier as either string or number
+      const TIER_NAMES_MAP = ['SILVER', 'GOLD', 'WHALE'];
+      let tierName;
+      if (typeof pos.tier === 'string') {
+        tierName = pos.tier.toUpperCase();
+      } else if (typeof pos.tier === 'number') {
+        tierName = TIER_NAMES_MAP[pos.tier] || 'GOLD';
+      } else if (pos.isLP) {
+        tierName = pos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND';
+      } else {
+        tierName = 'GOLD';
+      }
       const tierConfig = V19_TIER_CONFIG[tierName];
 
       if (!tierConfig) return pos;
@@ -3454,6 +3930,9 @@ export default function App() {
         initTestnetBalances();
       }
       
+      // Close wallet modal after testnet connection
+      setShowWalletModal(false);
+      
       showToast('🧪 TESTNET: Wallet connected with 100M PLS!', 'success');
       return;
     }
@@ -3498,115 +3977,106 @@ export default function App() {
       return;
     }
 
+    // Check if any wallet provider exists
+    if (!window.ethereum) {
+      // Only redirect to download if NO wallet is installed at all
+      const downloadUrls = {
+        internetmoney: 'https://internetmoney.io/',
+        metamask: 'https://metamask.io/download/',
+        rabby: 'https://rabby.io/',
+        okx: 'https://www.okx.com/web3',
+        coinbase: 'https://www.coinbase.com/wallet',
+      };
+      window.open(downloadUrls[walletType] || 'https://metamask.io/download/', '_blank');
+      showToast('No wallet detected. Please install a Web3 wallet.', 'info');
+      return;
+    }
+
     try {
       setLoading(true);
-      let provider;
-
-      switch (walletType) {
-        case 'internetmoney':
-          if (!window.ethereum) {
-            window.open('https://internetmoney.io/', '_blank');
-            showToast('Please install Internet Money Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
-          break;
-
-        case 'metamask':
-          if (!window.ethereum?.isMetaMask) {
-            window.open('https://metamask.io/download/', '_blank');
-            showToast('Please install MetaMask', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
-          break;
-
-        case 'rabby':
-          if (!window.ethereum) {
-            window.open('https://rabby.io/', '_blank');
-            showToast('Please install Rabby Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
-          break;
-
-        case 'okx':
-          if (!window.okxwallet && !window.ethereum) {
-            window.open('https://www.okx.com/web3', '_blank');
-            showToast('Please install OKX Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.okxwallet || window.ethereum);
-          break;
-
-        case 'coinbase':
-          if (!window.ethereum?.isCoinbaseWallet && !window.coinbaseWalletExtension) {
-            window.open('https://www.coinbase.com/wallet', '_blank');
-            showToast('Please install Coinbase Wallet', 'info');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.coinbaseWalletExtension || window.ethereum);
-          break;
-
-        default:
-          // Generic - try any available provider
-          if (!window.ethereum) {
-            showToast('No wallet detected', 'error');
-            setLoading(false);
-            return;
-          }
-          provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // Use the appropriate provider
+      let ethProvider = window.ethereum;
+      
+      // Check for specific wallet providers (but don't fail if not found)
+      if (walletType === 'okx' && window.okxwallet) {
+        ethProvider = window.okxwallet;
+      } else if (walletType === 'coinbase' && window.coinbaseWalletExtension) {
+        ethProvider = window.coinbaseWalletExtension;
       }
-
-      // Request accounts from the wallet
-      const ethProvider = window.okxwallet || window.ethereum;
-
-      // Request permission to see all accounts
-      await ethProvider.request({
-        method: 'wallet_requestPermissions',
-        params: [{ eth_accounts: {} }],
-      });
-
-      const accounts = await provider.send('eth_requestAccounts', []);
-
-      // If multiple accounts, show account selector
-      if (accounts.length > 1) {
-        setAvailableAccounts(accounts);
-        setSelectedWalletType(walletType);
-        setWalletStep('accounts');
-        setProvider(provider);
-        setLoading(false);
-        return;
-      }
-
-      // Single account - connect directly
-      const signer = await provider.getSigner();
-      const network = await provider.getNetwork();
-
-      if (Number(network.chainId) !== CHAIN_ID) {
-        await ethProvider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x171' }],
+      
+      // For wallets like Rabby that can have multiple providers
+      if (window.ethereum.providers?.length) {
+        // Try to find the specific wallet provider
+        const specificProvider = window.ethereum.providers.find(p => {
+          if (walletType === 'metamask') return p.isMetaMask;
+          if (walletType === 'coinbase') return p.isCoinbaseWallet;
+          if (walletType === 'rabby') return p.isRabby;
+          return false;
         });
+        if (specificProvider) {
+          ethProvider = specificProvider;
+        }
       }
 
+      // Create ethers provider
+      const provider = new ethers.BrowserProvider(ethProvider);
+
+      // Simply request accounts - this triggers the wallet popup
+      const accounts = await provider.send('eth_requestAccounts', []);
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned');
+      }
+
+      // Check network and switch if needed
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== CHAIN_ID) {
+        try {
+          await ethProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x171' }], // PulseChain
+          });
+        } catch (switchError) {
+          // If chain doesn't exist, add it
+          if (switchError.code === 4902) {
+            await ethProvider.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x171',
+                chainName: 'PulseChain',
+                nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                rpcUrls: ['https://rpc.pulsechain.com'],
+                blockExplorerUrls: ['https://otter.pulsechain.com'],
+              }],
+            });
+          } else {
+            console.warn('Could not switch chain:', switchError);
+          }
+        }
+      }
+
+      // Get signer
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      // Update state
       setProvider(provider);
       setSigner(signer);
-      setAccount(accounts[0]);
+      setAccount(address);
       setShowWalletModal(false);
-      setWalletStep('select');
-      showToast(`${walletType.charAt(0).toUpperCase() + walletType.slice(1)} connected!`, 'success');
+      
+      showToast(`✅ ${walletType.charAt(0).toUpperCase() + walletType.slice(1)} connected!`, 'success');
+
     } catch (err) {
-      console.error(err);
-      if (err.code === 4001) {
-        showToast('Connection rejected by user', 'error');
+      console.error('Wallet connection error:', err);
+      
+      if (err.code === 4001 || err.message?.includes('rejected')) {
+        showToast('Connection rejected by user', 'info');
+      } else if (err.code === -32002) {
+        showToast('Please check your wallet - connection pending', 'info');
       } else {
-        showToast('Connection failed', 'error');
+        showToast('Connection failed. Please try again.', 'error');
       }
     } finally {
       setLoading(false);
@@ -3661,6 +4131,250 @@ export default function App() {
     showToast('Wallet disconnected', 'info');
   };
 
+  // Switch wallet - prompts user to select a different account
+  const switchWallet = async () => {
+    if (!window.ethereum) {
+      showToast('No wallet detected', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('🔄 Select account in your wallet...', 'info');
+
+      // Request permission to access accounts - this opens the account picker
+      await window.ethereum.request({
+        method: 'wallet_requestPermissions',
+        params: [{ eth_accounts: {} }]
+      });
+
+      // Get the newly selected accounts
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts'
+      });
+
+      if (accounts && accounts.length > 0) {
+        const newAccount = accounts[0];
+        
+        // Update provider and signer for new account
+        const newProvider = new ethers.BrowserProvider(window.ethereum);
+        const newSigner = await newProvider.getSigner();
+        
+        setAccount(newAccount);
+        setProvider(newProvider);
+        setSigner(newSigner);
+        
+        // Clear old positions so they refresh for new account
+        setStakedPositions([]);
+        
+        showToast(`✅ Switched to ${newAccount.slice(0,6)}...${newAccount.slice(-4)}`, 'success');
+      }
+    } catch (err) {
+      console.error('Switch wallet error:', err);
+      if (err.code === 4001) {
+        showToast('Account switch cancelled', 'info');
+      } else {
+        showToast('Could not switch accounts', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // WalletConnect v2 connection (requires @walletconnect/ethereum-provider package)
+  const connectWalletConnect = async () => {
+    if (TESTNET_MODE) {
+      connectWallet();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('Initializing WalletConnect...', 'info');
+
+      // Check if package is available
+      let EthereumProvider;
+      try {
+        const module = await import('@walletconnect/ethereum-provider');
+        EthereumProvider = module.EthereumProvider;
+      } catch (importErr) {
+        // Package not installed - show mobile options
+        console.log('WalletConnect package not installed, showing mobile options');
+        setLoading(false);
+        
+        // For mobile users, show deep link options
+        if (isMobileBrowser) {
+          showToast('📱 Opening wallet selector...', 'info');
+          // Show a simple alert with options
+          const choice = window.confirm(
+            'Choose your wallet:\n\n' +
+            '• OK = MetaMask\n' +
+            '• Cancel = Other wallet (Trust/Rainbow/Coinbase)\n\n' +
+            'Your wallet will open and load this site.'
+          );
+          if (choice) {
+            openInWalletBrowser('metamask');
+          } else {
+            // Show more options
+            const wallet = window.prompt(
+              'Enter wallet name:\n' +
+              '1 = Trust Wallet\n' +
+              '2 = Rainbow\n' +
+              '3 = Coinbase\n' +
+              '4 = OKX'
+            );
+            if (wallet === '1') openInWalletBrowser('trust');
+            else if (wallet === '2') openInWalletBrowser('rainbow');
+            else if (wallet === '3') openInWalletBrowser('coinbase');
+            else if (wallet === '4') openInWalletBrowser('okx');
+          }
+        } else {
+          showToast('💡 On desktop? Use MetaMask/Internet Money extension. On mobile? Tap a wallet below.', 'info');
+        }
+        return;
+      }
+
+      const wcProvider = await EthereumProvider.init({
+        projectId: WALLETCONNECT_PROJECT_ID,
+        chains: [CHAIN_ID], // PulseChain
+        showQrModal: true,
+        qrModalOptions: {
+          themeMode: 'dark',
+        },
+        metadata: {
+          name: 'DTGC Premium Staking',
+          description: 'Premium DeFi Staking on PulseChain',
+          url: window.location.origin,
+          icons: [`${window.location.origin}/favicon1.png`],
+        },
+        rpcMap: {
+          [CHAIN_ID]: 'https://rpc.pulsechain.com',
+        },
+      });
+
+      // Connect and open QR modal
+      await wcProvider.connect();
+
+      const ethersProvider = new ethers.BrowserProvider(wcProvider);
+      const signer = await ethersProvider.getSigner();
+      const address = await signer.getAddress();
+
+      setProvider(ethersProvider);
+      setSigner(signer);
+      setAccount(address);
+      setShowWalletModal(false);
+      showToast('✅ Connected via WalletConnect!', 'success');
+
+      // Handle disconnect
+      wcProvider.on('disconnect', () => {
+        disconnectWallet();
+        showToast('WalletConnect disconnected', 'info');
+      });
+
+    } catch (err) {
+      console.error('WalletConnect error:', err);
+      if (err.message?.includes('User rejected') || err.code === 4001) {
+        showToast('Connection cancelled', 'info');
+      } else {
+        showToast('WalletConnect failed. Use browser wallet or mobile links.', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quick connect - uses any available provider
+  const connectAnyWallet = async () => {
+    if (TESTNET_MODE) {
+      connectWallet();
+      return;
+    }
+
+    if (!window.ethereum) {
+      showToast('No wallet detected. Please install MetaMask or another Web3 wallet.', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send('eth_requestAccounts', []);
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts');
+      }
+
+      // Check/switch network
+      const network = await provider.getNetwork();
+      if (Number(network.chainId) !== CHAIN_ID) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x171' }],
+          });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x171',
+                chainName: 'PulseChain',
+                nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                rpcUrls: ['https://rpc.pulsechain.com'],
+                blockExplorerUrls: ['https://otter.pulsechain.com'],
+              }],
+            });
+          }
+        }
+      }
+
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      setProvider(provider);
+      setSigner(signer);
+      setAccount(address);
+      setShowWalletModal(false);
+      showToast('✅ Wallet connected!', 'success');
+
+    } catch (err) {
+      console.error('Connection error:', err);
+      if (err.code === 4001 || err.message?.includes('rejected')) {
+        showToast('Connection rejected', 'info');
+      } else if (err.code === -32002) {
+        showToast('Check your wallet - connection request pending', 'info');
+      } else {
+        showToast('Connection failed', 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mobile wallet deep links
+  const openInWalletBrowser = (walletType) => {
+    const currentUrl = window.location.href;
+    const host = window.location.host;
+    
+    const deepLinks = {
+      metamask: `https://metamask.app.link/dapp/${host}`,
+      trust: `trust://open_url?coin_id=60&url=${encodeURIComponent(currentUrl)}`,
+      rainbow: `https://rnbwapp.com/dapp?url=${encodeURIComponent(currentUrl)}`,
+      imtoken: `imtokenv2://navigate/DappView?url=${encodeURIComponent(currentUrl)}`,
+      coinbase: `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(currentUrl)}`,
+      tokenpocket: `tpoutside://open?url=${encodeURIComponent(currentUrl)}`,
+      okx: `okx://wallet/dapp/details?dappUrl=${encodeURIComponent(currentUrl)}`,
+    };
+
+    const link = deepLinks[walletType];
+    if (link) {
+      window.location.href = link;
+    }
+  };
+
+  // Check if running in mobile browser (not wallet browser)
+  const isMobileBrowser = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && !window.ethereum;
+
   // Format balance with currency conversion
   const formatBalanceWithCurrency = (balance, tokenType = 'dtgc') => {
     const numBalance = parseFloat(balance) || 0;
@@ -3704,6 +4418,14 @@ export default function App() {
         return `¥${(valueUsd * CURRENCY_RATES.CNY).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       case 'czk':
         return `Kč${(valueUsd * CURRENCY_RATES.CZK).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'aud':
+        return `A$${(valueUsd * CURRENCY_RATES.AUD).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'ngn':
+        return `₦${(valueUsd * CURRENCY_RATES.NGN).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+      case 'cop':
+        return `$${(valueUsd * CURRENCY_RATES.COP).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+      case 'cad':
+        return `C$${(valueUsd * CURRENCY_RATES.CAD).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       default:
         return `${formatNumber(numBalance)} ${tokenType.toUpperCase()}`;
     }
@@ -3719,6 +4441,10 @@ export default function App() {
       case 'sar': return { value: valueUsd * CURRENCY_RATES.SAR, symbol: '﷼', code: 'SAR' };
       case 'cny': return { value: valueUsd * CURRENCY_RATES.CNY, symbol: '¥', code: 'CNY' };
       case 'czk': return { value: valueUsd * CURRENCY_RATES.CZK, symbol: 'Kč', code: 'CZK' };
+      case 'aud': return { value: valueUsd * CURRENCY_RATES.AUD, symbol: 'A$', code: 'AUD' };
+      case 'ngn': return { value: valueUsd * CURRENCY_RATES.NGN, symbol: '₦', code: 'NGN' };
+      case 'cop': return { value: valueUsd * CURRENCY_RATES.COP, symbol: '$', code: 'COP' };
+      case 'cad': return { value: valueUsd * CURRENCY_RATES.CAD, symbol: 'C$', code: 'CAD' };
       default: return { value: valueUsd, symbol: '$', code: 'USD' };
     }
   };
@@ -3732,6 +4458,10 @@ export default function App() {
       case 'sar': return value / CURRENCY_RATES.SAR;
       case 'cny': return value / CURRENCY_RATES.CNY;
       case 'czk': return value / CURRENCY_RATES.CZK;
+      case 'aud': return value / CURRENCY_RATES.AUD;
+      case 'ngn': return value / CURRENCY_RATES.NGN;
+      case 'cop': return value / CURRENCY_RATES.COP;
+      case 'cad': return value / CURRENCY_RATES.CAD;
       default: return value;
     }
   };
@@ -3746,13 +4476,17 @@ export default function App() {
       case 'sar': return '﷼';
       case 'cny': return '¥';
       case 'czk': return 'Kč';
+      case 'aud': return 'A$';
+      case 'ngn': return '₦';
+      case 'cop': return '$';
+      case 'cad': return 'C$';
       default: return '$';
     }
   };
 
   // Toggle currency display
   const toggleCurrencyDisplay = () => {
-    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy', 'sar', 'cny', 'czk'];
+    const currencies = ['units', 'usd', 'eur', 'gbp', 'jpy', 'sar', 'cny', 'czk', 'aud', 'ngn', 'cop', 'cad'];
     const currentIndex = currencies.indexOf(displayCurrency);
     const nextCurrency = currencies[(currentIndex + 1) % currencies.length];
     setDisplayCurrency(nextCurrency);
@@ -3779,16 +4513,53 @@ export default function App() {
         const urmomBal = await urmomContract.balanceOf(account);
         setUrmomBalance(ethers.formatEther(urmomBal));
 
-        // Get LP balance
-        const lpContract = new ethers.Contract(CONTRACTS.LP_TOKEN, ERC20_ABI, provider);
-        const lpBal = await lpContract.balanceOf(account);
-        setLpBalance(ethers.formatEther(lpBal));
+        // Get DTGC/PLS LP balance (Diamond tier)
+        let lpPlsBal = 0n;
+        try {
+          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+          lpPlsBal = await lpPlsContract.balanceOf(account);
+          setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
+        } catch (e) {
+          console.warn('Could not fetch DTGC/PLS LP balance:', e);
+          setLpDtgcPlsBalance('0');
+        }
+
+        // Get DTGC/URMOM LP balance (Diamond+ tier)
+        let lpUrmomBal = 0n;
+        try {
+          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+          lpUrmomBal = await lpUrmomContract.balanceOf(account);
+          setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
+          setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
+        } catch (e) {
+          console.warn('Could not fetch DTGC/URMOM LP balance:', e);
+          setLpDtgcUrmomBalance('0');
+        }
+
+        // Get Staking Contract Rewards Remaining (DTGC balance in staking contract)
+        try {
+          const stakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.stakingV3);
+          setStakingRewardsRemaining(ethers.formatEther(stakingRewards));
+        } catch (e) {
+          console.warn('Could not fetch staking rewards:', e);
+          setStakingRewardsRemaining('0');
+        }
+
+        // Get LP Staking Contract Rewards Remaining (DTGC balance in LP staking contract)
+        try {
+          const lpStakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.lpStakingV3);
+          setLpStakingRewardsRemaining(ethers.formatEther(lpStakingRewards));
+        } catch (e) {
+          console.warn('Could not fetch LP staking rewards:', e);
+          setLpStakingRewardsRemaining('0');
+        }
 
         console.log('📊 Mainnet balances loaded:', {
           pls: ethers.formatEther(plsBal),
           dtgc: ethers.formatEther(dtgcBal),
           urmom: ethers.formatEther(urmomBal),
-          lp: ethers.formatEther(lpBal)
+          lpDtgcPls: ethers.formatEther(lpPlsBal || 0n),
+          lpDtgcUrmom: ethers.formatEther(lpUrmomBal || 0n)
         });
       } catch (err) {
         console.error('Failed to fetch balances:', err);
@@ -3822,10 +4593,18 @@ export default function App() {
 
     // TESTNET MODE - Simulate staking
     if (TESTNET_MODE) {
-      const balance = isLP ? parseFloat(lpBalance) : parseFloat(dtgcBalance);
+      const getBalance = () => {
+        if (!isLP) return parseFloat(dtgcBalance);
+        return selectedTier === 4 ? parseFloat(lpDtgcUrmomBalance) : parseFloat(lpDtgcPlsBalance);
+      };
+      const getLpName = () => {
+        if (!isLP) return 'DTGC';
+        return selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP';
+      };
+      const balance = getBalance();
 
       if (amount > balance) {
-        showToast(`Insufficient ${isLP ? 'LP' : 'DTGC'} balance!`, 'error');
+        showToast(`Insufficient ${getLpName()} balance!`, 'error');
         return;
       }
       
@@ -3887,6 +4666,40 @@ export default function App() {
       return;
     }
 
+    // Check balance before proceeding
+    const walletBalance = isLP 
+      ? (selectedTier === 4 ? parseFloat(lpDtgcUrmomBalance) : parseFloat(lpDtgcPlsBalance))
+      : parseFloat(dtgcBalance);
+    
+    if (walletBalance <= 0) {
+      showToast(`❌ You have no ${isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC'} tokens to stake!`, 'error');
+      return;
+    }
+    
+    if (amount > walletBalance) {
+      showToast(`❌ Insufficient balance! You have ${formatNumber(walletBalance)} ${isLP ? 'LP' : 'DTGC'}`, 'error');
+      return;
+    }
+
+    // Check if user already has an active LP stake (contract may only allow 1)
+    if (isLP) {
+      const existingLpStake = stakedPositions.find(p => p.isLP);
+      if (existingLpStake) {
+        showToast(`⚠️ You already have an active LP stake (${formatNumber(existingLpStake.amount)} LP). Unstake first or wait for lock to expire.`, 'warning');
+        console.warn('🚫 User already has LP stake:', existingLpStake);
+        return;
+      }
+    }
+
+    console.log('💰 Pre-flight checks passed:', { 
+      walletBalance, 
+      stakingAmount: amount, 
+      isLP, 
+      selectedTier,
+      tokenType: isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC',
+      existingPositions: stakedPositions.length
+    });
+
     try {
       setLoading(true);
       setModalType('start');
@@ -3895,35 +4708,186 @@ export default function App() {
       const amountWei = ethers.parseEther(amount.toString());
 
       // Determine which token and contract to use
-      const tokenAddress = isLP ? CONTRACTS.LP_TOKEN : CONTRACTS.DTGC;
-      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
-      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      let tokenAddress;
+      if (isLP) {
+        // Use correct LP token based on tier
+        tokenAddress = selectedTier === 4 ? CONTRACT_ADDRESSES.lpDtgcUrmom : CONTRACT_ADDRESSES.lpDtgcPls;
+      } else {
+        tokenAddress = CONTRACTS.DTGC;
+      }
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+
+      console.log('🔄 Starting stake process...', { 
+        tokenAddress, 
+        stakingAddress, 
+        amount, 
+        amountWei: amountWei.toString(),
+        isLP: isLP,
+        selectedTier: selectedTier,
+        tierName: tierData.name
+      });
 
       // Step 1: Check and approve token spending
-      showToast('Step 1/2: Approving tokens...', 'info');
+      showToast('Step 1/2: Checking approval...', 'info');
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
 
       const currentAllowance = await tokenContract.allowance(account, stakingAddress);
+      console.log('📋 Current allowance:', currentAllowance.toString());
+      
       if (currentAllowance < amountWei) {
+        console.log('🔓 Requesting token approval...');
+        showToast('Step 1/2: Approve tokens in wallet...', 'info');
         const approveTx = await tokenContract.approve(stakingAddress, ethers.MaxUint256);
+        console.log('⏳ Approval tx sent:', approveTx.hash);
         await approveTx.wait();
+        console.log('✅ Approval confirmed!');
         showToast('Token approval confirmed!', 'success');
+      } else {
+        console.log('✅ Already approved, skipping approval step');
       }
 
       // Step 2: Stake tokens
-      showToast('Step 2/2: Staking tokens...', 'info');
+      console.log('🔄 Sending stake transaction...');
+      showToast('Step 2/2: Confirm stake in wallet...', 'info');
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+      console.log('📜 Contract address:', stakingAddress);
 
-      let stakeTx;
-      if (isLP) {
-        // LP Staking - just amount
-        stakeTx = await stakingContract.stake(amountWei);
-      } else {
-        // Regular Staking - amount and tier
-        stakeTx = await stakingContract.stake(amountWei, selectedTier);
+      // Get current gas price and apply speed multiplier
+      const gasSpeedMultipliers = { normal: 100n, fast: 150n, urgent: 200n };
+      const multiplier = gasSpeedMultipliers[gasSpeed] || 150n;
+      let gasPrice;
+      try {
+        const feeData = await provider.getFeeData();
+        const baseGasPrice = feeData.gasPrice || 0n;
+        gasPrice = (baseGasPrice * multiplier) / 100n;
+        console.log(`⛽ Gas price: ${ethers.formatUnits(baseGasPrice, 'gwei')} gwei → ${gasSpeed} (${multiplier}%) → ${ethers.formatUnits(gasPrice, 'gwei')} gwei`);
+      } catch (e) {
+        console.warn('Could not get gas price, using default');
+        gasPrice = undefined; // Let wallet decide
       }
 
+      let stakeTx;
+      try {
+        if (isLP) {
+          // LP Staking - amount and lpType (0=Diamond/PLS, 1=Diamond+/URMOM)
+          const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
+          console.log('📤 LP Stake params:', { amount: amountWei.toString(), lpType, contract: stakingAddress, gasSpeed });
+          
+          // Estimate gas and add 50% buffer for safety
+          let gasLimit = 300000n; // Default fallback
+          try {
+            const gasEstimate = await stakingContract.stake.estimateGas(amountWei, lpType);
+            gasLimit = (gasEstimate * 150n) / 100n; // Add 50% buffer
+            console.log('⛽ Gas estimate:', gasEstimate.toString(), '→ Using limit:', gasLimit.toString());
+          } catch (gasErr) {
+            console.error('⛽ Gas estimation failed - transaction will likely revert!');
+            console.error('⛽ Error:', gasErr.message || gasErr);
+            console.error('⛽ Reason:', gasErr.reason || 'unknown');
+            
+            // Try to extract revert reason
+            let revertReason = 'Unknown contract error';
+            if (gasErr.reason) revertReason = gasErr.reason;
+            else if (gasErr.data?.message) revertReason = gasErr.data.message;
+            else if (gasErr.error?.message) revertReason = gasErr.error.message;
+            else if (gasErr.message?.includes('execution reverted')) {
+              const match = gasErr.message.match(/reason="([^"]+)"/);
+              if (match) revertReason = match[1];
+            }
+            
+            showToast(`❌ Contract rejected: ${revertReason}`, 'error');
+            setLoading(false);
+            return;
+          }
+          
+          console.log('📤 Calling stake function with explicit gas... (waiting for wallet response)');
+          
+          // Build transaction options with gas price for speed
+          const txOptions = { gasLimit };
+          if (gasPrice) txOptions.gasPrice = gasPrice;
+          
+          // Wrap in timeout to handle wallets that don't return properly
+          const stakePromise = stakingContract.stake(amountWei, lpType, txOptions);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('TIMEOUT_CHECK_CHAIN')), 120000) // 2 min timeout
+          );
+          
+          try {
+            stakeTx = await Promise.race([stakePromise, timeoutPromise]);
+            console.log('✅ Stake call returned successfully');
+          } catch (raceErr) {
+            if (raceErr.message === 'TIMEOUT_CHECK_CHAIN') {
+              console.warn('⚠️ Wallet response timeout - transaction may have succeeded!');
+              showToast('⚠️ Wallet timeout - check your wallet/blockchain for tx status', 'warning');
+              setLoading(false);
+              setModalOpen(false);
+              // Refresh balances to check if stake went through
+              setTimeout(async () => {
+                try {
+                  if (selectedTier === 4) {
+                    const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+                    const lpBal = await lpUrmomContract.balanceOf(account);
+                    setLpDtgcUrmomBalance(ethers.formatEther(lpBal));
+                  } else {
+                    const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+                    const lpBal = await lpPlsContract.balanceOf(account);
+                    setLpDtgcPlsBalance(ethers.formatEther(lpBal));
+                  }
+                } catch (e) { console.warn('Balance refresh error:', e); }
+              }, 3000);
+              return;
+            }
+            throw raceErr;
+          }
+        } else {
+          // Regular Staking - amount and tier
+          console.log('📤 Stake params:', { amount: amountWei.toString(), tier: selectedTier, contract: stakingAddress, gasSpeed });
+          
+          // Estimate gas and add 50% buffer for safety
+          let gasLimit = 250000n; // Default fallback
+          try {
+            const gasEstimate = await stakingContract.stake.estimateGas(amountWei, selectedTier);
+            gasLimit = (gasEstimate * 150n) / 100n; // Add 50% buffer
+            console.log('⛽ Gas estimate:', gasEstimate.toString(), '→ Using limit:', gasLimit.toString());
+          } catch (gasErr) {
+            console.error('⛽ Gas estimation failed - transaction will likely revert!');
+            console.error('⛽ Error:', gasErr.message || gasErr);
+            
+            // Try to extract revert reason
+            let revertReason = 'Unknown contract error';
+            if (gasErr.reason) revertReason = gasErr.reason;
+            else if (gasErr.data?.message) revertReason = gasErr.data.message;
+            else if (gasErr.error?.message) revertReason = gasErr.error.message;
+            else if (gasErr.message?.includes('execution reverted')) {
+              const match = gasErr.message.match(/reason="([^"]+)"/);
+              if (match) revertReason = match[1];
+            }
+            
+            showToast(`❌ Contract rejected: ${revertReason}`, 'error');
+            setLoading(false);
+            return;
+          }
+          
+          // Build transaction options with gas price for speed
+          const txOptions = { gasLimit };
+          if (gasPrice) txOptions.gasPrice = gasPrice;
+          
+          console.log('📤 Calling stake function with explicit gas... (waiting for wallet response)');
+          stakeTx = await stakingContract.stake(amountWei, selectedTier, txOptions);
+          console.log('✅ Stake call returned successfully');
+        }
+      } catch (stakeCallErr) {
+        console.error('❌ Stake call failed:', stakeCallErr);
+        console.error('❌ Error code:', stakeCallErr.code);
+        console.error('❌ Error reason:', stakeCallErr.reason);
+        throw stakeCallErr;
+      }
+
+      console.log('⏳ Stake tx sent:', stakeTx.hash);
+      showToast(`Transaction sent! Hash: ${stakeTx.hash.slice(0,10)}...`, 'info');
+      
       await stakeTx.wait();
+      console.log('✅ Stake confirmed!');
 
       // Show stake video if enabled
       if (VIDEOS_ENABLED) {
@@ -3938,28 +4902,86 @@ export default function App() {
       showToast(`✅ Successfully staked ${formatNumber(amount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name} tier!`, 'success');
 
       // Refresh balances
-      const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
-      const dtgcBal = await dtgcContract.balanceOf(account);
-      setDtgcBalance(ethers.formatEther(dtgcBal));
+      try {
+        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+        const dtgcBal = await dtgcContract.balanceOf(account);
+        setDtgcBalance(ethers.formatEther(dtgcBal));
 
-      if (isLP) {
-        const lpContract = new ethers.Contract(CONTRACTS.LP_TOKEN, ERC20_ABI, provider);
-        const lpBal = await lpContract.balanceOf(account);
-        setLpBalance(ethers.formatEther(lpBal));
+        // Refresh correct LP balance based on tier
+        if (isLP) {
+          if (selectedTier === 4) {
+            // Diamond+ (DTGC/URMOM LP)
+            const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+            const lpBal = await lpUrmomContract.balanceOf(account);
+            setLpDtgcUrmomBalance(ethers.formatEther(lpBal));
+          } else {
+            // Diamond (DTGC/PLS LP)
+            const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+            const lpBal = await lpPlsContract.balanceOf(account);
+            setLpDtgcPlsBalance(ethers.formatEther(lpBal));
+          }
+        }
+      } catch (refreshErr) {
+        console.warn('Balance refresh error:', refreshErr);
       }
 
+      // Close modal after short delay to show success
+      setTimeout(() => {
+        setModalOpen(false);
+      }, 1500);
+
     } catch (err) {
-      console.error('Staking error:', err);
+      console.error('❌ Staking error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
       setLoading(false);
       setModalOpen(false);
 
-      if (err.code === 'ACTION_REJECTED') {
-        showToast('Transaction rejected by user', 'error');
-      } else if (err.message?.includes('insufficient')) {
-        showToast('Insufficient balance for transaction', 'error');
-      } else {
-        showToast(`Staking failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      // Parse error for user-friendly message
+      console.error('❌ Full stake error:', err);
+      
+      let errorMessage = 'Unknown error';
+      
+      // Check for common error patterns
+      if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
+        showToast('Transaction rejected by user', 'info');
+        return;
+      } else if (err.message?.includes('user rejected')) {
+        showToast('Transaction cancelled', 'info');
+        return;
+      } else if (err.code === -32002) {
+        showToast('Please check your wallet for pending request', 'info');
+        return;
       }
+      
+      // Try to extract revert reason
+      if (err.reason) {
+        errorMessage = err.reason;
+      } else if (err.data?.message) {
+        errorMessage = err.data.message;
+      } else if (err.error?.message) {
+        errorMessage = err.error.message;
+      } else if (err.message) {
+        // Parse common contract revert messages
+        const msg = err.message.toLowerCase();
+        if (msg.includes('already staked') || msg.includes('active stake')) {
+          errorMessage = 'You already have an active stake in this tier';
+        } else if (msg.includes('insufficient') || msg.includes('exceeds balance')) {
+          errorMessage = 'Insufficient token balance';
+        } else if (msg.includes('not enough') || msg.includes('empty')) {
+          errorMessage = 'Reward pool may be empty - contact admin';
+        } else if (msg.includes('paused')) {
+          errorMessage = 'Contract is currently paused';
+        } else if (msg.includes('minimum')) {
+          errorMessage = 'Amount below minimum stake requirement';
+        } else if (msg.includes('transfer failed')) {
+          errorMessage = 'Token transfer failed - check approval';
+        } else {
+          errorMessage = err.message.slice(0, 80);
+        }
+      }
+      
+      showToast(`❌ Staking failed: ${errorMessage}`, 'error');
     }
   };
 
@@ -3980,6 +5002,27 @@ export default function App() {
       // Calculate rewards (simplified: APR / 365 * days staked)
       const daysStaked = (now - position.startTime) / (24 * 60 * 60 * 1000);
       const rewards = (position.amount * (position.apr / 100) / 365) * daysStaked;
+
+      // Save to stake history before removing
+      const historyEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        tier: position.tier || 'GOLD',
+        amount: position.amount,
+        startTime: position.startTime,
+        endTime: now,
+        apr: position.apr,
+        rewards: rewards,
+        penalty: isEarly ? penalty : 0,
+        returnAmount: returnAmount + rewards,
+        isLP: position.isLP,
+        exitType: isEarly ? 'early' : 'normal',
+        wallet: account,
+      };
+      
+      const existingHistory = JSON.parse(localStorage.getItem('dtgc-stake-history') || '[]');
+      existingHistory.unshift(historyEntry);
+      localStorage.setItem('dtgc-stake-history', JSON.stringify(existingHistory.slice(0, 50))); // Keep last 50
+      setStakeHistory(existingHistory.slice(0, 50));
 
       const newBalances = {
         ...testnetBalances,
@@ -4004,23 +5047,62 @@ export default function App() {
     }
 
     try {
+      // Save current position to history before unstaking
+      const currentPosition = stakedPositions.find(p => p.id === positionId) || stakedPositions[0];
+      
       setLoading(true);
       showToast('Processing withdrawal...', 'info');
 
       // Determine if this is LP or regular staking based on positionId
-      // For now, use regular staking contract - can be enhanced with position tracking
-      const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, signer);
+      const isLP = positionId === 'lp-stake' || currentPosition?.isLP;
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
 
       const tx = await stakingContract.withdraw();
       await tx.wait();
 
-      setLoading(false);
-      showToast('✅ Successfully withdrawn!', 'success');
+      // Save to stake history
+      if (currentPosition) {
+        const now = Date.now();
+        const daysStaked = Math.max(0, (now - currentPosition.startTime) / (24 * 60 * 60 * 1000));
+        const rewards = (currentPosition.amount * (currentPosition.apr / 100) / 365) * daysStaked;
+        
+        const historyEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          tier: currentPosition.tierName || currentPosition.tier || 'GOLD',
+          amount: currentPosition.amount,
+          startTime: currentPosition.startTime,
+          endTime: now,
+          apr: currentPosition.apr,
+          rewards: rewards,
+          penalty: 0,
+          returnAmount: currentPosition.amount + rewards,
+          isLP: currentPosition.isLP,
+          exitType: 'normal',
+          wallet: account,
+          txHash: tx.hash,
+        };
+        
+        const existingHistory = JSON.parse(localStorage.getItem('dtgc-stake-history') || '[]');
+        existingHistory.unshift(historyEntry);
+        localStorage.setItem('dtgc-stake-history', JSON.stringify(existingHistory.slice(0, 50)));
+        setStakeHistory(existingHistory.slice(0, 50));
+      }
 
-      // Refresh balances
+      // Clear the position immediately from state
+      setStakedPositions(prev => prev.filter(p => p.id !== positionId));
+      
+      setLoading(false);
+      showToast('✅ Successfully withdrawn! Check Gold Records for history.', 'success');
+
+      // Refresh balances and positions
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
       const dtgcBal = await dtgcContract.balanceOf(account);
       setDtgcBalance(ethers.formatEther(dtgcBal));
+      
+      // Re-fetch positions after a short delay
+      setTimeout(() => fetchStakedPosition(), 2000);
 
     } catch (err) {
       console.error('Unstake error:', err);
@@ -4031,7 +5113,17 @@ export default function App() {
       } else if (err.message?.includes('locked')) {
         showToast('Position is still locked! Use Emergency Withdraw (20% fee)', 'error');
       } else {
-        showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+        // Detect "no position" errors - means stale UI data from V2
+        const errorMsg = err.message?.toLowerCase() || '';
+        if (errorMsg.includes('revert') || errorMsg.includes('estimategas') || errorMsg.includes('no position')) {
+          showToast('⚠️ No active stake found on V3. Clearing stale data...', 'info');
+          setStakedPositions([]);
+          setTimeout(() => {
+            showToast('✅ Cleared. Your stake may have been on old V2 contracts.', 'success');
+          }, 1500);
+        } else {
+          showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+        }
       }
     }
   };
@@ -4044,28 +5136,88 @@ export default function App() {
     }
 
     try {
+      // Find current position
+      const currentPosition = stakedPositions.find(p => p.isLP === isLP);
+      
       setLoading(true);
       showToast('Processing emergency withdrawal (20% fee)...', 'info');
 
-      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
-      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
 
       const tx = await stakingContract.emergencyWithdraw();
       await tx.wait();
 
+      // Save to stake history with penalty
+      if (currentPosition) {
+        const now = Date.now();
+        const daysStaked = Math.max(0, (now - currentPosition.startTime) / (24 * 60 * 60 * 1000));
+        const rewards = (currentPosition.amount * (currentPosition.apr / 100) / 365) * daysStaked;
+        const penalty = currentPosition.amount * 0.20; // 20% EES fee
+        
+        const historyEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          tier: currentPosition.tierName || currentPosition.tier || (isLP ? 'DIAMOND' : 'GOLD'),
+          amount: currentPosition.amount,
+          startTime: currentPosition.startTime,
+          endTime: now,
+          apr: currentPosition.apr,
+          rewards: rewards,
+          penalty: penalty,
+          returnAmount: currentPosition.amount - penalty + rewards,
+          isLP: isLP,
+          exitType: 'emergency',
+          wallet: account,
+          txHash: tx.hash,
+        };
+        
+        const existingHistory = JSON.parse(localStorage.getItem('dtgc-stake-history') || '[]');
+        existingHistory.unshift(historyEntry);
+        localStorage.setItem('dtgc-stake-history', JSON.stringify(existingHistory.slice(0, 50)));
+        setStakeHistory(existingHistory.slice(0, 50));
+      }
+
+      // Clear position from state
+      setStakedPositions(prev => prev.filter(p => p.isLP !== isLP));
+
       setLoading(false);
-      showToast('✅ Emergency withdrawal complete (20% fee applied)', 'success');
+      showToast('✅ Emergency withdrawal complete (20% fee applied). Check Gold Records.', 'success');
 
       // Refresh balances
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
       const dtgcBal = await dtgcContract.balanceOf(account);
       setDtgcBalance(ethers.formatEther(dtgcBal));
+      
+      // Re-fetch positions after delay
+      setTimeout(() => fetchStakedPosition(), 2000);
 
     } catch (err) {
       console.error('Emergency withdraw error:', err);
       setLoading(false);
-      showToast(`Emergency withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      
+      // Detect "no position" or "nothing to withdraw" errors - means stale UI data
+      const errorMsg = (err.message || '').toLowerCase();
+      const errorData = (err.data || '').toLowerCase();
+      const isNoPositionError = errorMsg.includes('revert') || 
+                                errorMsg.includes('estimategas') || 
+                                errorMsg.includes('no position') || 
+                                errorMsg.includes('nothing') ||
+                                errorMsg.includes('missing') ||
+                                errorData.includes('revert') ||
+                                err.code === 'CALL_EXCEPTION' ||
+                                err.code === 'UNPREDICTABLE_GAS_LIMIT';
+      
+      if (isNoPositionError) {
+        showToast('⚠️ No active stake found on V3 contract. Clearing stale UI data...', 'info');
+        // Auto-clear the stale position
+        setStakedPositions([]);
+        setTimeout(() => {
+          showToast('✅ Stale data cleared. Your stake may have been on V2 contracts.', 'success');
+        }, 1500);
+      } else {
+        showToast(`Emergency withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+      }
     }
   };
 
@@ -4080,8 +5232,8 @@ export default function App() {
       setLoading(true);
       showToast('Claiming rewards...', 'info');
 
-      const stakingAddress = isLP ? CONTRACTS.LP_STAKING_V2 : CONTRACTS.STAKING_V2;
-      const stakingABI = isLP ? LP_STAKING_V2_ABI : STAKING_V2_ABI;
+      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
       const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
 
       const tx = await stakingContract.claimRewards();
@@ -4109,78 +5261,231 @@ export default function App() {
     }
   };
 
+  // Force clear ALL stale stake data (for V2 -> V3 migration issues)
+  const forceClearStaleData = () => {
+    console.log('🧹 Force clearing all stale stake data...');
+    setStakedPositions([]);
+    localStorage.removeItem('dtgc-testnet-balances');
+    localStorage.removeItem('dtgc-stake-history');
+    
+    // Also clear testnet positions if in testnet mode
+    if (TESTNET_MODE) {
+      setTestnetBalances(prev => ({
+        ...prev,
+        positions: [],
+        stakedDTGC: 0,
+        stakedLP: 0,
+      }));
+    }
+    
+    showToast('✅ All stale stake data cleared!', 'success');
+    
+    // Re-fetch from blockchain after a delay
+    if (!TESTNET_MODE && account && provider) {
+      setTimeout(() => fetchStakedPosition(), 1500);
+    }
+  };
+
   // Fetch user's staked position from contract
   const fetchStakedPosition = useCallback(async () => {
     if (TESTNET_MODE || !account || !provider) return;
 
-    try {
-      const positions = [];
+    // RPC endpoints to try (primary + backups)
+    const RPC_ENDPOINTS = [
+      null, // null = use connected wallet provider first
+      'https://rpc.pulsechain.com',
+      'https://pulsechain-rpc.publicnode.com',
+      'https://rpc-pulsechain.g4mm4.io',
+    ];
 
-      // Fetch regular staking position with error handling
+    let lastError = null;
+    
+    for (const rpcUrl of RPC_ENDPOINTS) {
       try {
-        const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, provider);
+        console.log('🔍 Fetching staked positions for:', account, rpcUrl ? `(using ${rpcUrl})` : '(using wallet provider)');
+        
+        // Use either wallet provider or fallback RPC
+        const activeProvider = rpcUrl ? new ethers.JsonRpcProvider(rpcUrl) : provider;
+        
+        // Fetch regular staking position
+        const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, activeProvider);
         const position = await stakingContract.getPosition(account);
-
-        // Parse regular staking position
-        if (position && position[6]) { // isActive
-          positions.push({
-            id: 'dtgc-stake',
-            type: 'DTGC',
-            isLP: false,
-            amount: parseFloat(ethers.formatEther(position[0])),
-            startTime: Number(position[1]) * 1000,
-            endTime: Number(position[2]) * 1000,
-            lockPeriod: Number(position[3]),
-            apr: Number(position[4]) / 100, // Convert from bps
-            bonus: parseFloat(ethers.formatEther(position[5])),
-            isActive: position[6],
-            timeRemaining: Number(position[7]),
-          });
+        
+        // Log ALL values from DTGC position
+        console.log('📋 Raw DTGC position - ALL VALUES:');
+        for (let i = 0; i < 10; i++) {
+          try {
+            const val = position[i];
+            console.log(`  [${i}]:`, val?.toString ? val.toString() : val);
+          } catch (e) { break; }
         }
-      } catch (stakingErr) {
-        console.warn('DTGC staking fetch failed:', stakingErr.message?.slice(0, 100));
-      }
 
-      // Fetch LP staking position with error handling
+        // Fetch LP staking position
+        const lpStakingContract = new ethers.Contract(CONTRACT_ADDRESSES.lpStakingV3, LP_STAKING_V3_ABI, activeProvider);
+      
+      // Try getPosition first
+      let lpPosition;
       try {
-        const lpStakingContract = new ethers.Contract(CONTRACTS.LP_STAKING_V2, LP_STAKING_V2_ABI, provider);
-        const lpPosition = await lpStakingContract.getPosition(account);
-
-        // Parse LP staking position
-        if (lpPosition && lpPosition[6]) { // isActive
-          positions.push({
-            id: 'lp-stake',
-            type: 'LP',
-            isLP: true,
-            amount: parseFloat(ethers.formatEther(lpPosition[0])),
-            startTime: Number(lpPosition[1]) * 1000,
-            endTime: Number(lpPosition[2]) * 1000,
-            pendingReward: parseFloat(ethers.formatEther(lpPosition[3])),
-            pendingBonus: parseFloat(ethers.formatEther(lpPosition[4])),
-            boostMultiplier: Number(lpPosition[5]) / 100,
-            isActive: lpPosition[6],
-            timeRemaining: Number(lpPosition[7]),
-          });
+        lpPosition = await lpStakingContract.getPosition(account);
+        console.log('📋 Raw LP position - ALL VALUES:');
+        for (let i = 0; i < 12; i++) {
+          try {
+            const val = lpPosition[i];
+            console.log(`  [${i}]:`, val?.toString ? val.toString() : val);
+          } catch (e) { break; }
         }
       } catch (lpErr) {
-        console.warn('LP staking fetch failed:', lpErr.message?.slice(0, 100));
+        console.error('❌ LP getPosition failed:', lpErr.message);
+      }
+      
+      // Also try alternative functions that might exist
+      try {
+        const userStakes = await lpStakingContract.getUserStakes(account);
+        console.log('📋 LP getUserStakes result:', userStakes);
+      } catch (e) {
+        console.log('ℹ️ No getUserStakes function on LP contract');
+      }
+      
+      try {
+        const stakeCount = await lpStakingContract.stakeCount ? await lpStakingContract.stakeCount(account) : null;
+        console.log('📋 LP stakeCount:', stakeCount?.toString());
+      } catch (e) {
+        console.log('ℹ️ No stakeCount function on LP contract');
+      }
+      
+      // Check if there's a stakes mapping we can read
+      try {
+        const stake0 = await lpStakingContract.stakes ? await lpStakingContract.stakes(account, 0) : null;
+        console.log('📋 LP stakes(account, 0):', stake0);
+      } catch (e) {
+        console.log('ℹ️ No stakes mapping or index 0 empty');
       }
 
-      // Only update state if we got valid data, preserve existing if both failed
-      if (positions.length > 0) {
-        setStakedPositions(positions);
-        console.log('📊 Staked positions loaded:', positions);
+      const positions = [];
+
+      // Parse regular staking position
+      // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, bonusBps, tier, isActive, timeRemaining)
+      const amount = position ? parseFloat(ethers.formatEther(position[0])) : 0;
+      const dtgcIsActive = position ? position[7] : false;
+      console.log('💰 DTGC stake check:', { 
+        amount, 
+        isActive: dtgcIsActive, 
+        rawAmount: position?.[0]?.toString(),
+        rawIsActive: position?.[7]?.toString ? position[7].toString() : position?.[7]
+      });
+      
+      if (position && dtgcIsActive && amount > 0) {
+        const rawApr = Number(position[4]) / 100; // Convert from bps
+        const tierNum = Number(position[6]);
+        const tierNames = ['SILVER', 'GOLD', 'WHALE'];
+        const tierName = tierNames[tierNum] || 'GOLD';
+        
+        const dtgcPosition = {
+          id: 'dtgc-stake',
+          type: 'DTGC',
+          isLP: false,
+          amount: amount,
+          startTime: Number(position[1]) * 1000,
+          endTime: Number(position[2]) * 1000,
+          lockPeriod: Number(position[3]),
+          apr: getV19CorrectedAPR(rawApr, tierName, false),
+          bonus: Number(position[5]) / 100,
+          tier: tierNum,
+          tierName: tierName,
+          isActive: dtgcIsActive,
+          timeRemaining: Number(position[8]),
+        };
+        positions.push(dtgcPosition);
+        console.log('✅ Added DTGC position:', dtgcPosition);
+      } else {
+        console.log('⚠️ No active DTGC stake found (amount:', amount, ', isActive:', dtgcIsActive, ')');
       }
 
-    } catch (err) {
-      // Don't clear positions on error - preserve existing data
-      console.warn('Failed to fetch staked positions:', err.message);
-    }
+      // Parse LP staking position
+      // Try different index patterns since contract might be different
+      let lpAmount = 0;
+      let lpIsActive = false;
+      let lpTypeNum = 0;
+      
+      if (lpPosition) {
+        // Standard V3 format: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
+        lpAmount = parseFloat(ethers.formatEther(lpPosition[0] || 0n));
+        
+        // isActive could be at index 7 or elsewhere
+        // Check if it's a boolean or needs conversion
+        const possibleIsActive = lpPosition[7];
+        if (typeof possibleIsActive === 'boolean') {
+          lpIsActive = possibleIsActive;
+        } else if (possibleIsActive !== undefined) {
+          lpIsActive = possibleIsActive.toString() === 'true' || possibleIsActive === 1n || possibleIsActive === 1;
+        }
+        
+        lpTypeNum = Number(lpPosition[6] || 0);
+      }
+      
+      console.log('💎 LP stake check:', { 
+        lpAmount, 
+        isActive: lpIsActive, 
+        lpType: lpTypeNum,
+        rawAmount: lpPosition?.[0]?.toString(),
+        rawIsActive: lpPosition?.[7]?.toString ? lpPosition[7].toString() : lpPosition?.[7],
+        rawLpType: lpPosition?.[6]?.toString ? lpPosition[6].toString() : lpPosition?.[6]
+      });
+      
+      // Try to add LP position if it has any amount, even if isActive seems false
+      if (lpPosition && lpAmount > 0) {
+        const rawLpApr = Number(lpPosition[4] || 0) / 100;
+        const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+        
+        const lpStakePosition = {
+          id: 'lp-stake',
+          type: 'LP',
+          isLP: true,
+          amount: lpAmount,
+          startTime: Number(lpPosition[1] || 0) * 1000,
+          endTime: Number(lpPosition[2] || 0) * 1000,
+          lockPeriod: Number(lpPosition[3] || 0),
+          apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
+          boostMultiplier: Number(lpPosition[5] || 0) / 100,
+          lpType: lpTypeNum,
+          tier: lpTierName,
+          tierName: lpTierName,
+          isActive: lpIsActive || lpAmount > 0, // Force active if amount > 0
+          timeRemaining: Number(lpPosition[8] || 0),
+        };
+        positions.push(lpStakePosition);
+        console.log('✅ Added LP position:', lpStakePosition);
+      } else {
+        console.log('⚠️ No LP stake found (lpAmount:', lpAmount, ')');
+      }
+
+      // Always set positions to what blockchain returns
+      setStakedPositions(positions);
+      console.log('📊 Staked positions from V3 contracts:', positions.length > 0 ? positions : 'No active positions');
+      console.log('📊 Total positions found:', positions.length);
+      
+      // Success! Exit the loop
+      return;
+
+      } catch (err) {
+        lastError = err;
+        console.warn(`⚠️ RPC failed${rpcUrl ? ` (${rpcUrl})` : ' (wallet provider)'}: ${err.message}`);
+        // Continue to next RPC endpoint
+      }
+    } // end for loop
+    
+    // All RPCs failed - keep existing positions
+    console.error('❌ All RPC endpoints failed to fetch staked positions');
+    console.error('❌ Last error:', lastError?.message);
+    // DON'T clear positions - keep existing data visible
+    console.log('⚠️ Keeping existing positions due to RPC errors - will retry next interval');
   }, [account, provider]);
 
   // Fetch staked positions when account connects
   useEffect(() => {
     if (!TESTNET_MODE && account && provider) {
+      // Don't clear positions immediately - let fetch update them
+      // This prevents flicker when RPC is slow
       fetchStakedPosition();
       // Refresh every 60 seconds
       const interval = setInterval(fetchStakedPosition, 60000);
@@ -4192,6 +5497,83 @@ export default function App() {
     navigator.clipboard.writeText(text);
     showToast('Address copied!', 'success');
   };
+
+  // Password Gate Screen (moved after all hooks to fix React rules violation)
+  if (PASSWORD_ENABLED && !isAuthenticated) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'Arial, sans-serif',
+      }}>
+        <div style={{
+          background: 'rgba(26,35,39,0.95)',
+          border: '2px solid #D4AF37',
+          borderRadius: '20px',
+          padding: '40px',
+          maxWidth: '400px',
+          width: '90%',
+          textAlign: 'center',
+          boxShadow: '0 20px 60px rgba(212,175,55,0.2)',
+        }}>
+          <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🔐</div>
+          <h1 style={{ color: '#D4AF37', fontSize: '1.8rem', marginBottom: '10px', fontWeight: 800 }}>
+            DT GOLD COIN
+          </h1>
+          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '30px', letterSpacing: '1px' }}>
+            MAINNET PREVIEW • RESTRICTED ACCESS
+          </p>
+          <form onSubmit={handlePasswordSubmit}>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              placeholder="Enter password"
+              style={{
+                width: '100%',
+                padding: '15px 20px',
+                fontSize: '1rem',
+                background: 'rgba(0,0,0,0.5)',
+                border: passwordError ? '2px solid #F44336' : '2px solid rgba(212,175,55,0.3)',
+                borderRadius: '10px',
+                color: '#fff',
+                marginBottom: '15px',
+                outline: 'none',
+                textAlign: 'center',
+                letterSpacing: '3px',
+                boxSizing: 'border-box',
+              }}
+              autoFocus
+            />
+            {passwordError && (
+              <p style={{ color: '#F44336', fontSize: '0.85rem', marginBottom: '15px' }}>
+                ❌ Incorrect password
+              </p>
+            )}
+            <button type="submit" style={{
+              width: '100%',
+              padding: '15px 30px',
+              fontSize: '1rem',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #D4AF37 0%, #F4D03F 100%)',
+              border: 'none',
+              borderRadius: '10px',
+              color: '#000',
+              cursor: 'pointer',
+            }}>
+              ENTER SITE
+            </button>
+          </form>
+          <p style={{ color: '#555', fontSize: '0.7rem', marginTop: '30px', letterSpacing: '1px' }}>
+            A dtgc.io contract on PulseChain
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme }}>
@@ -4397,44 +5779,196 @@ export default function App() {
           </div>
         )}
 
-        {/* FLOATING ACTIVE STAKE BOX - Top Left */}
+        {/* FLOATING ACTIVE STAKE BOX - Top Left with Multi-Stake Toggle */}
         {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
-          <div style={{
-            position: 'fixed',
-            top: TESTNET_MODE ? '55px' : '15px',
-            left: '15px',
-            zIndex: 1500,
-            background: isDark ? 'rgba(15,15,15,0.95)' : 'rgba(255,255,255,0.95)',
-            backdropFilter: 'blur(20px)',
-            borderRadius: '16px',
-            border: '2px solid var(--gold)',
-            padding: '12px 16px',
-            minWidth: '220px',
-            maxWidth: '280px',
-            boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '10px',
-              borderBottom: '1px solid rgba(212,175,55,0.3)',
-              paddingBottom: '8px',
-            }}>
-              <span style={{ fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '0.75rem', color: 'var(--gold)', letterSpacing: '1px' }}>
-                💎 ACTIVE STAKE
-              </span>
-              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>LIVE</span>
+          stakeWidgetMinimized ? (
+            // Minimized view - show all stake diamonds in a row
+            <div
+              style={{
+                position: 'fixed',
+                top: TESTNET_MODE ? '55px' : '15px',
+                left: '15px',
+                display: 'flex',
+                gap: '8px',
+                zIndex: 1500,
+              }}
+            >
+              {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
+                // Get tier color for each diamond
+                let diamondColor, diamondIcon;
+                if (pos.isLP) {
+                  if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+                    diamondColor = '#9C27B0';
+                    diamondIcon = '💜💎';
+                  } else {
+                    diamondColor = '#00BCD4';
+                    diamondIcon = '💎';
+                  }
+                } else {
+                  const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
+                  if (tierNum === 0 || pos.tierName === 'SILVER') {
+                    diamondColor = '#C0C0C0';
+                    diamondIcon = '🥈';
+                  } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                    diamondColor = '#2196F3';
+                    diamondIcon = '🐋';
+                  } else {
+                    diamondColor = '#FFD700';
+                    diamondIcon = '🥇';
+                  }
+                }
+                return (
+                  <div
+                    key={pos.id || idx}
+                    onClick={() => {
+                      setSelectedStakeIndex(idx);
+                      setStakeWidgetMinimized(false);
+                    }}
+                    style={{
+                      width: '50px',
+                      height: '50px',
+                      background: `linear-gradient(135deg, rgba(15,15,15,0.95), rgba(30,30,30,0.95))`,
+                      border: `2px solid ${diamondColor}`,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: `0 4px 20px ${diamondColor}40`,
+                      transition: 'all 0.3s ease',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    title={`View Stake #${idx + 1}`}
+                  >
+                    <span style={{ fontSize: '1.3rem' }}>{diamondIcon}</span>
+                  </div>
+                );
+              })}
             </div>
+          ) : (
+            // Expanded view - full widget with diamond selector
+            <div style={{
+              position: 'fixed',
+              top: TESTNET_MODE ? '55px' : '15px',
+              left: '15px',
+              zIndex: 1500,
+              background: isDark ? 'rgba(15,15,15,0.95)' : 'rgba(255,255,255,0.95)',
+              backdropFilter: 'blur(20px)',
+              borderRadius: '16px',
+              border: '2px solid var(--gold)',
+              padding: '12px 16px',
+              minWidth: '240px',
+              maxWidth: '300px',
+              boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
+            }}>
+              {/* Diamond Selector Row */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '8px',
+                marginBottom: '10px',
+                paddingBottom: '10px',
+                borderBottom: '1px solid rgba(212,175,55,0.3)',
+              }}>
+                {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
+                  // Get tier color for each diamond
+                  let diamondColor, diamondIcon;
+                  if (pos.isLP) {
+                    if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+                      diamondColor = '#9C27B0';
+                      diamondIcon = '💜💎';
+                    } else {
+                      diamondColor = '#00BCD4';
+                      diamondIcon = '💎';
+                    }
+                  } else {
+                    const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
+                    if (tierNum === 0 || pos.tierName === 'SILVER') {
+                      diamondColor = '#C0C0C0';
+                      diamondIcon = '🥈';
+                    } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                      diamondColor = '#2196F3';
+                      diamondIcon = '🐋';
+                    } else {
+                      diamondColor = '#FFD700';
+                      diamondIcon = '🥇';
+                    }
+                  }
+                  const isSelected = idx === selectedStakeIndex;
+                  return (
+                    <div
+                      key={pos.id || idx}
+                      onClick={() => setSelectedStakeIndex(idx)}
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        background: isSelected ? `${diamondColor}30` : 'transparent',
+                        border: `2px solid ${isSelected ? diamondColor : 'rgba(255,255,255,0.2)'}`,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        transform: isSelected ? 'scale(1.1)' : 'scale(1)',
+                      }}
+                      title={`Stake #${idx + 1}`}
+                    >
+                      <span style={{ fontSize: '1rem' }}>{diamondIcon}</span>
+                    </div>
+                  );
+                })}
+                {/* Refresh button */}
+                <div
+                  onClick={() => {
+                    showToast('🔄 Refreshing positions...', 'info');
+                    fetchStakedPosition();
+                  }}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    background: 'rgba(76,175,80,0.2)',
+                    border: '1px solid rgba(76,175,80,0.4)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    marginLeft: '8px',
+                  }}
+                  title="Refresh Positions"
+                >
+                  <span style={{ fontSize: '0.9rem' }}>🔄</span>
+                </div>
+                {/* Minimize button */}
+                <div
+                  onClick={() => setStakeWidgetMinimized(true)}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    background: 'rgba(255,255,255,0.1)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    marginLeft: '4px',
+                  }}
+                  title="Minimize"
+                >
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>─</span>
+                </div>
+              </div>
 
             {(() => {
-              const activePos = TESTNET_MODE
-                ? testnetBalances.positions?.[0]
-                : stakedPositions[0];
+              const positions = TESTNET_MODE ? testnetBalances.positions : stakedPositions;
+              const activePos = positions[selectedStakeIndex] || positions[0];
 
               if (!activePos) return null;
 
-              // V19 Tier Correction - Override old APRs and lock periods with correct values
+              // V19 Tier Correction
               const V19_CORRECTIONS = {
                 'SILVER': { apr: 15.4, lockDays: 60 },
                 'GOLD': { apr: 16.8, lockDays: 90 },
@@ -4443,10 +5977,19 @@ export default function App() {
                 'DIAMOND+': { apr: 35, lockDays: 90, boost: 2 },
               };
 
-              const tierName = (activePos.tier || (activePos.isLP ? 'DIAMOND' : 'GOLD')).toUpperCase();
+              const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
+              let tierName;
+              if (activePos.tierName) {
+                tierName = activePos.tierName.toUpperCase();
+              } else if (activePos.isLP) {
+                tierName = activePos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND';
+              } else if (typeof activePos.tier === 'number') {
+                tierName = TIER_NAMES[activePos.tier] || 'GOLD';
+              } else {
+                tierName = (activePos.tier || 'GOLD').toUpperCase();
+              }
+              
               const correction = V19_CORRECTIONS[tierName] || V19_CORRECTIONS['GOLD'];
-
-              // Use corrected V19 values
               const correctedApr = activePos.isLP ? correction.apr * (correction.boost || 1) : correction.apr;
               const correctedLockDays = correction.lockDays;
               const correctedEndTime = activePos.startTime + (correctedLockDays * 24 * 60 * 60 * 1000);
@@ -4461,13 +6004,26 @@ export default function App() {
               const stakeValueUsd = activePos.amount * (livePrices.dtgc || 0);
               const rewardValueUsd = currentRewards * (livePrices.dtgc || 0);
 
+              const getTierColor = (name) => {
+                switch(name) {
+                  case 'SILVER': return '#C0C0C0';
+                  case 'GOLD': return '#D4AF37';
+                  case 'WHALE': return '#2196F3';
+                  case 'DIAMOND': return '#00BCD4';
+                  case 'DIAMOND+': return '#9C27B0';
+                  default: return '#D4AF37';
+                }
+              };
+              const tierColor = getTierColor(tierName);
+              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜💎' : tierName === 'DIAMOND' ? '💎' : '🥇';
+
               return (
                 <>
                   <div style={{ marginBottom: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Tier</span>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: activePos.isLP ? 'var(--diamond)' : 'var(--gold)' }}>
-                        {activePos.isLP ? '💎' : '🥇'} {tierName}
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: tierColor }}>
+                        {tierIcon} {tierName}
                       </span>
                     </div>
                   </div>
@@ -4489,7 +6045,7 @@ export default function App() {
                   <div style={{ marginBottom: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>APR</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4CAF50' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: tierColor }}>
                         {correctedApr.toFixed(1)}%
                       </span>
                     </div>
@@ -4499,10 +6055,10 @@ export default function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Rewards</span>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4CAF50' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4CAF50' }}>
                           +{formatNumber(currentRewards)} DTGC
                         </div>
-                        <div style={{ fontSize: '0.6rem', color: '#4CAF50', opacity: 0.8 }}>
+                        <div style={{ fontSize: '0.65rem', color: '#4CAF50' }}>
                           ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValueUsd).value)}
                         </div>
                       </div>
@@ -4510,23 +6066,19 @@ export default function App() {
                   </div>
 
                   <div style={{
+                    marginBottom: '10px',
+                    padding: '8px',
                     background: isLocked ? 'rgba(255,107,107,0.1)' : 'rgba(76,175,80,0.1)',
                     borderRadius: '8px',
-                    padding: '8px',
-                    marginBottom: '10px',
+                    border: `1px solid ${isLocked ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>EES Penalty Removed</span>
-                    </div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: isLocked ? '#FF6B6B' : '#4CAF50' }}>
-                      {isLocked ? (
-                        <>⏳ {daysLeft}d {hoursLeft}h remaining</>
-                      ) : (
-                        <>✅ Unlocked!</>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      📅 {new Date(correctedEndTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', color: isLocked ? '#FF6B6B' : '#4CAF50' }}>
+                        {isLocked ? '🔒 Locked' : '✅ Unlocked'}
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isLocked ? '#FF6B6B' : '#4CAF50' }}>
+                        {isLocked ? `${daysLeft}d ${hoursLeft}h` : 'Ready!'}
+                      </span>
                     </div>
                   </div>
 
@@ -4572,21 +6124,8 @@ export default function App() {
                 </>
               );
             })()}
-
-            {/* Show count if multiple stakes */}
-            {(TESTNET_MODE ? testnetBalances.positions?.length : stakedPositions.length) > 1 && (
-              <div style={{
-                marginTop: '8px',
-                paddingTop: '8px',
-                borderTop: '1px solid rgba(212,175,55,0.2)',
-                fontSize: '0.65rem',
-                color: 'var(--text-muted)',
-                textAlign: 'center',
-              }}>
-                +{(TESTNET_MODE ? testnetBalances.positions?.length : stakedPositions.length) - 1} more stake(s) • View in Stake tab
-              </div>
-            )}
           </div>
+          )
         )}
 
         {/* Navigation */}
@@ -4598,7 +6137,26 @@ export default function App() {
                 <span className="logo-text gold-text">DTGC</span>
                 <span className="logo-tagline">dtgc.io</span>
               </div>
+              {/* Mobile Menu Toggle */}
+              <button 
+                className="mobile-menu-toggle"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? '✕' : '☰'}
+              </button>
             </div>
+
+            {/* Mobile Nav Dropdown */}
+            {mobileMenuOpen && (
+              <div className="mobile-nav-dropdown">
+                <button className={activeTab === 'stake' ? 'active' : ''} onClick={() => { setActiveTab('stake'); setMobileMenuOpen(false); }}>💰 Stake</button>
+                <button className={activeTab === 'burn' ? 'active' : ''} onClick={() => { setActiveTab('burn'); setMobileMenuOpen(false); }}>🔥 Burn Stats</button>
+                <button className={activeTab === 'vote' ? 'active' : ''} onClick={() => { setActiveTab('vote'); setMobileMenuOpen(false); }}>🗳️ DAO</button>
+                <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { setActiveTab('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
+                <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { setActiveTab('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
+                <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
+              </div>
+            )}
 
             <nav className="nav-links">
               <button className={`nav-link ${activeTab === 'stake' ? 'active' : ''}`} onClick={() => setActiveTab('stake')}>Stake</button>
@@ -4609,32 +6167,49 @@ export default function App() {
               <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
             </nav>
 
-            <div className="nav-right">
-              {/* Compact Stacked Prices Display */}
+            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* Metal & Crypto Prices - Compact Single Row */}
               <div style={{
                 display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-                marginRight: '8px',
-                padding: '4px 8px',
-                background: 'rgba(0,0,0,0.3)',
-                borderRadius: '8px',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '4px 10px',
+                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                borderRadius: '16px',
                 border: '1px solid rgba(212,175,55,0.2)',
-                fontSize: '0.55rem',
-                lineHeight: '1.2',
+                fontSize: '0.6rem',
               }}>
-                {/* Metals Row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span title="Gold" style={{ color: '#FFD700' }}><span style={{ display: 'inline-block', width: '8px', height: '5px', background: 'linear-gradient(135deg, #FFD700, #B8860B)', borderRadius: '1px', marginRight: '2px' }}></span>${metalPrices.gold.toLocaleString()}</span>
-                  <span title="Silver" style={{ color: '#C0C0C0' }}><span style={{ display: 'inline-block', width: '8px', height: '5px', background: 'linear-gradient(135deg, #E8E8E8, #A8A8A8)', borderRadius: '1px', marginRight: '2px' }}></span>${metalPrices.silver.toFixed(0)}</span>
-                  <span title="Copper" style={{ color: '#CD7F32' }}><span style={{ display: 'inline-block', width: '8px', height: '5px', background: 'linear-gradient(135deg, #CD7F32, #8B4513)', borderRadius: '1px', marginRight: '2px' }}></span>${metalPrices.copper.toFixed(2)}</span>
-                </div>
-                {/* Crypto Row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span title="Bitcoin" style={{ color: '#F7931A' }}>₿{(cryptoPrices.btc/1000).toFixed(0)}k</span>
-                  <span title="Ethereum" style={{ color: '#627EEA' }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
-                  <span title="PulseChain" style={{ color: '#00D4AA' }}>PLS ${cryptoPrices.pls.toFixed(5)}</span>
-                </div>
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(2)}</span>
+                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
+              </div>
+              {/* Crypto Prices - Compact */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'rgba(33,150,243,0.08)',
+                borderRadius: '16px',
+                border: '1px solid rgba(33,150,243,0.15)',
+                fontSize: '0.55rem',
+              }}>
+                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{(cryptoPrices.btc/1000).toFixed(1)}K</span>
+                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
+              </div>
+              {/* PLS/PLSX Prices */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'rgba(0,212,170,0.08)',
+                borderRadius: '16px',
+                border: '1px solid rgba(0,212,170,0.15)',
+                fontSize: '0.55rem',
+              }}>
+                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
+                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
               </div>
               {/* Security & Audit Button */}
               <button
@@ -4675,15 +6250,52 @@ export default function App() {
                   🔄
                 </button>
               )}
-              <button
-                className={`connect-btn ${account ? 'connected' : ''}`}
-                onClick={account ? disconnectWallet : () => setShowWalletModal(true)}
-                disabled={loading}
-                title={account ? 'Click to disconnect' : 'Connect your wallet'}
-              >
-                {loading && <span className="spinner" />}
-                {account ? `🔌 ${formatAddress(account)}` : '🔗 Connect'}
-              </button>
+              {/* Wallet Connection Buttons */}
+              {account ? (
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  {/* Switch Account Button */}
+                  <button
+                    onClick={switchWallet}
+                    disabled={loading}
+                    style={{
+                      padding: '8px 10px',
+                      background: 'rgba(76,175,80,0.2)',
+                      border: '1px solid rgba(76,175,80,0.5)',
+                      borderRadius: '8px 0 0 8px',
+                      color: '#4CAF50',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: loading ? 'wait' : 'pointer',
+                    }}
+                    title="Switch to different wallet account"
+                  >
+                    🔀
+                  </button>
+                  {/* Connected Address & Disconnect */}
+                  <button
+                    className="connect-btn connected"
+                    onClick={disconnectWallet}
+                    disabled={loading}
+                    style={{
+                      borderRadius: '0 8px 8px 0',
+                    }}
+                    title="Click to disconnect"
+                  >
+                    {loading && <span className="spinner" />}
+                    🔌 {formatAddress(account)}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="connect-btn"
+                  onClick={() => setShowWalletModal(true)}
+                  disabled={loading}
+                  title="Connect your wallet"
+                >
+                  {loading && <span className="spinner" />}
+                  🔗 Connect
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -4691,7 +6303,7 @@ export default function App() {
         {/* Hero */}
         <section className="hero-section" style={TESTNET_MODE ? {paddingTop: '180px'} : {}}>
           <div className="hero-badge">
-            {TESTNET_MODE ? '🧪 V18 DIAMOND+ EDITION • TESTNET 🧪' : '🔴 LIVE • DT GOLD COIN • MAINNET'}
+            {TESTNET_MODE ? '🧪 TESTNET MODE • NOT REAL MONEY 🧪' : '🔴 LIVE • MAINNET'}
           </div>
           <h1 className="hero-title gold-text">DTGC STAKING</h1>
           <p className="hero-subtitle">Stake • Earn • Govern • Prosper</p>
@@ -4767,7 +6379,18 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
               >
-                {displayCurrency === 'units' ? '💰 UNITS' : displayCurrency === 'usd' ? '💵 USD' : displayCurrency === 'eur' ? '💶 EUR' : displayCurrency === 'gbp' ? '💷 GBP' : displayCurrency === 'jpy' ? '💴 JPY' : displayCurrency === 'sar' ? '🇸🇦 SAR' : displayCurrency === 'cny' ? '🇨🇳 CNY' : '🇨🇿 CZK'} ▼
+                {displayCurrency === 'units' ? '💰 UNITS' : 
+                 displayCurrency === 'usd' ? '💵 USD' : 
+                 displayCurrency === 'eur' ? '💶 EUR' : 
+                 displayCurrency === 'gbp' ? '💷 GBP' : 
+                 displayCurrency === 'jpy' ? '💴 JPY' : 
+                 displayCurrency === 'sar' ? '🇸🇦 SAR' : 
+                 displayCurrency === 'cny' ? '🇨🇳 CNY' : 
+                 displayCurrency === 'czk' ? '🇨🇿 CZK' :
+                 displayCurrency === 'aud' ? '🇦🇺 AUD' :
+                 displayCurrency === 'ngn' ? '🇳🇬 NGN' :
+                 displayCurrency === 'cop' ? '🇨🇴 COP' :
+                 displayCurrency === 'cad' ? '🇨🇦 CAD' : '💰 UNITS'} ▼
               </button>
 
               <div style={{
@@ -4792,10 +6415,51 @@ export default function App() {
                   <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#FF9800'}}>{formatNumber(parseFloat(urmomBalance))} URMOM</div>
                   <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(urmomBalance) * (livePrices.urmom || 0)).value)}</div>
                 </div>
-                <div style={{textAlign: 'center', padding: '10px 20px'}}>
-                  <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#00BCD4'}}>{formatNumber(parseFloat(lpBalance))} LP</div>
-                  <div style={{fontSize: '0.7rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
+                {/* Blue Diamond LP (DTGC/PLS) */}
+                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(0,188,212,0.15)', borderRadius: '8px', border: '2px solid #00BCD4'}}>
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#00BCD4'}}>{formatNumber(parseFloat(lpDtgcPlsBalance))} 💎</div>
+                  <div style={{fontSize: '0.65rem', color: '#00BCD4', fontWeight: 600}}>DTGC/PLS LP</div>
+                  <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcPlsBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
                 </div>
+                {/* Purple Diamond+ LP (DTGC/URMOM) */}
+                <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(156,39,176,0.15)', borderRadius: '8px', border: '2px solid #9C27B0'}}>
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#9C27B0'}}>{formatNumber(parseFloat(lpDtgcUrmomBalance))} 💜💎</div>
+                  <div style={{fontSize: '0.65rem', color: '#9C27B0', fontWeight: 600}}>DTGC/URMOM LP</div>
+                  <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(parseFloat(lpDtgcUrmomBalance) * (livePrices.dtgc || 0) * 2).value)}</div>
+                </div>
+                {/* Green Pending Rewards */}
+                {(() => {
+                  // Calculate total pending rewards from all staked positions
+                  const totalPendingRewards = stakedPositions.reduce((total, pos) => {
+                    const now = Date.now();
+                    const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
+                    // Use V19 corrected APRs
+                    const V19_APRS = { 'SILVER': 15.4, 'GOLD': 16.8, 'WHALE': 18.2, 'DIAMOND': 42, 'DIAMOND+': 70 };
+                    // Handle tier as either string or number
+                    const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
+                    let tierName;
+                    if (typeof pos.tier === 'string') {
+                      tierName = pos.tier.toUpperCase();
+                    } else if (typeof pos.tier === 'number') {
+                      tierName = TIER_NAMES[pos.tier] || 'GOLD';
+                    } else if (pos.isLP) {
+                      tierName = pos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND';
+                    } else {
+                      tierName = 'GOLD';
+                    }
+                    const apr = V19_APRS[tierName] || 16.8;
+                    const rewards = (pos.amount * (apr / 100) / 365) * daysStaked;
+                    return total + rewards;
+                  }, 0);
+                  const rewardsValueUsd = totalPendingRewards * (livePrices.dtgc || 0);
+                  return (
+                    <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(76,175,80,0.15)', borderRadius: '8px', border: '2px solid #4CAF50'}}>
+                      <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#4CAF50'}}>+{formatNumber(totalPendingRewards)} 🎁</div>
+                      <div style={{fontSize: '0.65rem', color: '#4CAF50', fontWeight: 600}}>PENDING REWARDS</div>
+                      <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(rewardsValueUsd).value)}</div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -4823,11 +6487,130 @@ export default function App() {
               <div className="hero-stat-value gold-text">${formatNumber(parseFloat(liveBurnedUSD))}</div>
               <div className="hero-stat-label">Burned Value</div>
             </div>
-            <div className="hero-stat">
-              <div className="hero-stat-value" style={{color: '#4CAF50'}}>91%</div>
-              <div className="hero-stat-label">Project Supply</div>
-            </div>
           </div>
+        </section>
+
+        {/* CURRENCY SELECTOR */}
+        <section style={{
+          margin: '0 auto 12px',
+          maxWidth: '1200px',
+          padding: '0 20px',
+          display: 'flex',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '8px 16px',
+            background: 'rgba(212,175,55,0.1)',
+            borderRadius: '20px',
+            border: '1px solid rgba(212,175,55,0.3)',
+          }}>
+            <span style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 600 }}>💱 Display Currency:</span>
+            <select
+              value={displayCurrency}
+              onChange={(e) => {
+                setDisplayCurrency(e.target.value);
+                localStorage.setItem('dtgc-display-currency', e.target.value);
+              }}
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(0,0,0,0.3)',
+                border: '1px solid rgba(212,175,55,0.4)',
+                borderRadius: '8px',
+                color: '#D4AF37',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              <option value="units">🔢 Units (Tokens)</option>
+              <option value="usd">🇺🇸 USD ($)</option>
+              <option value="eur">🇪🇺 EUR (€)</option>
+              <option value="gbp">🇬🇧 GBP (£)</option>
+              <option value="jpy">🇯🇵 JPY (¥)</option>
+              <option value="sar">🇸🇦 SAR (﷼)</option>
+              <option value="cny">🇨🇳 CNY (¥)</option>
+              <option value="czk">🇨🇿 CZK (Kč)</option>
+              <option value="aud">🇦🇺 AUD (A$)</option>
+              <option value="ngn">🇳🇬 NGN (₦)</option>
+              <option value="cop">🇨🇴 COP ($)</option>
+              <option value="cad">🇨🇦 CAD (C$)</option>
+            </select>
+          </div>
+        </section>
+
+        {/* DTGC BURN BAR - LIVE */}
+        <section style={{
+          margin: '0 auto 20px',
+          maxWidth: '1200px',
+          padding: '0 20px',
+        }}>
+          <a 
+            href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.burn}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ textDecoration: 'none' }}
+          >
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(244,67,54,0.15) 0%, rgba(255,152,0,0.15) 100%)',
+              border: '1px solid rgba(244,67,54,0.4)',
+              borderRadius: '12px',
+              padding: '16px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '16px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '2rem' }}>🔥</span>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                    DTGC Burned Forever
+                  </div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#F44336' }}>
+                    {dtgcBurnData.loading ? '⏳ Loading...' : formatNumber(dtgcBurnData.burned)} DTGC
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#888' }}>Live USD Value</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#4CAF50' }}>
+                  ${formatNumber(dtgcBurnData.burned * livePrices.dtgc, 2)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.65rem', color: '#888' }}>% of Total Supply</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FF9800' }}>
+                  {((dtgcBurnData.burned / DTGC_TOTAL_SUPPLY) * 100).toFixed(4)}%
+                </div>
+              </div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                background: 'rgba(244,67,54,0.2)',
+                borderRadius: '20px',
+                border: '1px solid rgba(244,67,54,0.4)',
+              }}>
+                <span style={{ 
+                  width: '8px', 
+                  height: '8px', 
+                  borderRadius: '50%', 
+                  background: dtgcBurnData.loading ? '#FF9800' : '#4CAF50',
+                  animation: 'pulse 2s infinite'
+                }} />
+                <span style={{ fontSize: '0.75rem', color: dtgcBurnData.loading ? '#FF9800' : '#4CAF50' }}>
+                  {dtgcBurnData.loading ? 'LOADING' : 'LIVE'} • View on Explorer ↗
+                </span>
+              </div>
+            </div>
+          </a>
         </section>
 
         {/* GOLD SUPPLY DYNAMICS BOX */}
@@ -5067,7 +6850,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Circulating */}
+              {/* DAO Ecosystem (Dev + Treasury + LP Locked) */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(255,152,0,0.1) 0%, rgba(255,152,0,0.05) 100%)',
                 border: '1px solid rgba(255,152,0,0.3)',
@@ -5075,13 +6858,13 @@ export default function App() {
                 padding: '16px',
                 textAlign: 'center',
               }}>
-                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>💱</div>
-                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>CIRCULATING</div>
+                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🏦</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>DAO ECOSYSTEM</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF9800' }}>
-                  {formatNumber(supplyDynamics.circulating)}
+                  {formatNumber(supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#FF9800', fontWeight: 600 }}>
-                  {((supplyDynamics.circulating / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
+                  {(((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
                 </div>
                 <div style={{ 
                   height: '4px',
@@ -5091,12 +6874,13 @@ export default function App() {
                   marginTop: '4px'
                 }}>
                   <div style={{
-                    width: `${(supplyDynamics.circulating / DTGC_TOTAL_SUPPLY) * 100}%`,
+                    width: `${((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100}%`,
                     height: '100%',
                     background: '#FF9800',
                     borderRadius: '2px',
                   }} />
                 </div>
+                <div style={{ fontSize: '0.55rem', color: '#666', marginTop: '6px' }}>Dev + Treasury + LP</div>
               </div>
             </div>
 
@@ -5106,23 +6890,11 @@ export default function App() {
               borderRadius: '8px',
               padding: '12px 16px',
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'center',
               alignItems: 'center',
               flexWrap: 'wrap',
-              gap: '12px',
+              gap: '20px',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.75rem', color: '#888' }}>PROJECT SUPPLY:</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#4CAF50' }}>
-                  {(((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.75rem', color: '#888' }}>PUBLIC FLOAT:</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#FF9800' }}>
-                  {((supplyDynamics.circulating / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
-                </span>
-              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.75rem', color: '#888' }}>MARKET CAP:</span>
                 <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#D4AF37' }}>
@@ -5153,35 +6925,47 @@ export default function App() {
               <div style={{ 
                 fontSize: '0.6rem', 
                 color: '#666', 
-                textAlign: 'center', 
                 marginBottom: '6px',
                 letterSpacing: '1px',
                 textTransform: 'uppercase',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
+                justifyContent: 'space-between',
+                gap: '8px',
+                flexWrap: 'wrap',
+                padding: '0 60px'
               }}>
-                📊 Top Holder Wallets (Excluding DAO/Dev) • Hover to Pause
-                {liveHolders.loading ? (
-                  <span style={{ color: '#FF9800' }}>⏳ Loading...</span>
-                ) : (
-                  <span style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    color: '#4CAF50' 
-                  }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  📊 PUBLIC HOLDERS • Hover to Pause
+                  {liveHolders.loading ? (
+                    <span style={{ color: '#FF9800' }}>⏳ Loading...</span>
+                  ) : (
                     <span style={{ 
-                      width: '6px', 
-                      height: '6px', 
-                      borderRadius: '50%', 
-                      background: '#4CAF50',
-                      animation: 'pulse 2s infinite'
-                    }} />
-                    LIVE
-                  </span>
-                )}
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '4px',
+                      color: '#4CAF50' 
+                    }}>
+                      <span style={{ 
+                        width: '6px', 
+                        height: '6px', 
+                        borderRadius: '50%', 
+                        background: '#4CAF50',
+                        animation: 'pulse 2s infinite'
+                      }} />
+                      LIVE
+                    </span>
+                  )}
+                </div>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  color: '#D4AF37',
+                  fontWeight: 600
+                }}>
+                  <span>Total Holders: {liveHolders.totalHolders || '...'}</span>
+                </div>
               </div>
               <div className="ticker-track">
                 {/* First set of items */}
@@ -5203,11 +6987,24 @@ export default function App() {
               </div>
               <div style={{ 
                 fontSize: '0.55rem', 
-                color: '#555', 
+                color: '#888', 
                 textAlign: 'center', 
-                marginTop: '6px'
+                marginTop: '8px',
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '30px',
+                flexWrap: 'wrap',
+                padding: '0 40px'
               }}>
-                Total Tracked: {formatNumber((liveHolders.holders || []).reduce((sum, w) => sum + w.balance, 0))} DTGC • {(liveHolders.holders || []).length} Wallets
+                <span style={{ color: '#4CAF50' }}>
+                  💰 Top 50 Hold: {(liveHolders.trackedPctOfTotal || 0).toFixed(2)}% of total
+                </span>
+                <span style={{ color: '#FF9800' }}>
+                  📊 Public Float: {formatNumber(liveHolders.publicFloat || 0)} DTGC ({((liveHolders.publicFloat || 0) / DTGC_TOTAL_SUPPLY * 100).toFixed(1)}%)
+                </span>
+                <span style={{ color: '#D4AF37' }}>
+                  🏆 Tracked: {formatNumber(liveHolders.trackedBalance || 0)} DTGC
+                </span>
               </div>
             </div>
           </div>
@@ -5268,7 +7065,13 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="tiers-grid">
+              {/* ROW 1: Silver, Gold, Whale (3 cards) */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '16px',
+                marginBottom: '16px'
+              }}>
                 {V5_STAKING_TIERS.map((tier) => {
                   const effectiveAPR = getEffectiveAPR(tier.apr, livePrices.dtgcMarketCap || 0);
                   return (
@@ -5302,7 +7105,15 @@ export default function App() {
                   </div>
                   );
                 })}
+              </div>
 
+              {/* ROW 2: Diamond & Diamond+ LP Tiers (centered) */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '20px',
+                flexWrap: 'wrap'
+              }}>
                 {/* Diamond Tier with Dynamic APR */}
                 {(() => {
                   const diamondEffectiveAPR = getEffectiveAPR(V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost, livePrices.dtgcMarketCap || 0);
@@ -5311,11 +7122,12 @@ export default function App() {
                 <div
                   className={`tier-card diamond ${isLP && selectedTier === 3 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(3); setIsLP(true); }}
+                  style={{ flex: '0 1 280px', maxWidth: '320px' }}
                 >
                   <div className="tier-icon">{V5_DIAMOND_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_TIER.color }}>{V5_DIAMOND_TIER.name}</div>
                   <div className="tier-subtitle">{V5_DIAMOND_TIER.lpPair} LP • {V5_DIAMOND_TIER.boost}x BOOST!</div>
-                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${V5_DIAMOND_TIER.minInvest}</div>
+                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Max: ${V5_DIAMOND_TIER.minInvest.toLocaleString()}</div>
                   <div className="tier-apr-container">
                     <div className="tier-apr" style={{ color: 'var(--diamond-dark)' }}>{diamondEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
@@ -5350,12 +7162,12 @@ export default function App() {
                 <div
                   className={`tier-card diamond-plus ${isLP && selectedTier === 4 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(4); setIsLP(true); }}
-                  style={{ background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(123,31,162,0.15) 100%)', border: '2px solid #9C27B0' }}
+                  style={{ flex: '0 1 280px', maxWidth: '320px', background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(123,31,162,0.15) 100%)', border: '2px solid #9C27B0' }}
                 >
                   <div className="tier-icon" style={{ fontSize: '2.5rem' }}>{V5_DIAMOND_PLUS_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_PLUS_TIER.color }}>{V5_DIAMOND_PLUS_TIER.name}</div>
                   <div className="tier-subtitle" style={{ color: '#9C27B0' }}>{V5_DIAMOND_PLUS_TIER.lpPair} LP • {V5_DIAMOND_PLUS_TIER.boost}x BOOST!</div>
-                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${V5_DIAMOND_PLUS_TIER.minInvest}</div>
+                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Max: ${V5_DIAMOND_PLUS_TIER.minInvest.toLocaleString()}</div>
                   <div className="tier-apr-container">
                     <div className="tier-apr" style={{ color: '#9C27B0', fontSize: '2.2rem' }}>{diamondPlusEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
@@ -5383,6 +7195,51 @@ export default function App() {
                 })()}
               </div>
 
+              {/* LP Staking Rewards Remaining */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '12px',
+                marginTop: '16px',
+                marginBottom: '16px'
+              }}>
+                {/* Diamond (DTGC Staking) Rewards */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(0,191,255,0.1) 0%, rgba(0,191,255,0.05) 100%)',
+                  border: '1px solid rgba(0,191,255,0.3)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '0.65rem', color: '#00BCD4', letterSpacing: '1px', marginBottom: '4px' }}>💎 DTGC STAKING REWARDS</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
+                    ${formatNumber((parseFloat(stakingRewardsRemaining) || 0) * (livePrices.dtgc || 0), 2)}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#00BCD4', marginTop: '4px' }}>
+                    {formatNumber(parseFloat(stakingRewardsRemaining) || 0)} DTGC
+                  </div>
+                  <div style={{ fontSize: '0.55rem', color: '#888', marginTop: '2px' }}>Silver • Gold • Whale</div>
+                </div>
+
+                {/* Diamond+ (LP Staking) Rewards */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(156,39,176,0.05) 100%)',
+                  border: '1px solid rgba(156,39,176,0.3)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '0.65rem', color: '#9C27B0', letterSpacing: '1px', marginBottom: '4px' }}>💜💎 LP STAKING REWARDS</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
+                    ${formatNumber((parseFloat(lpStakingRewardsRemaining) || 0) * (livePrices.dtgc || 0), 2)}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#9C27B0', marginTop: '4px' }}>
+                    {formatNumber(parseFloat(lpStakingRewardsRemaining) || 0)} DTGC
+                  </div>
+                  <div style={{ fontSize: '0.55rem', color: '#888', marginTop: '2px' }}>Diamond • Diamond+</div>
+                </div>
+              </div>
+
               {/* Staking Form */}
               {selectedTier !== null && account && (
                 <div className="staking-panel">
@@ -5394,19 +7251,28 @@ export default function App() {
                     <div className="input-header">
                       <span className="input-label">Amount</span>
                       <span className="balance-display" onClick={() => {
+                        // Get the correct balance based on tier
+                        const getBalance = () => {
+                          if (!isLP) return dtgcBalance;
+                          return selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance;
+                        };
+                        const getLpName = () => {
+                          if (!isLP) return 'DTGC';
+                          return selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP';
+                        };
                         if (stakeInputMode === 'tokens') {
-                          setStakeAmount(isLP ? lpBalance : dtgcBalance);
+                          setStakeAmount(getBalance());
                         } else {
                           // Set max in currency value
-                          const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
+                          const maxTokens = parseFloat(getBalance()) || 0;
                           const priceUsd = livePrices.dtgc || 0;
                           const valueUsd = maxTokens * priceUsd;
                           const currencyValue = convertToCurrency(valueUsd).value;
                           setStakeAmount(currencyValue.toFixed(2));
                         }
                       }} style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px'}}>
-                        <span>Balance: {formatNumber(parseFloat(isLP ? lpBalance : dtgcBalance))} {isLP ? 'LP' : 'DTGC'}</span>
-                        <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency((parseFloat(isLP ? lpBalance : dtgcBalance) || 0) * (livePrices.dtgc || 0)).value)}</span>
+                        <span>Balance: {formatNumber(parseFloat(isLP ? (selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance) : dtgcBalance))} {isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC'}</span>
+                        <span style={{fontSize: '0.75rem', color: '#4CAF50'}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency((parseFloat(isLP ? (selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance) : dtgcBalance) || 0) * (livePrices.dtgc || 0)).value)}</span>
                       </span>
                     </div>
                     <div className="input-container">
@@ -5465,10 +7331,14 @@ export default function App() {
                           {stakeInputMode === 'tokens' ? (isLP ? 'LP' : 'DTGC') : displayCurrency.toUpperCase()}
                         </button>
                         <button className="max-btn" onClick={() => {
+                          const getBalance = () => {
+                            if (!isLP) return dtgcBalance;
+                            return selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance;
+                          };
                           if (stakeInputMode === 'tokens') {
-                            setStakeAmount(isLP ? lpBalance : dtgcBalance);
+                            setStakeAmount(getBalance());
                           } else {
-                            const maxTokens = parseFloat(isLP ? lpBalance : dtgcBalance) || 0;
+                            const maxTokens = parseFloat(getBalance()) || 0;
                             const priceUsd = livePrices.dtgc || 0;
                             const valueUsd = maxTokens * priceUsd;
                             const currencyValue = convertToCurrency(valueUsd).value;
@@ -5495,6 +7365,50 @@ export default function App() {
                         ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency((parseFloat(stakeAmount) || 0) * (livePrices.dtgc || 0)).value)}
                       </div>
                     )}
+                  </div>
+
+                  {/* Gas Speed Selector */}
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    marginBottom: '16px',
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                  }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', marginRight: '8px' }}>
+                      ⛽ Speed:
+                    </div>
+                    {[
+                      { id: 'normal', label: '🐢 Normal', multiplier: '1x' },
+                      { id: 'fast', label: '🚀 Fast', multiplier: '1.5x' },
+                      { id: 'urgent', label: '⚡ Urgent', multiplier: '2x' },
+                    ].map(speed => (
+                      <button
+                        key={speed.id}
+                        onClick={() => setGasSpeed(speed.id)}
+                        style={{
+                          flex: 1,
+                          padding: '8px 4px',
+                          background: gasSpeed === speed.id 
+                            ? speed.id === 'urgent' ? 'rgba(255,87,34,0.3)' : speed.id === 'fast' ? 'rgba(76,175,80,0.3)' : 'rgba(255,255,255,0.1)'
+                            : 'transparent',
+                          border: `1px solid ${gasSpeed === speed.id 
+                            ? speed.id === 'urgent' ? '#FF5722' : speed.id === 'fast' ? '#4CAF50' : 'rgba(255,255,255,0.3)'
+                            : 'rgba(255,255,255,0.1)'}`,
+                          borderRadius: '8px',
+                          color: gasSpeed === speed.id ? '#fff' : 'var(--text-muted)',
+                          fontSize: '0.7rem',
+                          fontWeight: gasSpeed === speed.id ? 600 : 400,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <div>{speed.label}</div>
+                        <div style={{ fontSize: '0.6rem', opacity: 0.7 }}>{speed.multiplier} gas</div>
+                      </button>
+                    ))}
                   </div>
 
                   <button
@@ -5531,36 +7445,94 @@ export default function App() {
                   padding: '30px',
                   border: '1px solid var(--border-color)',
                 }}>
-                  <h3 style={{
-                    fontFamily: 'Cinzel, serif',
-                    fontSize: '1.2rem',
-                    letterSpacing: '3px',
-                    marginBottom: '20px',
-                    textAlign: 'center',
-                    color: 'var(--gold)',
-                  }}>📊 YOUR STAKED POSITIONS</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h3 style={{
+                      fontFamily: 'Cinzel, serif',
+                      fontSize: '1.2rem',
+                      letterSpacing: '3px',
+                      textAlign: 'center',
+                      color: 'var(--gold)',
+                      flex: 1,
+                    }}>📊 YOUR STAKED POSITIONS</h3>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Clear stale position data? Use this if you see old V2 stakes that no longer exist on the V3 contracts.')) {
+                          forceClearStaleData();
+                        }
+                      }}
+                      style={{
+                        background: 'rgba(255,107,107,0.1)',
+                        border: '1px solid rgba(255,107,107,0.3)',
+                        color: '#FF6B6B',
+                        fontSize: '0.7rem',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🗑️ Clear Stale
+                    </button>
+                  </div>
 
                   {stakedPositions.map((pos) => {
                     const now = Date.now();
                     const isLocked = now < pos.endTime;
                     const daysLeft = Math.max(0, Math.ceil((pos.endTime - now) / (24 * 60 * 60 * 1000)));
                     const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
-                    const effectiveApr = pos.apr * (pos.boostMultiplier || 1);
+                    // V19 APR Correction - Fix old contract's crazy APRs (use tierName string, not tier number)
+                    const correctedApr = getV19CorrectedAPR(pos.apr, pos.tierName || pos.tier, pos.isLP);
+                    const effectiveApr = correctedApr * (pos.boostMultiplier || 1);
                     const currentRewards = (pos.amount * (effectiveApr / 100) / 365) * daysStaked;
                     const rewardValue = currentRewards * (livePrices.dtgc || 0);
 
+                    // Determine tier display info
+                    let displayTierName, displayTierIcon, displayTierColor, displayBorderColor;
+                    if (pos.isLP) {
+                      if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+                        displayTierName = 'DIAMOND+ LP';
+                        displayTierIcon = '💜💎';
+                        displayTierColor = '#9C27B0';
+                        displayBorderColor = 'rgba(156,39,176,0.5)';
+                      } else {
+                        displayTierName = 'DIAMOND LP';
+                        displayTierIcon = '💎';
+                        displayTierColor = '#00BCD4';
+                        displayBorderColor = 'rgba(0,188,212,0.5)';
+                      }
+                    } else {
+                      // Regular DTGC stakes
+                      const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
+                      if (tierNum === 0 || pos.tierName === 'SILVER') {
+                        displayTierName = 'SILVER';
+                        displayTierIcon = '🥈';
+                        displayTierColor = '#C0C0C0';
+                        displayBorderColor = 'rgba(192,192,192,0.5)';
+                      } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                        displayTierName = 'WHALE';
+                        displayTierIcon = '🐋';
+                        displayTierColor = '#2196F3';
+                        displayBorderColor = 'rgba(33,150,243,0.5)';
+                      } else {
+                        displayTierName = 'GOLD';
+                        displayTierIcon = '🥇';
+                        displayTierColor = '#FFD700';
+                        displayBorderColor = 'rgba(255,215,0,0.5)';
+                      }
+                    }
+
                     return (
                       <div key={pos.id} style={{
-                        background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
-                        border: `1px solid ${isLocked ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
+                        background: isDark ? `linear-gradient(135deg, rgba(${displayTierColor === '#9C27B0' ? '156,39,176' : displayTierColor === '#00BCD4' ? '0,188,212' : displayTierColor === '#C0C0C0' ? '192,192,192' : displayTierColor === '#2196F3' ? '33,150,243' : '255,215,0'},0.1) 0%, rgba(0,0,0,0.2) 100%)` : `rgba(${displayTierColor === '#9C27B0' ? '156,39,176' : displayTierColor === '#00BCD4' ? '0,188,212' : displayTierColor === '#C0C0C0' ? '192,192,192' : displayTierColor === '#2196F3' ? '33,150,243' : '255,215,0'},0.05)`,
+                        border: `2px solid ${displayBorderColor}`,
+                        borderLeft: `4px solid ${displayTierColor}`,
                         borderRadius: '16px',
                         padding: '20px',
                         marginBottom: '15px',
                       }}>
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px'}}>
                           <div>
-                            <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '1.1rem', color: pos.isLP ? 'var(--diamond)' : 'var(--gold)'}}>
-                              {pos.isLP ? '💎 DIAMOND LP' : '🥇 DTGC STAKE'}
+                            <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '1.1rem', color: displayTierColor}}>
+                              {displayTierIcon} {displayTierName}
                             </div>
                             <div style={{fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px'}}>
                               Staked: <strong>{formatNumber(pos.amount)} {pos.isLP ? 'LP' : 'DTGC'}</strong>
@@ -5569,7 +7541,7 @@ export default function App() {
                               </span>
                             </div>
                             <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px'}}>
-                              APR: <strong>{effectiveApr.toFixed(1)}%</strong> {pos.boostMultiplier > 1 && `(${pos.boostMultiplier}x boost)`}
+                              APR: <strong style={{color: displayTierColor}}>{effectiveApr.toFixed(1)}%</strong> {pos.boostMultiplier > 1 && `(${pos.boostMultiplier}x boost)`}
                             </div>
                             <div style={{fontSize: '0.8rem', color: isLocked ? '#FF6B6B' : '#4CAF50', marginTop: '4px'}}>
                               {isLocked ? `🔒 ${daysLeft} days remaining` : '✅ Unlocked - Ready to claim!'}
@@ -5586,7 +7558,7 @@ export default function App() {
                             <div style={{fontSize: '0.75rem', color: '#4CAF50', opacity: 0.9}}>
                               ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValue).value)}
                             </div>
-                            <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end'}}>
+                            <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
                               {isLocked ? (
                                 <button
                                   onClick={() => handleEmergencyWithdraw(pos.isLP)}
@@ -5637,6 +7609,27 @@ export default function App() {
                                   </button>
                                 </>
                               )}
+                              {/* Ghost Clear Button */}
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('Clear this position from UI? Use if you get errors (ghost V2 data).')) {
+                                    setStakedPositions(prev => prev.filter(p => p.id !== pos.id));
+                                    showToast('🧹 Position cleared from UI', 'success');
+                                  }
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  background: 'transparent',
+                                  border: '1px dashed rgba(255,255,255,0.3)',
+                                  borderRadius: '20px',
+                                  fontWeight: 500,
+                                  fontSize: '0.6rem',
+                                  color: 'rgba(255,255,255,0.5)',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                🧹 Clear Ghost
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -5738,46 +7731,6 @@ export default function App() {
                   </button>
                 </div>
               )}
-
-              {/* DTGC Logo/Favicon at Bottom of Stake Page */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '40px 20px',
-                marginTop: '20px',
-              }}>
-                <img 
-                  src="/favicon.png" 
-                  alt="DTGC Logo" 
-                  style={{
-                    width: '120px',
-                    height: '120px',
-                    borderRadius: '50%',
-                    border: '3px solid var(--gold)',
-                    boxShadow: '0 0 30px rgba(212,175,55,0.4), 0 0 60px rgba(212,175,55,0.2)',
-                    animation: 'float 3s ease-in-out infinite',
-                  }}
-                />
-                <p style={{
-                  color: 'var(--gold)',
-                  fontFamily: 'Cinzel, serif',
-                  fontSize: '1.1rem',
-                  letterSpacing: '4px',
-                  marginTop: '16px',
-                  textTransform: 'uppercase',
-                }}>
-                  DT GOLD COIN
-                </p>
-                <p style={{
-                  color: 'var(--text-muted)',
-                  fontSize: '0.8rem',
-                  marginTop: '8px',
-                }}>
-                  Premium Staking on PulseChain
-                </p>
-              </div>
             </section>
           )}
 
@@ -6192,7 +8145,7 @@ export default function App() {
                 <h3 className="wp-card-title gold-text">💰 V5 GOLD PAPER TOKENOMICS</h3>
                 <div className="wp-card-content">
                   <p><strong>Total Supply: 1,000,000,000 DTGC</strong></p>
-                  <p style={{color: 'var(--gold)', fontWeight: '600', marginBottom: '16px'}}>⚠️ 91% CONTROLLED • ONLY 9% FLOAT!</p>
+                  <p style={{color: 'var(--gold)', fontWeight: '600', marginBottom: '16px'}}>DTGC Tokenomics</p>
                   <table className="tokenomics-table">
                     <thead>
                       <tr><th>Allocation</th><th>Amount</th><th>Percentage</th></tr>
@@ -6227,7 +8180,7 @@ export default function App() {
                       <tr><td>🥇 Gold</td><td>$500</td><td>90 days</td><td>16.8%</td><td>1x</td><td>DTGC</td></tr>
                       <tr><td>🐋 Whale</td><td>$10k</td><td>180 days</td><td>18.2%</td><td>1x</td><td>DTGC</td></tr>
                       <tr style={{background: 'rgba(0, 188, 212, 0.1)'}}><td>💎 Diamond</td><td>$1,000</td><td>90 days</td><td style={{color: '#00BCD4', fontWeight: '700'}}>28%</td><td style={{color: '#4CAF50', fontWeight: '700'}}>1.5x (42%)</td><td>DTGC/PLS LP</td></tr>
-                      <tr style={{background: 'rgba(156, 39, 176, 0.15)'}}><td>💎✨ Diamond+</td><td>$1,000</td><td>90 days</td><td style={{color: '#9C27B0', fontWeight: '700'}}>35%</td><td style={{color: '#9C27B0', fontWeight: '700'}}>2x (70%)</td><td>DTGC/URMOM LP</td></tr>
+                      <tr style={{background: 'rgba(156, 39, 176, 0.15)'}}><td>💜💎 Diamond+</td><td>$1,000</td><td>90 days</td><td style={{color: '#9C27B0', fontWeight: '700'}}>35%</td><td style={{color: '#9C27B0', fontWeight: '700'}}>2x (70%)</td><td>DTGC/URMOM LP</td></tr>
                     </tbody>
                   </table>
                   <div className="wp-highlight">
@@ -6354,11 +8307,13 @@ export default function App() {
                 {[
                   { label: '🪙 DTGC Token', addr: CONTRACT_ADDRESSES.dtgc },
                   { label: '👩 URMOM Token', addr: CONTRACT_ADDRESSES.urmom },
-                  { label: '💧 DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lp },
-                  { label: '✅ DTGC Staking V2', addr: CONTRACT_ADDRESSES.stakingV2 },
-                  { label: '✅ LP Staking V2', addr: CONTRACT_ADDRESSES.lpStakingV2 },
-                  { label: '🗳️ DAO Voting', addr: CONTRACT_ADDRESSES.daoVoting },
+                  { label: '💎 DTGC/PLS LP', addr: CONTRACT_ADDRESSES.lpDtgcPls },
+                  { label: '💜💎 DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lpDtgcUrmom },
+                  { label: '✅ DTGC Staking V3', addr: CONTRACT_ADDRESSES.stakingV3 },
+                  { label: '✅ LP Staking V3', addr: CONTRACT_ADDRESSES.lpStakingV3 },
+                  { label: '🗳️ DAO Voting V3', addr: CONTRACT_ADDRESSES.daoVotingV3 },
                   { label: '🏛️ DAO Treasury', addr: CONTRACT_ADDRESSES.daoTreasury },
+                  { label: '👨‍💻 Dev Wallet', addr: CONTRACT_ADDRESSES.devWallet },
                   { label: '🔥 Burn Address', addr: CONTRACT_ADDRESSES.burn },
                 ].map((item, i) => (
                   <div key={i} className="contract-row">
@@ -6400,6 +8355,10 @@ export default function App() {
                     <option value="sar">🇸🇦 SAR (﷼)</option>
                     <option value="cny">🇨🇳 CNY (¥)</option>
                     <option value="czk">🇨🇿 CZK (Kč)</option>
+                    <option value="aud">🇦🇺 AUD (A$)</option>
+                    <option value="ngn">🇳🇬 NGN (₦)</option>
+                    <option value="cop">🇨🇴 COP ($)</option>
+                    <option value="cad">🇨🇦 CAD (C$)</option>
                   </select>
                 </div>
                 <div className="section-divider" style={{ background: 'linear-gradient(90deg, transparent, #2196F3, transparent)' }} />
@@ -6671,6 +8630,331 @@ export default function App() {
                 </div>
               </div>
 
+              {/* ═══════════════════════════════════════════════════════════════ */}
+              {/*     🎲 DYNAMIC STAKE HEDGING FORECASTER - "IT'S GAMBLING IF YOU CAN'T FORECAST FIRST" */}
+              {/* ═══════════════════════════════════════════════════════════════ */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(156,39,176,0.15), rgba(0,188,212,0.1))',
+                border: '3px solid #D4AF37',
+                borderRadius: '20px',
+                padding: '28px',
+                marginBottom: '24px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {/* Decorative corner */}
+                <div style={{ position: 'absolute', top: 0, right: 0, width: '120px', height: '120px', background: 'linear-gradient(135deg, transparent 50%, rgba(212,175,55,0.1) 50%)', pointerEvents: 'none' }} />
+                
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <h3 style={{ color: '#D4AF37', fontSize: '1.5rem', marginBottom: '8px', fontFamily: "'Cinzel', serif", letterSpacing: '2px' }}>
+                    🎯 DYNAMIC STAKE HEDGING FORECASTER
+                  </h3>
+                  <p style={{ color: '#9C27B0', fontSize: '1rem', fontWeight: 'bold', fontStyle: 'italic' }}>
+                    "It's gambling if you can't forecast first"
+                  </p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px' }}>
+                    Allocate your portfolio across tiers and simulate price scenarios before staking
+                  </p>
+                </div>
+
+                {/* Investment & Price Change Inputs */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  <div>
+                    <label style={{ color: '#D4AF37', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>💰 Total Investment ($)</label>
+                    <input
+                      type="number"
+                      value={forecastInvestment}
+                      onChange={(e) => setForecastInvestment(e.target.value)}
+                      style={{ width: '100%', padding: '14px', background: 'rgba(0,0,0,0.4)', border: '2px solid #D4AF37', borderRadius: '10px', color: '#D4AF37', fontSize: '1.2rem', fontWeight: 'bold', boxSizing: 'border-box' }}
+                      placeholder="10000"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>📅 Staking Period (Months)</label>
+                    <select
+                      value={forecastMonths}
+                      onChange={(e) => setForecastMonths(e.target.value)}
+                      style={{ width: '100%', padding: '14px', background: 'rgba(0,0,0,0.4)', border: '2px solid rgba(255,255,255,0.3)', borderRadius: '10px', color: '#fff', fontSize: '1rem', boxSizing: 'border-box' }}
+                    >
+                      <option value="3">3 Months</option>
+                      <option value="6">6 Months</option>
+                      <option value="12">12 Months</option>
+                      <option value="24">24 Months</option>
+                      <option value="36">36 Months</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ color: parseFloat(forecastPriceChange) >= 0 ? '#4CAF50' : '#F44336', fontSize: '0.85rem', display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                      {parseFloat(forecastPriceChange) >= 0 ? '📈' : '📉'} Price Change at Exit (%)
+                    </label>
+                    <input
+                      type="number"
+                      value={forecastPriceChange}
+                      onChange={(e) => setForecastPriceChange(e.target.value)}
+                      style={{ 
+                        width: '100%', 
+                        padding: '14px', 
+                        background: parseFloat(forecastPriceChange) >= 0 ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)', 
+                        border: `2px solid ${parseFloat(forecastPriceChange) >= 0 ? '#4CAF50' : '#F44336'}`, 
+                        borderRadius: '10px', 
+                        color: parseFloat(forecastPriceChange) >= 0 ? '#4CAF50' : '#F44336', 
+                        fontSize: '1.2rem', 
+                        fontWeight: 'bold', 
+                        boxSizing: 'border-box' 
+                      }}
+                      placeholder="0"
+                    />
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'center' }}>
+                      Use negative for price drop (e.g. -50)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tier Allocation Sliders */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h4 style={{ color: '#fff', fontSize: '1rem' }}>📊 Portfolio Allocation</h4>
+                    <span style={{ 
+                      color: (parseFloat(forecastGoldPct) + parseFloat(forecastWhalePct) + parseFloat(forecastDiamondPct) + parseFloat(forecastDiamondPlusPct)) === 100 ? '#4CAF50' : '#F44336',
+                      fontWeight: 'bold',
+                      fontSize: '0.9rem'
+                    }}>
+                      Total: {parseFloat(forecastGoldPct || 0) + parseFloat(forecastWhalePct || 0) + parseFloat(forecastDiamondPct || 0) + parseFloat(forecastDiamondPlusPct || 0)}%
+                      {(parseFloat(forecastGoldPct) + parseFloat(forecastWhalePct) + parseFloat(forecastDiamondPct) + parseFloat(forecastDiamondPlusPct)) !== 100 && ' ⚠️ Must = 100%'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                    {/* Gold Allocation */}
+                    <div style={{ background: 'rgba(212,175,55,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #D4AF37' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>🥇 Gold</span>
+                        <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>{forecastGoldPct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastGoldPct}
+                        onChange={(e) => setForecastGoldPct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#D4AF37' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>16.8% APR</span>
+                        <span>90 Days Lock</span>
+                      </div>
+                    </div>
+
+                    {/* Whale Allocation */}
+                    <div style={{ background: 'rgba(33,150,243,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #2196F3' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#2196F3', fontWeight: 'bold' }}>🐋 Whale</span>
+                        <span style={{ color: '#2196F3', fontWeight: 'bold' }}>{forecastWhalePct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastWhalePct}
+                        onChange={(e) => setForecastWhalePct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#2196F3' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>18.2% APR</span>
+                        <span>180 Days Lock</span>
+                      </div>
+                    </div>
+
+                    {/* Diamond Allocation */}
+                    <div style={{ background: 'rgba(0,188,212,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #00BCD4' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#00BCD4', fontWeight: 'bold' }}>💎 Diamond LP</span>
+                        <span style={{ color: '#00BCD4', fontWeight: 'bold' }}>{forecastDiamondPct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastDiamondPct}
+                        onChange={(e) => setForecastDiamondPct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#00BCD4' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>42% APR (1.5x)</span>
+                        <span>DTGC/PLS LP</span>
+                      </div>
+                    </div>
+
+                    {/* Diamond+ Allocation */}
+                    <div style={{ background: 'rgba(156,39,176,0.15)', borderRadius: '12px', padding: '16px', border: '2px solid #9C27B0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>💜💎 Diamond+ LP</span>
+                        <span style={{ color: '#9C27B0', fontWeight: 'bold' }}>{forecastDiamondPlusPct}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={forecastDiamondPlusPct}
+                        onChange={(e) => setForecastDiamondPlusPct(e.target.value)}
+                        style={{ width: '100%', accentColor: '#9C27B0' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span>70% APR (2x)</span>
+                        <span>DTGC/URMOM LP</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Forecast Results */}
+                {(() => {
+                  const investment = parseFloat(forecastInvestment) || 0;
+                  const priceChange = parseFloat(forecastPriceChange) || 0;
+                  const months = parseFloat(forecastMonths) || 12;
+                  const goldPct = parseFloat(forecastGoldPct) || 0;
+                  const whalePct = parseFloat(forecastWhalePct) || 0;
+                  const diamondPct = parseFloat(forecastDiamondPct) || 0;
+                  const diamondPlusPct = parseFloat(forecastDiamondPlusPct) || 0;
+                  const totalPct = goldPct + whalePct + diamondPct + diamondPlusPct;
+
+                  if (totalPct !== 100 || investment <= 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                        {investment <= 0 ? 'Enter an investment amount' : 'Adjust allocations to total 100%'}
+                      </div>
+                    );
+                  }
+
+                  // Calculate allocations
+                  const goldAmt = investment * (goldPct / 100);
+                  const whaleAmt = investment * (whalePct / 100);
+                  const diamondAmt = investment * (diamondPct / 100);
+                  const diamondPlusAmt = investment * (diamondPlusPct / 100);
+
+                  // APRs and fees
+                  const APRS = { gold: 16.8, whale: 18.2, diamond: 42, diamondPlus: 70 };
+                  const ENTRY_FEE = 3.75 / 100;
+                  const EXIT_FEE = 3.75 / 100;
+
+                  // Calculate rewards for each tier (after entry fee)
+                  const calcTierResult = (amt, apr) => {
+                    const afterEntry = amt * (1 - ENTRY_FEE);
+                    const rewards = afterEntry * (apr / 100) * (months / 12);
+                    const totalBeforeExit = afterEntry + rewards;
+                    const afterExit = totalBeforeExit * (1 - EXIT_FEE);
+                    // Apply price change
+                    const finalValue = afterExit * (1 + priceChange / 100);
+                    return { afterEntry, rewards, afterExit, finalValue };
+                  };
+
+                  const goldResult = calcTierResult(goldAmt, APRS.gold);
+                  const whaleResult = calcTierResult(whaleAmt, APRS.whale);
+                  const diamondResult = calcTierResult(diamondAmt, APRS.diamond);
+                  const diamondPlusResult = calcTierResult(diamondPlusAmt, APRS.diamondPlus);
+
+                  const totalRewards = goldResult.rewards + whaleResult.rewards + diamondResult.rewards + diamondPlusResult.rewards;
+                  const totalFinalValue = goldResult.finalValue + whaleResult.finalValue + diamondResult.finalValue + diamondPlusResult.finalValue;
+                  const netGainLoss = totalFinalValue - investment;
+                  const netPercent = (netGainLoss / investment) * 100;
+                  const blendedAPR = ((goldPct/100)*APRS.gold + (whalePct/100)*APRS.whale + (diamondPct/100)*APRS.diamond + (diamondPlusPct/100)*APRS.diamondPlus);
+
+                  // Calculate breakeven price drop
+                  const rewardsOnly = totalRewards;
+                  const totalAfterFees = investment * (1 - ENTRY_FEE) * (1 - EXIT_FEE);
+                  const breakeven = ((rewardsOnly * (1 - EXIT_FEE)) / totalAfterFees) * 100;
+
+                  return (
+                    <>
+                      {/* Results Header */}
+                      <div style={{ 
+                        background: netGainLoss >= 0 ? 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.1))' : 'linear-gradient(135deg, rgba(244,67,54,0.2), rgba(244,67,54,0.1))',
+                        borderRadius: '16px',
+                        padding: '20px',
+                        marginBottom: '20px',
+                        border: `2px solid ${netGainLoss >= 0 ? '#4CAF50' : '#F44336'}`,
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '8px' }}>
+                          📊 Projected Portfolio Value After {months} Months
+                        </div>
+                        <div style={{ color: netGainLoss >= 0 ? '#4CAF50' : '#F44336', fontSize: '2.5rem', fontWeight: 'bold' }}>
+                          ${totalFinalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </div>
+                        <div style={{ color: netGainLoss >= 0 ? '#4CAF50' : '#F44336', fontSize: '1.2rem', fontWeight: 'bold', marginTop: '8px' }}>
+                          {netGainLoss >= 0 ? '📈' : '📉'} {netGainLoss >= 0 ? '+' : ''}${netGainLoss.toLocaleString(undefined, { maximumFractionDigits: 0 })} ({netPercent >= 0 ? '+' : ''}{netPercent.toFixed(1)}%)
+                        </div>
+                        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+                          <span style={{ color: '#D4AF37' }}>Blended APR: <b>{blendedAPR.toFixed(1)}%</b></span>
+                          <span style={{ color: '#4CAF50' }}>Total Rewards: <b>${totalRewards.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b></span>
+                          <span style={{ color: '#2196F3' }}>Breakeven Drop: <b>{breakeven.toFixed(1)}%</b></span>
+                        </div>
+                      </div>
+
+                      {/* Tier Breakdown */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                        {goldPct > 0 && (
+                          <div style={{ background: 'rgba(212,175,55,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #D4AF37' }}>
+                            <div style={{ color: '#D4AF37', fontWeight: 'bold', marginBottom: '8px' }}>🥇 Gold ({goldPct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${goldAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${goldResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: goldResult.finalValue >= goldAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${goldResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                        {whalePct > 0 && (
+                          <div style={{ background: 'rgba(33,150,243,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #2196F3' }}>
+                            <div style={{ color: '#2196F3', fontWeight: 'bold', marginBottom: '8px' }}>🐋 Whale ({whalePct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${whaleAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${whaleResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: whaleResult.finalValue >= whaleAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${whaleResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                        {diamondPct > 0 && (
+                          <div style={{ background: 'rgba(0,188,212,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #00BCD4' }}>
+                            <div style={{ color: '#00BCD4', fontWeight: 'bold', marginBottom: '8px' }}>💎 Diamond ({diamondPct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${diamondAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${diamondResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: diamondResult.finalValue >= diamondAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${diamondResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                        {diamondPlusPct > 0 && (
+                          <div style={{ background: 'rgba(156,39,176,0.1)', borderRadius: '12px', padding: '14px', border: '1px solid #9C27B0' }}>
+                            <div style={{ color: '#9C27B0', fontWeight: 'bold', marginBottom: '8px' }}>💜💎 Diamond+ ({diamondPlusPct}%)</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Invested: ${diamondPlusAmt.toLocaleString()}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#4CAF50' }}>Rewards: +${diamondPlusResult.rewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div style={{ fontSize: '0.9rem', color: diamondPlusResult.finalValue >= diamondPlusAmt ? '#4CAF50' : '#F44336', fontWeight: 'bold' }}>Final: ${diamondPlusResult.finalValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Scenario Quick Buttons */}
+                      <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <button onClick={() => setForecastPriceChange('-50')} style={{ padding: '8px 16px', background: 'rgba(244,67,54,0.2)', border: '1px solid #F44336', borderRadius: '20px', color: '#F44336', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>📉 -50% Crash</button>
+                        <button onClick={() => setForecastPriceChange('-25')} style={{ padding: '8px 16px', background: 'rgba(255,152,0,0.2)', border: '1px solid #FF9800', borderRadius: '20px', color: '#FF9800', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>📉 -25% Dip</button>
+                        <button onClick={() => setForecastPriceChange('0')} style={{ padding: '8px 16px', background: 'rgba(158,158,158,0.2)', border: '1px solid #9E9E9E', borderRadius: '20px', color: '#9E9E9E', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>➡️ Flat</button>
+                        <button onClick={() => setForecastPriceChange('50')} style={{ padding: '8px 16px', background: 'rgba(76,175,80,0.2)', border: '1px solid #4CAF50', borderRadius: '20px', color: '#4CAF50', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>📈 +50% Pump</button>
+                        <button onClick={() => setForecastPriceChange('100')} style={{ padding: '8px 16px', background: 'rgba(33,150,243,0.2)', border: '1px solid #2196F3', borderRadius: '20px', color: '#2196F3', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem' }}>🚀 +100% Moon</button>
+                      </div>
+
+                      {/* Strategy Insight */}
+                      <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(212,175,55,0.1)', borderRadius: '12px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                        <div style={{ color: '#D4AF37', fontWeight: 'bold', marginBottom: '8px' }}>💡 Strategy Insight</div>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
+                          {priceChange < -30 
+                            ? `⚠️ In a ${Math.abs(priceChange)}% crash, your ${blendedAPR.toFixed(1)}% blended APR helps offset losses. Higher LP allocation (Diamond/Diamond+) provides more protection through higher yields.`
+                            : priceChange < 0
+                            ? `📊 With a ${Math.abs(priceChange)}% dip, your staking rewards can help recover losses. Your breakeven is at ${breakeven.toFixed(1)}% price drop.`
+                            : priceChange === 0
+                            ? `✨ With flat prices, you earn pure ${blendedAPR.toFixed(1)}% APR returns. Consider increasing Diamond+ for maximum yield.`
+                            : `🚀 In a ${priceChange}% pump, your ${totalRewards.toLocaleString(undefined, {maximumFractionDigits: 0})} rewards compound with price gains for ${netPercent.toFixed(1)}% total return!`
+                          }
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
               {/* DYNAMIC PERSONAL FORECASTING CALCULATOR */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(156,39,176,0.1))',
@@ -6728,7 +9012,7 @@ export default function App() {
                       <option value="gold">🥇 Gold (16.8% APR, 90d)</option>
                       <option value="whale">🐋 Whale (18.2% APR, 180d)</option>
                       <option value="diamond">💎 Diamond LP (42% eff)</option>
-                      <option value="diamondplus">💎✨ Diamond+ LP (70% eff)</option>
+                      <option value="diamondplus">💜💎 Diamond+ LP (70% eff)</option>
                     </select>
                   </div>
                   <div>
@@ -6776,7 +9060,7 @@ export default function App() {
                     gold: { apr: 16.8, lock: 90, name: 'Gold', icon: '🥇' },
                     whale: { apr: 18.2, lock: 180, name: 'Whale', icon: '🐋' },
                     diamond: { apr: 42, lock: 90, name: 'Diamond LP', icon: '💎' },
-                    diamondplus: { apr: 70, lock: 90, name: 'Diamond+ LP', icon: '💎✨' },
+                    diamondplus: { apr: 70, lock: 90, name: 'Diamond+ LP', icon: '💜💎' },
                   }[calcTier];
 
                   const entryFee = 0.0375;
@@ -6894,7 +9178,7 @@ export default function App() {
                         <td style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#00BCD4', fontWeight: 'bold' }}>42%</td>
                       </tr>
                       <tr style={{ background: 'rgba(156,39,176,0.15)' }}>
-                        <td style={{ padding: '12px', fontWeight: 'bold' }}>💎✨ Diamond+ LP</td>
+                        <td style={{ padding: '12px', fontWeight: 'bold' }}>💜💎 Diamond+ LP</td>
                         <td style={{ padding: '12px', textAlign: 'center' }}>$1,000</td>
                         <td style={{ padding: '12px', textAlign: 'center' }}>90 days</td>
                         <td style={{ padding: '12px', textAlign: 'center', color: '#9C27B0' }}>35%</td>
@@ -7052,19 +9336,275 @@ export default function App() {
 
         {/* Footer */}
         <footer className="footer">
-          <div className="footer-logo gold-text">DTGC</div>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            marginBottom: '16px'
+          }}>
+            <div style={{
+              position: 'relative',
+              width: '80px',
+              height: '80px',
+              marginBottom: '12px'
+            }}>
+              <img 
+                src="/favicon1.png" 
+                alt="DTGC" 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.6)) drop-shadow(0 0 20px rgba(212,175,55,0.4)) drop-shadow(0 0 30px rgba(212,175,55,0.2))',
+                  animation: 'goldGlow 3s ease-in-out infinite'
+                }}
+              />
+              <div style={{
+                position: 'absolute',
+                inset: '-10px',
+                background: 'radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%)',
+                borderRadius: '50%',
+                animation: 'pulse 2s ease-in-out infinite',
+                zIndex: -1
+              }} />
+            </div>
+            <div style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 600, letterSpacing: '2px' }}>
+              Premium Staking on PulseChain
+            </div>
+          </div>
           <div className="footer-links">
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV2}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking Contract</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV2}`} target="_blank" rel="noopener noreferrer" className="footer-link">LP Staking</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVoting}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking V3</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">LP Staking V3</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVotingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting V3</a>
             <a href={SOCIAL_LINKS.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
-          <p className="footer-text">© 2025 DT GOLD COIN • dtgc.io • Premium Staking on PulseChain • Diamond & Diamond+ LP Tiers 💎✨</p>
+          <p className="footer-text">© 2026 dtgc.io • Premium Staking on PulseChain</p>
         </footer>
 
         {/* DexScreener Widget */}
         <DexScreenerWidget />
+
+        {/* Gold Records - Stake History (Bottom Right) */}
+        <div
+          onClick={() => setShowGoldRecords(true)}
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            width: '60px',
+            height: '60px',
+            background: 'linear-gradient(135deg, #B8860B 0%, #DAA520 50%, #FFD700 100%)',
+            border: '3px solid #D4AF37',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            zIndex: 1500,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '28px',
+            boxShadow: '0 4px 20px rgba(212,175,55,0.5), inset 0 2px 10px rgba(255,255,255,0.2)',
+            transition: 'all 0.3s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 30px rgba(212,175,55,0.7)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(212,175,55,0.5)';
+          }}
+          title="Gold Records - Stake History"
+        >
+          📜
+        </div>
+
+        {/* Gold Records Modal */}
+        {showGoldRecords && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            backdropFilter: 'blur(10px)',
+          }} onClick={() => setShowGoldRecords(false)}>
+            <div style={{
+              background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+              border: '2px solid #D4AF37',
+              borderRadius: '24px',
+              padding: '32px',
+              maxWidth: '700px',
+              width: '95%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 60px rgba(212,175,55,0.3)',
+            }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h2 style={{
+                  color: '#D4AF37',
+                  fontFamily: 'Cinzel, serif',
+                  fontSize: '1.8rem',
+                  letterSpacing: '3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}>
+                  📜 GOLD RECORDS
+                </h2>
+                <button
+                  onClick={() => setShowGoldRecords(false)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    fontSize: '1.5rem',
+                    cursor: 'pointer',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px', textAlign: 'center' }}>
+                Complete history of your staking activity
+              </p>
+
+              {stakeHistory.length === 0 ? (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '60px 20px',
+                  color: '#666',
+                }}>
+                  <div style={{ fontSize: '4rem', marginBottom: '16px', opacity: 0.5 }}>📦</div>
+                  <p style={{ fontSize: '1.1rem' }}>No stake history yet</p>
+                  <p style={{ fontSize: '0.85rem', marginTop: '8px' }}>Your completed stakes will appear here</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {stakeHistory.map((record) => (
+                    <div key={record.id} style={{
+                      background: record.exitType === 'emergency' 
+                        ? 'rgba(255,107,107,0.1)' 
+                        : 'rgba(76,175,80,0.1)',
+                      border: `1px solid ${record.exitType === 'emergency' ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
+                      borderRadius: '16px',
+                      padding: '20px',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                        <div>
+                          <div style={{ 
+                            fontFamily: 'Cinzel, serif', 
+                            fontWeight: 700, 
+                            fontSize: '1.1rem', 
+                            color: record.isLP ? '#9C27B0' : '#D4AF37',
+                            marginBottom: '8px',
+                          }}>
+                            {record.isLP ? '💎' : '🪙'} {record.tier} {record.isLP ? 'LP STAKE' : 'STAKE'}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            Amount: <strong>{formatNumber(record.amount)} {record.isLP ? 'LP' : 'DTGC'}</strong>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#4CAF50', marginTop: '4px' }}>
+                            Rewards: <strong>+{formatNumber(record.rewards)} DTGC</strong>
+                          </div>
+                          {record.penalty > 0 && (
+                            <div style={{ fontSize: '0.8rem', color: '#FF6B6B', marginTop: '4px' }}>
+                              Penalty: <strong>-{formatNumber(record.penalty)} DTGC</strong> (20% EES)
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                            📅 {new Date(record.startTime).toLocaleDateString()} → {new Date(record.endTime).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>APR</div>
+                          <div style={{ fontSize: '1rem', fontWeight: 700, color: '#D4AF37' }}>
+                            {record.apr?.toFixed(1)}%
+                          </div>
+                          <div style={{ 
+                            fontSize: '0.7rem', 
+                            marginTop: '8px',
+                            padding: '4px 8px',
+                            borderRadius: '8px',
+                            background: record.exitType === 'emergency' ? 'rgba(255,107,107,0.2)' : 'rgba(76,175,80,0.2)',
+                            color: record.exitType === 'emergency' ? '#FF6B6B' : '#4CAF50',
+                          }}>
+                            {record.exitType === 'emergency' ? '⚠️ Early Exit' : '✅ Completed'}
+                          </div>
+                          {record.txHash && (
+                            <a 
+                              href={`https://scan.pulsechain.com/tx/${record.txHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: '0.7rem', color: '#2196F3', marginTop: '8px', display: 'block' }}
+                            >
+                              View TX ↗
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        marginTop: '12px', 
+                        paddingTop: '12px', 
+                        borderTop: '1px solid rgba(255,255,255,0.1)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Net Return:</span>
+                        <span style={{ 
+                          fontSize: '1.1rem', 
+                          fontWeight: 800, 
+                          color: record.penalty > 0 ? '#FFB74D' : '#4CAF50',
+                        }}>
+                          {formatNumber(record.returnAmount)} {record.isLP ? 'LP + DTGC' : 'DTGC'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {stakeHistory.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('Clear all stake history? This cannot be undone.')) {
+                      localStorage.removeItem('dtgc-stake-history');
+                      setStakeHistory([]);
+                      showToast('Stake history cleared', 'success');
+                    }
+                  }}
+                  style={{
+                    marginTop: '24px',
+                    padding: '10px 20px',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,107,107,0.3)',
+                    borderRadius: '8px',
+                    color: '#FF6B6B',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'block',
+                    margin: '24px auto 0',
+                  }}
+                >
+                  🗑️ Clear History
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stake Modal */}
@@ -7078,36 +9618,9 @@ export default function App() {
 
       {/* Wallet Selector Modal */}
       {showWalletModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.85)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          backdropFilter: 'blur(8px)',
-        }} onClick={() => setShowWalletModal(false)}>
-          <div style={{
-            background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
-            border: '2px solid #D4AF37',
-            borderRadius: '20px',
-            padding: '32px',
-            maxWidth: '420px',
-            width: '90%',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.2)',
-          }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{
-              color: '#D4AF37',
-              fontFamily: 'Cinzel, serif',
-              fontSize: '1.5rem',
-              textAlign: 'center',
-              marginBottom: '24px',
-              letterSpacing: '2px',
-            }}>
+        <div className="wallet-modal-overlay" onClick={() => setShowWalletModal(false)}>
+          <div className="wallet-modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2 className="wallet-modal-title">
               {walletStep === 'accounts' ? 'Select Account' : 'Select Wallet'}
             </h2>
 
@@ -7186,6 +9699,87 @@ export default function App() {
             {/* Wallet Selector Step */}
             {walletStep === 'select' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              
+              {/* QUICK CONNECT - Primary CTA */}
+              <button
+                onClick={connectAnyWallet}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '20px 24px',
+                  background: 'linear-gradient(135deg, #D4AF37, #B8860B)',
+                  border: '2px solid #FFD700',
+                  borderRadius: '14px',
+                  color: '#000',
+                  fontSize: '1.1rem',
+                  cursor: loading ? 'wait' : 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 6px 20px rgba(212,175,55,0.4)',
+                  fontWeight: 700,
+                }}
+              >
+                <span style={{ fontSize: '1.8rem' }}>⚡</span>
+                <div style={{ textAlign: 'left', flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>Quick Connect</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: 500 }}>Auto-detect your browser wallet</div>
+                </div>
+                <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '4px 10px', borderRadius: '8px' }}>RECOMMENDED</span>
+              </button>
+
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px', 
+                margin: '8px 0',
+                color: '#666',
+                fontSize: '0.8rem',
+              }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                <span>or choose specific wallet</span>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+              </div>
+
+              {/* WalletConnect - Mobile Option */}
+              <button
+                onClick={connectWalletConnect}
+                disabled={loading}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '14px 18px',
+                  background: 'linear-gradient(135deg, #3B99FC, #2D7DD2)',
+                  border: '1px solid #3B99FC',
+                  borderRadius: '12px',
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>🔗</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 600 }}>WalletConnect</div>
+                  <div style={{ fontSize: '0.65rem', opacity: 0.9 }}>Scan QR with mobile wallet</div>
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: '0.65rem', background: 'rgba(255,255,255,0.2)', padding: '3px 6px', borderRadius: '4px' }}>📱</span>
+              </button>
+
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px', 
+                margin: '4px 0',
+                color: '#555',
+                fontSize: '0.75rem',
+              }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
+                <span>browser extensions</span>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
+              </div>
+
               <button
                 onClick={() => connectWalletType('internetmoney')}
                 disabled={loading}
@@ -7193,27 +9787,26 @@ export default function App() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '16px',
-                  padding: '16px 20px',
-                  background: 'rgba(212,175,55,0.15)',
-                  border: '1px solid #D4AF37',
+                  padding: '14px 18px',
+                  background: 'rgba(212,175,55,0.1)',
+                  border: '1px solid rgba(212,175,55,0.5)',
                   borderRadius: '12px',
                   color: '#fff',
-                  fontSize: '1rem',
+                  fontSize: '0.95rem',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(212,175,55,0.3)';
-                  e.target.style.borderColor = '#FFD700';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(212,175,55,0.15)';
+                  e.target.style.background = 'rgba(212,175,55,0.25)';
                   e.target.style.borderColor = '#D4AF37';
                 }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(212,175,55,0.1)';
+                  e.target.style.borderColor = 'rgba(212,175,55,0.5)';
+                }}
               >
-                <span style={{ fontSize: '1.5rem' }}>💰</span>
+                <span style={{ fontSize: '1.3rem' }}>💰</span>
                 <span style={{ fontWeight: 600 }}>Internet Money</span>
-                <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#D4AF37' }}>RECOMMENDED</span>
               </button>
 
               <button
@@ -7224,8 +9817,8 @@ export default function App() {
                   alignItems: 'center',
                   gap: '16px',
                   padding: '16px 20px',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(76,175,80,0.15)',
+                  border: '2px solid #4CAF50',
                   borderRadius: '12px',
                   color: '#fff',
                   fontSize: '1rem',
@@ -7233,16 +9826,19 @@ export default function App() {
                   transition: 'all 0.3s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(212,175,55,0.2)';
-                  e.target.style.borderColor = '#D4AF37';
+                  e.target.style.background = 'rgba(76,175,80,0.3)';
+                  e.target.style.borderColor = '#66BB6A';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(255,255,255,0.05)';
-                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                  e.target.style.background = 'rgba(76,175,80,0.15)';
+                  e.target.style.borderColor = '#4CAF50';
                 }}
               >
                 <span style={{ fontSize: '1.5rem' }}>🦊</span>
-                <span style={{ fontWeight: 600 }}>MetaMask</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                  <span style={{ fontWeight: 600 }}>MetaMask</span>
+                  <span style={{ fontSize: '0.7rem', color: '#4CAF50', fontWeight: 500 }}>✓ Recommended for Diamond LP Stakes</span>
+                </div>
               </button>
 
               <button
@@ -7360,6 +9956,165 @@ export default function App() {
                 <span style={{ fontSize: '1.5rem' }}>🔗</span>
                 <span style={{ fontWeight: 600 }}>Other Wallet</span>
               </button>
+
+              {/* Mobile Wallet Section */}
+              <div style={{
+                marginTop: '16px',
+                paddingTop: '16px',
+                borderTop: '1px solid rgba(212,175,55,0.3)',
+              }}>
+                <p style={{
+                  color: '#D4AF37',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  marginBottom: '12px',
+                }}>
+                  📱 On Mobile? Open in Wallet Browser
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => openInWalletBrowser('metamask')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #E27625, #CD6116)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🦊 MetaMask
+                  </button>
+                  <button
+                    onClick={() => openInWalletBrowser('trust')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #3375BB, #0500FF)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🛡️ Trust
+                  </button>
+                  <button
+                    onClick={() => openInWalletBrowser('coinbase')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #0052FF, #0033CC)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🔵 Coinbase
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => openInWalletBrowser('okx')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #121212, #333)',
+                      border: '1px solid #666',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    ⬛ OKX
+                  </button>
+                  <button
+                    onClick={() => openInWalletBrowser('rainbow')}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'linear-gradient(135deg, #FF6B6B, #4ECDC4)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    🌈 Rainbow
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      showToast('URL copied! Paste in your wallet browser', 'success');
+                    }}
+                    style={{
+                      flex: '1',
+                      minWidth: '100px',
+                      padding: '12px 12px',
+                      background: 'rgba(212,175,55,0.2)',
+                      border: '1px solid #D4AF37',
+                      borderRadius: '10px',
+                      color: '#D4AF37',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    📋 Copy URL
+                  </button>
+                </div>
+                <p style={{
+                  color: '#666',
+                  fontSize: '0.7rem',
+                  textAlign: 'center',
+                  marginTop: '12px',
+                  lineHeight: 1.4,
+                }}>
+                  Tap a button to open this dApp in your wallet's browser
+                </p>
+              </div>
             </div>
             )}
 
