@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { ethers } from 'ethers';
+// BUILD: 2026-01-05-V19-FINAL-7538
 import {
   CONTRACTS,
   TOKENS,
