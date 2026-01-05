@@ -4681,13 +4681,13 @@ export default function App() {
       return;
     }
 
-    // Check if user already has an active LP stake (contract may only allow 1)
+    // NOTE: Multiple stakes allowed - contract will handle if there are restrictions
+    // Previously blocked LP stakes if existing - now letting contract decide
     if (isLP) {
       const existingLpStake = stakedPositions.find(p => p.isLP);
       if (existingLpStake) {
-        showToast(`⚠️ You already have an active LP stake (${formatNumber(existingLpStake.amount)} LP). Unstake first or wait for lock to expire.`, 'warning');
-        console.warn('🚫 User already has LP stake:', existingLpStake);
-        return;
+        console.log('ℹ️ User has existing LP stake, attempting to add another:', existingLpStake);
+        // Don't block - let contract handle it
       }
     }
 
@@ -5858,10 +5858,82 @@ export default function App() {
               borderRadius: '16px',
               border: '2px solid var(--gold)',
               padding: '12px 16px',
-              minWidth: '240px',
-              maxWidth: '300px',
+              minWidth: '280px',
+              maxWidth: '320px',
               boxShadow: '0 8px 32px rgba(212,175,55,0.3)',
             }}>
+              {/* Cumulative Totals Row */}
+              {(() => {
+                const positions = TESTNET_MODE ? testnetBalances.positions : stakedPositions;
+                const now = Date.now();
+                
+                // Calculate cumulative totals
+                const dtgcTotal = positions.filter(p => !p.isLP).reduce((sum, p) => sum + (p.amount || 0), 0);
+                const lpTotal = positions.filter(p => p.isLP).reduce((sum, p) => sum + (p.amount || 0), 0);
+                
+                // Calculate total rewards across all positions
+                const totalRewards = positions.reduce((sum, pos) => {
+                  const V19_CORRECTIONS = {
+                    'SILVER': { apr: 15.4 }, 'GOLD': { apr: 16.8 }, 'WHALE': { apr: 18.2 },
+                    'DIAMOND': { apr: 42 }, 'DIAMOND+': { apr: 70 },
+                  };
+                  let tierName = pos.tierName?.toUpperCase() || (pos.isLP ? (pos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND') : 'GOLD');
+                  const apr = V19_CORRECTIONS[tierName]?.apr || 16.8;
+                  const daysStaked = Math.max(0, (now - pos.startTime) / (24 * 60 * 60 * 1000));
+                  const rewards = (pos.amount * (apr / 100) / 365) * daysStaked;
+                  return sum + rewards;
+                }, 0);
+                
+                return (
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    marginBottom: '10px',
+                    paddingBottom: '10px',
+                    borderBottom: '1px solid rgba(212,175,55,0.3)',
+                  }}>
+                    {/* DTGC Total - Blue */}
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(33,150,243,0.15)',
+                      border: '1px solid rgba(33,150,243,0.4)',
+                      borderRadius: '8px',
+                      padding: '6px 8px',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '0.65rem', color: '#2196F3', fontWeight: 600, marginBottom: '2px' }}>DTGC</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>{formatNumber(dtgcTotal)}</div>
+                    </div>
+                    
+                    {/* LP Total - Purple */}
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(156,39,176,0.15)',
+                      border: '1px solid rgba(156,39,176,0.4)',
+                      borderRadius: '8px',
+                      padding: '6px 8px',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '0.65rem', color: '#9C27B0', fontWeight: 600, marginBottom: '2px' }}>LP</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>{formatNumber(lpTotal)}</div>
+                    </div>
+                    
+                    {/* Rewards Total - Green */}
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(76,175,80,0.15)',
+                      border: '1px solid rgba(76,175,80,0.4)',
+                      borderRadius: '8px',
+                      padding: '6px 8px',
+                      textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: '0.65rem', color: '#4CAF50', fontWeight: 600, marginBottom: '2px' }}>REWARDS</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>{formatNumber(totalRewards)}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+              
               {/* Diamond Selector Row */}
               <div style={{
                 display: 'flex',
