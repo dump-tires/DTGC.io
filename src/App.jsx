@@ -115,14 +115,17 @@ const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
 /*
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
-    ║     🏆 DTGC PREMIUM STAKING PLATFORM V4 - MAINNET 🏆         ║
+    ║     🏆 DTGC V4 STAKING PLATFORM - MAINNET LIVE 🏆            ║
     ║                                                               ║
-    ║     ✦ V4 UNLIMITED MULTI-STAKE SUPPORT                       ║
-    ║     ✦ V19 Gold Paper Tokenomics (91% Controlled!)            ║
-    ║     ✦ Diamond (DTGC/PLS) + Diamond+ (DTGC/URMOM) LP Tiers    ║
-    ║     ✦ Claim Rewards Without Unstaking (V4)                   ║
-    ║     ✦ 7.5% Total Fees • Sustainable APRs                     ║
-    ║     ✦ Live Prices from DexScreener                           ║
+    ║     ✦ V4 UNLIMITED MULTI-STAKE - FIRST ON PULSECHAIN!        ║
+    ║     ✦ Stack Multiple Positions Across All Tiers              ║
+    ║     ✦ Claim Rewards Without Unstaking                        ║
+    ║     ✦ Diamond+ LP: Up to 70% APR                             ║
+    ║     ✦ Gold Paper V4 Tokenomics                               ║
+    ║     ✦ Deployed: January 5, 2026                              ║
+    ║                                                               ║
+    ║     DTGCStakingV4: 0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718║
+    ║     LPStakingV4:   0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231║
     ║                                                               ║
     ║                    dtgc.io                                    ║
     ╚═══════════════════════════════════════════════════════════════╝
@@ -133,7 +136,7 @@ const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
 // ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
-//                    V5 GOLD PAPER TOKENOMICS (91% CONTROLLED)
+//                    V4 GOLD PAPER TOKENOMICS (91% CONTROLLED)
 // ═══════════════════════════════════════════════════════════════
 
 const DTGC_TOKENOMICS = {
@@ -465,8 +468,8 @@ const EXCLUDED_WALLETS = [
   '0x0ba3d882f21b935412608d181501d59e99a8D0f9', // DTGCStakingV3 Rewards
   '0x7C328FFF32AD66a03218D8A953435283782Bc84F', // LPStakingV3 Rewards
   '0x4828A40bEd10c373718cA10B53A34208636CD8C4', // DAOVotingV3
-  '0x97f0B5b011E8de04EbE30F70455E0cC2516f6E4C', // DTGCStakingV4 Rewards
-  '0xD850Aa92968F6167E0240990984022E5bEf8FeBb', // LPStakingV4 Rewards
+  '0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718', // DTGCStakingV4 Rewards (NEW)
+  '0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231', // LPStakingV4 Rewards (NEW)
 ].map(addr => addr.toLowerCase());
 
 // Fallback data if API fails (placeholder)
@@ -512,9 +515,9 @@ const CONTRACT_ADDRESSES = {
   stakingV3: '0x0ba3d882f21b935412608d181501d59e99a8D0f9',
   lpStakingV3: '0x7C328FFF32AD66a03218D8A953435283782Bc84F',
   daoVotingV3: '0x4828A40bEd10c373718cA10B53A34208636CD8C4',
-  // V4 Contracts (UNLIMITED MULTI-STAKE) - DEPLOYED & LIVE!
-  stakingV4: '0x97f0B5b011E8de04EbE30F70455E0cC2516f6E4C',
-  lpStakingV4: '0xD850Aa92968F6167E0240990984022E5bEf8FeBb',
+  // V4 Contracts (UNLIMITED MULTI-STAKE) - DEPLOYED VIA REMIX 01/05/2026!
+  stakingV4: '0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718',
+  lpStakingV4: '0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231',
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -6604,7 +6607,7 @@ export default function App() {
             {TESTNET_MODE ? '🧪 TESTNET MODE • NOT REAL MONEY 🧪' : '🔴 LIVE • MAINNET'}
           </div>
           <h1 className="hero-title gold-text">DTGC STAKING</h1>
-          <p style={{ fontSize: '0.7rem', color: '#D4AF37', marginTop: '-8px', marginBottom: '8px', letterSpacing: '2px', fontWeight: 600 }}>🏆 PREMIUM STAKING ON PULSECHAIN 🏆</p>
+          <p style={{ fontSize: '0.75rem', color: '#4CAF50', marginTop: '-8px', marginBottom: '8px', letterSpacing: '2px', fontWeight: 700, textShadow: '0 0 10px rgba(76,175,80,0.5)' }}>✨ V4 CONTRACTS LIVE • UNLIMITED MULTI-STAKE ✨</p>
           <p className="hero-subtitle">Stake • Earn • Govern • Prosper</p>
           <p style={{
             fontSize: '0.7rem',
@@ -7317,7 +7320,7 @@ export default function App() {
                 <h2 className="section-title gold-text">SELECT YOUR TIER</h2>
                 <p style={{ fontSize: '0.65rem', color: 'rgba(212,175,55,0.7)', marginTop: '-4px', marginBottom: '12px' }}>*V4 contracts • Unlimited stakes per tier</p>
                 <div className="section-divider" />
-                <p className="section-description">Choose your staking tier based on lock duration and desired APR</p>
+                <p className="section-description">V4 Unlimited Multi-Stake: Stack multiple positions across all tiers simultaneously!</p>
               </div>
 
               {/* Market Cap Phase Indicator */}
@@ -8380,8 +8383,9 @@ export default function App() {
             <section className="section whitepaper-section">
               <div className="section-header">
                 <h2 className="section-title gold-text">WHITEPAPER</h2>
+                <p style={{ fontSize: '0.75rem', color: '#4CAF50', marginBottom: '8px', fontWeight: 600 }}>📋 V4 Contract Documentation</p>
                 <div className="section-divider" />
-                <p className="section-description">DT Gold Coin • Premium Staking Protocol</p>
+                <p className="section-description">DT Gold Coin • V4 Unlimited Multi-Stake Protocol on PulseChain</p>
               </div>
 
               {/* DOCUMENT DOWNLOADS */}
@@ -8391,7 +8395,7 @@ export default function App() {
                 gap: '20px',
                 marginBottom: '40px',
               }}>
-                <a href="/docs/DTGC-V18-White-Paper.docx" download style={{
+                <a href="/docs/DTGC-V4-White-Paper.docx" download style={{
                   background: 'linear-gradient(135deg, rgba(212,175,55,0.1) 0%, rgba(184,134,11,0.15) 100%)',
                   border: '2px solid rgba(212,175,55,0.4)',
                   borderRadius: '16px',
@@ -8404,13 +8408,13 @@ export default function App() {
                 }}>
                   <span style={{fontSize: '2.5rem'}}>📄</span>
                   <div>
-                    <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, color: 'var(--gold)', fontSize: '1.1rem'}}>WHITE PAPER</div>
-                    <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>Public Overview • V18</div>
+                    <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, color: 'var(--gold)', fontSize: '1.1rem'}}>WHITE PAPER V4</div>
+                    <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>Public Overview • Unlimited Stakes</div>
                     <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px'}}>📥 Download .docx</div>
                   </div>
                 </a>
                 
-                <a href="/docs/DTGC-V18-Gold-Paper-DiamondPlus.docx" download style={{
+                <a href="/docs/DTGC-V4-Gold-Paper.docx" download style={{
                   background: 'linear-gradient(135deg, rgba(212,175,55,0.15) 0%, rgba(184,134,11,0.2) 100%)',
                   border: '2px solid rgba(212,175,55,0.5)',
                   borderRadius: '16px',
@@ -8423,13 +8427,13 @@ export default function App() {
                 }}>
                   <span style={{fontSize: '2.5rem'}}>📜</span>
                   <div>
-                    <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, color: 'var(--gold)', fontSize: '1.1rem'}}>GOLD PAPER</div>
+                    <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, color: 'var(--gold)', fontSize: '1.1rem'}}>GOLD PAPER V4</div>
                     <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>Full Tokenomics • Diamond+ Edition</div>
                     <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px'}}>📥 Download .docx</div>
                   </div>
                 </a>
                 
-                <a href="/docs/DTGC-V18-Gold-Paper-Quant.docx" download style={{
+                <a href="/docs/DTGC-V4-Gold-Paper-Quant.docx" download style={{
                   background: 'linear-gradient(135deg, rgba(26,35,126,0.1) 0%, rgba(48,63,159,0.15) 100%)',
                   border: '2px solid rgba(26,35,126,0.4)',
                   borderRadius: '16px',
@@ -8442,8 +8446,8 @@ export default function App() {
                 }}>
                   <span style={{fontSize: '2.5rem'}}>📊</span>
                   <div>
-                    <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, color: '#5C6BC0', fontSize: '1.1rem'}}>GOLD PAPER QUANT</div>
-                    <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>Risk Analysis • ROI Modeling</div>
+                    <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, color: '#5C6BC0', fontSize: '1.1rem'}}>GOLD QUANT V4</div>
+                    <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>Risk Analysis • Multi-Stake ROI</div>
                     <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px'}}>📥 Download .docx</div>
                   </div>
                 </a>
@@ -8452,13 +8456,13 @@ export default function App() {
               <div className="wp-card">
                 <h3 className="wp-card-title gold-text">📜 Introduction</h3>
                 <div className="wp-card-content">
-                  <p>DT Gold Coin (DTGC) is a premium staking protocol built on PulseChain, designed to reward long-term holders while creating sustainable tokenomics through strategic burns and DAO governance.</p>
-                  <p>Paired with URMOM token, DTGC creates a dual-token ecosystem that benefits both communities through liquidity provision, staking rewards, and deflationary mechanisms.</p>
+                  <p>DT Gold Coin (DTGC) is a premium V4 staking protocol built on PulseChain, featuring <strong>unlimited multi-stake positions</strong> — the first of its kind on PulseChain! Stack multiple stakes across all tiers simultaneously while earning rewards on each position.</p>
+                  <p>Paired with URMOM token, DTGC creates a dual-token ecosystem with Diamond+ LP staking offering up to 70% APR. The V4 contracts enable claim-without-unstaking, allowing rewards harvesting while positions continue growing.</p>
                 </div>
               </div>
 
               <div className="wp-card">
-                <h3 className="wp-card-title gold-text">💰 V5 GOLD PAPER TOKENOMICS</h3>
+                <h3 className="wp-card-title gold-text">💰 V4 GOLD PAPER TOKENOMICS</h3>
                 <div className="wp-card-content">
                   <p><strong>Total Supply: 1,000,000,000 DTGC</strong></p>
                   <p style={{color: 'var(--gold)', fontWeight: '600', marginBottom: '16px'}}>DTGC Tokenomics</p>
@@ -9686,17 +9690,20 @@ export default function App() {
               }} />
             </div>
             <div style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 600, letterSpacing: '2px' }}>
-              Premium Staking on PulseChain
+              V4 Multi-Stake on PulseChain
+            </div>
+            <div style={{ fontSize: '0.65rem', color: '#4CAF50', marginTop: '4px', letterSpacing: '1px' }}>
+              ✨ First Unlimited Staking Protocol
             </div>
           </div>
           <div className="footer-links">
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking V4</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">LP Staking V4</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">🚀 Staking V4</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">💎 LP Staking V4</a>
             <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVotingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting</a>
             <a href={SOCIAL_LINKS.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
-          <p className="footer-text">© 2026 dtgc.io • Premium Staking on PulseChain</p>
+          <p className="footer-text">© 2026 dtgc.io • V4 Multi-Stake Protocol on PulseChain</p>
         </footer>
 
         {/* DexScreener Widget */}
