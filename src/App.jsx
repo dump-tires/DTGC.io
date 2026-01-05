@@ -4114,54 +4114,66 @@ export default function App() {
     if (TESTNET_MODE || !account || !provider) return;
 
     try {
-      // Fetch regular staking position
-      const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, provider);
-      const position = await stakingContract.getPosition(account);
-
-      // Fetch LP staking position
-      const lpStakingContract = new ethers.Contract(CONTRACTS.LP_STAKING_V2, LP_STAKING_V2_ABI, provider);
-      const lpPosition = await lpStakingContract.getPosition(account);
-
       const positions = [];
 
-      // Parse regular staking position
-      if (position && position[6]) { // isActive
-        positions.push({
-          id: 'dtgc-stake',
-          type: 'DTGC',
-          isLP: false,
-          amount: parseFloat(ethers.formatEther(position[0])),
-          startTime: Number(position[1]) * 1000,
-          endTime: Number(position[2]) * 1000,
-          lockPeriod: Number(position[3]),
-          apr: Number(position[4]) / 100, // Convert from bps
-          bonus: parseFloat(ethers.formatEther(position[5])),
-          isActive: position[6],
-          timeRemaining: Number(position[7]),
-        });
+      // Fetch regular staking position with error handling
+      try {
+        const stakingContract = new ethers.Contract(CONTRACTS.STAKING_V2, STAKING_V2_ABI, provider);
+        const position = await stakingContract.getPosition(account);
+
+        // Parse regular staking position
+        if (position && position[6]) { // isActive
+          positions.push({
+            id: 'dtgc-stake',
+            type: 'DTGC',
+            isLP: false,
+            amount: parseFloat(ethers.formatEther(position[0])),
+            startTime: Number(position[1]) * 1000,
+            endTime: Number(position[2]) * 1000,
+            lockPeriod: Number(position[3]),
+            apr: Number(position[4]) / 100, // Convert from bps
+            bonus: parseFloat(ethers.formatEther(position[5])),
+            isActive: position[6],
+            timeRemaining: Number(position[7]),
+          });
+        }
+      } catch (stakingErr) {
+        console.warn('DTGC staking fetch failed:', stakingErr.message?.slice(0, 100));
       }
 
-      // Parse LP staking position
-      if (lpPosition && lpPosition[6]) { // isActive
-        positions.push({
-          id: 'lp-stake',
-          type: 'LP',
-          isLP: true,
-          amount: parseFloat(ethers.formatEther(lpPosition[0])),
-          startTime: Number(lpPosition[1]) * 1000,
-          endTime: Number(lpPosition[2]) * 1000,
-          pendingReward: parseFloat(ethers.formatEther(lpPosition[3])),
-          pendingBonus: parseFloat(ethers.formatEther(lpPosition[4])),
-          boostMultiplier: Number(lpPosition[5]) / 100,
-          isActive: lpPosition[6],
-          timeRemaining: Number(lpPosition[7]),
-        });
+      // Fetch LP staking position with error handling
+      try {
+        const lpStakingContract = new ethers.Contract(CONTRACTS.LP_STAKING_V2, LP_STAKING_V2_ABI, provider);
+        const lpPosition = await lpStakingContract.getPosition(account);
+
+        // Parse LP staking position
+        if (lpPosition && lpPosition[6]) { // isActive
+          positions.push({
+            id: 'lp-stake',
+            type: 'LP',
+            isLP: true,
+            amount: parseFloat(ethers.formatEther(lpPosition[0])),
+            startTime: Number(lpPosition[1]) * 1000,
+            endTime: Number(lpPosition[2]) * 1000,
+            pendingReward: parseFloat(ethers.formatEther(lpPosition[3])),
+            pendingBonus: parseFloat(ethers.formatEther(lpPosition[4])),
+            boostMultiplier: Number(lpPosition[5]) / 100,
+            isActive: lpPosition[6],
+            timeRemaining: Number(lpPosition[7]),
+          });
+        }
+      } catch (lpErr) {
+        console.warn('LP staking fetch failed:', lpErr.message?.slice(0, 100));
       }
 
-      setStakedPositions(positions);
-      console.log('📊 Staked positions loaded:', positions);
+      // Only update state if we got valid data, preserve existing if both failed
+      if (positions.length > 0) {
+        setStakedPositions(positions);
+        console.log('📊 Staked positions loaded:', positions);
+      }
 
     } catch (err) {
+      // Don't clear positions on error - preserve existing data
       console.warn('Failed to fetch staked positions:', err.message);
     }
   }, [account, provider]);
