@@ -98,8 +98,8 @@ const LP_STAKING_V4_ABI = [
   'function earlyWithdrawFeeBps() external view returns (uint256)',
 ];
 
-// V4 Mode toggle - set to true after deploying V4 contracts
-const USE_V4_CONTRACTS = true;
+// V4 Mode toggle - set to false until V4 contracts are properly deployed
+const USE_V4_CONTRACTS = false;
 
 // Log which ABIs we're using
 console.log('📝 Staking V3 ABI:', STAKING_V3_ABI?.length ? `${STAKING_V3_ABI.length} functions` : 'MISSING!');
@@ -5461,10 +5461,12 @@ export default function App() {
         const positions = [];
         
         // ═══════════════════════════════════════════════════════════════
-        // V4 MULTI-STAKE MODE
+        // V4 MULTI-STAKE MODE - UNLIMITED STAKES PER USER
         // ═══════════════════════════════════════════════════════════════
         if (USE_V4_CONTRACTS && CONTRACT_ADDRESSES.stakingV4 !== '0x0000000000000000000000000000000000000000') {
-          console.log('🚀 Using V4 contracts (unlimited multi-stake)');
+          console.log('🚀 V4 MULTI-STAKE ACTIVE');
+          console.log('📍 DTGCStakingV4:', CONTRACT_ADDRESSES.stakingV4);
+          console.log('📍 LPStakingV4:', CONTRACT_ADDRESSES.lpStakingV4);
           
           try {
             // Fetch DTGC stakes from V4
@@ -6602,6 +6604,7 @@ export default function App() {
             {TESTNET_MODE ? '🧪 TESTNET MODE • NOT REAL MONEY 🧪' : '🔴 LIVE • MAINNET'}
           </div>
           <h1 className="hero-title gold-text">DTGC STAKING</h1>
+          <p style={{ fontSize: '0.7rem', color: '#D4AF37', marginTop: '-8px', marginBottom: '8px', letterSpacing: '2px', fontWeight: 600 }}>🏆 PREMIUM STAKING ON PULSECHAIN 🏆</p>
           <p className="hero-subtitle">Stake • Earn • Govern • Prosper</p>
           <p style={{
             fontSize: '0.7rem',
@@ -7312,6 +7315,7 @@ export default function App() {
             <section className="section">
               <div className="section-header">
                 <h2 className="section-title gold-text">SELECT YOUR TIER</h2>
+                <p style={{ fontSize: '0.65rem', color: 'rgba(212,175,55,0.7)', marginTop: '-4px', marginBottom: '12px' }}>*V4 contracts • Unlimited stakes per tier</p>
                 <div className="section-divider" />
                 <p className="section-description">Choose your staking tier based on lock duration and desired APR</p>
               </div>
@@ -7824,7 +7828,23 @@ export default function App() {
                         borderRadius: '16px',
                         padding: '20px',
                         marginBottom: '15px',
+                        position: 'relative',
                       }}>
+                        {/* V4 Badge */}
+                        {pos.isV4 && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            background: 'linear-gradient(135deg, #4CAF50, #2E7D32)',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '0.6rem',
+                            fontWeight: 700,
+                            color: '#FFF',
+                            letterSpacing: '0.5px',
+                          }}>V4</div>
+                        )}
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px'}}>
                           <div>
                             <div style={{fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '1.1rem', color: displayTierColor}}>
@@ -9259,9 +9279,10 @@ export default function App() {
                 padding: '24px',
                 marginBottom: '24px'
               }}>
-                <h3 style={{ color: '#D4AF37', fontSize: '1.3rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  🧮 PERSONAL STAKING CALCULATOR (V19)
+                <h3 style={{ color: '#D4AF37', fontSize: '1.3rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🧮 PERSONAL STAKING CALCULATOR
                 </h3>
+                <p style={{ fontSize: '0.65rem', color: 'rgba(212,175,55,0.7)', marginBottom: '20px' }}>*V4 contracts • Stake multiple times, earn rewards on each position</p>
 
                 {/* Input Fields */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '24px' }}>
