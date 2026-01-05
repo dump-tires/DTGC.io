@@ -99,7 +99,7 @@ const LP_STAKING_V4_ABI = [
 ];
 
 // V4 Mode toggle - set to false until V4 contracts are properly deployed
-const USE_V4_CONTRACTS = false;
+const USE_V4_CONTRACTS = true; // V4 LIVE - Unlimited Multi-Stake enabled!
 
 // Log which ABIs we're using
 console.log('📝 Staking V3 ABI:', STAKING_V3_ABI?.length ? `${STAKING_V3_ABI.length} functions` : 'MISSING!');
@@ -3158,6 +3158,15 @@ export default function App() {
   const [plsBalance, setPlsBalance] = useState('0');
   const [urmomBalance, setUrmomBalance] = useState('0');
   const [selectedTier, setSelectedTier] = useState(null);
+  
+  // V4 Multi-Stake Calculator State
+  const [multiStake, setMultiStake] = useState({
+    silver: { qty: 0, amount: 0 },
+    gold: { qty: 0, amount: 0 },
+    whale: { qty: 0, amount: 0 },
+    diamond: { qty: 0, amount: 0 },
+    diamondPlus: { qty: 0, amount: 0 }
+  });
   const [stakeAmount, setStakeAmount] = useState('');
   const [stakeInputMode, setStakeInputMode] = useState('tokens'); // 'tokens' or 'currency'
   const [isLP, setIsLP] = useState(false);
@@ -4743,14 +4752,29 @@ export default function App() {
       return;
     }
 
-    // NOTE: Multiple stakes allowed - contract will handle if there are restrictions
-    // Previously blocked LP stakes if existing - now letting contract decide
-    if (isLP) {
-      const existingLpStake = stakedPositions.find(p => p.isLP);
-      if (existingLpStake) {
-        console.log('ℹ️ User has existing LP stake, attempting to add another:', existingLpStake);
-        // Don't block - let contract handle it
+    // V4 MULTI-STAKE: Allow up to 3 stakes per tier type
+    const MAX_STAKES_PER_TIER = 3;
+    
+    if (USE_V4_CONTRACTS) {
+      // Count existing stakes for this tier
+      let existingCount = 0;
+      if (isLP) {
+        const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
+        existingCount = stakedPositions.filter(p => p.isLP && p.lpType === lpType).length;
+      } else {
+        // DTGC staking: tier 0=Silver, 1=Gold, 2=Whale
+        existingCount = stakedPositions.filter(p => !p.isLP && p.tier === selectedTier).length;
       }
+      
+      if (existingCount >= MAX_STAKES_PER_TIER) {
+        const tierName = isLP 
+          ? (selectedTier === 4 ? 'Diamond+' : 'Diamond') 
+          : ['Silver', 'Gold', 'Whale'][selectedTier];
+        showToast(`⚠️ Maximum ${MAX_STAKES_PER_TIER} stakes allowed per tier. You already have ${existingCount} in ${tierName}.`, 'error');
+        return;
+      }
+      
+      console.log(`✅ V4 Multi-stake: ${existingCount}/${MAX_STAKES_PER_TIER} stakes in this tier`);
     }
 
     console.log('💰 Pre-flight checks passed:', { 
@@ -4759,7 +4783,8 @@ export default function App() {
       isLP, 
       selectedTier,
       tokenType: isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC',
-      existingPositions: stakedPositions.length
+      existingPositions: stakedPositions.length,
+      v4Enabled: USE_V4_CONTRACTS
     });
 
     try {
@@ -7377,13 +7402,28 @@ export default function App() {
               }}>
                 {V5_STAKING_TIERS.map((tier) => {
                   const effectiveAPR = getEffectiveAPR(tier.apr, livePrices.dtgcMarketCap || 0);
+                  const tierStakeCount = stakedPositions.filter(p => !p.isLP && p.tier === tier.id).length;
                   return (
                   <div
                     key={tier.id}
                     className={`tier-card ${selectedTier === tier.id && !isLP ? 'selected' : ''}`}
-                    style={{ '--tier-gradient': tier.gradient }}
+                    style={{ '--tier-gradient': tier.gradient, position: 'relative' }}
                     onClick={() => { setSelectedTier(tier.id); setIsLP(false); }}
                   >
+                    {/* V4 Stake Count Badge */}
+                    {USE_V4_CONTRACTS && tierStakeCount > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        background: tierStakeCount >= 3 ? 'linear-gradient(135deg, #FF6B6B, #D32F2F)' : 'linear-gradient(135deg, #4CAF50, #2E7D32)',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        color: '#FFF',
+                      }}>{tierStakeCount}/3</div>
+                    )}
                     <div className="tier-icon">{tier.icon}</div>
                     <div className="tier-name" style={{ color: tier.color }}>{tier.name}</div>
                     <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${tier.minInvest.toLocaleString()}</div>
@@ -7392,7 +7432,7 @@ export default function App() {
                       <div className="tier-apr-label">APR</div>
                       {effectiveAPR < tier.apr && (
                         <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>Base: {tier.apr}%</div>
-                      )}
+                      )}}
                     </div>
                     <div className="tier-features">
                       <div className="tier-feature">
@@ -7421,12 +7461,27 @@ export default function App() {
                 {(() => {
                   const diamondEffectiveAPR = getEffectiveAPR(V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost, livePrices.dtgcMarketCap || 0);
                   const diamondBaseAPR = V5_DIAMOND_TIER.apr * V5_DIAMOND_TIER.boost;
+                  const diamondStakeCount = stakedPositions.filter(p => p.isLP && p.lpType === 0).length;
                   return (
                 <div
                   className={`tier-card diamond ${isLP && selectedTier === 3 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(3); setIsLP(true); }}
-                  style={{ flex: '0 1 280px', maxWidth: '320px' }}
+                  style={{ flex: '0 1 280px', maxWidth: '320px', position: 'relative' }}
                 >
+                  {/* V4 Stake Count Badge */}
+                  {USE_V4_CONTRACTS && diamondStakeCount > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: diamondStakeCount >= 3 ? 'linear-gradient(135deg, #FF6B6B, #D32F2F)' : 'linear-gradient(135deg, #00BCD4, #0097A7)',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      color: '#FFF',
+                    }}>{diamondStakeCount}/3</div>
+                  )}
                   <div className="tier-icon">{V5_DIAMOND_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_TIER.color }}>{V5_DIAMOND_TIER.name}</div>
                   <div className="tier-subtitle">{V5_DIAMOND_TIER.lpPair} LP • {V5_DIAMOND_TIER.boost}x BOOST!</div>
@@ -7461,12 +7516,27 @@ export default function App() {
                 {(() => {
                   const diamondPlusEffectiveAPR = getEffectiveAPR(V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost, livePrices.dtgcMarketCap || 0);
                   const diamondPlusBaseAPR = V5_DIAMOND_PLUS_TIER.apr * V5_DIAMOND_PLUS_TIER.boost;
+                  const diamondPlusStakeCount = stakedPositions.filter(p => p.isLP && p.lpType === 1).length;
                   return (
                 <div
                   className={`tier-card diamond-plus ${isLP && selectedTier === 4 ? 'selected' : ''}`}
                   onClick={() => { setSelectedTier(4); setIsLP(true); }}
-                  style={{ flex: '0 1 280px', maxWidth: '320px', background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(123,31,162,0.15) 100%)', border: '2px solid #9C27B0' }}
+                  style={{ flex: '0 1 280px', maxWidth: '320px', background: 'linear-gradient(135deg, rgba(156,39,176,0.1) 0%, rgba(123,31,162,0.15) 100%)', border: '2px solid #9C27B0', position: 'relative' }}
                 >
+                  {/* V4 Stake Count Badge */}
+                  {USE_V4_CONTRACTS && diamondPlusStakeCount > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: diamondPlusStakeCount >= 3 ? 'linear-gradient(135deg, #FF6B6B, #D32F2F)' : 'linear-gradient(135deg, #9C27B0, #7B1FA2)',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      color: '#FFF',
+                    }}>{diamondPlusStakeCount}/3</div>
+                  )}
                   <div className="tier-icon" style={{ fontSize: '2.5rem' }}>{V5_DIAMOND_PLUS_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_PLUS_TIER.color }}>{V5_DIAMOND_PLUS_TIER.name}</div>
                   <div className="tier-subtitle" style={{ color: '#9C27B0' }}>{V5_DIAMOND_PLUS_TIER.lpPair} LP • {V5_DIAMOND_PLUS_TIER.boost}x BOOST!</div>
@@ -7756,10 +7826,10 @@ export default function App() {
                       textAlign: 'center',
                       color: 'var(--gold)',
                       flex: 1,
-                    }}>📊 YOUR STAKED POSITIONS</h3>
+                    }}>📊 YOUR STAKED POSITIONS {USE_V4_CONTRACTS && <span style={{ fontSize: '0.6rem', background: 'linear-gradient(135deg, #4CAF50, #2E7D32)', padding: '2px 8px', borderRadius: '10px', color: '#FFF', marginLeft: '8px', verticalAlign: 'middle' }}>V4 • {stakedPositions.length} Active</span>}</h3>
                     <button
                       onClick={() => {
-                        if (window.confirm('Clear stale position data? Use this if you see old V2 stakes that no longer exist on the V3 contracts.')) {
+                        if (window.confirm('Clear stale position data? Use this if you see old stakes that no longer exist on the V4 contracts.')) {
                           forceClearStaleData();
                         }
                       }}
@@ -8682,6 +8752,244 @@ export default function App() {
                   </select>
                 </div>
                 <div className="section-divider" style={{ background: 'linear-gradient(90deg, transparent, #2196F3, transparent)' }} />
+              </div>
+
+              {/* V4 EXPLAINER BOX */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(76,175,80,0.1) 0%, rgba(46,125,50,0.15) 100%)',
+                border: '2px solid rgba(76,175,80,0.5)',
+                borderRadius: '16px',
+                padding: '24px',
+                marginBottom: '24px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  background: 'linear-gradient(135deg, #4CAF50, #2E7D32)',
+                  padding: '4px 12px',
+                  borderRadius: '12px',
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: '#FFF',
+                  letterSpacing: '1px'
+                }}>V4 LIVE</div>
+                
+                <h3 style={{ color: '#4CAF50', fontSize: '1.3rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  ✨ V4 UNLIMITED MULTI-STAKE
+                </h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <h4 style={{ color: '#4CAF50', fontSize: '0.95rem', marginBottom: '8px' }}>🚀 What's New in V4?</h4>
+                    <ul style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.8', paddingLeft: '20px', margin: 0 }}>
+                      <li><strong>Unlimited Stakes:</strong> Stack multiple positions across ALL tiers</li>
+                      <li><strong>Claim Without Unstaking:</strong> Harvest rewards while principal earns</li>
+                      <li><strong>Independent Positions:</strong> Each stake has its own lock & APR</li>
+                      <li><strong>First on PulseChain:</strong> Revolutionary multi-stake architecture</li>
+                    </ul>
+                  </div>
+                  
+                  <div>
+                    <h4 style={{ color: '#4CAF50', fontSize: '0.95rem', marginBottom: '8px' }}>📋 V4 Contract Addresses</h4>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                      <div style={{ marginBottom: '8px' }}>
+                        <span style={{ color: '#4CAF50' }}>DTGCStakingV4:</span><br/>
+                        <a href="https://scan.pulsechain.com/address/0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                          0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718
+                        </a>
+                      </div>
+                      <div>
+                        <span style={{ color: '#4CAF50' }}>LPStakingV4:</span><br/>
+                        <a href="https://scan.pulsechain.com/address/0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                          0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  💡 <strong>Pro Tip:</strong> With V4, you can stake 100K DTGC in Whale tier AND simultaneously stake LP tokens in Diamond+ — all earning independently!
+                </div>
+              </div>
+
+              {/* V4 MULTI-STAKE CALCULATOR */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.05) 0%, rgba(184,134,11,0.1) 100%)',
+                border: '2px solid rgba(212,175,55,0.4)',
+                borderRadius: '16px',
+                padding: '24px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ color: '#D4AF37', fontSize: '1.2rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  🧮 V4 MULTI-STAKE CALCULATOR
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '20px' }}>
+                  Plan your V4 portfolio by selecting quantities for each tier. Stack unlimited positions!
+                </p>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                  {/* Silver */}
+                  <div style={{ background: 'rgba(192,192,192,0.1)', border: '1px solid rgba(192,192,192,0.3)', borderRadius: '12px', padding: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '1.2rem' }}>🥈</span>
+                      <span style={{ color: '#C0C0C0', fontWeight: 'bold', fontSize: '0.9rem' }}>Silver</span>
+                      <span style={{ color: '#4CAF50', fontSize: '0.75rem', marginLeft: 'auto' }}>15.4%</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={multiStake.silver.amount || ''}
+                        onChange={(e) => setMultiStake(prev => ({ ...prev, silver: { ...prev.silver, amount: parseFloat(e.target.value) || 0 } }))}
+                        placeholder="DTGC Amount"
+                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid rgba(192,192,192,0.3)', background: 'rgba(0,0,0,0.2)', color: 'var(--text)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>Min: 1,000 DTGC • 60 days</div>
+                  </div>
+                  
+                  {/* Gold */}
+                  <div style={{ background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.3)', borderRadius: '12px', padding: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '1.2rem' }}>🥇</span>
+                      <span style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '0.9rem' }}>Gold</span>
+                      <span style={{ color: '#4CAF50', fontSize: '0.75rem', marginLeft: 'auto' }}>16.8%</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={multiStake.gold.amount || ''}
+                        onChange={(e) => setMultiStake(prev => ({ ...prev, gold: { ...prev.gold, amount: parseFloat(e.target.value) || 0 } }))}
+                        placeholder="DTGC Amount"
+                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,215,0,0.3)', background: 'rgba(0,0,0,0.2)', color: 'var(--text)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>Min: 10,000 DTGC • 90 days</div>
+                  </div>
+                  
+                  {/* Whale */}
+                  <div style={{ background: 'rgba(33,150,243,0.1)', border: '1px solid rgba(33,150,243,0.3)', borderRadius: '12px', padding: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '1.2rem' }}>🐋</span>
+                      <span style={{ color: '#2196F3', fontWeight: 'bold', fontSize: '0.9rem' }}>Whale</span>
+                      <span style={{ color: '#4CAF50', fontSize: '0.75rem', marginLeft: 'auto' }}>18.2%</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={multiStake.whale.amount || ''}
+                        onChange={(e) => setMultiStake(prev => ({ ...prev, whale: { ...prev.whale, amount: parseFloat(e.target.value) || 0 } }))}
+                        placeholder="DTGC Amount"
+                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid rgba(33,150,243,0.3)', background: 'rgba(0,0,0,0.2)', color: 'var(--text)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>Min: 100,000 DTGC • 180 days</div>
+                  </div>
+                  
+                  {/* Diamond LP */}
+                  <div style={{ background: 'rgba(0,188,212,0.1)', border: '1px solid rgba(0,188,212,0.3)', borderRadius: '12px', padding: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '1.2rem' }}>💎</span>
+                      <span style={{ color: '#00BCD4', fontWeight: 'bold', fontSize: '0.9rem' }}>Diamond LP</span>
+                      <span style={{ color: '#4CAF50', fontSize: '0.75rem', marginLeft: 'auto' }}>42%</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={multiStake.diamond.amount || ''}
+                        onChange={(e) => setMultiStake(prev => ({ ...prev, diamond: { ...prev.diamond, amount: parseFloat(e.target.value) || 0 } }))}
+                        placeholder="$ Value"
+                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid rgba(0,188,212,0.3)', background: 'rgba(0,0,0,0.2)', color: 'var(--text)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>DTGC/PLS • 90 days</div>
+                  </div>
+                  
+                  {/* Diamond+ LP */}
+                  <div style={{ background: 'rgba(156,39,176,0.1)', border: '1px solid rgba(156,39,176,0.3)', borderRadius: '12px', padding: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '1.2rem' }}>💜💎</span>
+                      <span style={{ color: '#9C27B0', fontWeight: 'bold', fontSize: '0.9rem' }}>Diamond+</span>
+                      <span style={{ color: '#4CAF50', fontSize: '0.75rem', marginLeft: 'auto' }}>70%</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={multiStake.diamondPlus.amount || ''}
+                        onChange={(e) => setMultiStake(prev => ({ ...prev, diamondPlus: { ...prev.diamondPlus, amount: parseFloat(e.target.value) || 0 } }))}
+                        placeholder="$ Value"
+                        style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid rgba(156,39,176,0.3)', background: 'rgba(0,0,0,0.2)', color: 'var(--text)', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>DTGC/URMOM • 90 days</div>
+                  </div>
+                </div>
+                
+                {/* Calculator Results */}
+                {(() => {
+                  const dtgcPrice = livePrices.dtgc || 0.0005;
+                  const silverRewards = (multiStake.silver.amount * 0.154);
+                  const goldRewards = (multiStake.gold.amount * 0.168);
+                  const whaleRewards = (multiStake.whale.amount * 0.182);
+                  const diamondRewards = (multiStake.diamond.amount * 0.42);
+                  const diamondPlusRewards = (multiStake.diamondPlus.amount * 0.70);
+                  
+                  const totalDtgcStaked = multiStake.silver.amount + multiStake.gold.amount + multiStake.whale.amount;
+                  const totalLpValue = multiStake.diamond.amount + multiStake.diamondPlus.amount;
+                  const totalDtgcRewards = silverRewards + goldRewards + whaleRewards;
+                  const totalLpRewards = diamondRewards + diamondPlusRewards;
+                  
+                  const totalValue = (totalDtgcStaked * dtgcPrice) + totalLpValue;
+                  const totalAnnualRewards = (totalDtgcRewards * dtgcPrice) + totalLpRewards;
+                  const blendedApr = totalValue > 0 ? (totalAnnualRewards / totalValue) * 100 : 0;
+                  
+                  return (
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(212,175,55,0.1) 0%, rgba(184,134,11,0.15) 100%)',
+                      border: '1px solid rgba(212,175,55,0.3)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: '16px'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>TOTAL DTGC STAKED</div>
+                        <div style={{ color: '#D4AF37', fontSize: '1.2rem', fontWeight: 'bold' }}>{totalDtgcStaked.toLocaleString()}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>${(totalDtgcStaked * dtgcPrice).toFixed(2)}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>TOTAL LP VALUE</div>
+                        <div style={{ color: '#00BCD4', fontSize: '1.2rem', fontWeight: 'bold' }}>${totalLpValue.toLocaleString()}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>BLENDED APR</div>
+                        <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 'bold' }}>{blendedApr.toFixed(1)}%</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>EST. ANNUAL REWARDS</div>
+                        <div style={{ color: '#4CAF50', fontSize: '1.2rem', fontWeight: 'bold' }}>${totalAnnualRewards.toFixed(2)}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{(totalDtgcRewards).toLocaleString()} DTGC</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '4px' }}>MONTHLY REWARDS</div>
+                        <div style={{ color: '#FFD700', fontSize: '1.2rem', fontWeight: 'bold' }}>${(totalAnnualRewards / 12).toFixed(2)}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                
+                <div style={{ marginTop: '12px', fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                  * Calculations based on current APRs. Enter DTGC amounts for token staking, $ values for LP staking.
+                </div>
               </div>
 
               {/* Portfolio Allocation Calculator */}
