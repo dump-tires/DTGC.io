@@ -49,6 +49,65 @@ const FALLBACK_LP_STAKING_V3_ABI = [
 const STAKING_V3_ABI = IMPORTED_STAKING_V3_ABI || FALLBACK_STAKING_V3_ABI;
 const LP_STAKING_V3_ABI = IMPORTED_LP_STAKING_V3_ABI || FALLBACK_LP_STAKING_V3_ABI;
 
+// ═══════════════════════════════════════════════════════════════
+// V4 MULTI-STAKE ABIs - UNLIMITED STAKES PER USER
+// ═══════════════════════════════════════════════════════════════
+const STAKING_V4_ABI = [
+  // Staking functions
+  'function stake(uint256 amount, uint8 tier) external',
+  'function withdraw(uint256 stakeIndex) external',
+  'function claimRewards(uint256 stakeIndex) external',
+  'function emergencyWithdraw(uint256 stakeIndex) external',
+  // View functions - Individual stake
+  'function getStake(address user, uint256 stakeIndex) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonusBps, uint8 tier, bool isActive, uint256 timeRemaining, uint256 pendingRewards)',
+  'function calculateRewards(address user, uint256 stakeIndex) external view returns (uint256)',
+  // View functions - All stakes
+  'function getStakeCount(address user) external view returns (uint256)',
+  'function getActiveStakeCount(address user) external view returns (uint256)',
+  'function getAllStakes(address user) external view returns (tuple(uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonusBps, uint8 tier, bool isActive, uint256 lastClaimTime)[])',
+  'function getActiveStakes(address user) external view returns (tuple(uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonusBps, uint8 tier, bool isActive, uint256 lastClaimTime)[])',
+  // View functions - Totals
+  'function getTotalStakedByUser(address user) external view returns (uint256)',
+  'function getTotalPendingRewards(address user) external view returns (uint256)',
+  'function totalStaked() external view returns (uint256)',
+  'function totalStakers() external view returns (uint256)',
+  // V3 compatibility
+  'function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 bonusBps, uint8 tier, bool isActive, uint256 timeRemaining)',
+  // Config
+  'function tierConfigs(uint8 tier) external view returns (uint256 lockDays, uint256 aprBps, uint256 minAmount, bool isActive)',
+  'function earlyWithdrawFeeBps() external view returns (uint256)',
+];
+
+const LP_STAKING_V4_ABI = [
+  // Staking functions
+  'function stake(uint256 amount, uint8 lpType) external',
+  'function withdraw(uint256 stakeIndex) external',
+  'function claimRewards(uint256 stakeIndex) external',
+  'function emergencyWithdraw(uint256 stakeIndex) external',
+  // View functions - Individual stake
+  'function getStake(address user, uint256 stakeIndex) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 timeRemaining, uint256 pendingRewards)',
+  'function calculateRewards(address user, uint256 stakeIndex) external view returns (uint256)',
+  // View functions - All stakes
+  'function getStakeCount(address user) external view returns (uint256)',
+  'function getActiveStakeCount(address user) external view returns (uint256)',
+  'function getAllStakes(address user) external view returns (tuple(uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 lastClaimTime)[])',
+  'function getActiveStakes(address user) external view returns (tuple(uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 lastClaimTime)[])',
+  // View functions - Totals
+  'function getTotalStakedByUser(address user) external view returns (uint256)',
+  'function getTotalPendingRewards(address user) external view returns (uint256)',
+  'function totalStaked() external view returns (uint256)',
+  'function totalStakedByType(uint8 lpType) external view returns (uint256)',
+  'function totalStakers() external view returns (uint256)',
+  // V3 compatibility
+  'function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 timeRemaining)',
+  // Config
+  'function lpConfigs(uint8 lpType) external view returns (address lpToken, uint256 lockDays, uint256 baseAprBps, uint256 boostBps, uint256 minAmount, bool isActive)',
+  'function earlyWithdrawFeeBps() external view returns (uint256)',
+];
+
+// V4 Mode toggle - set to true after deploying V4 contracts
+const USE_V4_CONTRACTS = true;
+
 // Log which ABIs we're using
 console.log('📝 Staking V3 ABI:', STAKING_V3_ABI?.length ? `${STAKING_V3_ABI.length} functions` : 'MISSING!');
 console.log('📝 LP Staking V3 ABI:', LP_STAKING_V3_ABI?.length ? `${LP_STAKING_V3_ABI.length} functions` : 'MISSING!');
@@ -63,11 +122,12 @@ const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
 /*
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
-    ║     🏆 DTGC PREMIUM STAKING PLATFORM V19 - MAINNET 🏆        ║
+    ║     🏆 DTGC PREMIUM STAKING PLATFORM V4 - MAINNET 🏆         ║
     ║                                                               ║
+    ║     ✦ V4 UNLIMITED MULTI-STAKE SUPPORT                       ║
     ║     ✦ V19 Gold Paper Tokenomics (91% Controlled!)            ║
-    ║     ✦ V3 Contracts Deployed & Live                           ║
     ║     ✦ Diamond (DTGC/PLS) + Diamond+ (DTGC/URMOM) LP Tiers    ║
+    ║     ✦ Claim Rewards Without Unstaking (V4)                   ║
     ║     ✦ 7.5% Total Fees • Sustainable APRs                     ║
     ║     ✦ Live Prices from DexScreener                           ║
     ║                                                               ║
@@ -412,6 +472,8 @@ const EXCLUDED_WALLETS = [
   '0x0ba3d882f21b935412608d181501d59e99a8D0f9', // DTGCStakingV3 Rewards
   '0x7C328FFF32AD66a03218D8A953435283782Bc84F', // LPStakingV3 Rewards
   '0x4828A40bEd10c373718cA10B53A34208636CD8C4', // DAOVotingV3
+  '0x97f0B5b011E8de04EbE30F70455E0cC2516f6E4C', // DTGCStakingV4 Rewards
+  '0xD850Aa92968F6167E0240990984022E5bEf8FeBb', // LPStakingV4 Rewards
 ].map(addr => addr.toLowerCase());
 
 // Fallback data if API fails (placeholder)
@@ -453,9 +515,13 @@ const CONTRACT_ADDRESSES = {
   lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM LP (Diamond+)
   lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',    // DTGC/PLS LP (Diamond)
   daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
-  stakingV3: '0x0ba3d882f21b935412608d181501d59e99a8D0f9',    // NEW V3
-  lpStakingV3: '0x7C328FFF32AD66a03218D8A953435283782Bc84F',  // NEW V3
-  daoVotingV3: '0x4828A40bEd10c373718cA10B53A34208636CD8C4',  // NEW V3
+  // V3 Contracts (legacy)
+  stakingV3: '0x0ba3d882f21b935412608d181501d59e99a8D0f9',
+  lpStakingV3: '0x7C328FFF32AD66a03218D8A953435283782Bc84F',
+  daoVotingV3: '0x4828A40bEd10c373718cA10B53A34208636CD8C4',
+  // V4 Contracts (UNLIMITED MULTI-STAKE) - DEPLOYED & LIVE!
+  stakingV4: '0x97f0B5b011E8de04EbE30F70455E0cC2516f6E4C',
+  lpStakingV4: '0xD850Aa92968F6167E0240990984022E5bEf8FeBb',
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -4536,18 +4602,18 @@ export default function App() {
           setLpDtgcUrmomBalance('0');
         }
 
-        // Get Staking Contract Rewards Remaining (DTGC balance in staking contract)
+        // Get Staking Contract Rewards Remaining (DTGC balance in V4 staking contract)
         try {
-          const stakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.stakingV3);
+          const stakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.stakingV4);
           setStakingRewardsRemaining(ethers.formatEther(stakingRewards));
         } catch (e) {
           console.warn('Could not fetch staking rewards:', e);
           setStakingRewardsRemaining('0');
         }
 
-        // Get LP Staking Contract Rewards Remaining (DTGC balance in LP staking contract)
+        // Get LP Staking Contract Rewards Remaining (DTGC balance in V4 LP staking contract)
         try {
-          const lpStakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.lpStakingV3);
+          const lpStakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.lpStakingV4);
           setLpStakingRewardsRemaining(ethers.formatEther(lpStakingRewards));
         } catch (e) {
           console.warn('Could not fetch LP staking rewards:', e);
@@ -4715,8 +4781,25 @@ export default function App() {
       } else {
         tokenAddress = CONTRACTS.DTGC;
       }
-      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
-      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+      
+      // ═══════════════════════════════════════════════════════════════
+      // V4 vs V3 CONTRACT SELECTION
+      // ═══════════════════════════════════════════════════════════════
+      let stakingAddress;
+      let stakingABI;
+      const useV4 = USE_V4_CONTRACTS && (isLP 
+        ? CONTRACT_ADDRESSES.lpStakingV4 !== '0x0000000000000000000000000000000000000000'
+        : CONTRACT_ADDRESSES.stakingV4 !== '0x0000000000000000000000000000000000000000');
+      
+      if (useV4) {
+        console.log('🚀 Using V4 contracts (unlimited multi-stake)');
+        stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV4 : CONTRACT_ADDRESSES.stakingV4;
+        stakingABI = isLP ? LP_STAKING_V4_ABI : STAKING_V4_ABI;
+      } else {
+        console.log('📦 Using V3 contracts (single stake per type)');
+        stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+        stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+      }
 
       console.log('🔄 Starting stake process...', { 
         tokenAddress, 
@@ -5054,12 +5137,33 @@ export default function App() {
       showToast('Processing withdrawal...', 'info');
 
       // Determine if this is LP or regular staking based on positionId
-      const isLP = positionId === 'lp-stake' || currentPosition?.isLP;
-      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
-      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
-      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
-
-      const tx = await stakingContract.withdraw();
+      const isLP = positionId?.includes('lp-stake') || currentPosition?.isLP;
+      const isV4 = currentPosition?.isV4 || false;
+      const stakeIndex = currentPosition?.stakeIndex ?? 0;
+      
+      let stakingContract;
+      let tx;
+      
+      // ═══════════════════════════════════════════════════════════════
+      // V4 WITHDRAW (with stakeIndex)
+      // ═══════════════════════════════════════════════════════════════
+      if (isV4 && USE_V4_CONTRACTS) {
+        console.log('🚀 V4 Withdraw - stakeIndex:', stakeIndex, 'isLP:', isLP);
+        const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV4 : CONTRACT_ADDRESSES.stakingV4;
+        const stakingABI = isLP ? LP_STAKING_V4_ABI : STAKING_V4_ABI;
+        stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+        tx = await stakingContract.withdraw(stakeIndex);
+      } else {
+        // ═══════════════════════════════════════════════════════════════
+        // V3 WITHDRAW (no index)
+        // ═══════════════════════════════════════════════════════════════
+        console.log('📦 V3 Withdraw - isLP:', isLP);
+        const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+        const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+        stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+        tx = await stakingContract.withdraw();
+      }
+      
       await tx.wait();
 
       // Save to stake history
@@ -5129,24 +5233,48 @@ export default function App() {
   };
 
   // Emergency withdraw (early exit with penalty)
-  const handleEmergencyWithdraw = async (isLP = false) => {
+  const handleEmergencyWithdraw = async (isLP = false, positionId = null) => {
     if (!signer || !account) {
       showToast('Please connect your wallet first', 'error');
       return;
     }
 
     try {
-      // Find current position
-      const currentPosition = stakedPositions.find(p => p.isLP === isLP);
+      // Find current position - support both old isLP method and new positionId method
+      const currentPosition = positionId 
+        ? stakedPositions.find(p => p.id === positionId)
+        : stakedPositions.find(p => p.isLP === isLP);
       
       setLoading(true);
       showToast('Processing emergency withdrawal (20% fee)...', 'info');
 
-      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
-      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
-      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
-
-      const tx = await stakingContract.emergencyWithdraw();
+      const isV4 = currentPosition?.isV4 || false;
+      const stakeIndex = currentPosition?.stakeIndex ?? 0;
+      const actualIsLP = currentPosition?.isLP ?? isLP;
+      
+      let stakingContract;
+      let tx;
+      
+      // ═══════════════════════════════════════════════════════════════
+      // V4 EMERGENCY WITHDRAW (with stakeIndex)
+      // ═══════════════════════════════════════════════════════════════
+      if (isV4 && USE_V4_CONTRACTS) {
+        console.log('🚀 V4 Emergency Withdraw - stakeIndex:', stakeIndex, 'isLP:', actualIsLP);
+        const stakingAddress = actualIsLP ? CONTRACT_ADDRESSES.lpStakingV4 : CONTRACT_ADDRESSES.stakingV4;
+        const stakingABI = actualIsLP ? LP_STAKING_V4_ABI : STAKING_V4_ABI;
+        stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+        tx = await stakingContract.emergencyWithdraw(stakeIndex);
+      } else {
+        // ═══════════════════════════════════════════════════════════════
+        // V3 EMERGENCY WITHDRAW (no index)
+        // ═══════════════════════════════════════════════════════════════
+        console.log('📦 V3 Emergency Withdraw - isLP:', actualIsLP);
+        const stakingAddress = actualIsLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+        const stakingABI = actualIsLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+        stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+        tx = await stakingContract.emergencyWithdraw();
+      }
+      
       await tx.wait();
 
       // Save to stake history with penalty
@@ -5221,22 +5349,49 @@ export default function App() {
     }
   };
 
-  // Claim rewards function
-  const handleClaimRewards = async (isLP = false) => {
+  // Claim rewards function (V4: claim without unstaking!)
+  const handleClaimRewards = async (isLP = false, positionId = null) => {
     if (!signer || !account) {
       showToast('Please connect your wallet first', 'error');
       return;
     }
 
     try {
+      // Find current position
+      const currentPosition = positionId 
+        ? stakedPositions.find(p => p.id === positionId)
+        : stakedPositions.find(p => p.isLP === isLP);
+      
+      const isV4 = currentPosition?.isV4 || false;
+      const stakeIndex = currentPosition?.stakeIndex ?? 0;
+      const actualIsLP = currentPosition?.isLP ?? isLP;
+      
       setLoading(true);
       showToast('Claiming rewards...', 'info');
 
-      const stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
-      const stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
-      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
-
-      const tx = await stakingContract.claimRewards();
+      let stakingContract;
+      let tx;
+      
+      // ═══════════════════════════════════════════════════════════════
+      // V4 CLAIM REWARDS (with stakeIndex - keeps stake active!)
+      // ═══════════════════════════════════════════════════════════════
+      if (isV4 && USE_V4_CONTRACTS) {
+        console.log('🚀 V4 Claim Rewards - stakeIndex:', stakeIndex, 'isLP:', actualIsLP);
+        const stakingAddress = actualIsLP ? CONTRACT_ADDRESSES.lpStakingV4 : CONTRACT_ADDRESSES.stakingV4;
+        const stakingABI = actualIsLP ? LP_STAKING_V4_ABI : STAKING_V4_ABI;
+        stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+        tx = await stakingContract.claimRewards(stakeIndex);
+      } else {
+        // ═══════════════════════════════════════════════════════════════
+        // V3 CLAIM REWARDS (no index)
+        // ═══════════════════════════════════════════════════════════════
+        console.log('📦 V3 Claim Rewards - isLP:', actualIsLP);
+        const stakingAddress = actualIsLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
+        const stakingABI = actualIsLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
+        stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+        tx = await stakingContract.claimRewards();
+      }
+      
       await tx.wait();
 
       setLoading(false);
@@ -5246,6 +5401,9 @@ export default function App() {
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
       const dtgcBal = await dtgcContract.balanceOf(account);
       setDtgcBalance(ethers.formatEther(dtgcBal));
+      
+      // Re-fetch positions to update rewards display
+      setTimeout(() => fetchStakedPosition(), 2000);
 
     } catch (err) {
       console.error('Claim rewards error:', err);
@@ -5286,7 +5444,7 @@ export default function App() {
     }
   };
 
-  // Fetch user's staked position from contract
+  // Fetch user's staked position from contract (V4 multi-stake support)
   const fetchStakedPosition = useCallback(async () => {
     if (TESTNET_MODE || !account || !provider) return;
 
@@ -5307,165 +5465,216 @@ export default function App() {
         // Use either wallet provider or fallback RPC
         const activeProvider = rpcUrl ? new ethers.JsonRpcProvider(rpcUrl) : provider;
         
+        const positions = [];
+        
+        // ═══════════════════════════════════════════════════════════════
+        // V4 MULTI-STAKE MODE
+        // ═══════════════════════════════════════════════════════════════
+        if (USE_V4_CONTRACTS && CONTRACT_ADDRESSES.stakingV4 !== '0x0000000000000000000000000000000000000000') {
+          console.log('🚀 Using V4 contracts (unlimited multi-stake)');
+          
+          try {
+            // Fetch DTGC stakes from V4
+            const stakingV4 = new ethers.Contract(CONTRACT_ADDRESSES.stakingV4, STAKING_V4_ABI, activeProvider);
+            const dtgcStakeCount = await stakingV4.getActiveStakeCount(account);
+            console.log('📊 V4 DTGC active stake count:', dtgcStakeCount.toString());
+            
+            if (dtgcStakeCount > 0) {
+              // Fetch all stakes at once
+              const dtgcStakes = await stakingV4.getActiveStakes(account);
+              console.log('📋 V4 DTGC stakes:', dtgcStakes);
+              
+              // Find original indices by iterating all stakes
+              const allDtgcStakes = await stakingV4.getAllStakes(account);
+              
+              dtgcStakes.forEach((stake, activeIdx) => {
+                // Find original index in allStakes
+                let originalIndex = 0;
+                for (let i = 0; i < allDtgcStakes.length; i++) {
+                  if (allDtgcStakes[i].isActive && 
+                      allDtgcStakes[i].amount.toString() === stake.amount.toString() &&
+                      allDtgcStakes[i].startTime.toString() === stake.startTime.toString()) {
+                    originalIndex = i;
+                    break;
+                  }
+                }
+                
+                const amount = parseFloat(ethers.formatEther(stake.amount));
+                const tierNum = Number(stake.tier);
+                const tierNames = ['SILVER', 'GOLD', 'WHALE'];
+                const tierName = tierNames[tierNum] || 'GOLD';
+                const rawApr = Number(stake.aprBps) / 100;
+                
+                positions.push({
+                  id: `dtgc-stake-${originalIndex}`,
+                  stakeIndex: originalIndex, // V4: needed for withdraw
+                  type: 'DTGC',
+                  isLP: false,
+                  amount: amount,
+                  startTime: Number(stake.startTime) * 1000,
+                  endTime: Number(stake.unlockTime) * 1000,
+                  lockPeriod: Number(stake.lockPeriod),
+                  apr: getV19CorrectedAPR(rawApr, tierName, false),
+                  bonus: Number(stake.bonusBps) / 100,
+                  tier: tierNum,
+                  tierName: tierName,
+                  isActive: stake.isActive,
+                  timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
+                  isV4: true,
+                });
+                console.log(`✅ Added V4 DTGC stake #${originalIndex}:`, tierName, amount);
+              });
+            }
+            
+            // Fetch LP stakes from V4
+            const lpStakingV4 = new ethers.Contract(CONTRACT_ADDRESSES.lpStakingV4, LP_STAKING_V4_ABI, activeProvider);
+            const lpStakeCount = await lpStakingV4.getActiveStakeCount(account);
+            console.log('📊 V4 LP active stake count:', lpStakeCount.toString());
+            
+            if (lpStakeCount > 0) {
+              const lpStakes = await lpStakingV4.getActiveStakes(account);
+              console.log('📋 V4 LP stakes:', lpStakes);
+              
+              // Find original indices
+              const allLpStakes = await lpStakingV4.getAllStakes(account);
+              
+              lpStakes.forEach((stake, activeIdx) => {
+                // Find original index
+                let originalIndex = 0;
+                for (let i = 0; i < allLpStakes.length; i++) {
+                  if (allLpStakes[i].isActive && 
+                      allLpStakes[i].amount.toString() === stake.amount.toString() &&
+                      allLpStakes[i].startTime.toString() === stake.startTime.toString()) {
+                    originalIndex = i;
+                    break;
+                  }
+                }
+                
+                const lpAmount = parseFloat(ethers.formatEther(stake.amount));
+                const lpTypeNum = Number(stake.lpType);
+                const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+                const rawLpApr = Number(stake.aprBps) / 100;
+                
+                positions.push({
+                  id: `lp-stake-${originalIndex}`,
+                  stakeIndex: originalIndex, // V4: needed for withdraw
+                  type: 'LP',
+                  isLP: true,
+                  amount: lpAmount,
+                  startTime: Number(stake.startTime) * 1000,
+                  endTime: Number(stake.unlockTime) * 1000,
+                  lockPeriod: Number(stake.lockPeriod),
+                  apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
+                  boostMultiplier: Number(stake.boostBps) / 100,
+                  lpType: lpTypeNum,
+                  tier: lpTierName,
+                  tierName: lpTierName,
+                  isActive: stake.isActive,
+                  timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
+                  isV4: true,
+                });
+                console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount);
+              });
+            }
+            
+            setStakedPositions(positions);
+            console.log('📊 V4 Total positions found:', positions.length);
+            return; // Success with V4!
+            
+          } catch (v4Err) {
+            console.warn('⚠️ V4 fetch failed, falling back to V3:', v4Err.message);
+            // Fall through to V3 logic
+          }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // V3 FALLBACK MODE (single stake per type)
+        // ═══════════════════════════════════════════════════════════════
+        console.log('📦 Using V3 contracts (single stake per type)');
+        
         // Fetch regular staking position
         const stakingContract = new ethers.Contract(CONTRACT_ADDRESSES.stakingV3, STAKING_V3_ABI, activeProvider);
         const position = await stakingContract.getPosition(account);
         
-        // Log ALL values from DTGC position
-        console.log('📋 Raw DTGC position - ALL VALUES:');
-        for (let i = 0; i < 10; i++) {
-          try {
-            const val = position[i];
-            console.log(`  [${i}]:`, val?.toString ? val.toString() : val);
-          } catch (e) { break; }
+        // Parse regular staking position
+        const amount = position ? parseFloat(ethers.formatEther(position[0])) : 0;
+        const dtgcIsActive = position ? position[7] : false;
+        
+        if (position && dtgcIsActive && amount > 0) {
+          const rawApr = Number(position[4]) / 100;
+          const tierNum = Number(position[6]);
+          const tierNames = ['SILVER', 'GOLD', 'WHALE'];
+          const tierName = tierNames[tierNum] || 'GOLD';
+          
+          positions.push({
+            id: 'dtgc-stake-0',
+            stakeIndex: 0,
+            type: 'DTGC',
+            isLP: false,
+            amount: amount,
+            startTime: Number(position[1]) * 1000,
+            endTime: Number(position[2]) * 1000,
+            lockPeriod: Number(position[3]),
+            apr: getV19CorrectedAPR(rawApr, tierName, false),
+            bonus: Number(position[5]) / 100,
+            tier: tierNum,
+            tierName: tierName,
+            isActive: dtgcIsActive,
+            timeRemaining: Number(position[8]),
+            isV4: false,
+          });
+          console.log('✅ Added V3 DTGC position');
         }
 
         // Fetch LP staking position
         const lpStakingContract = new ethers.Contract(CONTRACT_ADDRESSES.lpStakingV3, LP_STAKING_V3_ABI, activeProvider);
-      
-      // Try getPosition first
-      let lpPosition;
-      try {
-        lpPosition = await lpStakingContract.getPosition(account);
-        console.log('📋 Raw LP position - ALL VALUES:');
-        for (let i = 0; i < 12; i++) {
-          try {
-            const val = lpPosition[i];
-            console.log(`  [${i}]:`, val?.toString ? val.toString() : val);
-          } catch (e) { break; }
-        }
-      } catch (lpErr) {
-        console.error('❌ LP getPosition failed:', lpErr.message);
-      }
-      
-      // Also try alternative functions that might exist
-      try {
-        const userStakes = await lpStakingContract.getUserStakes(account);
-        console.log('📋 LP getUserStakes result:', userStakes);
-      } catch (e) {
-        console.log('ℹ️ No getUserStakes function on LP contract');
-      }
-      
-      try {
-        const stakeCount = await lpStakingContract.stakeCount ? await lpStakingContract.stakeCount(account) : null;
-        console.log('📋 LP stakeCount:', stakeCount?.toString());
-      } catch (e) {
-        console.log('ℹ️ No stakeCount function on LP contract');
-      }
-      
-      // Check if there's a stakes mapping we can read
-      try {
-        const stake0 = await lpStakingContract.stakes ? await lpStakingContract.stakes(account, 0) : null;
-        console.log('📋 LP stakes(account, 0):', stake0);
-      } catch (e) {
-        console.log('ℹ️ No stakes mapping or index 0 empty');
-      }
-
-      const positions = [];
-
-      // Parse regular staking position
-      // getPosition returns: (amount, startTime, unlockTime, lockPeriod, aprBps, bonusBps, tier, isActive, timeRemaining)
-      const amount = position ? parseFloat(ethers.formatEther(position[0])) : 0;
-      const dtgcIsActive = position ? position[7] : false;
-      console.log('💰 DTGC stake check:', { 
-        amount, 
-        isActive: dtgcIsActive, 
-        rawAmount: position?.[0]?.toString(),
-        rawIsActive: position?.[7]?.toString ? position[7].toString() : position?.[7]
-      });
-      
-      if (position && dtgcIsActive && amount > 0) {
-        const rawApr = Number(position[4]) / 100; // Convert from bps
-        const tierNum = Number(position[6]);
-        const tierNames = ['SILVER', 'GOLD', 'WHALE'];
-        const tierName = tierNames[tierNum] || 'GOLD';
-        
-        const dtgcPosition = {
-          id: 'dtgc-stake',
-          type: 'DTGC',
-          isLP: false,
-          amount: amount,
-          startTime: Number(position[1]) * 1000,
-          endTime: Number(position[2]) * 1000,
-          lockPeriod: Number(position[3]),
-          apr: getV19CorrectedAPR(rawApr, tierName, false),
-          bonus: Number(position[5]) / 100,
-          tier: tierNum,
-          tierName: tierName,
-          isActive: dtgcIsActive,
-          timeRemaining: Number(position[8]),
-        };
-        positions.push(dtgcPosition);
-        console.log('✅ Added DTGC position:', dtgcPosition);
-      } else {
-        console.log('⚠️ No active DTGC stake found (amount:', amount, ', isActive:', dtgcIsActive, ')');
-      }
-
-      // Parse LP staking position
-      // Try different index patterns since contract might be different
-      let lpAmount = 0;
-      let lpIsActive = false;
-      let lpTypeNum = 0;
-      
-      if (lpPosition) {
-        // Standard V3 format: (amount, startTime, unlockTime, lockPeriod, aprBps, boostBps, lpType, isActive, timeRemaining)
-        lpAmount = parseFloat(ethers.formatEther(lpPosition[0] || 0n));
-        
-        // isActive could be at index 7 or elsewhere
-        // Check if it's a boolean or needs conversion
-        const possibleIsActive = lpPosition[7];
-        if (typeof possibleIsActive === 'boolean') {
-          lpIsActive = possibleIsActive;
-        } else if (possibleIsActive !== undefined) {
-          lpIsActive = possibleIsActive.toString() === 'true' || possibleIsActive === 1n || possibleIsActive === 1;
+        let lpPosition;
+        try {
+          lpPosition = await lpStakingContract.getPosition(account);
+        } catch (lpErr) {
+          console.error('❌ LP getPosition failed:', lpErr.message);
         }
         
-        lpTypeNum = Number(lpPosition[6] || 0);
-      }
-      
-      console.log('💎 LP stake check:', { 
-        lpAmount, 
-        isActive: lpIsActive, 
-        lpType: lpTypeNum,
-        rawAmount: lpPosition?.[0]?.toString(),
-        rawIsActive: lpPosition?.[7]?.toString ? lpPosition[7].toString() : lpPosition?.[7],
-        rawLpType: lpPosition?.[6]?.toString ? lpPosition[6].toString() : lpPosition?.[6]
-      });
-      
-      // Try to add LP position if it has any amount, even if isActive seems false
-      if (lpPosition && lpAmount > 0) {
-        const rawLpApr = Number(lpPosition[4] || 0) / 100;
-        const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
-        
-        const lpStakePosition = {
-          id: 'lp-stake',
-          type: 'LP',
-          isLP: true,
-          amount: lpAmount,
-          startTime: Number(lpPosition[1] || 0) * 1000,
-          endTime: Number(lpPosition[2] || 0) * 1000,
-          lockPeriod: Number(lpPosition[3] || 0),
-          apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
-          boostMultiplier: Number(lpPosition[5] || 0) / 100,
-          lpType: lpTypeNum,
-          tier: lpTierName,
-          tierName: lpTierName,
-          isActive: lpIsActive || lpAmount > 0, // Force active if amount > 0
-          timeRemaining: Number(lpPosition[8] || 0),
-        };
-        positions.push(lpStakePosition);
-        console.log('✅ Added LP position:', lpStakePosition);
-      } else {
-        console.log('⚠️ No LP stake found (lpAmount:', lpAmount, ')');
-      }
+        if (lpPosition) {
+          const lpAmount = parseFloat(ethers.formatEther(lpPosition[0] || 0n));
+          const possibleIsActive = lpPosition[7];
+          let lpIsActive = false;
+          if (typeof possibleIsActive === 'boolean') {
+            lpIsActive = possibleIsActive;
+          } else if (possibleIsActive !== undefined) {
+            lpIsActive = possibleIsActive.toString() === 'true' || possibleIsActive === 1n || possibleIsActive === 1;
+          }
+          const lpTypeNum = Number(lpPosition[6] || 0);
+          
+          if (lpAmount > 0) {
+            const rawLpApr = Number(lpPosition[4] || 0) / 100;
+            const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+            
+            positions.push({
+              id: 'lp-stake-0',
+              stakeIndex: 0,
+              type: 'LP',
+              isLP: true,
+              amount: lpAmount,
+              startTime: Number(lpPosition[1] || 0) * 1000,
+              endTime: Number(lpPosition[2] || 0) * 1000,
+              lockPeriod: Number(lpPosition[3] || 0),
+              apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
+              boostMultiplier: Number(lpPosition[5] || 0) / 100,
+              lpType: lpTypeNum,
+              tier: lpTierName,
+              tierName: lpTierName,
+              isActive: lpIsActive || lpAmount > 0,
+              timeRemaining: Number(lpPosition[8] || 0),
+              isV4: false,
+            });
+            console.log('✅ Added V3 LP position');
+          }
+        }
 
-      // Always set positions to what blockchain returns
-      setStakedPositions(positions);
-      console.log('📊 Staked positions from V3 contracts:', positions.length > 0 ? positions : 'No active positions');
-      console.log('📊 Total positions found:', positions.length);
-      
-      // Success! Exit the loop
-      return;
+        setStakedPositions(positions);
+        console.log('📊 V3 Total positions found:', positions.length);
+        return; // Success!
 
       } catch (err) {
         lastError = err;
@@ -5477,7 +5686,6 @@ export default function App() {
     // All RPCs failed - keep existing positions
     console.error('❌ All RPC endpoints failed to fetch staked positions');
     console.error('❌ Last error:', lastError?.message);
-    // DON'T clear positions - keep existing data visible
     console.log('⚠️ Keeping existing positions due to RPC errors - will retry next interval');
   }, [account, provider]);
 
@@ -6156,7 +6364,7 @@ export default function App() {
 
                   {isLocked ? (
                     <button
-                      onClick={() => handleEmergencyWithdraw(activePos.isLP)}
+                      onClick={() => handleEmergencyWithdraw(activePos.isLP, activePos.id)}
                       disabled={loading}
                       style={{
                         width: '100%',
@@ -6174,24 +6382,47 @@ export default function App() {
                       ⚠️ Early Exit (20% EES Fee)
                     </button>
                   ) : (
-                    <button
-                      onClick={() => handleUnstake(activePos.id)}
-                      disabled={loading}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontWeight: 700,
-                        fontSize: '0.7rem',
-                        color: '#FFF',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        opacity: loading ? 0.7 : 1,
-                      }}
-                    >
-                      ✅ Claim All
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {/* V4: Claim Rewards without unstaking */}
+                      {activePos.isV4 && (
+                        <button
+                          onClick={() => handleClaimRewards(activePos.isLP, activePos.id)}
+                          disabled={loading}
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontWeight: 700,
+                            fontSize: '0.65rem',
+                            color: '#000',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            opacity: loading ? 0.7 : 1,
+                          }}
+                        >
+                          🎁 Claim
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleUnstake(activePos.id)}
+                        disabled={loading}
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontWeight: 700,
+                          fontSize: '0.65rem',
+                          color: '#FFF',
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                          opacity: loading ? 0.7 : 1,
+                        }}
+                      >
+                        ✅ {activePos.isV4 ? 'Withdraw' : 'Claim All'}
+                      </button>
+                    </div>
                   )}
                 </>
               );
@@ -7633,7 +7864,7 @@ export default function App() {
                             <div style={{display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
                               {isLocked ? (
                                 <button
-                                  onClick={() => handleEmergencyWithdraw(pos.isLP)}
+                                  onClick={() => handleEmergencyWithdraw(pos.isLP, pos.id)}
                                   style={{
                                     padding: '8px 16px',
                                     background: 'linear-gradient(135deg, #FF6B6B, #FF8E53)',
@@ -7650,7 +7881,7 @@ export default function App() {
                               ) : (
                                 <>
                                   <button
-                                    onClick={() => handleClaimRewards(pos.isLP)}
+                                    onClick={() => handleClaimRewards(pos.isLP, pos.id)}
                                     style={{
                                       padding: '8px 16px',
                                       background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
@@ -7662,10 +7893,10 @@ export default function App() {
                                       cursor: 'pointer',
                                     }}
                                   >
-                                    💰 Claim Rewards
+                                    {pos.isV4 ? '🎁 Claim Rewards' : '💰 Claim Rewards'}
                                   </button>
                                   <button
-                                    onClick={() => handleUnstake(null, pos.isLP)}
+                                    onClick={() => handleUnstake(pos.id)}
                                     style={{
                                       padding: '8px 16px',
                                       background: 'linear-gradient(135deg, #D4AF37, #B8860B)',
@@ -7677,7 +7908,7 @@ export default function App() {
                                       cursor: 'pointer',
                                     }}
                                   >
-                                    🔓 Unstake All
+                                    {pos.isV4 ? '🔓 Withdraw' : '🔓 Unstake All'}
                                   </button>
                                 </>
                               )}
@@ -8381,8 +8612,8 @@ export default function App() {
                   { label: '👩 URMOM Token', addr: CONTRACT_ADDRESSES.urmom },
                   { label: '💎 DTGC/PLS LP', addr: CONTRACT_ADDRESSES.lpDtgcPls },
                   { label: '💜💎 DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lpDtgcUrmom },
-                  { label: '✅ DTGC Staking V3', addr: CONTRACT_ADDRESSES.stakingV3 },
-                  { label: '✅ LP Staking V3', addr: CONTRACT_ADDRESSES.lpStakingV3 },
+                  { label: '🚀 DTGC Staking V4', addr: CONTRACT_ADDRESSES.stakingV4 },
+                  { label: '🚀 LP Staking V4', addr: CONTRACT_ADDRESSES.lpStakingV4 },
                   { label: '🗳️ DAO Voting V3', addr: CONTRACT_ADDRESSES.daoVotingV3 },
                   { label: '🏛️ DAO Treasury', addr: CONTRACT_ADDRESSES.daoTreasury },
                   { label: '👨‍💻 Dev Wallet', addr: CONTRACT_ADDRESSES.devWallet },
@@ -9445,9 +9676,9 @@ export default function App() {
             </div>
           </div>
           <div className="footer-links">
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking V3</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">LP Staking V3</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVotingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting V3</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">Staking V4</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">LP Staking V4</a>
+            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVotingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting</a>
             <a href={SOCIAL_LINKS.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
