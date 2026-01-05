@@ -7,8 +7,6 @@ import {
   TOKENS,
   STAKING_TIERS,
   DIAMOND_TIER,
-  STAKING_V3_ABI as IMPORTED_STAKING_V3_ABI,
-  LP_STAKING_V3_ABI as IMPORTED_LP_STAKING_V3_ABI,
   DAO_VOTING_V3_ABI,
   ERC20_ABI,
   CHAIN_ID,
@@ -19,9 +17,9 @@ import {
 } from './config/constants';
 
 // ═══════════════════════════════════════════════════════════════
-// FALLBACK ABIs - Use these if imports don't have the right structure
+// V3 ABIs (for backwards compatibility / migration)
 // ═══════════════════════════════════════════════════════════════
-const FALLBACK_STAKING_V3_ABI = [
+const STAKING_V3_ABI = [
   'function stake(uint256 amount, uint8 tier) external',
   'function withdraw() external',
   'function emergencyWithdraw() external',
@@ -31,7 +29,7 @@ const FALLBACK_STAKING_V3_ABI = [
   'function totalStaked() external view returns (uint256)',
 ];
 
-const FALLBACK_LP_STAKING_V3_ABI = [
+const LP_STAKING_V3_ABI = [
   'function stake(uint256 amount, uint8 lpType) external',
   'function withdraw() external',
   'function emergencyWithdraw() external',
@@ -39,15 +37,10 @@ const FALLBACK_LP_STAKING_V3_ABI = [
   'function getPosition(address user) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive, uint256 timeRemaining)',
   'function calculateRewards(address user) external view returns (uint256)',
   'function totalStaked() external view returns (uint256)',
-  // Alternative function signatures that might exist
-  'function getUserStakes(address user) external view returns (uint256[])',
-  'function stakes(address user, uint256 index) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lockPeriod, uint256 aprBps, uint256 boostBps, uint8 lpType, bool isActive)',
-  'function stakeCount(address user) external view returns (uint256)',
 ];
 
-// Use imported ABIs if they exist and have getPosition, otherwise use fallbacks
-const STAKING_V3_ABI = IMPORTED_STAKING_V3_ABI || FALLBACK_STAKING_V3_ABI;
-const LP_STAKING_V3_ABI = IMPORTED_LP_STAKING_V3_ABI || FALLBACK_LP_STAKING_V3_ABI;
+const FALLBACK_STAKING_V3_ABI = STAKING_V3_ABI;
+const FALLBACK_LP_STAKING_V3_ABI = LP_STAKING_V3_ABI;
 
 // ═══════════════════════════════════════════════════════════════
 // V4 MULTI-STAKE ABIs - UNLIMITED STAKES PER USER
