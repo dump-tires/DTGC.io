@@ -8857,8 +8857,6 @@ export default function App() {
                   <option value="cop">🇨🇴 COP ($)</option>
                   <option value="cad">🇨🇦 CAD (C$)</option>
                 </select>
-                </div>
-                <div className="section-divider" style={{ background: 'linear-gradient(90deg, transparent, #2196F3, transparent)' }} />
               </div>
 
               {/* Portfolio Allocation Calculator */}
