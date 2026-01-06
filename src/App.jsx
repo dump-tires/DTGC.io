@@ -6812,6 +6812,21 @@ export default function App() {
               alignItems: 'center',
               marginBottom: '30px',
             }}>
+              {/* Gold Bag Title */}
+              <h3 style={{
+                color: '#D4AF37',
+                fontFamily: 'Cinzel, serif',
+                fontSize: '1.2rem',
+                letterSpacing: '3px',
+                marginBottom: '12px',
+                textShadow: '0 0 20px rgba(212,175,55,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}>
+                💰 GOLD BAG
+              </h3>
+              
               {/* Currency Toggle Button */}
               <button
                 onClick={toggleCurrencyDisplay}
@@ -6933,9 +6948,19 @@ export default function App() {
               </div>
               <div className="hero-stat-label">DTGC {livePrices.loading ? '⏳ Loading...' : ''}</div>
             </div>
-            <div className="hero-stat">
-              <div className="hero-stat-value gold-text">${formatNumber(parseFloat(liveBurnedUSD))}</div>
-              <div className="hero-stat-label">Burned Value</div>
+            <div className="hero-stat" style={{background: 'rgba(255,152,0,0.1)', borderRadius: '12px', border: '1px solid rgba(255,152,0,0.3)'}}>
+              <div className="hero-stat-value" style={{color: '#FF9800', position: 'relative'}}>
+                ${formatNumber(parseFloat(liveBurnedUSD))}
+                <span style={{position: 'absolute', top: '-8px', right: '-20px', fontSize: '0.5rem', background: '#4CAF50', padding: '2px 6px', borderRadius: '10px', color: '#FFF', animation: 'pulse 2s infinite'}}>LIVE</span>
+              </div>
+              <div className="hero-stat-label" style={{color: '#FF9800'}}>🔥 URMOM Burned</div>
+            </div>
+            <div className="hero-stat" style={{background: 'rgba(244,67,54,0.1)', borderRadius: '12px', border: '1px solid rgba(244,67,54,0.3)'}}>
+              <div className="hero-stat-value" style={{color: '#F44336', position: 'relative'}}>
+                ${formatNumber(dtgcBurnData.burned * livePrices.dtgc, 2)}
+                {!dtgcBurnData.loading && <span style={{position: 'absolute', top: '-8px', right: '-20px', fontSize: '0.5rem', background: '#4CAF50', padding: '2px 6px', borderRadius: '10px', color: '#FFF', animation: 'pulse 2s infinite'}}>LIVE</span>}
+              </div>
+              <div className="hero-stat-label" style={{color: '#F44336'}}>🔥 DTGC Burned</div>
             </div>
           </div>
         </section>
