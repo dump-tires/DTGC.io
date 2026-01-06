@@ -98,8 +98,8 @@ const LP_STAKING_V4_ABI = [
   'function earlyWithdrawFeeBps() external view returns (uint256)',
 ];
 
-// V4 Mode toggle - set to false until V4 contracts are properly deployed
-const USE_V4_CONTRACTS = false;
+// V4 Mode toggle - ENABLED for multi-stake support
+const USE_V4_CONTRACTS = true;
 
 // Log which ABIs we're using
 console.log('📝 Staking V3 ABI:', STAKING_V3_ABI?.length ? `${STAKING_V3_ABI.length} functions` : 'MISSING!');
@@ -7788,7 +7788,7 @@ export default function App() {
                   padding: '30px',
                   border: '1px solid var(--border-color)',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                     <h3 style={{
                       fontFamily: 'Cinzel, serif',
                       fontSize: '1.2rem',
@@ -7796,7 +7796,24 @@ export default function App() {
                       textAlign: 'center',
                       color: 'var(--gold)',
                       flex: 1,
-                    }}>📊 YOUR STAKED POSITIONS</h3>
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px',
+                    }}>
+                      📊 YOUR STAKED POSITIONS
+                      {USE_V4_CONTRACTS && (
+                        <span style={{
+                          background: 'linear-gradient(135deg, #4CAF50, #2E7D32)',
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          color: '#FFF',
+                          letterSpacing: '1px',
+                        }}>V4 • {stakedPositions.filter(p => p.isActive !== false).length} ACTIVE</span>
+                      )}
+                    </h3>
                     <button
                       onClick={() => {
                         if (window.confirm('Clear stale position data? Use this if you see old V2 stakes that no longer exist on the V3 contracts.')) {
