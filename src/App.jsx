@@ -3593,12 +3593,41 @@ export default function App() {
     }
   }, []);
 
+  // Fetch total staked from V4 contract
+  const fetchTotalStaked = useCallback(async () => {
+    try {
+      // Use public RPC to query contract
+      const provider = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+      const stakingContract = new ethers.Contract(
+        CONTRACT_ADDRESSES.stakingV4,
+        ['function totalStaked() external view returns (uint256)'],
+        provider
+      );
+      
+      const totalStakedRaw = await stakingContract.totalStaked();
+      const totalStakedFormatted = ethers.formatUnits(totalStakedRaw, 18);
+      
+      setContractStats(prev => ({
+        ...prev,
+        totalStaked: totalStakedFormatted,
+      }));
+      
+      console.log('📊 Total staked updated:', totalStakedFormatted);
+    } catch (err) {
+      console.warn('⚠️ Failed to fetch total staked:', err.message);
+    }
+  }, []);
+
   // Fetch supply dynamics on mount and every 5 minutes
   useEffect(() => {
     fetchSupplyDynamics();
-    const interval = setInterval(fetchSupplyDynamics, 5 * 60 * 1000);
+    fetchTotalStaked();
+    const interval = setInterval(() => {
+      fetchSupplyDynamics();
+      fetchTotalStaked();
+    }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [fetchSupplyDynamics]);
+  }, [fetchSupplyDynamics, fetchTotalStaked]);
 
   // Fetch live holder data from our Vercel API route (proxies PulseChain API)
   const fetchLiveHolders = useCallback(async () => {
