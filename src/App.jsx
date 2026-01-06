@@ -211,6 +211,7 @@ const V5_STAKING_TIERS = [
     name: 'WHALE',
     icon: '🐋',
     minInvest: 10000,
+    maxInvest: 50000,  // Max $50,000 worth - exclusive tier
     lockDays: 180,
     holdDays: 180,
     apr: 18.2,     // Reduced 30% from 26%
@@ -4740,6 +4741,22 @@ export default function App() {
     }
 
     const tierData = selectedTier === 4 ? V5_DIAMOND_PLUS_TIER : (selectedTier === 3 ? V5_DIAMOND_TIER : V5_STAKING_TIERS[selectedTier]);
+    
+    // Calculate USD value for min/max checks
+    const priceUsd = livePrices.dtgc || 0;
+    const valueUsd = amount * priceUsd;
+    
+    // Check minimum stake requirement
+    if (valueUsd < tierData.minInvest) {
+      showToast(`Minimum stake for ${tierData.name} is $${tierData.minInvest.toLocaleString()}`, 'error');
+      return;
+    }
+    
+    // Check maximum stake requirement (Whale tier only)
+    if (tierData.maxInvest && valueUsd > tierData.maxInvest) {
+      showToast(`Maximum stake for ${tierData.name} is $${tierData.maxInvest.toLocaleString()}`, 'error');
+      return;
+    }
 
     // TESTNET MODE - Simulate staking
     if (TESTNET_MODE) {
@@ -7492,7 +7509,10 @@ export default function App() {
                   >
                     <div className="tier-icon">{tier.icon}</div>
                     <div className="tier-name" style={{ color: tier.color }}>{tier.name}</div>
-                    <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Min: ${tier.minInvest.toLocaleString()}</div>
+                    <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                      Min: ${tier.minInvest.toLocaleString()}
+                      {tier.maxInvest && <span style={{ marginLeft: '8px' }}>• Max: ${tier.maxInvest.toLocaleString()}</span>}
+                    </div>
                     <div className="tier-apr-container">
                       <div className="tier-apr gold-text">{effectiveAPR.toFixed(1)}%</div>
                       <div className="tier-apr-label">APR</div>
