@@ -10140,15 +10140,15 @@ export default function App() {
         {/* DexScreener Widget */}
         <DexScreenerWidget />
 
-        {/* Gold Records - Stake History (Bottom Right) */}
+        {/* Gold Records - Stake History (Above Calculator) */}
         <div
           onClick={() => setShowGoldRecords(true)}
           style={{
             position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            width: '60px',
-            height: '60px',
+            bottom: '94px',
+            right: '24px',
+            width: '56px',
+            height: '56px',
             background: 'linear-gradient(135deg, #B8860B 0%, #DAA520 50%, #FFD700 100%)',
             border: '3px solid #D4AF37',
             borderRadius: '50%',
@@ -10157,7 +10157,7 @@ export default function App() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '28px',
+            fontSize: '24px',
             boxShadow: '0 4px 20px rgba(212,175,55,0.5), inset 0 2px 10px rgba(255,255,255,0.2)',
             transition: 'all 0.3s ease',
           }}
@@ -10169,9 +10169,9 @@ export default function App() {
             e.currentTarget.style.transform = 'scale(1)';
             e.currentTarget.style.boxShadow = '0 4px 20px rgba(212,175,55,0.5)';
           }}
-          title="Gold Records - Stake History"
+          title="🏆 Treasure Vault - Stake History"
         >
-          📜
+          🏆
         </div>
 
         {/* Gold Records Modal - TREASURE VAULT */}
@@ -10492,7 +10492,7 @@ export default function App() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* CALCULATOR FAB - BOTTOM RIGHT */}
+      {/* CALCULATOR FAB - BOTTOM RIGHT (Below Treasure Vault) */}
       {/* ═══════════════════════════════════════════════════════════════ */}
       {!TESTNET_MODE && account && stakedPositions.length > 0 && (
         <button
@@ -10501,14 +10501,14 @@ export default function App() {
             position: 'fixed',
             bottom: '24px',
             right: '24px',
-            zIndex: 100,
-            width: '60px',
-            height: '60px',
+            zIndex: 1500,
+            width: '56px',
+            height: '56px',
             borderRadius: '50%',
             background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
             border: '3px solid #81C784',
             color: '#fff',
-            fontSize: '1.5rem',
+            fontSize: '1.4rem',
             cursor: 'pointer',
             boxShadow: '0 4px 20px rgba(76,175,80,0.5), 0 0 30px rgba(76,175,80,0.3)',
             display: 'flex',
@@ -10518,7 +10518,7 @@ export default function App() {
           }}
           onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 6px 30px rgba(76,175,80,0.6), 0 0 40px rgba(76,175,80,0.4)'; }}
           onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(76,175,80,0.5), 0 0 30px rgba(76,175,80,0.3)'; }}
-          title="Calculate My Stakes Value"
+          title="🧮 Calculate My Stakes Value"
         >
           🧮
         </button>
