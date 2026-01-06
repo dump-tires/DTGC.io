@@ -3456,6 +3456,11 @@ export default function App() {
   const [stakeHistory, setStakeHistory] = useState([]);
   const [showGoldRecords, setShowGoldRecords] = useState(false);
   
+  // My Stakes Calculator Modal
+  const [showStakeCalculator, setShowStakeCalculator] = useState(false);
+  const [calcFuturePrice, setCalcFuturePrice] = useState('');
+  const [calcFutureMonths, setCalcFutureMonths] = useState('6');
+  
   // Load stake history from localStorage on mount
   useEffect(() => {
     const savedHistory = localStorage.getItem('dtgc-stake-history');
@@ -3524,6 +3529,7 @@ export default function App() {
     burned: 0,
     staked: 0,
     circulating: SUPPLY_WALLETS.circulating.expected,
+    rewardsPool: 0,
     lastUpdated: null,
   });
 
@@ -3542,7 +3548,7 @@ export default function App() {
       const daoBalance = daoData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
       const daoDtgc = daoBalance ? parseFloat(daoBalance.value) / 1e18 : 0;
 
-      // Fetch Dev Wallet balance
+      // Fetch Dev Wallet balance (kept for internal tracking, not shown in UI)
       const devRes = await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dev.address}/token-balances`);
       const devData = await devRes.json();
       const devBalance = devData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
@@ -3553,6 +3559,17 @@ export default function App() {
       const burnData = await burnRes.json();
       const burnBalance = burnData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
       const burnedDtgc = burnBalance ? parseFloat(burnBalance.value) / 1e18 : 0;
+
+      // Fetch Rewards Pool (V4 Staking Contract DTGC balance)
+      let rewardsPoolDtgc = 0;
+      try {
+        const stakingRes = await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${CONTRACT_ADDRESSES.stakingV4}/token-balances`);
+        const stakingData = await stakingRes.json();
+        const stakingBalance = stakingData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
+        rewardsPoolDtgc = stakingBalance ? parseFloat(stakingBalance.value) / 1e18 : 0;
+      } catch (e) {
+        console.warn('Failed to fetch rewards pool:', e);
+      }
 
       // Calculate circulating = Total - DAO - Dev - LP - Burned - Staked
       const totalSupply = DTGC_TOTAL_SUPPLY;
@@ -3565,10 +3582,11 @@ export default function App() {
         burned: burnedDtgc,
         staked: 0, // Will be updated from contract
         circulating: Math.max(0, circulating),
+        rewardsPool: rewardsPoolDtgc,
         lastUpdated: new Date(),
       });
 
-      console.log('📊 Supply dynamics updated:', { dao: daoDtgc, dev: devDtgc, burned: burnedDtgc });
+      console.log('📊 Supply dynamics updated:', { dao: daoDtgc, dev: devDtgc, burned: burnedDtgc, rewardsPool: rewardsPoolDtgc });
     } catch (err) {
       console.warn('⚠️ Failed to fetch supply dynamics:', err.message);
     }
@@ -7095,50 +7113,54 @@ export default function App() {
               </div>
               </a>
 
-              {/* Dev Wallet */}
+              {/* Rewards Pool (V4 Staking Contract Balance) */}
               <a 
-                href={`https://scan.pulsechain.com/address/${SUPPLY_WALLETS.dev.address}`}
+                href={`https://scan.pulsechain.com/address/${CONTRACT_ADDRESSES.stakingV4}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ textDecoration: 'none' }}
               >
               <div style={{
-                background: 'linear-gradient(135deg, rgba(33,150,243,0.1) 0%, rgba(33,150,243,0.05) 100%)',
-                border: '1px solid rgba(33,150,243,0.3)',
+                background: 'linear-gradient(135deg, rgba(76,175,80,0.1) 0%, rgba(76,175,80,0.05) 100%)',
+                border: '1px solid rgba(76,175,80,0.3)',
                 borderRadius: '12px',
                 padding: '16px',
                 textAlign: 'center',
                 cursor: 'pointer',
                 transition: 'transform 0.2s, box-shadow 0.2s',
               }}
-              onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(33,150,243,0.3)'; }}
+              onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(76,175,80,0.3)'; }}
               onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
               >
-                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>👨‍💻</div>
-                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>DEV WALLET</div>
-                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#2196F3' }}>
-                  {formatNumber(supplyDynamics.dev)}
+                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🏦</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>REWARDS POOL</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
+                  {formatNumber(supplyDynamics.rewardsPool || 0)}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: '#2196F3', fontWeight: 600 }}>
-                  {((supplyDynamics.dev / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
+                <div style={{ fontSize: '0.75rem', color: '#4CAF50', fontWeight: 600 }}>
+                  Available for Payouts
                 </div>
-                <div style={{ 
-                  height: '4px',
-                  background: 'rgba(255,255,255,0.1)',
-                  borderRadius: '2px',
-                  overflow: 'hidden',
-                  marginTop: '4px'
-                }}>
-                  <div style={{
-                    width: `${(supplyDynamics.dev / DTGC_TOTAL_SUPPLY) * 100}%`,
-                    height: '100%',
-                    background: '#2196F3',
-                    borderRadius: '2px',
-                  }} />
-                </div>
-                <div style={{ fontSize: '0.5rem', color: '#666', marginTop: '6px' }}>🔗 View on PulseScan</div>
+                <div style={{ fontSize: '0.5rem', color: '#666', marginTop: '6px' }}>🔗 View Contract</div>
               </div>
               </a>
+
+              {/* Active Stakes Count */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(255,152,0,0.1) 0%, rgba(255,152,0,0.05) 100%)',
+                border: '1px solid rgba(255,152,0,0.3)',
+                borderRadius: '12px',
+                padding: '16px',
+                textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>📊</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>ACTIVE STAKES</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF9800' }}>
+                  {stakedPositions.length}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#FF9800', fontWeight: 600 }}>
+                  V4 Positions
+                </div>
+              </div>
 
               {/* LP Locked */}
               <div style={{
@@ -7236,7 +7258,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* DAO Ecosystem (Dev + Treasury + LP Locked) */}
+              {/* DAO Ecosystem (Treasury + LP Locked) */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(255,152,0,0.1) 0%, rgba(255,152,0,0.05) 100%)',
                 border: '1px solid rgba(255,152,0,0.3)',
@@ -7247,10 +7269,10 @@ export default function App() {
                 <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🏦</div>
                 <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>DAO ECOSYSTEM</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF9800' }}>
-                  {formatNumber(supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked)}
+                  {formatNumber(supplyDynamics.dao + supplyDynamics.lpLocked)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#FF9800', fontWeight: 600 }}>
-                  {(((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
+                  {(((supplyDynamics.dao + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
                 </div>
                 <div style={{ 
                   height: '4px',
@@ -7260,13 +7282,13 @@ export default function App() {
                   marginTop: '4px'
                 }}>
                   <div style={{
-                    width: `${((supplyDynamics.dao + supplyDynamics.dev + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100}%`,
+                    width: `${((supplyDynamics.dao + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100}%`,
                     height: '100%',
                     background: '#FF9800',
                     borderRadius: '2px',
                   }} />
                 </div>
-                <div style={{ fontSize: '0.55rem', color: '#666', marginTop: '6px' }}>Dev + Treasury + LP</div>
+                <div style={{ fontSize: '0.55rem', color: '#666', marginTop: '6px' }}>Treasury + LP</div>
               </div>
             </div>
 
@@ -10152,7 +10174,7 @@ export default function App() {
           📜
         </div>
 
-        {/* Gold Records Modal */}
+        {/* Gold Records Modal - TREASURE VAULT */}
         {showGoldRecords && (
           <div style={{
             position: 'fixed',
@@ -10160,7 +10182,7 @@ export default function App() {
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0,0,0,0.9)',
+            background: 'rgba(0,0,0,0.95)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -10168,15 +10190,15 @@ export default function App() {
             backdropFilter: 'blur(10px)',
           }} onClick={() => setShowGoldRecords(false)}>
             <div style={{
-              background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
-              border: '2px solid #D4AF37',
+              background: 'linear-gradient(135deg, #1a1505 0%, #0d0d1a 100%)',
+              border: '3px solid #D4AF37',
               borderRadius: '24px',
               padding: '32px',
-              maxWidth: '700px',
+              maxWidth: '800px',
               width: '95%',
-              maxHeight: '80vh',
+              maxHeight: '85vh',
               overflow: 'auto',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 60px rgba(212,175,55,0.3)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 80px rgba(212,175,55,0.4), inset 0 0 60px rgba(212,175,55,0.05)',
             }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <h2 style={{
@@ -10187,15 +10209,16 @@ export default function App() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '12px',
+                  textShadow: '0 0 20px rgba(212,175,55,0.5)',
                 }}>
-                  📜 GOLD RECORDS
+                  🏆 TREASURE VAULT
                 </h2>
                 <button
                   onClick={() => setShowGoldRecords(false)}
                   style={{
                     background: 'transparent',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    color: '#fff',
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    color: '#D4AF37',
                     fontSize: '1.5rem',
                     cursor: 'pointer',
                     width: '40px',
@@ -10210,9 +10233,43 @@ export default function App() {
                 </button>
               </div>
               
-              <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px', textAlign: 'center' }}>
-                Complete history of your staking activity
+              <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '24px', textAlign: 'center' }}>
+                Your completed stakes displayed as gold bars • {stakeHistory.length} total records
               </p>
+
+              {/* Summary Stats */}
+              {stakeHistory.length > 0 && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                  gap: '12px',
+                  marginBottom: '24px',
+                  padding: '16px',
+                  background: 'rgba(212,175,55,0.1)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(212,175,55,0.3)',
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>TOTAL STAKED</div>
+                    <div style={{ color: '#D4AF37', fontWeight: 700 }}>{formatNumber(stakeHistory.reduce((sum, r) => sum + (r.amount || 0), 0))}</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>TOTAL REWARDS</div>
+                    <div style={{ color: '#4CAF50', fontWeight: 700 }}>+{formatNumber(stakeHistory.reduce((sum, r) => sum + (r.rewards || 0), 0))}</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>PENALTIES</div>
+                    <div style={{ color: '#FF6B6B', fontWeight: 700 }}>-{formatNumber(stakeHistory.reduce((sum, r) => sum + (r.penalty || 0), 0))}</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>NET P&L</div>
+                    <div style={{ color: stakeHistory.reduce((sum, r) => sum + (r.rewards || 0) - (r.penalty || 0), 0) >= 0 ? '#4CAF50' : '#FF6B6B', fontWeight: 700 }}>
+                      {stakeHistory.reduce((sum, r) => sum + (r.rewards || 0) - (r.penalty || 0), 0) >= 0 ? '+' : ''}
+                      {formatNumber(stakeHistory.reduce((sum, r) => sum + (r.rewards || 0) - (r.penalty || 0), 0))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {stakeHistory.length === 0 ? (
                 <div style={{
@@ -10220,93 +10277,105 @@ export default function App() {
                   padding: '60px 20px',
                   color: '#666',
                 }}>
-                  <div style={{ fontSize: '4rem', marginBottom: '16px', opacity: 0.5 }}>📦</div>
-                  <p style={{ fontSize: '1.1rem' }}>No stake history yet</p>
-                  <p style={{ fontSize: '0.85rem', marginTop: '8px' }}>Your completed stakes will appear here</p>
+                  <div style={{ fontSize: '4rem', marginBottom: '16px', opacity: 0.5 }}>🪙</div>
+                  <p style={{ fontSize: '1.1rem', color: '#D4AF37' }}>No gold bars yet</p>
+                  <p style={{ fontSize: '0.85rem', marginTop: '8px' }}>Complete stakes to mint gold bars in your vault</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {stakeHistory.map((record) => (
-                    <div key={record.id} style={{
-                      background: record.exitType === 'emergency' 
-                        ? 'rgba(255,107,107,0.1)' 
-                        : 'rgba(76,175,80,0.1)',
-                      border: `1px solid ${record.exitType === 'emergency' ? 'rgba(255,107,107,0.3)' : 'rgba(76,175,80,0.3)'}`,
-                      borderRadius: '16px',
-                      padding: '20px',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                        <div>
-                          <div style={{ 
-                            fontFamily: 'Cinzel, serif', 
-                            fontWeight: 700, 
-                            fontSize: '1.1rem', 
-                            color: record.isLP ? '#9C27B0' : '#D4AF37',
-                            marginBottom: '8px',
-                          }}>
-                            {record.isLP ? '💎' : '🪙'} {record.tier} {record.isLP ? 'LP STAKE' : 'STAKE'}
-                          </div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            Amount: <strong>{formatNumber(record.amount)} {record.isLP ? 'LP' : 'DTGC'}</strong>
-                          </div>
-                          <div style={{ fontSize: '0.8rem', color: '#4CAF50', marginTop: '4px' }}>
-                            Rewards: <strong>+{formatNumber(record.rewards)} DTGC</strong>
-                          </div>
-                          {record.penalty > 0 && (
-                            <div style={{ fontSize: '0.8rem', color: '#FF6B6B', marginTop: '4px' }}>
-                              Penalty: <strong>-{formatNumber(record.penalty)} DTGC</strong> (20% EES)
-                            </div>
-                          )}
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                            📅 {new Date(record.startTime).toLocaleDateString()} → {new Date(record.endTime).toLocaleDateString()}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>APR</div>
-                          <div style={{ fontSize: '1rem', fontWeight: 700, color: '#D4AF37' }}>
-                            {record.apr?.toFixed(1)}%
-                          </div>
-                          <div style={{ 
-                            fontSize: '0.7rem', 
-                            marginTop: '8px',
-                            padding: '4px 8px',
-                            borderRadius: '8px',
-                            background: record.exitType === 'emergency' ? 'rgba(255,107,107,0.2)' : 'rgba(76,175,80,0.2)',
-                            color: record.exitType === 'emergency' ? '#FF6B6B' : '#4CAF50',
-                          }}>
-                            {record.exitType === 'emergency' ? '⚠️ Early Exit' : '✅ Completed'}
-                          </div>
-                          {record.txHash && (
-                            <a 
-                              href={`https://scan.pulsechain.com/tx/${record.txHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ fontSize: '0.7rem', color: '#2196F3', marginTop: '8px', display: 'block' }}
-                            >
-                              View TX ↗
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ 
-                        marginTop: '12px', 
-                        paddingTop: '12px', 
-                        borderTop: '1px solid rgba(255,255,255,0.1)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {stakeHistory.map((record, idx) => {
+                    const netGain = (record.rewards || 0) - (record.penalty || 0);
+                    const isProfit = netGain >= 0;
+                    const barWidth = Math.min(100, Math.max(20, (record.amount / Math.max(...stakeHistory.map(r => r.amount || 1))) * 100));
+                    
+                    return (
+                      <div key={record.id} style={{
+                        background: `linear-gradient(135deg, ${isProfit ? 'rgba(212,175,55,0.2)' : 'rgba(255,107,107,0.15)'} 0%, rgba(0,0,0,0.3) 100%)`,
+                        border: `2px solid ${isProfit ? '#D4AF37' : '#FF6B6B'}`,
+                        borderRadius: '8px',
+                        padding: '0',
+                        overflow: 'hidden',
+                        position: 'relative',
                       }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Net Return:</span>
-                        <span style={{ 
-                          fontSize: '1.1rem', 
-                          fontWeight: 800, 
-                          color: record.penalty > 0 ? '#FFB74D' : '#4CAF50',
-                        }}>
-                          {formatNumber(record.returnAmount)} {record.isLP ? 'LP + DTGC' : 'DTGC'}
-                        </span>
+                        {/* Gold Bar Visual */}
+                        <div style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          height: '100%',
+                          width: `${barWidth}%`,
+                          background: isProfit 
+                            ? 'linear-gradient(135deg, rgba(212,175,55,0.3) 0%, rgba(184,134,11,0.2) 100%)'
+                            : 'linear-gradient(135deg, rgba(255,107,107,0.2) 0%, rgba(200,50,50,0.1) 100%)',
+                          borderRight: `2px solid ${isProfit ? 'rgba(212,175,55,0.5)' : 'rgba(255,107,107,0.5)'}`,
+                          zIndex: 0,
+                        }} />
+                        
+                        <div style={{ position: 'relative', zIndex: 1, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                          {/* Left: Bar number and tier */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '40px',
+                              height: '40px',
+                              background: isProfit ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'linear-gradient(135deg, #FF6B6B, #CC4444)',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 800,
+                              fontSize: '1rem',
+                              color: isProfit ? '#000' : '#fff',
+                              boxShadow: isProfit ? '0 4px 12px rgba(212,175,55,0.4)' : '0 4px 12px rgba(255,107,107,0.3)',
+                            }}>
+                              {record.isLP ? '💎' : '🪙'}
+                            </div>
+                            <div>
+                              <div style={{ fontFamily: 'Cinzel, serif', fontWeight: 700, fontSize: '1rem', color: record.isLP ? '#9C27B0' : '#D4AF37' }}>
+                                {record.tier} {record.isLP ? 'LP' : ''}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#888' }}>
+                                {formatNumber(record.amount)} {record.isLP ? 'LP' : 'DTGC'}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Center: Dates */}
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.7rem', color: '#666' }}>
+                              {new Date(record.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} → {new Date(record.endTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                            </div>
+                            <div style={{ 
+                              fontSize: '0.65rem', 
+                              marginTop: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: record.exitType === 'emergency' ? 'rgba(255,107,107,0.2)' : 'rgba(76,175,80,0.2)',
+                              color: record.exitType === 'emergency' ? '#FF6B6B' : '#4CAF50',
+                              display: 'inline-block',
+                            }}>
+                              {record.exitType === 'emergency' ? '⚠️ Early' : '✅ Complete'}
+                            </div>
+                          </div>
+                          
+                          {/* Right: Net P&L */}
+                          <div style={{ textAlign: 'right', minWidth: '100px' }}>
+                            <div style={{ fontSize: '0.7rem', color: '#888' }}>NET P&L</div>
+                            <div style={{ 
+                              fontSize: '1.2rem', 
+                              fontWeight: 800, 
+                              color: isProfit ? '#4CAF50' : '#FF6B6B',
+                              textShadow: isProfit ? '0 0 10px rgba(76,175,80,0.3)' : '0 0 10px rgba(255,107,107,0.3)',
+                            }}>
+                              {isProfit ? '+' : ''}{formatNumber(netGain)}
+                            </div>
+                            <div style={{ fontSize: '0.65rem', color: '#888' }}>
+                              {record.apr?.toFixed(1)}% APR
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               
@@ -10339,6 +10408,393 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* STAKE WIDGETS - TOP LEFT (shows each active stake as mini icon) */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {!TESTNET_MODE && account && stakedPositions.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          top: '80px',
+          left: '12px',
+          zIndex: 100,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          maxHeight: 'calc(100vh - 160px)',
+          overflowY: 'auto',
+        }}>
+          {stakedPositions.map((pos, idx) => {
+            const tierColors = {
+              'SILVER': '#C0C0C0',
+              'GOLD': '#D4AF37',
+              'WHALE': '#2196F3',
+              'DIAMOND': '#00BCD4',
+              'DIAMOND+': '#9C27B0',
+            };
+            const tierIcons = {
+              'SILVER': '🥈',
+              'GOLD': '🥇',
+              'WHALE': '🐋',
+              'DIAMOND': '💎',
+              'DIAMOND+': '💜',
+            };
+            const tierName = pos.tierName || pos.tier?.toString().toUpperCase() || 'GOLD';
+            const color = tierColors[tierName] || '#D4AF37';
+            const icon = tierIcons[tierName] || '🪙';
+            
+            return (
+              <div
+                key={pos.id}
+                title={`${tierName} - ${formatNumber(pos.amount)} ${pos.isLP ? 'LP' : 'DTGC'} @ ${pos.apr?.toFixed(1)}% APR`}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  background: `linear-gradient(135deg, ${color}33 0%, ${color}11 100%)`,
+                  border: `2px solid ${color}`,
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  boxShadow: `0 2px 8px ${color}40`,
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  position: 'relative',
+                }}
+                onClick={() => {
+                  // Scroll to positions section
+                  document.querySelector('[class*="staked-positions"]')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = `0 4px 16px ${color}60`; }}
+                onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = `0 2px 8px ${color}40`; }}
+              >
+                {icon}
+                {/* V3/V4 badge */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '-4px',
+                  right: '-4px',
+                  background: pos.isV4 ? '#4CAF50' : '#FF9800',
+                  color: '#fff',
+                  fontSize: '0.45rem',
+                  fontWeight: 700,
+                  padding: '1px 3px',
+                  borderRadius: '4px',
+                  lineHeight: 1,
+                }}>
+                  {pos.isV4 ? 'V4' : 'V3'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* CALCULATOR FAB - BOTTOM RIGHT */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {!TESTNET_MODE && account && stakedPositions.length > 0 && (
+        <button
+          onClick={() => setShowStakeCalculator(true)}
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 100,
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%)',
+            border: '3px solid #81C784',
+            color: '#fff',
+            fontSize: '1.5rem',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(76,175,80,0.5), 0 0 30px rgba(76,175,80,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 6px 30px rgba(76,175,80,0.6), 0 0 40px rgba(76,175,80,0.4)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(76,175,80,0.5), 0 0 30px rgba(76,175,80,0.3)'; }}
+          title="Calculate My Stakes Value"
+        >
+          🧮
+        </button>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* MY STAKES CALCULATOR MODAL */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {showStakeCalculator && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.9)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          backdropFilter: 'blur(10px)',
+        }} onClick={() => setShowStakeCalculator(false)}>
+          <div style={{
+            background: 'linear-gradient(135deg, #0d1a0d 0%, #0d0d1a 100%)',
+            border: '3px solid #4CAF50',
+            borderRadius: '24px',
+            padding: '32px',
+            maxWidth: '700px',
+            width: '95%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 80px rgba(76,175,80,0.3)',
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{
+                color: '#4CAF50',
+                fontFamily: 'Cinzel, serif',
+                fontSize: '1.6rem',
+                letterSpacing: '2px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                textShadow: '0 0 20px rgba(76,175,80,0.5)',
+              }}>
+                🧮 MY STAKES CALCULATOR
+              </h2>
+              <button
+                onClick={() => setShowStakeCalculator(false)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid rgba(76,175,80,0.3)',
+                  color: '#4CAF50',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Current Stakes Summary */}
+            <div style={{
+              background: 'rgba(76,175,80,0.1)',
+              border: '1px solid rgba(76,175,80,0.3)',
+              borderRadius: '12px',
+              padding: '16px',
+              marginBottom: '20px',
+            }}>
+              <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '12px' }}>YOUR CURRENT POSITIONS ({stakedPositions.length})</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {stakedPositions.map((pos, idx) => (
+                  <div key={pos.id} style={{
+                    padding: '8px 12px',
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '8px',
+                    border: `1px solid ${pos.isLP ? '#9C27B0' : '#D4AF37'}`,
+                  }}>
+                    <div style={{ color: pos.isLP ? '#9C27B0' : '#D4AF37', fontWeight: 700, fontSize: '0.85rem' }}>
+                      {pos.tierName || pos.tier} {pos.isLP ? 'LP' : ''}
+                    </div>
+                    <div style={{ color: '#fff', fontSize: '0.9rem' }}>{formatNumber(pos.amount)} {pos.isLP ? 'LP' : 'DTGC'}</div>
+                    <div style={{ color: '#4CAF50', fontSize: '0.7rem' }}>{pos.apr?.toFixed(1)}% APR</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Forecast Inputs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <div>
+                <label style={{ color: '#4CAF50', fontSize: '0.85rem', display: 'block', marginBottom: '8px' }}>
+                  📈 Future DTGC Price ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={calcFuturePrice}
+                  onChange={(e) => setCalcFuturePrice(e.target.value)}
+                  placeholder={livePrices.dtgc?.toFixed(6) || '0.000001'}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '2px solid #4CAF50',
+                    borderRadius: '8px',
+                    color: '#4CAF50',
+                    fontSize: '1.1rem',
+                    fontWeight: 'bold',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px' }}>
+                  Current: ${livePrices.dtgc?.toFixed(8) || '0.00000001'}
+                </div>
+              </div>
+              <div>
+                <label style={{ color: '#888', fontSize: '0.85rem', display: 'block', marginBottom: '8px' }}>
+                  📅 Months from Now
+                </label>
+                <select
+                  value={calcFutureMonths}
+                  onChange={(e) => setCalcFutureMonths(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '2px solid rgba(255,255,255,0.3)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <option value="1">1 Month</option>
+                  <option value="3">3 Months</option>
+                  <option value="6">6 Months</option>
+                  <option value="12">12 Months</option>
+                  <option value="24">24 Months</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Calculation Results */}
+            {(() => {
+              const futurePrice = parseFloat(calcFuturePrice) || livePrices.dtgc || 0.00000001;
+              const months = parseInt(calcFutureMonths) || 6;
+              const currentPrice = livePrices.dtgc || 0.00000001;
+              
+              let totalCurrentValue = 0;
+              let totalFutureValue = 0;
+              let totalRewards = 0;
+              
+              const stakeResults = stakedPositions.map(pos => {
+                const amount = pos.amount || 0;
+                const apr = pos.apr || 16.8;
+                const isLP = pos.isLP;
+                
+                // Current value (LP tokens = 2x DTGC value approx)
+                const currentVal = isLP ? amount * currentPrice * 2 : amount * currentPrice;
+                
+                // Rewards earned over the period
+                const rewardsEarned = amount * (apr / 100) * (months / 12);
+                
+                // Future value at new price (principal + rewards)
+                const futureVal = isLP 
+                  ? (amount * futurePrice * 2) + (rewardsEarned * futurePrice)
+                  : ((amount + rewardsEarned) * futurePrice);
+                
+                totalCurrentValue += currentVal;
+                totalFutureValue += futureVal;
+                totalRewards += rewardsEarned;
+                
+                return { ...pos, currentVal, futureVal, rewardsEarned };
+              });
+              
+              const valueChange = totalFutureValue - totalCurrentValue;
+              const percentChange = totalCurrentValue > 0 ? (valueChange / totalCurrentValue) * 100 : 0;
+              const priceChangePercent = currentPrice > 0 ? ((futurePrice - currentPrice) / currentPrice) * 100 : 0;
+              
+              return (
+                <>
+                  {/* Price Change Indicator */}
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '12px',
+                    background: priceChangePercent >= 0 ? 'rgba(76,175,80,0.1)' : 'rgba(244,67,54,0.1)',
+                    borderRadius: '8px',
+                    marginBottom: '16px',
+                  }}>
+                    <span style={{ color: '#888', fontSize: '0.85rem' }}>Price Change: </span>
+                    <span style={{ color: priceChangePercent >= 0 ? '#4CAF50' : '#F44336', fontWeight: 700, fontSize: '1.1rem' }}>
+                      {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(1)}%
+                    </span>
+                    <span style={{ color: '#888', fontSize: '0.8rem', marginLeft: '8px' }}>
+                      (${currentPrice.toFixed(8)} → ${futurePrice.toFixed(8)})
+                    </span>
+                  </div>
+
+                  {/* Results Grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    gap: '12px',
+                    marginBottom: '20px',
+                  }}>
+                    <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '4px' }}>CURRENT VALUE</div>
+                      <div style={{ color: '#D4AF37', fontSize: '1.3rem', fontWeight: 700 }}>${totalCurrentValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '4px' }}>REWARDS ({months}mo)</div>
+                      <div style={{ color: '#4CAF50', fontSize: '1.3rem', fontWeight: 700 }}>+{formatNumber(totalRewards)}</div>
+                      <div style={{ color: '#888', fontSize: '0.65rem' }}>DTGC</div>
+                    </div>
+                    <div style={{ background: valueChange >= 0 ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)', borderRadius: '12px', padding: '16px', textAlign: 'center', border: `2px solid ${valueChange >= 0 ? '#4CAF50' : '#F44336'}` }}>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '4px' }}>FUTURE VALUE</div>
+                      <div style={{ color: valueChange >= 0 ? '#4CAF50' : '#F44336', fontSize: '1.5rem', fontWeight: 800 }}>${totalFutureValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                      <div style={{ color: valueChange >= 0 ? '#4CAF50' : '#F44336', fontSize: '0.8rem' }}>
+                        {valueChange >= 0 ? '+' : ''}${valueChange.toLocaleString(undefined, { maximumFractionDigits: 2 })} ({percentChange >= 0 ? '+' : ''}{percentChange.toFixed(1)}%)
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Per-Stake Breakdown */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+                    <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '12px' }}>Per-Position Breakdown:</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {stakeResults.map((r, i) => (
+                        <div key={i} style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '10px 12px',
+                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '8px',
+                          fontSize: '0.8rem',
+                        }}>
+                          <div>
+                            <span style={{ color: r.isLP ? '#9C27B0' : '#D4AF37', fontWeight: 600 }}>
+                              {r.tierName || r.tier} {r.isLP ? 'LP' : ''}
+                            </span>
+                            <span style={{ color: '#888', marginLeft: '8px' }}>
+                              {formatNumber(r.amount)} {r.isLP ? 'LP' : 'DTGC'}
+                            </span>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ color: '#888' }}>${r.currentVal.toFixed(2)} → </span>
+                            <span style={{ color: r.futureVal >= r.currentVal ? '#4CAF50' : '#F44336', fontWeight: 700 }}>
+                              ${r.futureVal.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quick Price Scenarios */}
+                  <div style={{ marginTop: '20px', display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+                    <button onClick={() => setCalcFuturePrice((currentPrice * 0.5).toFixed(8))} style={{ padding: '6px 12px', background: 'rgba(244,67,54,0.2)', border: '1px solid #F44336', borderRadius: '16px', color: '#F44336', cursor: 'pointer', fontSize: '0.75rem' }}>-50%</button>
+                    <button onClick={() => setCalcFuturePrice((currentPrice * 2).toFixed(8))} style={{ padding: '6px 12px', background: 'rgba(76,175,80,0.2)', border: '1px solid #4CAF50', borderRadius: '16px', color: '#4CAF50', cursor: 'pointer', fontSize: '0.75rem' }}>2x</button>
+                    <button onClick={() => setCalcFuturePrice((currentPrice * 5).toFixed(8))} style={{ padding: '6px 12px', background: 'rgba(76,175,80,0.2)', border: '1px solid #4CAF50', borderRadius: '16px', color: '#4CAF50', cursor: 'pointer', fontSize: '0.75rem' }}>5x</button>
+                    <button onClick={() => setCalcFuturePrice((currentPrice * 10).toFixed(8))} style={{ padding: '6px 12px', background: 'rgba(33,150,243,0.2)', border: '1px solid #2196F3', borderRadius: '16px', color: '#2196F3', cursor: 'pointer', fontSize: '0.75rem' }}>10x</button>
+                    <button onClick={() => setCalcFuturePrice((currentPrice * 100).toFixed(8))} style={{ padding: '6px 12px', background: 'rgba(156,39,176,0.2)', border: '1px solid #9C27B0', borderRadius: '16px', color: '#9C27B0', cursor: 'pointer', fontSize: '0.75rem' }}>100x 🚀</button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Stake Modal */}
       <StakeModal
