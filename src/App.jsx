@@ -589,17 +589,17 @@ const getStyles = (isDark) => `
     --diamond: #B9F2FF;
     --diamond-dark: #00BCD4;
     
-    --bg-primary: ${isDark ? '#0D0D0D' : '#FEFEFE'};
-    --bg-secondary: ${isDark ? '#1A1A1A' : '#F5F5F5'};
-    --bg-card: ${isDark ? '#1E1E1E' : '#FFFFFF'};
-    --text-primary: ${isDark ? '#FFFFFF' : '#1A1A1A'};
-    --text-secondary: ${isDark ? '#B0B0B0' : '#4A4A4A'};
-    --text-muted: ${isDark ? '#707070' : '#7A7A7A'};
-    --border-color: ${isDark ? '#333333' : '#E8E8E8'};
+    --bg-primary: ${isDark ? '#0D0D0D' : '#E8E4E0'};
+    --bg-secondary: ${isDark ? '#1A1A1A' : '#D5D0CB'};
+    --bg-card: ${isDark ? '#1E1E1E' : '#F0EDE9'};
+    --text-primary: ${isDark ? '#FFFFFF' : '#2A2520'};
+    --text-secondary: ${isDark ? '#B0B0B0' : '#5A5550'};
+    --text-muted: ${isDark ? '#707070' : '#8A8580'};
+    --border-color: ${isDark ? '#333333' : '#C0B8B0'};
     
-    --glow-gold: 0 0 40px rgba(212, 175, 55, ${isDark ? '0.5' : '0.3'});
+    --glow-gold: 0 0 40px rgba(212, 175, 55, ${isDark ? '0.5' : '0.4'});
     --glow-diamond: 0 0 40px rgba(0, 188, 212, ${isDark ? '0.5' : '0.3'});
-    --shadow-luxury: 0 25px 50px -12px rgba(0, 0, 0, ${isDark ? '0.4' : '0.15'});
+    --shadow-luxury: 0 25px 50px -12px rgba(0, 0, 0, ${isDark ? '0.4' : '0.2'});
   }
 
   html { scroll-behavior: smooth; }
@@ -635,9 +635,11 @@ const getStyles = (isDark) => `
         radial-gradient(ellipse at 80% 70%, rgba(212, 175, 55, 0.05) 0%, transparent 40%),
         radial-gradient(ellipse at 50% 50%, rgba(100, 100, 100, 0.1) 0%, transparent 60%)
       ` : `
-        radial-gradient(ellipse at 20% 30%, rgba(212, 175, 55, 0.06) 0%, transparent 40%),
-        radial-gradient(ellipse at 80% 70%, rgba(212, 175, 55, 0.04) 0%, transparent 40%),
-        radial-gradient(ellipse at 50% 50%, rgba(200, 200, 200, 0.3) 0%, transparent 60%)
+        radial-gradient(ellipse at 15% 25%, rgba(212, 175, 55, 0.15) 0%, transparent 35%),
+        radial-gradient(ellipse at 85% 75%, rgba(212, 175, 55, 0.12) 0%, transparent 40%),
+        radial-gradient(ellipse at 60% 40%, rgba(184, 134, 11, 0.08) 0%, transparent 30%),
+        radial-gradient(ellipse at 30% 80%, rgba(212, 175, 55, 0.1) 0%, transparent 35%),
+        radial-gradient(ellipse at 50% 50%, rgba(140, 130, 120, 0.2) 0%, transparent 60%)
       `};
   }
 
@@ -646,7 +648,7 @@ const getStyles = (isDark) => `
     position: absolute;
     inset: 0;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 1000 1000' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-    opacity: ${isDark ? '0.03' : '0.04'};
+    opacity: ${isDark ? '0.03' : '0.06'};
     mix-blend-mode: overlay;
   }
 
@@ -660,14 +662,14 @@ const getStyles = (isDark) => `
 
   .vein {
     position: absolute;
-    background: linear-gradient(90deg, transparent 0%, ${isDark ? 'rgba(212, 175, 55, 0.08)' : 'rgba(180, 180, 180, 0.15)'} 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, ${isDark ? 'rgba(212, 175, 55, 0.08)' : 'rgba(212, 175, 55, 0.25)'} 50%, transparent 100%);
     transform-origin: center;
   }
 
-  .vein-1 { top: 10%; left: -10%; width: 60%; height: 1px; transform: rotate(25deg); }
-  .vein-2 { top: 30%; right: -10%; width: 50%; height: 1px; transform: rotate(-15deg); }
-  .vein-3 { top: 50%; left: -5%; width: 40%; height: 1px; transform: rotate(35deg); }
-  .vein-4 { top: 70%; right: -5%; width: 55%; height: 1px; transform: rotate(-25deg); }
+  .vein-1 { top: 10%; left: -10%; width: 60%; height: ${isDark ? '1px' : '2px'}; transform: rotate(25deg); }
+  .vein-2 { top: 30%; right: -10%; width: 50%; height: ${isDark ? '1px' : '2px'}; transform: rotate(-15deg); }
+  .vein-3 { top: 50%; left: -5%; width: 40%; height: ${isDark ? '1px' : '1.5px'}; transform: rotate(35deg); }
+  .vein-4 { top: 70%; right: -5%; width: 55%; height: ${isDark ? '1px' : '2px'}; transform: rotate(-25deg); }
   .vein-5 { top: 85%; left: 20%; width: 45%; height: 1px; transform: rotate(10deg); }
 
   /* Animations */
@@ -698,6 +700,12 @@ const getStyles = (isDark) => `
   @keyframes pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  @keyframes goldFlash {
+    0% { opacity: 0; }
+    30% { opacity: 1; }
+    100% { opacity: 0; }
   }
 
   @keyframes rotate-slow {
@@ -782,7 +790,7 @@ const getStyles = (isDark) => `
 
   .ticker-track {
     display: flex;
-    animation: ticker-scroll 30s linear infinite;
+    animation: ticker-scroll 41s linear infinite;
     width: fit-content;
   }
 
@@ -905,7 +913,7 @@ const getStyles = (isDark) => `
     font-size: 1.1rem;
     color: #1A1A1A;
     box-shadow: var(--glow-gold);
-    animation: float 3s ease-in-out infinite;
+    /* Removed bounce animation per user request */
   }
 
   .logo-text-group { display: flex; flex-direction: column; }
@@ -3099,9 +3107,11 @@ export default function App() {
 
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('dtgc-theme') === 'dark';
+      const saved = localStorage.getItem('dtgc-theme');
+      // Default to dark mode if no preference saved
+      return saved !== 'light';
     }
-    return false;
+    return true; // Default to dark mode
   });
 
   // Admin Access Logs Panel (Ctrl+Shift+L to toggle)
@@ -3538,6 +3548,24 @@ export default function App() {
   const showToast = (message, type) => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  // Gold flash state for nav clicks
+  const [showGoldFlash, setShowGoldFlash] = useState(false);
+
+  // Handle navigation click with gold flash and scroll
+  const handleNavClick = (tab) => {
+    setActiveTab(tab);
+    setShowGoldFlash(true);
+    setTimeout(() => setShowGoldFlash(false), 300);
+    
+    // Scroll to content section after a brief delay
+    setTimeout(() => {
+      const contentSection = document.getElementById('main-content');
+      if (contentSection) {
+        contentSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   // Fetch live supply dynamics (wallet balances) from PulseChain API
@@ -6074,6 +6102,21 @@ export default function App() {
       <MarbleBackground />
       <Particles />
       
+      {/* Gold Flash Overlay for Nav Clicks */}
+      {showGoldFlash && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at center, rgba(212,175,55,0.3) 0%, transparent 70%)',
+          zIndex: 9998,
+          pointerEvents: 'none',
+          animation: 'goldFlash 0.3s ease-out forwards',
+        }} />
+      )}
+      
       <div className="app-container">
         {/* TESTNET BANNER */}
         {TESTNET_MODE && (
@@ -6598,22 +6641,22 @@ export default function App() {
             {/* Mobile Nav Dropdown */}
             {mobileMenuOpen && (
               <div className="mobile-nav-dropdown">
-                <button className={activeTab === 'stake' ? 'active' : ''} onClick={() => { setActiveTab('stake'); setMobileMenuOpen(false); }}>💰 Stake</button>
-                <button className={activeTab === 'burn' ? 'active' : ''} onClick={() => { setActiveTab('burn'); setMobileMenuOpen(false); }}>🔥 Burn Stats</button>
-                <button className={activeTab === 'vote' ? 'active' : ''} onClick={() => { setActiveTab('vote'); setMobileMenuOpen(false); }}>🗳️ DAO</button>
-                <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { setActiveTab('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
-                <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { setActiveTab('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
-                <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
+                <button className={activeTab === 'stake' ? 'active' : ''} onClick={() => { handleNavClick('stake'); setMobileMenuOpen(false); }}>💰 Stake</button>
+                <button className={activeTab === 'burn' ? 'active' : ''} onClick={() => { handleNavClick('burn'); setMobileMenuOpen(false); }}>🔥 Burn Stats</button>
+                <button className={activeTab === 'vote' ? 'active' : ''} onClick={() => { handleNavClick('vote'); setMobileMenuOpen(false); }}>🗳️ DAO</button>
+                <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { handleNavClick('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
+                <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { handleNavClick('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
+                <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
               </div>
             )}
 
             <nav className="nav-links">
-              <button className={`nav-link ${activeTab === 'stake' ? 'active' : ''}`} onClick={() => setActiveTab('stake')}>Stake</button>
-              <button className={`nav-link ${activeTab === 'burn' ? 'active' : ''}`} onClick={() => setActiveTab('burn')}>Burn Stats</button>
-              <button className={`nav-link ${activeTab === 'vote' ? 'active' : ''}`} onClick={() => setActiveTab('vote')}>DAO</button>
-              <button className={`nav-link ${activeTab === 'whitepaper' ? 'active' : ''}`} onClick={() => setActiveTab('whitepaper')}>Whitepaper</button>
-              <button className={`nav-link ${activeTab === 'links' ? 'active' : ''}`} onClick={() => setActiveTab('links')}>Links</button>
-              <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
+              <button className={`nav-link ${activeTab === 'stake' ? 'active' : ''}`} onClick={() => handleNavClick('stake')}>Stake</button>
+              <button className={`nav-link ${activeTab === 'burn' ? 'active' : ''}`} onClick={() => handleNavClick('burn')}>Burn Stats</button>
+              <button className={`nav-link ${activeTab === 'vote' ? 'active' : ''}`} onClick={() => handleNavClick('vote')}>DAO</button>
+              <button className={`nav-link ${activeTab === 'whitepaper' ? 'active' : ''}`} onClick={() => handleNavClick('whitepaper')}>Whitepaper</button>
+              <button className={`nav-link ${activeTab === 'links' ? 'active' : ''}`} onClick={() => handleNavClick('links')}>Links</button>
+              <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleNavClick('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
             </nav>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -7489,7 +7532,7 @@ export default function App() {
           </div>
         </section>
 
-        <main className="main-content">
+        <main className="main-content" id="main-content">
           {/* STAKE TAB */}
           {activeTab === 'stake' && (
             <section className="section">
@@ -10202,9 +10245,10 @@ export default function App() {
             </div>
           </div>
           <div className="footer-links">
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.stakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">🚀 Staking V4</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.lpStakingV4}`} target="_blank" rel="noopener noreferrer" className="footer-link">💎 LP Staking V4</a>
-            <a href={`${EXPLORER}/address/${CONTRACT_ADDRESSES.daoVotingV3}`} target="_blank" rel="noopener noreferrer" className="footer-link">DAO Voting</a>
+            <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>🚀 Staking V4</button>
+            <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>💎 LP Staking V4</button>
+            <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>
+            <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>
             <a href={SOCIAL_LINKS.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
@@ -11561,11 +11605,23 @@ export default function App() {
               <h3 style={{ color: '#D4AF37', fontSize: '1rem', marginBottom: '12px', borderBottom: '1px solid rgba(212,175,55,0.3)', paddingBottom: '8px' }}>
                 Verified Contracts
               </h3>
-              <div style={{ fontSize: '0.75rem', color: '#888', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div><span style={{ color: '#D4AF37' }}>DTGC Token:</span> <span style={{ fontFamily: 'monospace' }}>0x146a...9165e</span></div>
-                <div><span style={{ color: '#D4AF37' }}>Staking V2:</span> <span style={{ fontFamily: 'monospace' }}>0x6cD0...55432</span></div>
-                <div><span style={{ color: '#D4AF37' }}>LP Staking V2:</span> <span style={{ fontFamily: 'monospace' }}>0xFcFa...d4332</span></div>
-                <div><span style={{ color: '#D4AF37' }}>DAO Treasury:</span> <span style={{ fontFamily: 'monospace' }}>0x2228...bFC</span></div>
+              <div style={{ fontSize: '0.75rem', color: '#888', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: 'rgba(212,175,55,0.05)', borderRadius: '6px' }}>
+                  <div><span style={{ color: '#D4AF37' }}>DTGC Token:</span> <span style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>0xd0676B28a457371d58d47e5247b439114e40eb0f</span></div>
+                  <button onClick={() => { navigator.clipboard.writeText('0xd0676B28a457371d58d47e5247b439114e40eb0f'); showToast('DTGC Token address copied!', 'success'); }} style={{ background: 'rgba(212,175,55,0.2)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', color: '#D4AF37', fontSize: '0.7rem' }}>📋 Copy</button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: 'rgba(76,175,80,0.05)', borderRadius: '6px' }}>
+                  <div><span style={{ color: '#4CAF50' }}>Staking V4:</span> <span style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718</span></div>
+                  <button onClick={() => { navigator.clipboard.writeText('0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718'); showToast('Staking V4 address copied!', 'success'); }} style={{ background: 'rgba(76,175,80,0.2)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', color: '#4CAF50', fontSize: '0.7rem' }}>📋 Copy</button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: 'rgba(0,188,212,0.05)', borderRadius: '6px' }}>
+                  <div><span style={{ color: '#00BCD4' }}>LP Staking V4:</span> <span style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231</span></div>
+                  <button onClick={() => { navigator.clipboard.writeText('0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231'); showToast('LP Staking V4 address copied!', 'success'); }} style={{ background: 'rgba(0,188,212,0.2)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', color: '#00BCD4', fontSize: '0.7rem' }}>📋 Copy</button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', background: 'rgba(156,39,176,0.05)', borderRadius: '6px' }}>
+                  <div><span style={{ color: '#9C27B0' }}>DAO Voting:</span> <span style={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>0x2228f8E52E14A87C9c2228c86F9DD25f3c07bFC</span></div>
+                  <button onClick={() => { navigator.clipboard.writeText('0x2228f8E52E14A87C9c2228c86F9DD25f3c07bFC'); showToast('DAO Voting address copied!', 'success'); }} style={{ background: 'rgba(156,39,176,0.2)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', color: '#9C27B0', fontSize: '0.7rem' }}>📋 Copy</button>
+                </div>
               </div>
             </div>
 
