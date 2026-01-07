@@ -228,7 +228,8 @@ const V5_DIAMOND_TIER = {
   id: 3,
   name: 'DIAMOND',
   icon: '💎',
-  minInvest: 25000,
+  minInvest: 1,               // No minimum - anyone can stake!
+  maxInvest: 25000,           // Maximum $25,000
   lockDays: 90,
   holdDays: 90,
   apr: 28,                   // Reduced 30% from 40%
@@ -246,7 +247,8 @@ const V5_DIAMOND_PLUS_TIER = {
   id: 4,
   name: 'DIAMOND+',
   icon: '💜💎',
-  minInvest: 25000,
+  minInvest: 1,               // No minimum - anyone can stake!
+  maxInvest: 25000,           // Maximum $25,000
   lockDays: 90,
   holdDays: 90,
   apr: 35,                   // Reduced 30% from 50%
@@ -7653,7 +7655,7 @@ export default function App() {
                   <div className="tier-icon">{V5_DIAMOND_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_TIER.color }}>{V5_DIAMOND_TIER.name}</div>
                   <div className="tier-subtitle">{V5_DIAMOND_TIER.lpPair} LP • {V5_DIAMOND_TIER.boost}x BOOST!</div>
-                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Max: ${V5_DIAMOND_TIER.minInvest.toLocaleString()}</div>
+                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Max: ${V5_DIAMOND_TIER.maxInvest.toLocaleString()}</div>
                   <div className="tier-apr-container">
                     <div className="tier-apr" style={{ color: 'var(--diamond-dark)' }}>{diamondEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
@@ -7693,7 +7695,7 @@ export default function App() {
                   <div className="tier-icon" style={{ fontSize: '2.5rem' }}>{V5_DIAMOND_PLUS_TIER.icon}</div>
                   <div className="tier-name" style={{ color: V5_DIAMOND_PLUS_TIER.color }}>{V5_DIAMOND_PLUS_TIER.name}</div>
                   <div className="tier-subtitle" style={{ color: '#9C27B0' }}>{V5_DIAMOND_PLUS_TIER.lpPair} LP • {V5_DIAMOND_PLUS_TIER.boost}x BOOST!</div>
-                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Max: ${V5_DIAMOND_PLUS_TIER.minInvest.toLocaleString()}</div>
+                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Max: ${V5_DIAMOND_PLUS_TIER.maxInvest.toLocaleString()}</div>
                   <div className="tier-apr-container">
                     <div className="tier-apr" style={{ color: '#9C27B0', fontSize: '2.2rem' }}>{diamondPlusEffectiveAPR.toFixed(1)}%</div>
                     <div className="tier-apr-label">EFFECTIVE APR</div>
