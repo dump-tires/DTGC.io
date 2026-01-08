@@ -3247,6 +3247,21 @@ export default function App() {
     { symbol: 'WETH', name: 'WETH from ETH', address: '0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c', decimals: 18, icon: '🔹', color: '#627EEA' },
     { symbol: 'WBTC', name: 'WBTC from ETH', address: '0xb17d901469b9208b17d916112988a3fed19b5ca1', decimals: 8, icon: '🟠', color: '#F7931A' },
   ];
+
+  // Live prices - must be defined before functions that use it
+  const [livePrices, setLivePrices] = useState({
+    urmom: 0.0000001,
+    dtgc: 0.0002,
+    pls: 0.00003,
+    plsx: 0.00008,
+    hex: 0.005,
+    inc: 0.0001,
+    dtgcMarketCap: 0,
+    lastUpdated: null,
+    loading: true,
+    error: null,
+  });
+
   
   // WPLS address for price lookups
   const WPLS_ADDRESS = '0xa1077a294dde1b09bb078844df40758a5d0f9a27';
@@ -3828,14 +3843,7 @@ export default function App() {
   });
 
   // Live prices state (fetched from DexScreener)
-  const [livePrices, setLivePrices] = useState({
-    urmom: BURN_STATS.urmomPrice,
-    dtgc: BURN_STATS.dtgcPrice,
-    dtgcMarketCap: 0,
-    lastUpdated: null,
-    loading: true,
-    error: null,
-  });
+
 
   // DTGC Supply Dynamics state
   const [supplyDynamics, setSupplyDynamics] = useState({
