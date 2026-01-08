@@ -3250,6 +3250,16 @@ export default function App() {
     { symbol: 'WETH', name: 'WETH from ETH', address: '0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c', decimals: 18, icon: '🔹', color: '#627EEA' },
     { symbol: 'WBTC', name: 'WBTC from ETH', address: '0xb17d901469b9208b17d916112988a3fed19b5ca1', decimals: 8, icon: '🟠', color: '#F7931A' },
   ];
+  
+  // Tokens that are ALWAYS liquid - override any DEX check failures
+  const LIQUID_TOKENS = new Set([
+    'URMOM', 'DTGC', 'PLS', 'WPLS', 'PLSX', 'HEX', 'INC', 'DAI', 'USDC', 'USDT', 'WETH', 'WBTC',
+    '0x636cc7d7c76298cde00025370461c59c0b2ef896', // URMOM
+    '0xd0676b28a457371d58d47e5247b439114e40eb0f', // DTGC
+    '0xa1077a294dde1b09bb078844df40758a5d0f9a27', // WPLS
+    '0x95b303987a60c71504d99aa1b13b4da07b0790ab', // PLSX
+    '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39', // HEX
+  ]);
 
   // Live prices - must be defined before functions that use it
   const [livePrices, setLivePrices] = useState({
@@ -3391,13 +3401,26 @@ export default function App() {
               const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
               if (bal <= 0) continue;
               
+              const tokenSymbol = item.token?.symbol?.toUpperCase() || '';
+              const tokenAddr = item.token?.address?.toLowerCase() || '';
+              
+              // Check if this is a known liquid token
+              const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
+              
               // Try to get price from DEX
               let price = 0;
-              let hasLiquidity = false;
+              let hasLiquidity = isKnownLiquid; // Default to true for known liquid tokens
               try {
                 price = await getTokenPriceFromDex(item.token?.address, decimals);
-                hasLiquidity = price > 0;
+                if (price > 0) hasLiquidity = true;
               } catch (e) {}
+              
+              // Use live prices for known tokens
+              if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
+              else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
+              else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
+              else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
+              else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
               
               foundTokens.push({
                 symbol: item.token?.symbol || 'UNKNOWN',
@@ -3453,14 +3476,26 @@ export default function App() {
                   try { name = await contract.name(); } catch {}
                   
                   const balFormatted = ethers.formatUnits(bal, decimals);
+                  const tokenSymbol = symbol.toUpperCase();
+                  const tokenAddr = tx.token.address?.toLowerCase();
+                  
+                  // Check if this is a known liquid token
+                  const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
                   
                   // Try to get price
                   let price = 0;
-                  let hasLiquidity = false;
+                  let hasLiquidity = isKnownLiquid; // Default to true for known liquid tokens
                   try {
                     price = await getTokenPriceFromDex(tx.token.address, decimals);
-                    hasLiquidity = price > 0;
+                    if (price > 0) hasLiquidity = true;
                   } catch (e) {}
+                  
+                  // Use live prices for known tokens
+                  if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
+                  else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
+                  else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
+                  else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
+                  else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
                   
                   foundTokens.push({
                     symbol: symbol,
@@ -6618,10 +6653,10 @@ export default function App() {
           </div>
         )}
 
-        {/* FLOATING ACTIVE STAKE BOX - Top Left with Multi-Stake Toggle */}
-        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
+        {/* FLOATING ACTIVE STAKE BOX - V4 Style Minimized Widgets */}
+        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0 || flexStakes.length > 0)) && (
           stakeWidgetMinimized ? (
-            // Minimized view - show all stake diamonds VERTICALLY
+            // Minimized view - V4 style square widgets VERTICALLY
             <div
               style={{
                 position: 'fixed',
@@ -6629,32 +6664,32 @@ export default function App() {
                 left: '15px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '8px',
+                gap: '6px',
                 zIndex: 1500,
               }}
             >
               {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
-                // Get tier color for each diamond
-                let diamondColor, diamondIcon;
+                // Get tier color for each stake
+                let tierColor, tierIcon;
                 if (pos.isLP) {
                   if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
-                    diamondColor = '#9C27B0';
-                    diamondIcon = '💜💎';
+                    tierColor = '#9C27B0';
+                    tierIcon = '💜💎';
                   } else {
-                    diamondColor = '#00BCD4';
-                    diamondIcon = '💎';
+                    tierColor = '#00BCD4';
+                    tierIcon = '💎';
                   }
                 } else {
                   const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
                   if (tierNum === 0 || pos.tierName === 'SILVER') {
-                    diamondColor = '#C0C0C0';
-                    diamondIcon = '🥈';
+                    tierColor = '#C0C0C0';
+                    tierIcon = '🥈';
                   } else if (tierNum === 2 || pos.tierName === 'WHALE') {
-                    diamondColor = '#2196F3';
-                    diamondIcon = '🐋';
+                    tierColor = '#2196F3';
+                    tierIcon = '🐋';
                   } else {
-                    diamondColor = '#FFD700';
-                    diamondIcon = '🥇';
+                    tierColor = '#FFD700';
+                    tierIcon = '🥇';
                   }
                 }
                 return (
@@ -6665,54 +6700,101 @@ export default function App() {
                       setStakeWidgetMinimized(false);
                     }}
                     style={{
-                      width: '50px',
-                      height: '50px',
+                      width: '52px',
+                      height: '52px',
                       background: `linear-gradient(135deg, rgba(15,15,15,0.95), rgba(30,30,30,0.95))`,
-                      border: `2px solid ${diamondColor}`,
-                      borderRadius: '50%',
+                      border: `2px solid ${tierColor}`,
+                      borderRadius: '12px',
                       display: 'flex',
+                      flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      boxShadow: `0 4px 20px ${diamondColor}40`,
+                      boxShadow: `0 4px 15px ${tierColor}50`,
                       transition: 'all 0.3s ease',
+                      position: 'relative',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                     onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    title={`View Stake #${idx + 1}`}
+                    title={`Stake #${idx + 1} - ${pos.tierName || 'GOLD'}`}
                   >
-                    <span style={{ fontSize: '1.3rem' }}>{diamondIcon}</span>
+                    <span style={{ fontSize: '1.2rem' }}>{tierIcon}</span>
+                    <span style={{ 
+                      fontSize: '0.5rem', 
+                      fontWeight: 700, 
+                      color: tierColor,
+                      marginTop: '2px'
+                    }}>V4</span>
                   </div>
                 );
               })}
               
-              {/* Flex Heart Icon - Always visible */}
-              <div
-                onClick={() => {
-                  setIsFlexTier(true);
-                  setSelectedTier(null);
-                  setIsLP(false);
-                  setStakeWidgetMinimized(false);
-                }}
-                style={{
-                  width: '50px',
-                  height: '50px',
-                  background: 'linear-gradient(135deg, rgba(255,20,147,0.3), rgba(255,105,180,0.2))',
-                  border: '2px solid #FF1493',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 20px rgba(255,20,147,0.4)',
-                  transition: 'all 0.3s ease',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                title="Open Flex Panel"
-              >
-                <span style={{ fontSize: '1.3rem' }}>💗</span>
-              </div>
+              {/* Pink Flex V4 Widget - Shows Yield/APR/LP Value */}
+              {flexStakes.length > 0 ? (
+                <div
+                  onClick={() => {
+                    setIsFlexTier(true);
+                    setSelectedTier(null);
+                    setIsLP(false);
+                    setStakeWidgetMinimized(false);
+                  }}
+                  style={{
+                    width: '52px',
+                    minHeight: '65px',
+                    background: 'linear-gradient(135deg, rgba(255,20,147,0.2), rgba(255,105,180,0.15))',
+                    border: '2px solid #FF1493',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(255,20,147,0.4)',
+                    transition: 'all 0.3s ease',
+                    padding: '4px 2px',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  title="Flex Stakes - 10% APR"
+                >
+                  <span style={{ fontSize: '1rem' }}>💗</span>
+                  <span style={{ fontSize: '0.45rem', fontWeight: 700, color: '#FF1493' }}>V4</span>
+                  <span style={{ fontSize: '0.4rem', color: '#FFD700', marginTop: '1px' }}>
+                    {formatNumber(flexStakes.reduce((s, f) => s + (f.lpAmount || 0), 0), 1)} LP
+                  </span>
+                  <span style={{ fontSize: '0.35rem', color: '#4CAF50' }}>10% APR</span>
+                </div>
+              ) : (
+                <div
+                  onClick={() => {
+                    setIsFlexTier(true);
+                    setSelectedTier(null);
+                    setIsLP(false);
+                    setStakeWidgetMinimized(false);
+                  }}
+                  style={{
+                    width: '52px',
+                    height: '52px',
+                    background: 'linear-gradient(135deg, rgba(255,20,147,0.15), rgba(255,105,180,0.1))',
+                    border: '2px dashed #FF1493',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(255,20,147,0.2)',
+                    transition: 'all 0.3s ease',
+                    opacity: 0.8,
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  title="Open Flex Panel"
+                >
+                  <span style={{ fontSize: '1rem' }}>💗</span>
+                  <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#FF1493' }}>FLEX</span>
+                </div>
+              )}
             </div>
           ) : (
             // Expanded view - full widget with diamond selector
