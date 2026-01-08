@@ -99,6 +99,22 @@ const LP_STAKING_V4_ABI = [
   'function earlyWithdrawFeeBps() external view returns (uint256)',
 ];
 
+// Flex LP Staking V4 ABI - 10% APR, No Lock, Any LP Token
+const LP_STAKING_FLEX_V4_ABI = [
+  'function stake(uint256 amount) external',
+  'function withdraw(uint256 stakeIndex) external',
+  'function claimRewards(uint256 stakeIndex) external',
+  'function getStake(address user, uint256 stakeIndex) external view returns (uint256 amount, uint256 startTime, uint256 pendingRewards, bool isActive)',
+  'function getStakeCount(address user) external view returns (uint256)',
+  'function getActiveStakeCount(address user) external view returns (uint256)',
+  'function getActiveStakes(address user) external view returns (tuple(uint256 amount, uint256 startTime, uint256 lastClaimTime, bool isActive)[])',
+  'function getTotalStakedByUser(address user) external view returns (uint256)',
+  'function getTotalPendingRewards(address user) external view returns (uint256)',
+  'function calculateRewards(address user, uint256 stakeIndex) external view returns (uint256)',
+  'function totalStaked() external view returns (uint256)',
+  'function aprBps() external view returns (uint256)',
+];
+
 // V4 Mode toggle - ENABLED for multi-stake support
 const USE_V4_CONTRACTS = true;
 
@@ -522,6 +538,8 @@ const CONTRACT_ADDRESSES = {
   // V4 Contracts (UNLIMITED MULTI-STAKE) - DEPLOYED VIA REMIX 01/05/2026!
   stakingV4: '0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718',
   lpStakingV4: '0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231',
+  // Flex V4 - 10% APR No Lock LP Staking
+  lpStakingFlexV4: '0x0000000000000000000000000000000000000000', // TODO: Deploy and update
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -6212,6 +6230,57 @@ export default function App() {
               });
             }
             
+            // ═══════════════════════════════════════════════════════════════
+            // V4 FLEX LP STAKES - 10% APR No Lock
+            // ═══════════════════════════════════════════════════════════════
+            if (CONTRACT_ADDRESSES.lpStakingFlexV4 && CONTRACT_ADDRESSES.lpStakingFlexV4 !== '0x0000000000000000000000000000000000000000') {
+              try {
+                console.log('💗 Fetching Flex V4 LP stakes...');
+                console.log('📍 LPStakingFlexV4:', CONTRACT_ADDRESSES.lpStakingFlexV4);
+                
+                const flexStakingV4 = new ethers.Contract(CONTRACT_ADDRESSES.lpStakingFlexV4, LP_STAKING_FLEX_V4_ABI, activeProvider);
+                const flexStakeCount = await flexStakingV4.getActiveStakeCount(account);
+                console.log('📊 V4 Flex active stake count:', Number(flexStakeCount));
+                
+                if (Number(flexStakeCount) > 0) {
+                  const flexStakes = await flexStakingV4.getActiveStakes(account);
+                  console.log('📋 V4 Flex stakes:', flexStakes);
+                  
+                  flexStakes.forEach((stake, idx) => {
+                    if (!stake.isActive && stake[3] !== true) return;
+                    
+                    const flexAmount = parseFloat(ethers.formatEther(stake.amount || stake[0] || 0n));
+                    if (flexAmount <= 0) return;
+                    
+                    const flexStartTime = Number(stake.startTime || stake[1] || 0) * 1000;
+                    
+                    positions.push({
+                      id: `v4-flex-stake-${idx}`,
+                      stakeIndex: idx,
+                      type: 'FLEX LP',
+                      isLP: true,
+                      isFlex: true,
+                      amount: flexAmount,
+                      startTime: flexStartTime,
+                      endTime: 0, // No lock
+                      lockPeriod: 0,
+                      apr: 10, // 10% APR
+                      bonus: 0,
+                      tier: 5, // Special Flex tier
+                      tierName: 'FLEX',
+                      lpType: 2, // Flex type
+                      isActive: true,
+                      timeRemaining: 0,
+                      isV4: true,
+                    });
+                    console.log(`✅ Added V4 Flex stake #${idx}: ${flexAmount} LP @ 10% APR`);
+                  });
+                }
+              } catch (flexErr) {
+                console.warn('⚠️ Flex V4 fetch failed:', flexErr.message);
+              }
+            }
+            
             setStakedPositions(positions);
             console.log('📊 V4 Total positions found:', positions.length);
             
@@ -6668,7 +6737,11 @@ export default function App() {
                 let tierColor = '#FFD700';
                 let tierEmoji = '🥇';
                 
-                if (pos.isLP) {
+                // Check for Flex tier first
+                if (pos.isFlex || pos.tierName === 'FLEX') {
+                  tierColor = '#FF1493';
+                  tierEmoji = '💗';
+                } else if (pos.isLP) {
                   if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                     tierColor = '#9C27B0';
                     tierEmoji = '💜';
@@ -6707,39 +6780,44 @@ export default function App() {
                       cursor: 'pointer',
                       boxShadow: `0 2px 10px ${tierColor}40`,
                     }}
-                    title={`${pos.tierName || 'Stake'} #${idx + 1}`}
+                    title={`${pos.tierName || 'Stake'} #${idx + 1}${pos.isFlex ? ' • 10% APR' : ''}`}
                   >
                     <span style={{ fontSize: '1.3rem' }}>{tierEmoji}</span>
-                    <span style={{ fontSize: '0.4rem', fontWeight: 700, color: tierColor }}>V4</span>
+                    <span style={{ fontSize: '0.4rem', fontWeight: 700, color: tierColor }}>
+                      {pos.isFlex || pos.tierName === 'FLEX' ? 'FLEX' : 'V4'}
+                    </span>
                   </div>
                 );
               })}
               
-              {/* Pink Flex Widget */}
-              <div
-                onClick={() => {
-                  setIsFlexTier(true);
-                  setSelectedTier(null);
-                  setIsLP(false);
-                }}
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  background: 'rgba(255,20,147,0.1)',
-                  border: '2px solid #FF1493',
-                  borderRadius: '10px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 10px rgba(255,20,147,0.3)',
-                }}
-                title="Flex Staking - 10% APR"
-              >
-                <span style={{ fontSize: '1.3rem' }}>💗</span>
-                <span style={{ fontSize: '0.4rem', fontWeight: 700, color: '#FF1493' }}>FLEX</span>
-              </div>
+              {/* Pink Flex Widget - Only show if no Flex stakes exist */}
+              {!(TESTNET_MODE ? testnetBalances.positions : stakedPositions).some(p => p.isFlex || p.tierName === 'FLEX') && (
+                <div
+                  onClick={() => {
+                    setIsFlexTier(true);
+                    setSelectedTier(null);
+                    setIsLP(false);
+                  }}
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    background: 'rgba(255,20,147,0.1)',
+                    border: '2px dashed #FF1493',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 10px rgba(255,20,147,0.2)',
+                    opacity: 0.7,
+                  }}
+                  title="Open Flex Staking Panel"
+                >
+                  <span style={{ fontSize: '1.1rem' }}>💗</span>
+                  <span style={{ fontSize: '0.35rem', fontWeight: 700, color: '#FF1493' }}>+ FLEX</span>
+                </div>
+              )}
             </div>
         )}
         
@@ -6863,7 +6941,11 @@ export default function App() {
                   let diamondColor = '#FFD700';
                   let diamondIcon = '🥇';
                   
-                  if (pos.isLP) {
+                  // Check for Flex first
+                  if (pos.isFlex || pos.tierName === 'FLEX') {
+                    diamondColor = '#FF1493';
+                    diamondIcon = '💗';
+                  } else if (pos.isLP) {
                     if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                       diamondColor = '#9C27B0';
                       diamondIcon = '💜';
@@ -6898,7 +6980,7 @@ export default function App() {
                         justifyContent: 'center',
                         cursor: 'pointer',
                       }}
-                      title={`Stake #${idx + 1}`}
+                      title={`${pos.tierName || 'Stake'} #${idx + 1}`}
                     >
                       <span style={{ fontSize: '1rem' }}>{diamondIcon}</span>
                     </div>
@@ -6953,18 +7035,21 @@ export default function App() {
 
               if (!activePos) return null;
 
-              // V19 Tier Correction
+              // V19 Tier Correction - includes FLEX
               const V19_CORRECTIONS = {
                 'SILVER': { apr: 15.4, lockDays: 60 },
                 'GOLD': { apr: 16.8, lockDays: 90 },
                 'WHALE': { apr: 18.2, lockDays: 180 },
                 'DIAMOND': { apr: 28, lockDays: 90, boost: 1.5 },
                 'DIAMOND+': { apr: 35, lockDays: 90, boost: 2 },
+                'FLEX': { apr: 10, lockDays: 0, boost: 1 }, // No lock!
               };
 
               const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
               let tierName;
-              if (activePos.tierName) {
+              if (activePos.isFlex || activePos.tierName === 'FLEX') {
+                tierName = 'FLEX';
+              } else if (activePos.tierName) {
                 tierName = activePos.tierName.toUpperCase();
               } else if (activePos.isLP) {
                 tierName = activePos.lpType === 1 ? 'DIAMOND+' : 'DIAMOND';
@@ -6975,14 +7060,15 @@ export default function App() {
               }
               
               const correction = V19_CORRECTIONS[tierName] || V19_CORRECTIONS['GOLD'];
-              const correctedApr = activePos.isLP ? correction.apr * (correction.boost || 1) : correction.apr;
-              const correctedLockDays = correction.lockDays;
-              const correctedEndTime = activePos.startTime + (correctedLockDays * 24 * 60 * 60 * 1000);
+              const isFlex = tierName === 'FLEX';
+              const correctedApr = isFlex ? 10 : (activePos.isLP ? correction.apr * (correction.boost || 1) : correction.apr);
+              const correctedLockDays = isFlex ? 0 : correction.lockDays;
+              const correctedEndTime = isFlex ? 0 : activePos.startTime + (correctedLockDays * 24 * 60 * 60 * 1000);
 
               const now = Date.now();
-              const isLocked = now < correctedEndTime;
-              const daysLeft = Math.max(0, Math.ceil((correctedEndTime - now) / (24 * 60 * 60 * 1000)));
-              const hoursLeft = Math.max(0, Math.ceil((correctedEndTime - now) / (1000 * 60 * 60)) % 24);
+              const isLocked = !isFlex && now < correctedEndTime;
+              const daysLeft = isFlex ? 0 : Math.max(0, Math.ceil((correctedEndTime - now) / (24 * 60 * 60 * 1000)));
+              const hoursLeft = isFlex ? 0 : Math.max(0, Math.ceil((correctedEndTime - now) / (1000 * 60 * 60)) % 24);
               const daysStaked = Math.max(0, (now - activePos.startTime) / (24 * 60 * 60 * 1000));
               const currentRewards = (activePos.amount * (correctedApr / 100) / 365) * daysStaked;
 
@@ -7009,7 +7095,7 @@ export default function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Tier</span>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: tierColor }}>
-                        {tierIcon} {tierName}
+                        {tierIcon} {tierName} {isFlex && <span style={{ fontSize: '0.6rem', color: '#4CAF50' }}>• NO LOCK</span>}
                       </span>
                     </div>
                   </div>
@@ -11723,88 +11809,6 @@ export default function App() {
           </div>
         )}
       </div>
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* STAKE WIDGETS - TOP LEFT (shows each active stake as mini icon) */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {!TESTNET_MODE && account && stakedPositions.length > 0 && (
-        <div style={{
-          position: 'fixed',
-          top: '80px',
-          left: '12px',
-          zIndex: 100,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-          maxHeight: 'calc(100vh - 160px)',
-          overflowY: 'auto',
-        }}>
-          {stakedPositions.map((pos, idx) => {
-            const tierColors = {
-              'SILVER': '#C0C0C0',
-              'GOLD': '#D4AF37',
-              'WHALE': '#2196F3',
-              'DIAMOND': '#00BCD4',
-              'DIAMOND+': '#9C27B0',
-            };
-            const tierIcons = {
-              'SILVER': '🥈',
-              'GOLD': '🥇',
-              'WHALE': '🐋',
-              'DIAMOND': '💎',
-              'DIAMOND+': '💜',
-            };
-            const tierName = pos.tierName || pos.tier?.toString().toUpperCase() || 'GOLD';
-            const color = tierColors[tierName] || '#D4AF37';
-            const icon = tierIcons[tierName] || '🪙';
-            
-            return (
-              <div
-                key={pos.id}
-                title={`${tierName} - ${formatNumber(pos.amount)} ${pos.isLP ? 'LP' : 'DTGC'} @ ${pos.apr?.toFixed(1)}% APR`}
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  background: `linear-gradient(135deg, ${color}33 0%, ${color}11 100%)`,
-                  border: `2px solid ${color}`,
-                  borderRadius: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1rem',
-                  cursor: 'pointer',
-                  boxShadow: `0 2px 8px ${color}40`,
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  position: 'relative',
-                }}
-                onClick={() => {
-                  // Scroll to positions section
-                  document.querySelector('[class*="staked-positions"]')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = `0 4px 16px ${color}60`; }}
-                onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = `0 2px 8px ${color}40`; }}
-              >
-                {icon}
-                {/* V3/V4 badge */}
-                <div style={{
-                  position: 'absolute',
-                  bottom: '-4px',
-                  right: '-4px',
-                  background: pos.isV4 ? '#4CAF50' : '#FF9800',
-                  color: '#fff',
-                  fontSize: '0.45rem',
-                  fontWeight: 700,
-                  padding: '1px 3px',
-                  borderRadius: '4px',
-                  lineHeight: 1,
-                }}>
-                  {pos.isV4 ? 'V4' : 'V3'}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* CALCULATOR FAB - BOTTOM RIGHT (Below Treasure Vault) */}
