@@ -6652,9 +6652,7 @@ export default function App() {
         )}
 
         {/* FLOATING ACTIVE STAKE BOX - Clean V4 Style */}
-        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
-          stakeWidgetMinimized ? (
-            // Minimized view - Clean V4 square widgets
+        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && stakeWidgetMinimized && (
             <div
               style={{
                 position: 'fixed',
@@ -6667,16 +6665,13 @@ export default function App() {
               }}
             >
               {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
-                // Single emoji per tier - no doubles
                 let tierColor = '#FFD700';
                 let tierEmoji = '🥇';
-                let isDoubleTier = false; // For Diamond+ layered icon
                 
                 if (pos.isLP) {
                   if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                     tierColor = '#9C27B0';
-                    tierEmoji = '💎';
-                    isDoubleTier = true; // Show purple heart overlay
+                    tierEmoji = '💜';
                   } else {
                     tierColor = '#00BCD4';
                     tierEmoji = '💎';
@@ -6689,15 +6684,12 @@ export default function App() {
                   } else if (tierName === 'WHALE') {
                     tierColor = '#2196F3';
                     tierEmoji = '🐋';
-                  } else {
-                    tierColor = '#FFD700';
-                    tierEmoji = '🥇';
                   }
                 }
                 
                 return (
                   <div
-                    key={`min-stake-${idx}`}
+                    key={`stake-${idx}`}
                     onClick={() => {
                       setSelectedStakeIndex(idx);
                       setStakeWidgetMinimized(false);
@@ -6714,19 +6706,10 @@ export default function App() {
                       justifyContent: 'center',
                       cursor: 'pointer',
                       boxShadow: `0 2px 10px ${tierColor}40`,
-                      position: 'relative',
                     }}
                     title={`${pos.tierName || 'Stake'} #${idx + 1}`}
                   >
-                    {isDoubleTier ? (
-                      // Diamond+ layered icon - purple heart over diamond
-                      <div style={{ position: 'relative', width: '24px', height: '24px' }}>
-                        <span style={{ fontSize: '1.2rem', position: 'absolute', top: '0', left: '2px' }}>💎</span>
-                        <span style={{ fontSize: '0.7rem', position: 'absolute', bottom: '-2px', right: '-4px' }}>💜</span>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>{tierEmoji}</span>
-                    )}
+                    <span style={{ fontSize: '1.3rem' }}>{tierEmoji}</span>
                     <span style={{ fontSize: '0.4rem', fontWeight: 700, color: tierColor }}>V4</span>
                   </div>
                 );
@@ -6754,11 +6737,14 @@ export default function App() {
                 }}
                 title="Flex Staking - 10% APR"
               >
-                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>💗</span>
+                <span style={{ fontSize: '1.3rem' }}>💗</span>
                 <span style={{ fontSize: '0.4rem', fontWeight: 700, color: '#FF1493' }}>FLEX</span>
               </div>
             </div>
-          ) : (
+        )}
+        
+        {/* EXPANDED STAKE WIDGET */}
+        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && !stakeWidgetMinimized && (
             // Expanded view - full widget with diamond selector
             <div style={{
               position: 'fixed',
@@ -6874,16 +6860,13 @@ export default function App() {
                 borderBottom: '1px solid rgba(212,175,55,0.3)',
               }}>
                 {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
-                  // Single emoji per tier
                   let diamondColor = '#FFD700';
                   let diamondIcon = '🥇';
-                  let isDoubleTier = false;
                   
                   if (pos.isLP) {
                     if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                       diamondColor = '#9C27B0';
-                      diamondIcon = '💎';
-                      isDoubleTier = true;
+                      diamondIcon = '💜';
                     } else {
                       diamondColor = '#00BCD4';
                       diamondIcon = '💎';
@@ -6914,20 +6897,10 @@ export default function App() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        transform: isSelected ? 'scale(1.1)' : 'scale(1)',
-                        position: 'relative',
                       }}
                       title={`Stake #${idx + 1}`}
                     >
-                      {isDoubleTier ? (
-                        <div style={{ position: 'relative', width: '20px', height: '20px' }}>
-                          <span style={{ fontSize: '1rem', position: 'absolute', top: '-2px', left: '0' }}>💎</span>
-                          <span style={{ fontSize: '0.55rem', position: 'absolute', bottom: '-4px', right: '-6px' }}>💜</span>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '1rem' }}>{diamondIcon}</span>
-                      )}
+                      <span style={{ fontSize: '1rem' }}>{diamondIcon}</span>
                     </div>
                   );
                 })}
@@ -7028,7 +7001,7 @@ export default function App() {
                 }
               };
               const tierColor = getTierColor(tierName);
-              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜💎' : tierName === 'DIAMOND' ? '💎' : tierName === 'FLEX' ? '💗' : '🥇';
+              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜' : tierName === 'DIAMOND' ? '💎' : tierName === 'FLEX' ? '💗' : '🥇';
 
               return (
                 <>
@@ -7161,7 +7134,6 @@ export default function App() {
               );
             })()}
           </div>
-          )
         )}
 
         {/* Navigation */}
