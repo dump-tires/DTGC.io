@@ -4159,26 +4159,83 @@ export default function App() {
 
     try {
       setLoading(true);
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send('eth_requestAccounts', []);
-      const signer = await provider.getSigner();
-      const network = await provider.getNetwork();
-
-      if (Number(network.chainId) !== CHAIN_ID) {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x171' }],
-        });
+      console.log('🔗 Connecting wallet...');
+      
+      // Request accounts directly first
+      let accounts;
+      try {
+        accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      } catch (reqErr) {
+        if (reqErr.code === 4001) {
+          showToast('Connection cancelled', 'info');
+          return;
+        }
+        if (reqErr.code === -32002) {
+          showToast('⏳ Please check your wallet - a connection request is pending', 'info');
+          return;
+        }
+        throw reqErr;
       }
+
+      if (!accounts || accounts.length === 0) {
+        showToast('No accounts found', 'error');
+        return;
+      }
+
+      // Check/switch network
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const currentChainId = parseInt(chainId, 16);
+
+      if (currentChainId !== CHAIN_ID) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x171' }],
+          });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0x171',
+                  chainName: 'PulseChain',
+                  nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                  rpcUrls: ['https://rpc.pulsechain.com'],
+                  blockExplorerUrls: ['https://otter.pulsechain.com'],
+                }],
+              });
+            } catch (addErr) {
+              console.warn('Could not add PulseChain:', addErr);
+            }
+          } else if (switchErr.code === 4001) {
+            showToast('Please switch to PulseChain to continue', 'info');
+            return;
+          }
+        }
+      }
+
+      // Create provider AFTER chain switch
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      console.log(`✅ Connected: ${address}`);
 
       setProvider(provider);
       setSigner(signer);
-      setAccount(accounts[0]);
+      setAccount(address);
       setShowWalletModal(false);
-      showToast('Wallet connected', 'success');
+      showToast('✅ Wallet connected', 'success');
     } catch (err) {
-      console.error(err);
-      showToast('Connection failed', 'error');
+      console.error('Connection error:', err);
+      if (err.code === 4001) {
+        showToast('Connection cancelled', 'info');
+      } else if (err.code === -32002) {
+        showToast('⏳ Check your wallet - request pending', 'info');
+      } else {
+        showToast('Connection failed', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -4223,7 +4280,7 @@ export default function App() {
       if (window.ethereum.providers?.length) {
         // Try to find the specific wallet provider
         const specificProvider = window.ethereum.providers.find(p => {
-          if (walletType === 'metamask') return p.isMetaMask;
+          if (walletType === 'metamask') return p.isMetaMask && !p.isRabby;
           if (walletType === 'coinbase') return p.isCoinbaseWallet;
           if (walletType === 'rabby') return p.isRabby;
           return false;
@@ -4233,19 +4290,39 @@ export default function App() {
         }
       }
 
-      // Create ethers provider
-      const provider = new ethers.BrowserProvider(ethProvider);
-
-      // Simply request accounts - this triggers the wallet popup
-      const accounts = await provider.send('eth_requestAccounts', []);
+      console.log(`🔗 Connecting ${walletType}...`);
+      
+      // Request accounts directly from the provider first
+      let accounts;
+      try {
+        accounts = await ethProvider.request({ method: 'eth_requestAccounts' });
+      } catch (reqErr) {
+        // Check for actual user rejection
+        if (reqErr.code === 4001) {
+          showToast('Connection cancelled', 'info');
+          return;
+        }
+        // Check for pending request
+        if (reqErr.code === -32002) {
+          showToast('⏳ Please check your wallet - a connection request is pending', 'info');
+          return;
+        }
+        throw reqErr;
+      }
       
       if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts returned');
+        showToast('No accounts found. Please unlock your wallet.', 'error');
+        return;
       }
 
+      console.log(`✅ Got accounts: ${accounts[0]}`);
+
       // Check network and switch if needed
-      const network = await provider.getNetwork();
-      if (Number(network.chainId) !== CHAIN_ID) {
+      const chainId = await ethProvider.request({ method: 'eth_chainId' });
+      const currentChainId = parseInt(chainId, 16);
+      
+      if (currentChainId !== CHAIN_ID) {
+        console.log(`🔄 Switching to PulseChain (current: ${currentChainId})...`);
         try {
           await ethProvider.request({
             method: 'wallet_switchEthereumChain',
@@ -4254,25 +4331,35 @@ export default function App() {
         } catch (switchError) {
           // If chain doesn't exist, add it
           if (switchError.code === 4902) {
-            await ethProvider.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '0x171',
-                chainName: 'PulseChain',
-                nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
-                rpcUrls: ['https://rpc.pulsechain.com'],
-                blockExplorerUrls: ['https://otter.pulsechain.com'],
-              }],
-            });
+            try {
+              await ethProvider.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0x171',
+                  chainName: 'PulseChain',
+                  nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                  rpcUrls: ['https://rpc.pulsechain.com'],
+                  blockExplorerUrls: ['https://otter.pulsechain.com'],
+                }],
+              });
+            } catch (addErr) {
+              console.warn('Could not add PulseChain:', addErr);
+            }
+          } else if (switchError.code === 4001) {
+            showToast('Please switch to PulseChain to continue', 'info');
+            return;
           } else {
             console.warn('Could not switch chain:', switchError);
           }
         }
       }
 
-      // Get signer
+      // Create provider and signer AFTER chain switch
+      const provider = new ethers.BrowserProvider(ethProvider);
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
+
+      console.log(`✅ Connected: ${address}`);
 
       // Update state
       setProvider(provider);
@@ -4284,11 +4371,16 @@ export default function App() {
 
     } catch (err) {
       console.error('Wallet connection error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
       
-      if (err.code === 4001 || err.message?.includes('rejected')) {
-        showToast('Connection rejected by user', 'info');
+      // Only show "rejected" if it's actually a user rejection (code 4001)
+      if (err.code === 4001) {
+        showToast('Connection cancelled', 'info');
       } else if (err.code === -32002) {
-        showToast('Please check your wallet - connection pending', 'info');
+        showToast('⏳ Check your wallet - connection request pending', 'info');
+      } else if (err.code === -32603) {
+        showToast('Wallet error. Please try again.', 'error');
       } else {
         showToast('Connection failed. Please try again.', 'error');
       }
@@ -4520,16 +4612,37 @@ export default function App() {
 
     try {
       setLoading(true);
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send('eth_requestAccounts', []);
+      console.log('🔗 Quick Connect starting...');
+      
+      // Request accounts directly from provider first
+      let accounts;
+      try {
+        accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      } catch (reqErr) {
+        if (reqErr.code === 4001) {
+          showToast('Connection cancelled', 'info');
+          return;
+        }
+        if (reqErr.code === -32002) {
+          showToast('⏳ Please check your wallet - a connection request is pending', 'info');
+          return;
+        }
+        throw reqErr;
+      }
       
       if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts');
+        showToast('No accounts found. Please unlock your wallet.', 'error');
+        return;
       }
 
+      console.log(`✅ Got accounts: ${accounts[0]}`);
+
       // Check/switch network
-      const network = await provider.getNetwork();
-      if (Number(network.chainId) !== CHAIN_ID) {
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const currentChainId = parseInt(chainId, 16);
+      
+      if (currentChainId !== CHAIN_ID) {
+        console.log(`🔄 Switching to PulseChain...`);
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
@@ -4537,22 +4650,33 @@ export default function App() {
           });
         } catch (switchErr) {
           if (switchErr.code === 4902) {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId: '0x171',
-                chainName: 'PulseChain',
-                nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
-                rpcUrls: ['https://rpc.pulsechain.com'],
-                blockExplorerUrls: ['https://otter.pulsechain.com'],
-              }],
-            });
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0x171',
+                  chainName: 'PulseChain',
+                  nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                  rpcUrls: ['https://rpc.pulsechain.com'],
+                  blockExplorerUrls: ['https://otter.pulsechain.com'],
+                }],
+              });
+            } catch (addErr) {
+              console.warn('Could not add PulseChain:', addErr);
+            }
+          } else if (switchErr.code === 4001) {
+            showToast('Please switch to PulseChain to continue', 'info');
+            return;
           }
         }
       }
 
+      // Create provider AFTER chain operations
+      const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
+
+      console.log(`✅ Connected: ${address}`);
 
       setProvider(provider);
       setSigner(signer);
@@ -4562,12 +4686,14 @@ export default function App() {
 
     } catch (err) {
       console.error('Connection error:', err);
-      if (err.code === 4001 || err.message?.includes('rejected')) {
-        showToast('Connection rejected', 'info');
+      console.error('Error code:', err.code);
+      
+      if (err.code === 4001) {
+        showToast('Connection cancelled', 'info');
       } else if (err.code === -32002) {
-        showToast('Check your wallet - connection request pending', 'info');
+        showToast('⏳ Check your wallet - connection request pending', 'info');
       } else {
-        showToast('Connection failed', 'error');
+        showToast('Connection failed. Please try again.', 'error');
       }
     } finally {
       setLoading(false);
