@@ -8205,7 +8205,7 @@ export default function App() {
                   <div className="tier-name" style={{ color: '#FF1493' }}>FLEX</div>
                   <div className="tier-subtitle" style={{ color: '#FF69B4' }}>COIN CLEAN • NO LOCK!</div>
                   <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    Requires $1,000+ Diamond/Diamond+
+                    Requires $300+ Diamond/Diamond+
                   </div>
                   <div className="tier-apr-container">
                     <div className="tier-apr" style={{ color: '#FF1493', fontSize: '2.2rem' }}>10.0%</div>
