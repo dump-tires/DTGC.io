@@ -3229,6 +3229,9 @@ export default function App() {
   const [walletTokens, setWalletTokens] = useState([]); // Scanned tokens from wallet
   const [scanningWallet, setScanningWallet] = useState(false);
   const [lastScanTime, setLastScanTime] = useState(null);
+  const [flexSuccess, setFlexSuccess] = useState(null); // {lpAmount, plsReturned, totalValue}
+  const [showFlexCalculator, setShowFlexCalculator] = useState(false);
+  const [flexStakes, setFlexStakes] = useState([]); // Track Flex stakes
   const DAPPER_ADDRESS = "0xc7fe28708ba913d6bdf1e7eac2c75f2158d978de";
   const DAPPER_ABI = ["function zapPLS() external payable", "function zapToken(address token, uint256 amount) external"];
   
@@ -6618,13 +6621,14 @@ export default function App() {
         {/* FLOATING ACTIVE STAKE BOX - Top Left with Multi-Stake Toggle */}
         {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
           stakeWidgetMinimized ? (
-            // Minimized view - show all stake diamonds in a row
+            // Minimized view - show all stake diamonds VERTICALLY
             <div
               style={{
                 position: 'fixed',
-                top: TESTNET_MODE ? '55px' : '15px',
+                top: TESTNET_MODE ? '120px' : '100px',
                 left: '15px',
                 display: 'flex',
+                flexDirection: 'column',
                 gap: '8px',
                 zIndex: 1500,
               }}
@@ -6681,12 +6685,40 @@ export default function App() {
                   </div>
                 );
               })}
+              
+              {/* Flex Heart Icon - Always visible */}
+              <div
+                onClick={() => {
+                  setIsFlexTier(true);
+                  setSelectedTier(null);
+                  setIsLP(false);
+                  setStakeWidgetMinimized(false);
+                }}
+                style={{
+                  width: '50px',
+                  height: '50px',
+                  background: 'linear-gradient(135deg, rgba(255,20,147,0.3), rgba(255,105,180,0.2))',
+                  border: '2px solid #FF1493',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 20px rgba(255,20,147,0.4)',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                title="Open Flex Panel"
+              >
+                <span style={{ fontSize: '1.3rem' }}>💗</span>
+              </div>
             </div>
           ) : (
             // Expanded view - full widget with diamond selector
             <div style={{
               position: 'fixed',
-              top: TESTNET_MODE ? '55px' : '15px',
+              top: TESTNET_MODE ? '120px' : '100px',
               left: '15px',
               zIndex: 1500,
               background: isDark ? 'rgba(15,15,15,0.95)' : 'rgba(255,255,255,0.95)',
@@ -7440,9 +7472,51 @@ export default function App() {
                     minWidth: '120px',
                   }}
                 >
-                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>⚡ FLEX</div>
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>💗⚡ FLEX</div>
                   <div style={{fontSize: '0.65rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
                   <div style={{fontSize: '0.55rem', color: '#FF1493', marginTop: '2px'}}>10% APR • No Lock</div>
+                  {flexStakes.length > 0 && (
+                    <div style={{
+                      marginTop: '4px',
+                      padding: '3px 8px',
+                      background: 'rgba(255,105,180,0.3)',
+                      borderRadius: '10px',
+                      fontSize: '0.5rem',
+                      color: '#FFD700',
+                    }}>
+                      {flexStakes.length} Flex Stake{flexStakes.length > 1 ? 's' : ''} Active
+                    </div>
+                  )}
+                  {flexStakes.reduce((sum, s) => sum + (s.plsReturned || 0), 0) > 0 && (
+                    <div style={{
+                      marginTop: '4px',
+                      padding: '2px 6px',
+                      background: 'rgba(255,20,147,0.2)',
+                      borderRadius: '8px',
+                      fontSize: '0.45rem',
+                      color: '#FF69B4',
+                    }}>
+                      💜 {formatNumber(flexStakes.reduce((sum, s) => sum + (s.plsReturned || 0), 0), 0)} PLS returned
+                    </div>
+                  )}
+                </div>
+                
+                {/* Calculator Icon - Stake Forecaster */}
+                <div 
+                  onClick={() => handleNavClick('analytics')}
+                  style={{
+                    textAlign: 'center',
+                    padding: '8px 12px',
+                    background: 'rgba(76,175,80,0.15)',
+                    borderRadius: '8px',
+                    border: '2px solid rgba(76,175,80,0.5)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  title="Stake Calculator & Forecaster"
+                >
+                  <div style={{fontSize: '1.3rem'}}>🧮</div>
+                  <div style={{fontSize: '0.5rem', color: '#4CAF50', fontWeight: 600}}>CALC</div>
                 </div>
               </div>
             </div>
@@ -8900,8 +8974,34 @@ export default function App() {
                           }
                         }
                         
+                        // Calculate totals for celebration
+                        const totalValueUsd = Object.entries(selectedFlexTokens).reduce((sum, [key, data]) => {
+                          const amt = parseFloat(data?.amount) || 0;
+                          const price = key === 'pls' ? (livePrices.pls || 0.00003) : (data?.price || 0);
+                          return sum + (amt * price);
+                        }, 0);
+                        
+                        const netValue = totalValueUsd * 0.99; // After 1% fee
+                        const stakeValue = netValue * (flexStakePercent / 100);
+                        const walletValue = netValue - stakeValue;
+                        const estLpTokens = stakeValue / ((livePrices.dtgc || 0.0002) * 2);
+                        
                         if (flexOutputMode === 'stake') {
-                          showToast(`✅ ${flexStakePercent}% staked at 10% APR, No Lock!`, 'success');
+                          const newFlexStake = {
+                            id: Date.now(),
+                            lpAmount: estLpTokens,
+                            plsReturned: walletValue / (livePrices.pls || 0.00003),
+                            totalValue: totalValueUsd,
+                            stakeValue: stakeValue,
+                            stakePercent: flexStakePercent,
+                            timestamp: Date.now(),
+                            apr: 10,
+                          };
+                          // Add to flex stakes
+                          setFlexStakes(prev => [...prev, newFlexStake]);
+                          // Show pink celebration popup
+                          setFlexSuccess(newFlexStake);
+                          showToast(`🎉 Flex LP Created! ${flexStakePercent}% staked at 10% APR!`, 'success');
                         } else {
                           showToast('✅ Converted to PLS in wallet!', 'success');
                         }
@@ -8940,6 +9040,84 @@ export default function App() {
                         🎯 After Zap: {flexStakePercent}% staked • 10% APR • No Time Lock
                       </div>
                     </div>
+                  )}
+
+                  {/* Flex Success Celebration Popup */}
+                  {flexSuccess && (
+                    <div style={{
+                      position: 'fixed',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      background: 'linear-gradient(135deg, rgba(255,20,147,0.98) 0%, rgba(255,105,180,0.98) 100%)',
+                      border: '3px solid #FFD700',
+                      borderRadius: '20px',
+                      padding: '32px',
+                      textAlign: 'center',
+                      zIndex: 10000,
+                      boxShadow: '0 0 60px rgba(255,20,147,0.8), 0 0 100px rgba(255,215,0,0.4)',
+                      animation: 'pulse 0.5s ease-in-out',
+                      minWidth: '320px',
+                    }}>
+                      <div style={{ fontSize: '4rem', marginBottom: '16px' }}>🎉💗⚡</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>
+                        CONGRATULATIONS!
+                      </div>
+                      <div style={{ fontSize: '1.2rem', color: '#FFD700', marginBottom: '16px', fontWeight: 700 }}>
+                        Flex LP Created Successfully!
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#fff', marginBottom: '12px' }}>
+                        ~${formatNumber(flexSuccess.stakeValue || (flexSuccess.totalValue * 0.99 * (flexSuccess.stakePercent / 100)), 2)} LP Staked
+                      </div>
+                      <div style={{ 
+                        background: 'rgba(0,0,0,0.3)', 
+                        borderRadius: '12px', 
+                        padding: '16px', 
+                        marginBottom: '16px' 
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <span style={{ color: '#fff' }}>LP Staked:</span>
+                          <span style={{ color: '#FFD700', fontWeight: 700 }}>~{formatNumber(flexSuccess.lpAmount, 4)} LP</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                          <span style={{ color: '#fff' }}>PLS to Wallet:</span>
+                          <span style={{ color: '#4CAF50', fontWeight: 700 }}>~{formatNumber(flexSuccess.plsReturned, 2)} PLS</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#fff' }}>Total Value:</span>
+                          <span style={{ color: '#fff', fontWeight: 700 }}>${formatNumber(flexSuccess.totalValue, 2)}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#fff', marginBottom: '16px' }}>
+                        ⚡ {flexSuccess.stakePercent}% Staked • 10% APR • No Lock
+                      </div>
+                      <button
+                        onClick={() => setFlexSuccess(null)}
+                        style={{
+                          background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+                          border: 'none',
+                          padding: '12px 32px',
+                          borderRadius: '25px',
+                          fontSize: '1rem',
+                          fontWeight: 700,
+                          color: '#000',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ✓ Awesome!
+                      </button>
+                    </div>
+                  )}
+                  {flexSuccess && (
+                    <div 
+                      onClick={() => setFlexSuccess(null)}
+                      style={{
+                        position: 'fixed',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.7)',
+                        zIndex: 9999,
+                      }}
+                    />
                   )}
 
                   {/* Fee Info */}
@@ -9199,6 +9377,77 @@ export default function App() {
                             </div>
                           </div>
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 💗 FLEX STAKES SECTION - Pink Box */}
+              {account && flexStakes.length > 0 && (
+                <div style={{
+                  maxWidth: '700px',
+                  margin: '20px auto 0',
+                  background: 'linear-gradient(135deg, rgba(255,20,147,0.1) 0%, rgba(255,105,180,0.05) 100%)',
+                  borderRadius: '24px',
+                  padding: '24px',
+                  border: '2px solid #FF1493',
+                  boxShadow: '0 8px 32px rgba(255,20,147,0.2)',
+                }}>
+                  <h3 style={{
+                    fontFamily: 'Cinzel, serif',
+                    fontSize: '1.1rem',
+                    letterSpacing: '2px',
+                    marginBottom: '16px',
+                    textAlign: 'center',
+                    color: '#FF1493',
+                  }}>💗⚡ YOUR FLEX STAKES</h3>
+                  
+                  {flexStakes.map((stake, idx) => {
+                    const now = Date.now();
+                    const daysStaked = (now - stake.timestamp) / (24 * 60 * 60 * 1000);
+                    const pendingRewards = (stake.stakeValue || 0) * (stake.apr / 100 / 365) * daysStaked;
+                    
+                    return (
+                      <div key={stake.id || idx} style={{
+                        background: 'rgba(0,0,0,0.2)',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        marginBottom: idx < flexStakes.length - 1 ? '12px' : 0,
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <div>
+                            <div style={{ color: '#FF1493', fontWeight: 700, fontSize: '1.1rem' }}>
+                              💗 Flex LP Stake #{idx + 1}
+                            </div>
+                            <div style={{ color: '#FF69B4', fontSize: '0.75rem' }}>
+                              10% APR • No Lock • {daysStaked.toFixed(1)} days
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '1.2rem' }}>
+                              ~{formatNumber(stake.lpAmount, 4)} LP
+                            </div>
+                            <div style={{ color: '#4CAF50', fontSize: '0.75rem' }}>
+                              +{formatNumber(pendingRewards, 4)} rewards
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* PLS Returned Notice - Pink */}
+                        {stake.plsReturned > 0 && (
+                          <div style={{
+                            background: 'linear-gradient(135deg, rgba(255,20,147,0.2) 0%, rgba(255,105,180,0.1) 100%)',
+                            border: '1px solid #FF69B4',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            textAlign: 'center',
+                          }}>
+                            <span style={{ color: '#FF69B4', fontSize: '0.75rem' }}>
+                              💜 {formatNumber(stake.plsReturned, 2)} PLS sent to wallet
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
