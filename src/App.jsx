@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
+import DapperComponent from './components/DapperComponent';import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { ethers } from 'ethers';
 // WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
 // import { EthereumProvider } from '@walletconnect/ethereum-provider';
@@ -45,7 +45,7 @@ const FALLBACK_LP_STAKING_V3_ABI = LP_STAKING_V3_ABI;
 // ═══════════════════════════════════════════════════════════════
 // V4 MULTI-STAKE ABIs - UNLIMITED STAKES PER USER
 // ═══════════════════════════════════════════════════════════════
-const STAKING_V4_ABI = [
+const STAKING_V4_ABI = [B
   // Staking functions
   'function stake(uint256 amount, uint8 tier) external',
   'function withdraw(uint256 stakeIndex) external',
@@ -8846,6 +8846,20 @@ export default function App() {
                     <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px'}}>📥 Download .docx</div>
                   </div>
                 </a>
+                <a href="/docs/DapperFlexPinkPaper.docx" download style={{
+                  display: "flex", alignItems: "center", gap: "12px", padding: "16px",
+                  background: "var(--card-bg)", borderRadius: "12px",
+                  textDecoration: "none", color: "inherit",
+                  border: "1px solid rgba(255,20,147,0.3)",
+                  transition: "all 0.3s ease",
+                }}>
+                  <span style={{fontSize: "2.5rem"}}>💎⚡</span>
+                  <div>
+                    <div style={{fontFamily: "Cinzel, serif", fontWeight: 700, color: "#FF1493", fontSize: "1.1rem"}}>DAPPER PINK PAPER</div>
+                    <div style={{fontSize: "0.8rem", color: "var(--text-secondary)"}}>Flex Protocol • One-Click LP Zapper</div>
+                    <div style={{fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "4px"}}>📥 Download .docx</div>
+                  </div>
+                </a>
               </div>
 
               <div className="wp-card">
@@ -8911,6 +8925,9 @@ export default function App() {
                 </div>
               </div>
 
+
+              {/* Dapper One-Click LP Zapper */}
+              <DapperComponent provider={provider} account={account} />
               <div className="wp-card">
                 <h3 className="wp-card-title gold-text">📈 Dynamic APR System</h3>
                 <div className="wp-card-content">
