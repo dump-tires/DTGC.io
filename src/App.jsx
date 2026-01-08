@@ -5871,14 +5871,14 @@ export default function App() {
       } else if (err.message?.includes('locked')) {
         showToast('Position is still locked! Use Emergency Withdraw (20% fee)', 'error');
       } else {
-        // Detect "no position" errors - means stale UI data from V2
+        // Generic error - don't clear positions, just show error
         const errorMsg = err.message?.toLowerCase() || '';
         if (errorMsg.includes('revert') || errorMsg.includes('estimategas') || errorMsg.includes('no position')) {
-          showToast('⚠️ No active stake found on V3. Clearing stale data...', 'info');
-          setStakedPositions([]);
-          setTimeout(() => {
-            showToast('✅ Cleared. Your stake may have been on old V2 contracts.', 'success');
-          }, 1500);
+          showToast('⚠️ Stake not found on contract. It may have already been withdrawn.', 'info');
+          // Only remove THIS specific position, not all
+          if (positionId) {
+            setStakedPositions(prev => prev.filter(p => p.id !== positionId));
+          }
         } else {
           showToast(`Withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
         }
@@ -5995,7 +5995,7 @@ export default function App() {
         // Auto-clear the stale position
         setStakedPositions([]);
         setTimeout(() => {
-          showToast('✅ Stale data cleared. Your stake may have been on V2 contracts.', 'success');
+          showToast('✅ Stale data cleared. Position may have already been withdrawn.', 'success');
         }, 1500);
       } else {
         showToast(`Emergency withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
@@ -9331,7 +9331,7 @@ export default function App() {
                     </h3>
                     <button
                       onClick={() => {
-                        if (window.confirm('Clear stale position data? Use this if you see old V2 stakes that no longer exist on the V3 contracts.')) {
+                        if (window.confirm('Clear stale position data? Use this if you see ghost stakes that no longer exist.')) {
                           forceClearStaleData();
                         }
                       }}
@@ -9510,7 +9510,7 @@ export default function App() {
                               {/* Ghost Clear Button */}
                               <button
                                 onClick={() => {
-                                  if (window.confirm('Clear this position from UI? Use if you get errors (ghost V2 data).')) {
+                                  if (window.confirm('Clear this position from UI? Use if this stake no longer exists.')) {
                                     setStakedPositions(prev => prev.filter(p => p.id !== pos.id));
                                     showToast('🧹 Position cleared from UI', 'success');
                                   }
@@ -9648,19 +9648,27 @@ export default function App() {
                           <button
                             onClick={async () => {
                               try {
+                                setLoading(true);
                                 const signer = await provider.getSigner();
                                 const flexContract = new ethers.Contract(
                                   CONTRACT_ADDRESSES.lpStakingFlexV4,
                                   LP_STAKING_FLEX_V4_ABI,
                                   signer
                                 );
-                                showToast('🎁 Claiming Flex rewards...', 'info');
+                                showToast('🎁 Claiming Flex V4 rewards...', 'info');
                                 const tx = await flexContract.claimRewards(stake.stakeIndex);
                                 await tx.wait();
-                                showToast('✅ Flex rewards claimed!', 'success');
-                                fetchStakedPosition();
+                                showToast(`✅ Flex V4 rewards claimed! +${formatNumber(pendingRewards, 4)} LP (≈ $${formatNumber(rewardValue, 2)})`, 'success');
+                                // Refresh positions in background
+                                setTimeout(() => fetchStakedPosition(), 1500);
                               } catch (err) {
-                                showToast(`❌ Claim failed: ${err.message}`, 'error');
+                                if (err.code === 'ACTION_REJECTED' || err.message?.includes('rejected')) {
+                                  showToast('Transaction cancelled', 'info');
+                                } else {
+                                  showToast(`❌ Claim failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+                                }
+                              } finally {
+                                setLoading(false);
                               }
                             }}
                             disabled={loading}
@@ -9674,13 +9682,20 @@ export default function App() {
                               fontSize: '0.8rem',
                               color: '#fff',
                               cursor: loading ? 'not-allowed' : 'pointer',
+                              opacity: loading ? 0.7 : 1,
                             }}
                           >
                             🎁 Claim Rewards
                           </button>
                           <button
                             onClick={async () => {
+                              const stakeId = stake.id;
+                              const withdrawAmount = stake.amount;
+                              const withdrawRewards = pendingRewards;
+                              const withdrawValue = lpValue + rewardValue;
+                              
                               try {
+                                setLoading(true);
                                 const signer = await provider.getSigner();
                                 const flexContract = new ethers.Contract(
                                   CONTRACT_ADDRESSES.lpStakingFlexV4,
@@ -9694,21 +9709,32 @@ export default function App() {
                                 // Record to Flex History
                                 const historyRecord = {
                                   id: `flex-history-${Date.now()}`,
-                                  lpAmount: stake.amount,
+                                  lpAmount: withdrawAmount,
                                   lpValueUsd: lpValue,
-                                  rewardsLp: pendingRewards,
+                                  rewardsLp: withdrawRewards,
                                   rewardsUsd: rewardValue,
                                   daysStaked: daysStaked,
                                   startDate: stake.startTime,
                                   endDate: Date.now(),
-                                  profitLoss: rewardValue, // Flex has no penalty, so profit = rewards
+                                  profitLoss: rewardValue,
                                 };
                                 setFlexHistory(prev => [historyRecord, ...prev]);
                                 
-                                showToast(`✅ Flex stake ended! ${formatNumber(stake.amount, 2)} LP + ${formatNumber(pendingRewards, 4)} LP rewards returned to wallet (≈ $${formatNumber(lpValue + rewardValue, 2)})`, 'success');
-                                fetchStakedPosition();
+                                // Remove just THIS stake from UI immediately
+                                setStakedPositions(prev => prev.filter(p => p.id !== stakeId));
+                                
+                                showToast(`✅ Flex V4 stake ended! ${formatNumber(withdrawAmount, 2)} LP + ${formatNumber(withdrawRewards, 4)} LP rewards back in wallet (≈ $${formatNumber(withdrawValue, 2)})`, 'success');
+                                
+                                // Refresh in background after short delay
+                                setTimeout(() => fetchStakedPosition(), 2000);
                               } catch (err) {
-                                showToast(`❌ Withdraw failed: ${err.message}`, 'error');
+                                if (err.code === 'ACTION_REJECTED' || err.message?.includes('rejected')) {
+                                  showToast('Transaction cancelled', 'info');
+                                } else {
+                                  showToast(`❌ Withdraw failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+                                }
+                              } finally {
+                                setLoading(false);
                               }
                             }}
                             disabled={loading}
@@ -9817,23 +9843,27 @@ export default function App() {
                         {/* Withdraw Button */}
                         <button
                           onClick={async () => {
+                            const stakeId = stake.id;
+                            const lpAmount = stake.lpAmount || stake.amount || 0;
+                            
                             if (stake.stakeIndex !== undefined) {
                               // Real contract stake - withdraw from LPStakingFlexV4
                               try {
+                                setLoading(true);
                                 const signer = await provider.getSigner();
                                 const flexContract = new ethers.Contract(
                                   CONTRACT_ADDRESSES.lpStakingFlexV4,
                                   LP_STAKING_FLEX_V4_ABI,
                                   signer
                                 );
-                                showToast('💗 Withdrawing Flex stake...', 'info');
+                                showToast('💗 Withdrawing Flex V4 stake...', 'info');
                                 const tx = await flexContract.withdraw(stake.stakeIndex);
                                 await tx.wait();
                                 
                                 // Record to history
                                 const historyRecord = {
                                   id: `flex-history-${Date.now()}`,
-                                  lpAmount: stake.lpAmount || stake.amount,
+                                  lpAmount: lpAmount,
                                   lpValueUsd: stakeValue,
                                   rewardsLp: pendingRewards / (livePrices.dtgc || 0.0005),
                                   rewardsUsd: pendingRewards,
@@ -9844,16 +9874,28 @@ export default function App() {
                                 };
                                 setFlexHistory(prev => [historyRecord, ...prev]);
                                 
-                                showToast(`✅ Flex stake ended! LP + rewards returned to wallet`, 'success');
-                                fetchStakedPosition();
+                                // Remove just THIS stake from UI immediately
+                                setStakedPositions(prev => prev.filter(p => p.id !== stakeId));
+                                setFlexStakes(prev => prev.filter(s => s.id !== stakeId));
+                                
+                                showToast(`✅ Flex V4 stake ended! ${formatNumber(lpAmount, 2)} LP + rewards back in wallet (≈ $${formatNumber(stakeValue + pendingRewards, 2)})`, 'success');
+                                
+                                // Refresh in background
+                                setTimeout(() => fetchStakedPosition(), 2000);
                               } catch (err) {
-                                showToast(`❌ Withdraw failed: ${err.message}`, 'error');
+                                if (err.code === 'ACTION_REJECTED' || err.message?.includes('rejected')) {
+                                  showToast('Transaction cancelled', 'info');
+                                } else {
+                                  showToast(`❌ Withdraw failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+                                }
+                              } finally {
+                                setLoading(false);
                               }
                             } else {
                               // In-memory stake from Dapper zap - record and remove
                               const historyRecord = {
                                 id: `flex-history-${Date.now()}`,
-                                lpAmount: stake.lpAmount || 0,
+                                lpAmount: lpAmount,
                                 lpValueUsd: stakeValue,
                                 rewardsLp: pendingRewards / (livePrices.dtgc || 0.0005),
                                 rewardsUsd: pendingRewards,
@@ -9864,8 +9906,8 @@ export default function App() {
                                 plsReturned: stake.plsReturned || 0,
                               };
                               setFlexHistory(prev => [historyRecord, ...prev]);
-                              setFlexStakes(prev => prev.filter(s => s.id !== stake.id));
-                              showToast(`✅ Flex stake recorded! ${formatNumber(stake.lpAmount || 0, 2)} LP in wallet • +$${formatNumber(pendingRewards, 2)} rewards earned`, 'success');
+                              setFlexStakes(prev => prev.filter(s => s.id !== stakeId));
+                              showToast(`✅ Flex stake recorded! ${formatNumber(lpAmount, 2)} LP in wallet • +$${formatNumber(pendingRewards, 2)} rewards earned`, 'success');
                             }
                           }}
                           disabled={loading}
