@@ -3866,7 +3866,7 @@ export default function App() {
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
-  const [stakeWidgetMinimized, setStakeWidgetMinimized] = useState(false);
+  const [stakeWidgetMinimized, setStakeWidgetMinimized] = useState(true);
   const [selectedStakeIndex, setSelectedStakeIndex] = useState(0); // For multi-stake toggle in hero
   const [modalType, setModalType] = useState('start');
 
@@ -6667,48 +6667,44 @@ export default function App() {
               }}
             >
               {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
-                // Determine tier styling
+                // Single emoji per tier - no doubles
                 let tierColor = '#FFD700';
-                let tierLabel = 'GOLD';
                 let tierEmoji = '🥇';
+                let isDoubleTier = false; // For Diamond+ layered icon
                 
                 if (pos.isLP) {
                   if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                     tierColor = '#9C27B0';
-                    tierLabel = '💎+';
-                    tierEmoji = '💜';
+                    tierEmoji = '💎';
+                    isDoubleTier = true; // Show purple heart overlay
                   } else {
                     tierColor = '#00BCD4';
-                    tierLabel = '💎';
                     tierEmoji = '💎';
                   }
                 } else {
                   const tierName = (pos.tierName || 'GOLD').toUpperCase();
                   if (tierName === 'SILVER') {
                     tierColor = '#C0C0C0';
-                    tierLabel = 'SLV';
                     tierEmoji = '🥈';
                   } else if (tierName === 'WHALE') {
                     tierColor = '#2196F3';
-                    tierLabel = '🐋';
                     tierEmoji = '🐋';
                   } else {
                     tierColor = '#FFD700';
-                    tierLabel = 'GLD';
                     tierEmoji = '🥇';
                   }
                 }
                 
                 return (
                   <div
-                    key={`stake-${pos.id || idx}`}
+                    key={`min-stake-${idx}`}
                     onClick={() => {
                       setSelectedStakeIndex(idx);
                       setStakeWidgetMinimized(false);
                     }}
                     style={{
-                      width: '48px',
-                      height: '48px',
+                      width: '44px',
+                      height: '44px',
                       background: 'rgba(15,15,15,0.95)',
                       border: `2px solid ${tierColor}`,
                       borderRadius: '10px',
@@ -6717,12 +6713,21 @@ export default function App() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      boxShadow: `0 2px 12px ${tierColor}40`,
+                      boxShadow: `0 2px 10px ${tierColor}40`,
+                      position: 'relative',
                     }}
                     title={`${pos.tierName || 'Stake'} #${idx + 1}`}
                   >
-                    <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>{tierEmoji}</span>
-                    <span style={{ fontSize: '0.45rem', fontWeight: 700, color: tierColor, marginTop: '2px' }}>V4</span>
+                    {isDoubleTier ? (
+                      // Diamond+ layered icon - purple heart over diamond
+                      <div style={{ position: 'relative', width: '24px', height: '24px' }}>
+                        <span style={{ fontSize: '1.2rem', position: 'absolute', top: '0', left: '2px' }}>💎</span>
+                        <span style={{ fontSize: '0.7rem', position: 'absolute', bottom: '-2px', right: '-4px' }}>💜</span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>{tierEmoji}</span>
+                    )}
+                    <span style={{ fontSize: '0.4rem', fontWeight: 700, color: tierColor }}>V4</span>
                   </div>
                 );
               })}
@@ -6735,9 +6740,9 @@ export default function App() {
                   setIsLP(false);
                 }}
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  background: 'linear-gradient(135deg, rgba(255,20,147,0.15), rgba(255,105,180,0.1))',
+                  width: '44px',
+                  height: '44px',
+                  background: 'rgba(255,20,147,0.1)',
                   border: '2px solid #FF1493',
                   borderRadius: '10px',
                   display: 'flex',
@@ -6745,12 +6750,12 @@ export default function App() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  boxShadow: '0 2px 12px rgba(255,20,147,0.3)',
+                  boxShadow: '0 2px 10px rgba(255,20,147,0.3)',
                 }}
                 title="Flex Staking - 10% APR"
               >
-                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>💗</span>
-                <span style={{ fontSize: '0.45rem', fontWeight: 700, color: '#FF1493', marginTop: '2px' }}>FLEX</span>
+                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>💗</span>
+                <span style={{ fontSize: '0.4rem', fontWeight: 700, color: '#FF1493' }}>FLEX</span>
               </div>
             </div>
           ) : (
@@ -6869,33 +6874,35 @@ export default function App() {
                 borderBottom: '1px solid rgba(212,175,55,0.3)',
               }}>
                 {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
-                  // Get tier color for each diamond
-                  let diamondColor, diamondIcon;
+                  // Single emoji per tier
+                  let diamondColor = '#FFD700';
+                  let diamondIcon = '🥇';
+                  let isDoubleTier = false;
+                  
                   if (pos.isLP) {
                     if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                       diamondColor = '#9C27B0';
-                      diamondIcon = '💜💎';
+                      diamondIcon = '💎';
+                      isDoubleTier = true;
                     } else {
                       diamondColor = '#00BCD4';
                       diamondIcon = '💎';
                     }
                   } else {
-                    const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
-                    if (tierNum === 0 || pos.tierName === 'SILVER') {
+                    const tierName = (pos.tierName || 'GOLD').toUpperCase();
+                    if (tierName === 'SILVER') {
                       diamondColor = '#C0C0C0';
                       diamondIcon = '🥈';
-                    } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                    } else if (tierName === 'WHALE') {
                       diamondColor = '#2196F3';
                       diamondIcon = '🐋';
-                    } else {
-                      diamondColor = '#FFD700';
-                      diamondIcon = '🥇';
                     }
                   }
+                  
                   const isSelected = idx === selectedStakeIndex;
                   return (
                     <div
-                      key={pos.id || idx}
+                      key={`sel-${idx}`}
                       onClick={() => setSelectedStakeIndex(idx)}
                       style={{
                         width: '36px',
@@ -6909,10 +6916,18 @@ export default function App() {
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                         transform: isSelected ? 'scale(1.1)' : 'scale(1)',
+                        position: 'relative',
                       }}
                       title={`Stake #${idx + 1}`}
                     >
-                      <span style={{ fontSize: '1rem' }}>{diamondIcon}</span>
+                      {isDoubleTier ? (
+                        <div style={{ position: 'relative', width: '20px', height: '20px' }}>
+                          <span style={{ fontSize: '1rem', position: 'absolute', top: '-2px', left: '0' }}>💎</span>
+                          <span style={{ fontSize: '0.55rem', position: 'absolute', bottom: '-4px', right: '-6px' }}>💜</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '1rem' }}>{diamondIcon}</span>
+                      )}
                     </div>
                   );
                 })}
