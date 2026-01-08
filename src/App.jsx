@@ -3402,7 +3402,6 @@ export default function App() {
               if (bal <= 0) continue;
               
               const tokenSymbol = item.token?.symbol?.toUpperCase() || '';
-              const tokenAddr = item.token?.address?.toLowerCase() || '';
               
               // Check if this is a known liquid token
               const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
@@ -3477,9 +3476,8 @@ export default function App() {
                   
                   const balFormatted = ethers.formatUnits(bal, decimals);
                   const tokenSymbol = symbol.toUpperCase();
-                  const tokenAddr = tx.token.address?.toLowerCase();
                   
-                  // Check if this is a known liquid token
+                  // Check if this is a known liquid token (reuse tokenAddr from outer scope)
                   const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
                   
                   // Try to get price
