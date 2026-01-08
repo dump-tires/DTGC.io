@@ -6651,148 +6651,107 @@ export default function App() {
           </div>
         )}
 
-        {/* FLOATING ACTIVE STAKE BOX - V4 Style Minimized Widgets */}
-        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0 || flexStakes.length > 0)) && (
+        {/* FLOATING ACTIVE STAKE BOX - Clean V4 Style */}
+        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && (
           stakeWidgetMinimized ? (
-            // Minimized view - V4 style square widgets VERTICALLY
+            // Minimized view - Clean V4 square widgets
             <div
               style={{
                 position: 'fixed',
                 top: TESTNET_MODE ? '120px' : '100px',
-                left: '15px',
+                left: '12px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '6px',
+                gap: '8px',
                 zIndex: 1500,
               }}
             >
               {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).map((pos, idx) => {
-                // Get tier color for each stake
-                let tierColor, tierIcon;
+                // Determine tier styling
+                let tierColor = '#FFD700';
+                let tierLabel = 'GOLD';
+                let tierEmoji = '🥇';
+                
                 if (pos.isLP) {
                   if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                     tierColor = '#9C27B0';
-                    tierIcon = '💜💎';
+                    tierLabel = '💎+';
+                    tierEmoji = '💜';
                   } else {
                     tierColor = '#00BCD4';
-                    tierIcon = '💎';
+                    tierLabel = '💎';
+                    tierEmoji = '💎';
                   }
                 } else {
-                  const tierNum = typeof pos.tier === 'number' ? pos.tier : (['SILVER', 'GOLD', 'WHALE'].indexOf((pos.tierName || pos.tier || 'GOLD').toUpperCase()));
-                  if (tierNum === 0 || pos.tierName === 'SILVER') {
+                  const tierName = (pos.tierName || 'GOLD').toUpperCase();
+                  if (tierName === 'SILVER') {
                     tierColor = '#C0C0C0';
-                    tierIcon = '🥈';
-                  } else if (tierNum === 2 || pos.tierName === 'WHALE') {
+                    tierLabel = 'SLV';
+                    tierEmoji = '🥈';
+                  } else if (tierName === 'WHALE') {
                     tierColor = '#2196F3';
-                    tierIcon = '🐋';
+                    tierLabel = '🐋';
+                    tierEmoji = '🐋';
                   } else {
                     tierColor = '#FFD700';
-                    tierIcon = '🥇';
+                    tierLabel = 'GLD';
+                    tierEmoji = '🥇';
                   }
                 }
+                
                 return (
                   <div
-                    key={pos.id || idx}
+                    key={`stake-${pos.id || idx}`}
                     onClick={() => {
                       setSelectedStakeIndex(idx);
                       setStakeWidgetMinimized(false);
                     }}
                     style={{
-                      width: '52px',
-                      height: '52px',
-                      background: `linear-gradient(135deg, rgba(15,15,15,0.95), rgba(30,30,30,0.95))`,
+                      width: '48px',
+                      height: '48px',
+                      background: 'rgba(15,15,15,0.95)',
                       border: `2px solid ${tierColor}`,
-                      borderRadius: '12px',
+                      borderRadius: '10px',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      boxShadow: `0 4px 15px ${tierColor}50`,
-                      transition: 'all 0.3s ease',
-                      position: 'relative',
+                      boxShadow: `0 2px 12px ${tierColor}40`,
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    title={`Stake #${idx + 1} - ${pos.tierName || 'GOLD'}`}
+                    title={`${pos.tierName || 'Stake'} #${idx + 1}`}
                   >
-                    <span style={{ fontSize: '1.2rem' }}>{tierIcon}</span>
-                    <span style={{ 
-                      fontSize: '0.5rem', 
-                      fontWeight: 700, 
-                      color: tierColor,
-                      marginTop: '2px'
-                    }}>V4</span>
+                    <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>{tierEmoji}</span>
+                    <span style={{ fontSize: '0.45rem', fontWeight: 700, color: tierColor, marginTop: '2px' }}>V4</span>
                   </div>
                 );
               })}
               
-              {/* Pink Flex V4 Widget - Shows Yield/APR/LP Value */}
-              {flexStakes.length > 0 ? (
-                <div
-                  onClick={() => {
-                    setIsFlexTier(true);
-                    setSelectedTier(null);
-                    setIsLP(false);
-                    setStakeWidgetMinimized(false);
-                  }}
-                  style={{
-                    width: '52px',
-                    minHeight: '65px',
-                    background: 'linear-gradient(135deg, rgba(255,20,147,0.2), rgba(255,105,180,0.15))',
-                    border: '2px solid #FF1493',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 15px rgba(255,20,147,0.4)',
-                    transition: 'all 0.3s ease',
-                    padding: '4px 2px',
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                  title="Flex Stakes - 10% APR"
-                >
-                  <span style={{ fontSize: '1rem' }}>💗</span>
-                  <span style={{ fontSize: '0.45rem', fontWeight: 700, color: '#FF1493' }}>V4</span>
-                  <span style={{ fontSize: '0.4rem', color: '#FFD700', marginTop: '1px' }}>
-                    {formatNumber(flexStakes.reduce((s, f) => s + (f.lpAmount || 0), 0), 1)} LP
-                  </span>
-                  <span style={{ fontSize: '0.35rem', color: '#4CAF50' }}>10% APR</span>
-                </div>
-              ) : (
-                <div
-                  onClick={() => {
-                    setIsFlexTier(true);
-                    setSelectedTier(null);
-                    setIsLP(false);
-                    setStakeWidgetMinimized(false);
-                  }}
-                  style={{
-                    width: '52px',
-                    height: '52px',
-                    background: 'linear-gradient(135deg, rgba(255,20,147,0.15), rgba(255,105,180,0.1))',
-                    border: '2px dashed #FF1493',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 15px rgba(255,20,147,0.2)',
-                    transition: 'all 0.3s ease',
-                    opacity: 0.8,
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                  title="Open Flex Panel"
-                >
-                  <span style={{ fontSize: '1rem' }}>💗</span>
-                  <span style={{ fontSize: '0.5rem', fontWeight: 700, color: '#FF1493' }}>FLEX</span>
-                </div>
-              )}
+              {/* Pink Flex Widget */}
+              <div
+                onClick={() => {
+                  setIsFlexTier(true);
+                  setSelectedTier(null);
+                  setIsLP(false);
+                }}
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  background: 'linear-gradient(135deg, rgba(255,20,147,0.15), rgba(255,105,180,0.1))',
+                  border: '2px solid #FF1493',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 12px rgba(255,20,147,0.3)',
+                }}
+                title="Flex Staking - 10% APR"
+              >
+                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>💗</span>
+                <span style={{ fontSize: '0.45rem', fontWeight: 700, color: '#FF1493', marginTop: '2px' }}>FLEX</span>
+              </div>
             </div>
           ) : (
             // Expanded view - full widget with diamond selector
@@ -7549,36 +7508,12 @@ export default function App() {
                     border: '2px solid #FF1493',
                     cursor: 'pointer',
                     transition: 'all 0.3s ease',
-                    minWidth: '120px',
+                    minWidth: '100px',
                   }}
                 >
-                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>💗⚡ FLEX</div>
-                  <div style={{fontSize: '0.65rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
-                  <div style={{fontSize: '0.55rem', color: '#FF1493', marginTop: '2px'}}>10% APR • No Lock</div>
-                  {flexStakes.length > 0 && (
-                    <div style={{
-                      marginTop: '4px',
-                      padding: '3px 8px',
-                      background: 'rgba(255,105,180,0.3)',
-                      borderRadius: '10px',
-                      fontSize: '0.5rem',
-                      color: '#FFD700',
-                    }}>
-                      {flexStakes.length} Flex Stake{flexStakes.length > 1 ? 's' : ''} Active
-                    </div>
-                  )}
-                  {flexStakes.reduce((sum, s) => sum + (s.plsReturned || 0), 0) > 0 && (
-                    <div style={{
-                      marginTop: '4px',
-                      padding: '2px 6px',
-                      background: 'rgba(255,20,147,0.2)',
-                      borderRadius: '8px',
-                      fontSize: '0.45rem',
-                      color: '#FF69B4',
-                    }}>
-                      💜 {formatNumber(flexStakes.reduce((sum, s) => sum + (s.plsReturned || 0), 0), 0)} PLS returned
-                    </div>
-                  )}
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>💗 FLEX</div>
+                  <div style={{fontSize: '0.6rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
+                  <div style={{fontSize: '0.5rem', color: '#FF1493', marginTop: '2px'}}>10% APR</div>
                 </div>
                 
                 {/* Calculator Icon - Stake Forecaster */}
@@ -9036,7 +8971,7 @@ export default function App() {
                               'function allowance(address owner, address spender) view returns (uint256)',
                             ], signer);
                             
-                            const decimals = tokenData.decimals || 18;
+                            const decimals = parseInt(tokenData.decimals) || 18;
                             const amountWei = ethers.parseUnits(amount.toString(), decimals);
                             
                             // Check allowance
@@ -9457,77 +9392,6 @@ export default function App() {
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* 💗 FLEX STAKES SECTION - Pink Box */}
-              {account && flexStakes.length > 0 && (
-                <div style={{
-                  maxWidth: '700px',
-                  margin: '20px auto 0',
-                  background: 'linear-gradient(135deg, rgba(255,20,147,0.1) 0%, rgba(255,105,180,0.05) 100%)',
-                  borderRadius: '24px',
-                  padding: '24px',
-                  border: '2px solid #FF1493',
-                  boxShadow: '0 8px 32px rgba(255,20,147,0.2)',
-                }}>
-                  <h3 style={{
-                    fontFamily: 'Cinzel, serif',
-                    fontSize: '1.1rem',
-                    letterSpacing: '2px',
-                    marginBottom: '16px',
-                    textAlign: 'center',
-                    color: '#FF1493',
-                  }}>💗⚡ YOUR FLEX STAKES</h3>
-                  
-                  {flexStakes.map((stake, idx) => {
-                    const now = Date.now();
-                    const daysStaked = (now - stake.timestamp) / (24 * 60 * 60 * 1000);
-                    const pendingRewards = (stake.stakeValue || 0) * (stake.apr / 100 / 365) * daysStaked;
-                    
-                    return (
-                      <div key={stake.id || idx} style={{
-                        background: 'rgba(0,0,0,0.2)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        marginBottom: idx < flexStakes.length - 1 ? '12px' : 0,
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                          <div>
-                            <div style={{ color: '#FF1493', fontWeight: 700, fontSize: '1.1rem' }}>
-                              💗 Flex LP Stake #{idx + 1}
-                            </div>
-                            <div style={{ color: '#FF69B4', fontSize: '0.75rem' }}>
-                              10% APR • No Lock • {daysStaked.toFixed(1)} days
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '1.2rem' }}>
-                              ~{formatNumber(stake.lpAmount, 4)} LP
-                            </div>
-                            <div style={{ color: '#4CAF50', fontSize: '0.75rem' }}>
-                              +{formatNumber(pendingRewards, 4)} rewards
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* PLS Returned Notice - Pink */}
-                        {stake.plsReturned > 0 && (
-                          <div style={{
-                            background: 'linear-gradient(135deg, rgba(255,20,147,0.2) 0%, rgba(255,105,180,0.1) 100%)',
-                            border: '1px solid #FF69B4',
-                            borderRadius: '8px',
-                            padding: '8px 12px',
-                            textAlign: 'center',
-                          }}>
-                            <span style={{ color: '#FF69B4', fontSize: '0.75rem' }}>
-                              💜 {formatNumber(stake.plsReturned, 2)} PLS sent to wallet
-                            </span>
-                          </div>
-                        )}
                       </div>
                     );
                   })}
