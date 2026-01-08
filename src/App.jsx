@@ -45,7 +45,7 @@ const FALLBACK_LP_STAKING_V3_ABI = LP_STAKING_V3_ABI;
 // ═══════════════════════════════════════════════════════════════
 // V4 MULTI-STAKE ABIs - UNLIMITED STAKES PER USER
 // ═══════════════════════════════════════════════════════════════
-const STAKING_V4_ABI = [B
+const STAKING_V4_ABI = [
   // Staking functions
   'function stake(uint256 amount, uint8 tier) external',
   'function withdraw(uint256 stakeIndex) external',
@@ -3218,6 +3218,12 @@ export default function App() {
   const [stakeAmount, setStakeAmount] = useState('');
   const [stakeInputMode, setStakeInputMode] = useState('tokens'); // 'tokens' or 'currency'
   const [isLP, setIsLP] = useState(false);
+  // Flex Tier State
+  const [isFlexTier, setIsFlexTier] = useState(false);
+  const [selectedFlexTokens, setSelectedFlexTokens] = useState({});
+  const [flexLoading, setFlexLoading] = useState(false);
+  const DAPPER_ADDRESS = "0xc7fe28708ba913d6bdf1e7eac2c75f2158d978de";
+  const DAPPER_ABI = ["function zapPLS() external payable"];
   const [gasSpeed, setGasSpeed] = useState('fast'); // 'normal', 'fast', 'urgent'
   
   // LP Staking Contract Rewards Remaining
@@ -7116,6 +7122,24 @@ export default function App() {
                     </div>
                   );
                 })()}
+                {/* Pink Flex Coin Clean Box */}
+                <div 
+                  onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
+                  style={{
+                    textAlign: 'center', 
+                    padding: '10px 15px', 
+                    background: 'linear-gradient(135deg, rgba(255,20,147,0.2) 0%, rgba(255,105,180,0.15) 100%)', 
+                    borderRadius: '8px', 
+                    border: '2px solid #FF1493',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    minWidth: '120px',
+                  }}
+                >
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>⚡ FLEX</div>
+                  <div style={{fontSize: '0.65rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
+                  <div style={{fontSize: '0.55rem', color: '#FF1493', marginTop: '2px'}}>10% APR • No Lock</div>
+                </div>
               </div>
             </div>
           )}
@@ -8104,6 +8128,153 @@ export default function App() {
                     </div>
                     <div style={{ fontSize: '0.6rem', color: '#4CAF50', marginTop: '4px', textAlign: 'center' }}>
                       ✓ Sustainable tokenomics • 7.5% total fees
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* FLEX STAKING PANEL */}
+              {isFlexTier && account && (
+                <div className="staking-panel" style={{
+                  background: 'linear-gradient(135deg, rgba(255,20,147,0.1) 0%, rgba(255,105,180,0.05) 100%)',
+                  border: '2px solid #FF1493',
+                  boxShadow: '0 8px 32px rgba(255, 20, 147, 0.2)',
+                }}>
+                  <h3 className="panel-title" style={{ color: '#FF1493' }}>
+                    ⚡💎 FLEX COIN CLEAN
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#FF69B4', marginBottom: '16px', textAlign: 'center' }}>
+                    Zap PLS → Staked DTGC/PLS LP • 10% APR • No Lock
+                  </p>
+
+                  {/* PLS Input */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '0.75rem', color: '#FF69B4', display: 'block', marginBottom: '6px' }}>
+                      PLS Amount
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="number"
+                        placeholder="0.0"
+                        value={selectedFlexTokens.pls || ''}
+                        onChange={(e) => setSelectedFlexTokens({ pls: e.target.value })}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: '1px solid #FF1493',
+                          background: 'rgba(0,0,0,0.3)',
+                          color: '#fff',
+                          fontSize: '1rem',
+                        }}
+                      />
+                      <button
+                        onClick={() => setSelectedFlexTokens({ pls: plsBalance })}
+                        style={{
+                          padding: '12px 16px',
+                          background: 'rgba(255,20,147,0.2)',
+                          border: '1px solid #FF1493',
+                          borderRadius: '8px',
+                          color: '#FF1493',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                        }}
+                      >
+                        MAX
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
+                      Balance: {formatNumber(parseFloat(plsBalance))} PLS
+                    </div>
+                  </div>
+
+                  {/* Estimate Box */}
+                  <div style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    marginBottom: '16px',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem' }}>Value:</span>
+                      <span style={{ color: '#4CAF50', fontWeight: 700 }}>
+                        ${formatNumber(parseFloat(selectedFlexTokens.pls || 0) * (livePrices.pls || 0.00003))}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem' }}>Entry Fee (1%):</span>
+                      <span style={{ color: '#FFD700' }}>
+                        ${formatNumber(parseFloat(selectedFlexTokens.pls || 0) * (livePrices.pls || 0.00003) * 0.01)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '8px' }}>
+                      <span style={{ color: '#FF1493', fontWeight: 600 }}>Est. LP Tokens:</span>
+                      <span style={{ color: '#FF1493', fontWeight: 700 }}>
+                        ~{formatNumber((parseFloat(selectedFlexTokens.pls || 0) * (livePrices.pls || 0.00003) * 0.99) / ((livePrices.dtgc || 0.0005) * 2))} LP
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Liquidity Notice */}
+                  <div style={{
+                    background: 'rgba(255,152,0,0.1)',
+                    border: '1px solid rgba(255,152,0,0.3)',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    marginBottom: '16px',
+                    fontSize: '0.7rem',
+                    color: '#FF9800',
+                    textAlign: 'center',
+                  }}>
+                    ⚠️ If tokens lack liquidity, transaction may fail
+                  </div>
+
+                  {/* Zap Button */}
+                  <button
+                    className="action-btn primary"
+                    onClick={async () => {
+                      if (!provider || !selectedFlexTokens.pls) return;
+                      try {
+                        setFlexLoading(true);
+                        const signer = await provider.getSigner();
+                        const dapper = new ethers.Contract(DAPPER_ADDRESS, DAPPER_ABI, signer);
+                        const amountWei = ethers.parseEther(selectedFlexTokens.pls.toString());
+                        const tx = await dapper.zapPLS({ value: amountWei });
+                        showToast('⚡ Zapping PLS...', 'info');
+                        await tx.wait();
+                        showToast('✅ Staked at 10% APR, No Lock!', 'success');
+                        setSelectedFlexTokens({});
+                        refreshBalances();
+                      } catch (err) {
+                        console.error('Flex zap error:', err);
+                        showToast('Zap failed: ' + err.message, 'error');
+                      } finally {
+                        setFlexLoading(false);
+                      }
+                    }}
+                    disabled={flexLoading || !selectedFlexTokens.pls || parseFloat(selectedFlexTokens.pls) <= 0}
+                    style={{
+                      background: 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)',
+                      border: 'none',
+                    }}
+                  >
+                    {flexLoading ? 'Zapping...' : '⚡ Zap & Stake'}
+                  </button>
+
+                  {/* Fee Info */}
+                  <div className="fee-breakdown" style={{ marginTop: '16px' }}>
+                    <div className="fee-title" style={{ color: '#FF1493' }}>
+                      FLEX FEES 
+                      <a href="/docs/DapperFlexPinkPaper.docx" download style={{ fontSize: '0.7rem', color: '#FF69B4', marginLeft: '8px' }}>
+                        📄 Pink Paper
+                      </a>
+                    </div>
+                    <div className="fee-row"><span>Entry Fee</span><span style={{color: '#FFD700'}}>1%</span></div>
+                    <div className="fee-row"><span>Exit Fee</span><span style={{color: '#FFD700'}}>1%</span></div>
+                    <div className="fee-row"><span>APR</span><span style={{color: '#4CAF50'}}>10%</span></div>
+                    <div className="fee-row"><span>Lock Period</span><span style={{color: '#4CAF50'}}>None</span></div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
+                      All fees → Growth Engine for DTGC buybacks
                     </div>
                   </div>
                 </div>
