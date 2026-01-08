@@ -1,5 +1,5 @@
 import DapperComponent from './components/DapperComponent';
-import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
 // WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
 // import { EthereumProvider } from '@walletconnect/ethereum-provider';
@@ -3748,6 +3748,116 @@ export default function App() {
   const [position, setPosition] = useState(null);
   const [lpPosition, setLpPosition] = useState(null);
   const [stakedPositions, setStakedPositions] = useState([]);
+  const [sidebarKey, setSidebarKey] = useState(0); // Key to force sidebar re-render
+  
+  // ═══════════════════════════════════════════════════════════════
+  // BLACKLIST: Track withdrawn stakes - survives RPC refresh!
+  // Uses useRef so it persists across re-renders without causing re-renders
+  // ═══════════════════════════════════════════════════════════════
+  const withdrawnStakesRef = useRef(new Set());
+  const withdrawnFlexRef = useRef(false); // Track if ALL flex were withdrawn
+  
+  // Add stake to blacklist (called on successful withdrawal)
+  const blacklistStake = useCallback((stakeId) => {
+    console.log('🚫 BLACKLISTING stake:', stakeId);
+    withdrawnStakesRef.current.add(stakeId);
+    // Also add by stakeIndex pattern for flex stakes
+    if (stakeId.includes('flex')) {
+      withdrawnStakesRef.current.add(stakeId);
+    }
+  }, []);
+  
+  // Check if stake is blacklisted
+  const isBlacklisted = useCallback((stakeId) => {
+    return withdrawnStakesRef.current.has(stakeId);
+  }, []);
+  
+  // Clear blacklist (called after 2 minutes or manual refresh)
+  const clearBlacklist = useCallback(() => {
+    console.log('🧹 Clearing withdrawal blacklist');
+    withdrawnStakesRef.current.clear();
+    withdrawnFlexRef.current = false;
+  }, []);
+  
+  // Auto-clear blacklist after 2 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (withdrawnStakesRef.current.size > 0 || withdrawnFlexRef.current) {
+        console.log('⏰ Auto-clearing blacklist after 2 minutes');
+        clearBlacklist();
+      }
+    }, 120000); // 2 minutes
+    return () => clearInterval(interval);
+  }, [clearBlacklist]);
+  
+  // BULLETPROOF: Remove stake + blacklist it
+  const removeStakeFromUI = useCallback((stakeId) => {
+    console.log('🗑️ REMOVING + BLACKLISTING stake:', stakeId);
+    
+    // Add to blacklist first
+    blacklistStake(stakeId);
+    
+    // Remove from stakedPositions
+    setStakedPositions(prev => {
+      const filtered = prev.filter(p => p.id !== stakeId);
+      console.log('📊 stakedPositions after removal:', filtered.length);
+      return filtered;
+    });
+    
+    // Remove from flexStakes
+    setFlexStakes(prev => {
+      const filtered = prev.filter(s => s.id !== stakeId);
+      console.log('📊 flexStakes after removal:', filtered.length);
+      return filtered;
+    });
+    
+    // Force sidebar to re-render
+    setSidebarKey(prev => prev + 1);
+  }, [blacklistStake]);
+  
+  // BULLETPROOF: Remove ALL flex stakes + blacklist them
+  const removeAllFlexFromUI = useCallback(() => {
+    console.log('🗑️ REMOVING + BLACKLISTING ALL FLEX');
+    
+    // Mark that all flex are withdrawn
+    withdrawnFlexRef.current = true;
+    
+    // Blacklist each flex stake
+    stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX').forEach(p => {
+      blacklistStake(p.id);
+    });
+    flexStakes.forEach(s => {
+      blacklistStake(s.id);
+    });
+    
+    setStakedPositions(prev => {
+      const filtered = prev.filter(p => !p.isFlex && p.tierName !== 'FLEX');
+      console.log('📊 stakedPositions after flex removal:', filtered.length);
+      return filtered;
+    });
+    
+    setFlexStakes([]);
+    setSidebarKey(prev => prev + 1);
+  }, [stakedPositions, flexStakes, blacklistStake]);
+  
+  // FILTERED GETTERS - these filter out blacklisted stakes
+  const getVisiblePositions = useCallback(() => {
+    return stakedPositions.filter(p => !isBlacklisted(p.id) && !(withdrawnFlexRef.current && (p.isFlex || p.tierName === 'FLEX')));
+  }, [stakedPositions, isBlacklisted]);
+  
+  const getVisibleFlexPositions = useCallback(() => {
+    if (withdrawnFlexRef.current) return [];
+    return stakedPositions.filter(p => (p.isFlex || p.tierName === 'FLEX') && !isBlacklisted(p.id));
+  }, [stakedPositions, isBlacklisted]);
+  
+  const getVisibleNonFlexPositions = useCallback(() => {
+    return stakedPositions.filter(p => !p.isFlex && p.tierName !== 'FLEX' && !isBlacklisted(p.id));
+  }, [stakedPositions, isBlacklisted]);
+  
+  const getVisibleFlexStakes = useCallback(() => {
+    if (withdrawnFlexRef.current) return [];
+    return flexStakes.filter(s => !isBlacklisted(s.id));
+  }, [flexStakes, isBlacklisted]);
   
   // ═══════════════════════════════════════════════════════════════
   // DEBUG: Expose contract inspection to browser console
@@ -5848,19 +5958,16 @@ export default function App() {
         setStakeHistory(existingHistory.slice(0, 50));
       }
 
-      // Clear the position immediately from state
-      setStakedPositions(prev => prev.filter(p => p.id !== positionId));
+      // Clear the position immediately from UI
+      removeStakeFromUI(positionId);
       
       setLoading(false);
       showToast('✅ Successfully withdrawn! Check Gold Records for history.', 'success');
 
-      // Refresh balances and positions
+      // Refresh balances
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
       const dtgcBal = await dtgcContract.balanceOf(account);
       setDtgcBalance(ethers.formatEther(dtgcBal));
-      
-      // Re-fetch positions after a short delay
-      setTimeout(() => fetchStakedPosition(), 2000);
 
     } catch (err) {
       console.error('Unstake error:', err);
@@ -5960,8 +6067,12 @@ export default function App() {
         setStakeHistory(existingHistory.slice(0, 50));
       }
 
-      // Clear position from state
-      setStakedPositions(prev => prev.filter(p => p.isLP !== isLP));
+      // Clear position from state and mark as withdrawn
+      // Clear position from UI
+      const stakeIdToRemove = currentPosition?.id || positionId;
+      if (stakeIdToRemove) {
+        removeStakeFromUI(stakeIdToRemove);
+      }
 
       setLoading(false);
       showToast('✅ Emergency withdrawal complete (20% fee applied). Check Gold Records.', 'success');
@@ -5970,9 +6081,6 @@ export default function App() {
       const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
       const dtgcBal = await dtgcContract.balanceOf(account);
       setDtgcBalance(ethers.formatEther(dtgcBal));
-      
-      // Re-fetch positions after delay
-      setTimeout(() => fetchStakedPosition(), 2000);
 
     } catch (err) {
       console.error('Emergency withdraw error:', err);
@@ -6073,10 +6181,12 @@ export default function App() {
     }
   };
 
-  // Force clear ALL stale stake data (for V2 -> V3 migration issues)
+  // Force clear ALL stale stake data
   const forceClearStaleData = () => {
     console.log('🧹 Force clearing all stale stake data...');
     setStakedPositions([]);
+    setFlexStakes([]);
+    setSidebarKey(prev => prev + 1);
     localStorage.removeItem('dtgc-testnet-balances');
     localStorage.removeItem('dtgc-stake-history');
     
@@ -6090,7 +6200,7 @@ export default function App() {
       }));
     }
     
-    showToast('✅ All stale stake data cleared!', 'success');
+    showToast('✅ All stake data cleared! Refreshing...', 'success');
     
     // Re-fetch from blockchain after a delay
     if (!TESTNET_MODE && account && provider) {
@@ -6760,8 +6870,9 @@ export default function App() {
         )}
 
         {/* FLOATING ACTIVE STAKE BOX - Clean V4 Style */}
-        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0 || flexStakes.length > 0)) && stakeWidgetMinimized && (
+        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (getVisibleNonFlexPositions().length > 0 || getVisibleFlexPositions().length > 0 || getVisibleFlexStakes().length > 0)) && stakeWidgetMinimized && (
             <div
+              key={`sidebar-${sidebarKey}`}
               style={{
                 position: 'fixed',
                 top: TESTNET_MODE ? '120px' : '100px',
@@ -6772,8 +6883,8 @@ export default function App() {
                 zIndex: 1500,
               }}
             >
-              {/* Regular V4 Stakes (non-flex) */}
-              {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).filter(p => !p.isFlex && p.tierName !== 'FLEX').map((pos, idx) => {
+              {/* Regular V4 Stakes (non-flex only) */}
+              {(TESTNET_MODE ? testnetBalances.positions.filter(p => !p.isFlex && p.tierName !== 'FLEX') : getVisibleNonFlexPositions()).map((pos, idx) => {
                 let tierColor = '#FFD700';
                 let tierEmoji = '🥇';
                 
@@ -6798,7 +6909,7 @@ export default function App() {
                 
                 return (
                   <div
-                    key={`stake-${idx}`}
+                    key={`stake-${pos.id || idx}`}
                     onClick={() => {
                       setSelectedStakeIndex(idx);
                       setStakeWidgetMinimized(false);
@@ -6826,8 +6937,8 @@ export default function App() {
               
               {/* Flex Stakes - from contract OR in-memory */}
               {[
-                ...(TESTNET_MODE ? testnetBalances.positions : stakedPositions).filter(p => p.isFlex || p.tierName === 'FLEX'),
-                ...flexStakes
+                ...(TESTNET_MODE ? testnetBalances.positions.filter(p => p.isFlex || p.tierName === 'FLEX') : getVisibleFlexPositions()),
+                ...(TESTNET_MODE ? [] : getVisibleFlexStakes())
               ].map((stake, idx) => (
                 <div
                   key={`flex-${stake.id || idx}`}
@@ -6857,7 +6968,7 @@ export default function App() {
               ))}
               
               {/* Add Flex Button - Only if no flex stakes exist anywhere */}
-              {(TESTNET_MODE ? testnetBalances.positions : stakedPositions).filter(p => p.isFlex || p.tierName === 'FLEX').length === 0 && flexStakes.length === 0 && (
+              {getVisibleFlexPositions().length === 0 && getVisibleFlexStakes().length === 0 && (
                 <div
                   onClick={() => {
                     setIsFlexTier(true);
@@ -9294,7 +9405,7 @@ export default function App() {
               )}
 
               {/* Active Positions (Mainnet) */}
-              {!TESTNET_MODE && account && stakedPositions.length > 0 && (
+              {!TESTNET_MODE && account && getVisibleNonFlexPositions().length > 0 && (
                 <div style={{
                   maxWidth: '700px',
                   margin: '40px auto 0',
@@ -9326,7 +9437,7 @@ export default function App() {
                           fontWeight: 700,
                           color: '#FFF',
                           letterSpacing: '1px',
-                        }}>V4 • {stakedPositions.filter(p => p.isActive !== false && !p.isFlex && p.tierName !== 'FLEX').length} ACTIVE</span>
+                        }}>V4 • {getVisibleNonFlexPositions().length} ACTIVE</span>
                       )}
                     </h3>
                     <button
@@ -9349,7 +9460,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {stakedPositions.filter(p => !p.isFlex && p.tierName !== 'FLEX').map((pos) => {
+                  {getVisibleNonFlexPositions().map((pos) => {
                     const now = Date.now();
                     const isLocked = now < pos.endTime;
                     const daysLeft = Math.max(0, Math.ceil((pos.endTime - now) / (24 * 60 * 60 * 1000)));
@@ -9538,7 +9649,7 @@ export default function App() {
               )}
 
               {/* 💗 FLEX STAKES SECTION - Pink Box */}
-              {!TESTNET_MODE && account && (flexStakes.length > 0 || stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX').length > 0) && (
+              {!TESTNET_MODE && account && (getVisibleFlexStakes().length > 0 || getVisibleFlexPositions().length > 0) && (
                 <div style={{
                   maxWidth: '700px',
                   margin: '20px auto 0',
@@ -9571,8 +9682,148 @@ export default function App() {
                     }}>10% APR • NO LOCK</span>
                   </h3>
                   
+                  {/* EXIT ALL FLEX STAKES BUTTON */}
+                  {(getVisibleFlexPositions().length > 0 || getVisibleFlexStakes().length > 0) && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <button
+                        onClick={async () => {
+                          const allFlexStakes = [
+                            ...getVisibleFlexPositions(),
+                            ...getVisibleFlexStakes()
+                          ];
+                          
+                          if (allFlexStakes.length === 0) {
+                            showToast('No active Flex stakes to withdraw', 'info');
+                            return;
+                          }
+                          
+                          if (!window.confirm(`Exit ALL ${allFlexStakes.length} Flex stake(s) and claim rewards? This will return all LP + rewards to your wallet.`)) {
+                            return;
+                          }
+                          
+                          try {
+                            setLoading(true);
+                            const signer = await provider.getSigner();
+                            const flexContract = new ethers.Contract(
+                              CONTRACT_ADDRESSES.lpStakingFlexV4,
+                              LP_STAKING_FLEX_V4_ABI,
+                              signer
+                            );
+                            
+                            let totalLp = 0;
+                            let totalRewards = 0;
+                            let successCount = 0;
+                            
+                            // Process contract stakes
+                            const contractFlexStakes = getVisibleFlexPositions().filter(p => p.stakeIndex !== undefined);
+                            
+                            for (const stake of contractFlexStakes) {
+                              try {
+                                showToast(`💗 Withdrawing Flex stake #${stake.stakeIndex + 1}...`, 'info');
+                                const tx = await flexContract.withdraw(stake.stakeIndex);
+                                await tx.wait();
+                                
+                                const daysStaked = Math.max(0, (Date.now() - stake.startTime) / (24 * 60 * 60 * 1000));
+                                const rewards = (stake.amount * 0.10 / 365) * daysStaked;
+                                
+                                totalLp += stake.amount;
+                                totalRewards += rewards;
+                                successCount++;
+                                
+                                // Record to history
+                                const historyRecord = {
+                                  id: `flex-history-${Date.now()}-${stake.stakeIndex}`,
+                                  lpAmount: stake.amount,
+                                  lpValueUsd: stake.amount * (livePrices.dtgc || 0.0005) * 2,
+                                  rewardsLp: rewards,
+                                  rewardsUsd: rewards * (livePrices.dtgc || 0.0005),
+                                  daysStaked: daysStaked,
+                                  startDate: stake.startTime,
+                                  endDate: Date.now(),
+                                  profitLoss: rewards * (livePrices.dtgc || 0.0005),
+                                };
+                                setFlexHistory(prev => [historyRecord, ...prev]);
+                              } catch (err) {
+                                console.error(`Failed to withdraw stake #${stake.stakeIndex}:`, err);
+                              }
+                            }
+                            
+                            // Clear in-memory flex stakes
+                            const memoryFlexCount = flexStakes.length;
+                            if (memoryFlexCount > 0) {
+                              flexStakes.forEach(stake => {
+                                const daysStaked = (Date.now() - stake.timestamp) / (24 * 60 * 60 * 1000);
+                                const rewards = ((stake.stakeValue || 0) * 0.10 / 365) * daysStaked;
+                                totalRewards += rewards;
+                                
+                                const historyRecord = {
+                                  id: `flex-history-${Date.now()}-mem-${stake.id}`,
+                                  lpAmount: stake.lpAmount || 0,
+                                  lpValueUsd: stake.stakeValue || 0,
+                                  rewardsLp: rewards / (livePrices.dtgc || 0.0005),
+                                  rewardsUsd: rewards,
+                                  daysStaked: daysStaked,
+                                  startDate: stake.timestamp,
+                                  endDate: Date.now(),
+                                  profitLoss: rewards,
+                                };
+                                setFlexHistory(prev => [historyRecord, ...prev]);
+                              });
+                              setFlexStakes([]);
+                              successCount += memoryFlexCount;
+                            }
+                            
+                            // Remove all flex stakes from UI
+                            removeAllFlexFromUI();
+                            
+                            const totalValue = (totalLp * (livePrices.dtgc || 0.0005) * 2) + (totalRewards * (livePrices.dtgc || 0.0005));
+                            showToast(`✅ Exited ${successCount} Flex stake(s)! ${formatNumber(totalLp, 2)} LP + rewards back in wallet (≈ $${formatNumber(totalValue, 2)})`, 'success');
+                            
+                            // DON'T re-fetch - let withdrawn tracker handle it
+                          } catch (err) {
+                            if (err.code === 'ACTION_REJECTED' || err.message?.includes('rejected')) {
+                              showToast('Transaction cancelled', 'info');
+                            } else {
+                              showToast(`❌ Exit failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
+                            }
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                        disabled={loading}
+                        style={{
+                          width: '100%',
+                          padding: '14px 20px',
+                          background: 'linear-gradient(135deg, #FF1493, #C71585)',
+                          border: '2px solid #FF69B4',
+                          borderRadius: '16px',
+                          fontWeight: 700,
+                          fontSize: '1rem',
+                          color: '#fff',
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                          opacity: loading ? 0.7 : 1,
+                          boxShadow: '0 4px 20px rgba(255,20,147,0.4)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '10px',
+                        }}
+                      >
+                        💗 EXIT ALL FLEX STAKES & CLAIM REWARDS
+                        <span style={{
+                          background: 'rgba(255,255,255,0.2)',
+                          padding: '4px 10px',
+                          borderRadius: '10px',
+                          fontSize: '0.75rem',
+                        }}>
+                          {getVisibleFlexPositions().length + getVisibleFlexStakes().length} stakes
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                  
                   {/* Contract Flex Stakes from LPStakingFlexV4 */}
-                  {stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX').map((stake, idx) => {
+                  {getVisibleFlexPositions().map((stake, idx) => {
                     const now = Date.now();
                     const daysStaked = Math.max(0, (now - stake.startTime) / (24 * 60 * 60 * 1000));
                     const lpValue = stake.amount * (livePrices.dtgc || 0.0005) * 2; // LP is ~2x DTGC value
@@ -9720,13 +9971,12 @@ export default function App() {
                                 };
                                 setFlexHistory(prev => [historyRecord, ...prev]);
                                 
-                                // Remove just THIS stake from UI immediately
-                                setStakedPositions(prev => prev.filter(p => p.id !== stakeId));
+                                // Hide stake immediately and remove from UI
+                                removeStakeFromUI(stakeId);
                                 
                                 showToast(`✅ Flex V4 stake ended! ${formatNumber(withdrawAmount, 2)} LP + ${formatNumber(withdrawRewards, 4)} LP rewards back in wallet (≈ $${formatNumber(withdrawValue, 2)})`, 'success');
                                 
-                                // Refresh in background after short delay
-                                setTimeout(() => fetchStakedPosition(), 2000);
+                                // DON'T re-fetch immediately - let user see clean UI
                               } catch (err) {
                                 if (err.code === 'ACTION_REJECTED' || err.message?.includes('rejected')) {
                                   showToast('Transaction cancelled', 'info');
@@ -9758,8 +10008,8 @@ export default function App() {
                   })}
                   
                   {/* In-Memory Flex Stakes (from Dapper zap) */}
-                  {flexStakes.map((stake, idx) => {
-                    const contractFlexCount = stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX').length;
+                  {getVisibleFlexStakes().map((stake, idx) => {
+                    const contractFlexCount = getVisibleFlexPositions().length;
                     const stakeNum = contractFlexCount + idx + 1;
                     const now = Date.now();
                     const daysStaked = (now - stake.timestamp) / (24 * 60 * 60 * 1000);
@@ -9874,14 +10124,12 @@ export default function App() {
                                 };
                                 setFlexHistory(prev => [historyRecord, ...prev]);
                                 
-                                // Remove just THIS stake from UI immediately
-                                setStakedPositions(prev => prev.filter(p => p.id !== stakeId));
-                                setFlexStakes(prev => prev.filter(s => s.id !== stakeId));
+                                // Hide stake immediately
+                                removeStakeFromUI(stakeId);
                                 
                                 showToast(`✅ Flex V4 stake ended! ${formatNumber(lpAmount, 2)} LP + rewards back in wallet (≈ $${formatNumber(stakeValue + pendingRewards, 2)})`, 'success');
                                 
-                                // Refresh in background
-                                setTimeout(() => fetchStakedPosition(), 2000);
+                                // DON'T re-fetch - let hidden tracker handle it
                               } catch (err) {
                                 if (err.code === 'ACTION_REJECTED' || err.message?.includes('rejected')) {
                                   showToast('Transaction cancelled', 'info');
