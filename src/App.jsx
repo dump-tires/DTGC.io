@@ -1,4 +1,4 @@
-import DapperComponent from './components/DapperComponent';import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { ethers } from 'ethers';
 // WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
 // import { EthereumProvider } from '@walletconnect/ethereum-provider';
@@ -3214,29 +3214,13 @@ export default function App() {
   const [lpDtgcUrmomBalance, setLpDtgcUrmomBalance] = useState('0'); // Diamond+ tier LP
   const [plsBalance, setPlsBalance] = useState('0');
   const [urmomBalance, setUrmomBalance] = useState('0');
+  const [walletTokens, setWalletTokens] = useState([]); // All PulseChain tokens in wallet
+  const [loadingTokens, setLoadingTokens] = useState(false);
+  const [showAllTokens, setShowAllTokens] = useState(false); // Toggle for all tokens panel
   const [selectedTier, setSelectedTier] = useState(null);
   const [stakeAmount, setStakeAmount] = useState('');
   const [stakeInputMode, setStakeInputMode] = useState('tokens'); // 'tokens' or 'currency'
   const [isLP, setIsLP] = useState(false);
-  // Flex Tier State - Comprehensive Multi-Token Selector
-  const [isFlexTier, setIsFlexTier] = useState(false);
-  const [selectedFlexTokens, setSelectedFlexTokens] = useState({});
-  const [flexLoading, setFlexLoading] = useState(false);
-  const [flexOutputMode, setFlexOutputMode] = useState('stake'); // 'stake' or 'wallet'
-  const [flexStakePercent, setFlexStakePercent] = useState(100);
-  const [flexFilter, setFlexFilter] = useState('');
-  const DAPPER_ADDRESS = "0xc7fe28708ba913d6bdf1e7eac2c75f2158d978de";
-  const DAPPER_ABI = ["function zapPLS() external payable", "function zapToken(address token, uint256 amount) external"];
-  
-  // Available tokens for Flex zapping
-  const FLEX_TOKENS = [
-    { symbol: 'PLS', name: 'PulseChain', address: null, decimals: 18, icon: '💜', color: '#E1BEE7' },
-    { symbol: 'DTGC', name: 'DT Gold Coin', address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', decimals: 18, icon: '🪙', color: '#FFD700' },
-    { symbol: 'URMOM', name: 'URMOM Token', address: '0x636cc7d7c76298cde00025370461c59c0b2ef896', decimals: 18, icon: '🔥', color: '#FF9800' },
-    { symbol: 'PLSX', name: 'PulseX', address: '0x95b303987a60c71504d99aa1b13b4da07b0790ab', decimals: 18, icon: '🔷', color: '#00BCD4' },
-    { symbol: 'HEX', name: 'HEX', address: '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39', decimals: 8, icon: '⬡', color: '#FF00FF' },
-    { symbol: 'INC', name: 'Incentive', address: '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d', decimals: 18, icon: '💎', color: '#9C27B0' },
-  ];
   const [gasSpeed, setGasSpeed] = useState('fast'); // 'normal', 'fast', 'urgent'
   
   // LP Staking Contract Rewards Remaining
@@ -4948,6 +4932,87 @@ export default function App() {
     return () => clearInterval(interval);
   }, [account, provider]);
 
+  // Fetch ALL wallet tokens from PulseScan API
+  useEffect(() => {
+    const fetchAllWalletTokens = async () => {
+      if (TESTNET_MODE || !account) return;
+      
+      setLoadingTokens(true);
+      try {
+        // PulseScan API v2 for token balances
+        const response = await fetch(
+          `https://api.scan.pulsechain.com/api/v2/addresses/${account}/token-balances`
+        );
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch tokens');
+        }
+        
+        const data = await response.json();
+        
+        // Transform the data into a usable format
+        const tokens = data
+          .filter(item => item.token && parseFloat(item.value) > 0)
+          .map(item => ({
+            address: item.token.address,
+            name: item.token.name || 'Unknown',
+            symbol: item.token.symbol || '???',
+            decimals: parseInt(item.token.decimals) || 18,
+            balance: item.value,
+            formattedBalance: (parseFloat(item.value) / Math.pow(10, parseInt(item.token.decimals) || 18)).toFixed(4),
+            type: item.token.type || 'ERC-20',
+            icon: item.token.icon_url || null
+          }))
+          .sort((a, b) => {
+            // Sort by balance value (descending)
+            const aVal = parseFloat(a.balance);
+            const bVal = parseFloat(b.balance);
+            return bVal - aVal;
+          });
+        
+        setWalletTokens(tokens);
+        console.log(`📦 Found ${tokens.length} tokens in wallet:`, tokens.slice(0, 5));
+      } catch (err) {
+        console.error('Failed to fetch wallet tokens:', err);
+        // Fallback: try the old API format
+        try {
+          const fallbackResponse = await fetch(
+            `https://scan.pulsechain.com/api?module=account&action=tokenlist&address=${account}`
+          );
+          const fallbackData = await fallbackResponse.json();
+          
+          if (fallbackData.status === '1' && fallbackData.result) {
+            const tokens = fallbackData.result
+              .filter(item => parseFloat(item.balance) > 0)
+              .map(item => ({
+                address: item.contractAddress,
+                name: item.name || 'Unknown',
+                symbol: item.symbol || '???',
+                decimals: parseInt(item.decimals) || 18,
+                balance: item.balance,
+                formattedBalance: (parseFloat(item.balance) / Math.pow(10, parseInt(item.decimals) || 18)).toFixed(4),
+                type: 'ERC-20',
+                icon: null
+              }));
+            
+            setWalletTokens(tokens);
+            console.log(`📦 Found ${tokens.length} tokens (fallback API)`);
+          }
+        } catch (fallbackErr) {
+          console.error('Fallback token fetch also failed:', fallbackErr);
+        }
+      } finally {
+        setLoadingTokens(false);
+      }
+    };
+
+    fetchAllWalletTokens();
+    
+    // Refresh token list every 60 seconds
+    const tokenInterval = setInterval(fetchAllWalletTokens, 60000);
+    return () => clearInterval(tokenInterval);
+  }, [account]);
+
   const handleStake = async () => {
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) return;
 
@@ -6494,24 +6559,6 @@ export default function App() {
                       <div style={{ fontSize: '0.65rem', color: '#4CAF50', fontWeight: 600, marginBottom: '2px' }}>REWARDS</div>
                       <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>{formatNumber(totalRewards)}</div>
                     </div>
-                    
-                    {/* Flex Total - Pink Heart */}
-                    <div 
-                      onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
-                      style={{
-                        flex: 1,
-                        background: 'rgba(255,20,147,0.15)',
-                        border: '1px solid rgba(255,20,147,0.4)',
-                        borderRadius: '8px',
-                        padding: '6px 8px',
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.65rem', color: '#FF1493', fontWeight: 600, marginBottom: '2px' }}>💗 FLEX</div>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#FF69B4' }}>10% APR</div>
-                    </div>
                   </div>
                 );
               })()}
@@ -6665,12 +6712,11 @@ export default function App() {
                   case 'WHALE': return '#2196F3';
                   case 'DIAMOND': return '#00BCD4';
                   case 'DIAMOND+': return '#9C27B0';
-                  case 'FLEX': return '#FF1493';
                   default: return '#D4AF37';
                 }
               };
               const tierColor = getTierColor(tierName);
-              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜💎' : tierName === 'DIAMOND' ? '💎' : tierName === 'FLEX' ? '💗' : '🥇';
+              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜💎' : tierName === 'DIAMOND' ? '💎' : '🥇';
 
               return (
                 <>
@@ -7154,25 +7200,77 @@ export default function App() {
                     </div>
                   );
                 })()}
-                {/* Pink Flex Coin Clean Box */}
-                <div 
-                  onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
-                  style={{
-                    textAlign: 'center', 
-                    padding: '10px 15px', 
-                    background: 'linear-gradient(135deg, rgba(255,20,147,0.2) 0%, rgba(255,105,180,0.15) 100%)', 
-                    borderRadius: '8px', 
-                    border: '2px solid #FF1493',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    minWidth: '120px',
-                  }}
-                >
-                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>⚡ FLEX</div>
-                  <div style={{fontSize: '0.65rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
-                  <div style={{fontSize: '0.55rem', color: '#FF1493', marginTop: '2px'}}>10% APR • No Lock</div>
-                </div>
+                {/* View All Tokens Button */}
+                {walletTokens.length > 0 && (
+                  <div 
+                    onClick={() => setShowAllTokens(!showAllTokens)}
+                    style={{
+                      textAlign: 'center', 
+                      padding: '10px 15px', 
+                      background: 'rgba(33,150,243,0.15)', 
+                      borderRadius: '8px', 
+                      border: '2px solid #2196F3',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#2196F3'}}>
+                      {walletTokens.length} 📦
+                    </div>
+                    <div style={{fontSize: '0.65rem', color: '#2196F3', fontWeight: 600}}>
+                      {showAllTokens ? 'HIDE TOKENS' : 'ALL TOKENS'}
+                    </div>
+                  </div>
+                )}
               </div>
+              
+              {/* Expandable All Tokens Panel */}
+              {showAllTokens && walletTokens.length > 0 && (
+                <div style={{
+                  marginTop: '16px',
+                  padding: '16px',
+                  background: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(33,150,243,0.3)',
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  <h4 style={{color: '#2196F3', marginBottom: '12px', fontSize: '0.9rem', fontWeight: 700}}>
+                    📦 All Wallet Tokens ({walletTokens.length})
+                  </h4>
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px'}}>
+                    {walletTokens.map((token, idx) => (
+                      <div 
+                        key={token.address || idx}
+                        style={{
+                          padding: '10px',
+                          background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px'}}>
+                          {token.icon && (
+                            <img 
+                              src={token.icon} 
+                              alt={token.symbol} 
+                              style={{width: '20px', height: '20px', borderRadius: '50%'}}
+                              onError={(e) => e.target.style.display = 'none'}
+                            />
+                          )}
+                          <span style={{fontWeight: 700, color: '#fff', fontSize: '0.85rem'}}>{token.symbol}</span>
+                        </div>
+                        <div style={{fontSize: '0.75rem', color: '#888'}}>{token.name}</div>
+                        <div style={{fontSize: '0.9rem', color: '#4CAF50', fontWeight: 600, marginTop: '4px'}}>
+                          {parseFloat(token.formattedBalance) > 1000000 
+                            ? formatNumber(parseFloat(token.formattedBalance)) 
+                            : parseFloat(token.formattedBalance).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -7923,47 +8021,6 @@ export default function App() {
                 </div>
                   );
                 })()}
-
-                {/* FLEX Tier Card */}
-                <div
-                  className={`tier-card flex ${isFlexTier ? 'selected' : ''}`}
-                  onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
-                  style={{ 
-                    flex: '0 1 280px', 
-                    maxWidth: '320px', 
-                    background: 'linear-gradient(135deg, rgba(255,20,147,0.15) 0%, rgba(255,105,180,0.1) 50%, rgba(255,182,193,0.05) 100%)', 
-                    border: isFlexTier ? '3px solid #FF1493' : '2px solid #FF1493',
-                    boxShadow: isFlexTier ? '0 0 20px rgba(255,20,147,0.5)' : '0 8px 32px rgba(255,20,147,0.2)',
-                    transform: isFlexTier ? 'scale(1.02)' : 'scale(1)',
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  <div className="tier-icon" style={{ fontSize: '2.5rem' }}>💗⚡</div>
-                  <div className="tier-name" style={{ color: '#FF1493' }}>FLEX</div>
-                  <div className="tier-subtitle" style={{ color: '#FF69B4' }}>COIN CLEAN • NO LOCK!</div>
-                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    Requires $1,000+ Diamond/Diamond+
-                  </div>
-                  <div className="tier-apr-container">
-                    <div className="tier-apr" style={{ color: '#FF1493', fontSize: '2.2rem' }}>10.0%</div>
-                    <div className="tier-apr-label">APR</div>
-                  </div>
-                  <div className="tier-features">
-                    <div className="tier-feature">
-                      <span className="tier-feature-label">Lock</span>
-                      <span className="tier-feature-value" style={{ color: '#4CAF50', fontWeight: '700' }}>NONE</span>
-                    </div>
-                    <div className="tier-feature">
-                      <span className="tier-feature-label">Tax</span>
-                      <span className="tier-feature-value" style={{ color: '#FFD700', fontWeight: '700' }}>2%</span>
-                    </div>
-                    <div className="tier-feature">
-                      <span className="tier-feature-label">Exit</span>
-                      <span className="tier-feature-value" style={{ color: '#4CAF50', fontWeight: '700' }}>Anytime</span>
-                    </div>
-                  </div>
-                  <span className="tier-badge" style={{ background: 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)' }}>FLEX</span>
-                </div>
               </div>
 
               {/* LP Staking Rewards Remaining */}
@@ -8201,403 +8258,6 @@ export default function App() {
                     </div>
                     <div style={{ fontSize: '0.6rem', color: '#4CAF50', marginTop: '4px', textAlign: 'center' }}>
                       ✓ Sustainable tokenomics • 7.5% total fees
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* FLEX STAKING PANEL - COMPREHENSIVE MULTI-TOKEN */}
-              {isFlexTier && account && (
-                <div className="staking-panel" style={{
-                  background: 'linear-gradient(135deg, rgba(255,20,147,0.1) 0%, rgba(255,105,180,0.05) 100%)',
-                  border: '2px solid #FF1493',
-                  boxShadow: '0 8px 32px rgba(255, 20, 147, 0.2)',
-                  maxWidth: '500px',
-                }}>
-                  <h3 className="panel-title" style={{ color: '#FF1493' }}>
-                    ⚡💎 FLEX COIN CLEAN
-                  </h3>
-                  <p style={{ fontSize: '0.8rem', color: '#FF69B4', marginBottom: '16px', textAlign: 'center' }}>
-                    Select tokens to zap → DTGC/PLS LP • 10% APR • No Lock
-                  </p>
-
-                  {/* Search/Filter */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <input
-                      type="text"
-                      placeholder="🔍 Filter tokens..."
-                      value={flexFilter}
-                      onChange={(e) => setFlexFilter(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(255,20,147,0.3)',
-                        background: 'rgba(0,0,0,0.2)',
-                        color: '#fff',
-                        fontSize: '0.9rem',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  </div>
-
-                  {/* Token List with Checkboxes */}
-                  <div style={{
-                    maxHeight: '280px',
-                    overflowY: 'auto',
-                    marginBottom: '16px',
-                    border: '1px solid rgba(255,20,147,0.2)',
-                    borderRadius: '12px',
-                    background: 'rgba(0,0,0,0.2)',
-                  }}>
-                    {FLEX_TOKENS
-                      .filter(token => 
-                        flexFilter === '' || 
-                        token.symbol.toLowerCase().includes(flexFilter.toLowerCase()) ||
-                        token.name.toLowerCase().includes(flexFilter.toLowerCase())
-                      )
-                      .map((token) => {
-                        const balance = token.symbol === 'PLS' ? plsBalance :
-                                       token.symbol === 'DTGC' ? dtgcBalance :
-                                       token.symbol === 'URMOM' ? urmomBalance : '0';
-                        const balanceNum = parseFloat(balance) || 0;
-                        const price = token.symbol === 'PLS' ? (livePrices.pls || 0.00003) :
-                                     token.symbol === 'DTGC' ? (livePrices.dtgc || 0) :
-                                     token.symbol === 'URMOM' ? (livePrices.urmom || 0) :
-                                     token.symbol === 'PLSX' ? (livePrices.plsx || 0) :
-                                     token.symbol === 'HEX' ? (livePrices.hex || 0) : 0;
-                        const valueUsd = balanceNum * price;
-                        const isSelected = selectedFlexTokens[token.symbol.toLowerCase()];
-                        
-                        return (
-                          <div
-                            key={token.symbol}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              padding: '12px 14px',
-                              borderBottom: '1px solid rgba(255,255,255,0.05)',
-                              background: isSelected ? 'rgba(255,20,147,0.15)' : 'transparent',
-                              transition: 'all 0.2s ease',
-                            }}
-                          >
-                            {/* Checkbox */}
-                            <input
-                              type="checkbox"
-                              checked={!!isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedFlexTokens(prev => ({
-                                    ...prev,
-                                    [token.symbol.toLowerCase()]: balance
-                                  }));
-                                } else {
-                                  setSelectedFlexTokens(prev => {
-                                    const newState = { ...prev };
-                                    delete newState[token.symbol.toLowerCase()];
-                                    return newState;
-                                  });
-                                }
-                              }}
-                              style={{
-                                width: '18px',
-                                height: '18px',
-                                marginRight: '12px',
-                                accentColor: '#FF1493',
-                                cursor: 'pointer',
-                              }}
-                            />
-                            
-                            {/* Token Icon & Name */}
-                            <div style={{ flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '1.2rem' }}>{token.icon}</span>
-                                <div>
-                                  <div style={{ color: token.color, fontWeight: 600, fontSize: '0.9rem' }}>{token.symbol}</div>
-                                  <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>{token.name}</div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Balance & Amount Input */}
-                            <div style={{ textAlign: 'right', minWidth: '140px' }}>
-                              {isSelected ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <input
-                                    type="number"
-                                    value={selectedFlexTokens[token.symbol.toLowerCase()] || ''}
-                                    onChange={(e) => setSelectedFlexTokens(prev => ({
-                                      ...prev,
-                                      [token.symbol.toLowerCase()]: e.target.value
-                                    }))}
-                                    style={{
-                                      width: '90px',
-                                      padding: '6px 8px',
-                                      borderRadius: '6px',
-                                      border: '1px solid #FF1493',
-                                      background: 'rgba(0,0,0,0.4)',
-                                      color: '#fff',
-                                      fontSize: '0.8rem',
-                                      textAlign: 'right',
-                                    }}
-                                  />
-                                  <button
-                                    onClick={() => setSelectedFlexTokens(prev => ({
-                                      ...prev,
-                                      [token.symbol.toLowerCase()]: balance
-                                    }))}
-                                    style={{
-                                      padding: '6px 8px',
-                                      background: 'rgba(255,20,147,0.3)',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      color: '#FF1493',
-                                      fontSize: '0.65rem',
-                                      cursor: 'pointer',
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    MAX
-                                  </button>
-                                </div>
-                              ) : (
-                                <div>
-                                  <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>
-                                    {formatNumber(balanceNum)}
-                                  </div>
-                                  <div style={{ color: '#4CAF50', fontSize: '0.7rem' }}>
-                                    ${formatNumber(valueUsd)}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-
-                  {/* Output Mode Toggle */}
-                  <div style={{
-                    display: 'flex',
-                    gap: '8px',
-                    marginBottom: '12px',
-                  }}>
-                    <button
-                      onClick={() => setFlexOutputMode('stake')}
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        borderRadius: '8px',
-                        border: flexOutputMode === 'stake' ? '2px solid #FF1493' : '1px solid rgba(255,255,255,0.2)',
-                        background: flexOutputMode === 'stake' ? 'rgba(255,20,147,0.2)' : 'transparent',
-                        color: flexOutputMode === 'stake' ? '#FF1493' : 'rgba(255,255,255,0.6)',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        fontSize: '0.8rem',
-                      }}
-                    >
-                      ⚡ Stake LP (10% APR)
-                    </button>
-                    <button
-                      onClick={() => setFlexOutputMode('wallet')}
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        borderRadius: '8px',
-                        border: flexOutputMode === 'wallet' ? '2px solid #4CAF50' : '1px solid rgba(255,255,255,0.2)',
-                        background: flexOutputMode === 'wallet' ? 'rgba(76,175,80,0.2)' : 'transparent',
-                        color: flexOutputMode === 'wallet' ? '#4CAF50' : 'rgba(255,255,255,0.6)',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        fontSize: '0.8rem',
-                      }}
-                    >
-                      💰 Keep in Wallet
-                    </button>
-                  </div>
-
-                  {/* Stake Percentage Slider */}
-                  {flexOutputMode === 'stake' && (
-                    <div style={{ marginBottom: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '0.75rem', color: '#FF69B4' }}>Stake Percentage</span>
-                        <span style={{ fontSize: '0.85rem', color: '#FF1493', fontWeight: 700 }}>{flexStakePercent}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="10"
-                        max="100"
-                        step="10"
-                        value={flexStakePercent}
-                        onChange={(e) => setFlexStakePercent(parseInt(e.target.value))}
-                        style={{
-                          width: '100%',
-                          accentColor: '#FF1493',
-                          cursor: 'pointer',
-                        }}
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)' }}>
-                        <span>10%</span>
-                        <span>50%</span>
-                        <span>100%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Summary Box */}
-                  {(() => {
-                    const totalValueUsd = Object.entries(selectedFlexTokens).reduce((sum, [symbol, amount]) => {
-                      const amountNum = parseFloat(amount) || 0;
-                      const price = symbol === 'pls' ? (livePrices.pls || 0.00003) :
-                                   symbol === 'dtgc' ? (livePrices.dtgc || 0) :
-                                   symbol === 'urmom' ? (livePrices.urmom || 0) : 0;
-                      return sum + (amountNum * price);
-                    }, 0);
-                    const selectedCount = Object.keys(selectedFlexTokens).length;
-                    const entryFee = totalValueUsd * 0.01;
-                    const netValue = totalValueUsd * 0.99;
-                    const stakeValue = flexOutputMode === 'stake' ? netValue * (flexStakePercent / 100) : 0;
-                    const walletValue = flexOutputMode === 'stake' ? netValue * ((100 - flexStakePercent) / 100) : netValue;
-                    const estLpTokens = stakeValue / ((livePrices.dtgc || 0.0005) * 2);
-
-                    return (
-                      <div style={{
-                        background: 'rgba(0,0,0,0.3)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        marginBottom: '16px',
-                      }}>
-                        <div style={{ fontSize: '0.7rem', color: '#FF69B4', marginBottom: '10px', letterSpacing: '1px' }}>
-                          📊 SUMMARY ({selectedCount} token{selectedCount !== 1 ? 's' : ''} selected)
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem' }}>Total Value:</span>
-                          <span style={{ color: '#fff', fontWeight: 700 }}>${formatNumber(totalValueUsd)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                          <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem' }}>Entry Fee (1%):</span>
-                          <span style={{ color: '#FFD700' }}>-${formatNumber(entryFee)}</span>
-                        </div>
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '8px', marginTop: '8px' }}>
-                          {flexOutputMode === 'stake' ? (
-                            <>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                <span style={{ color: '#FF1493', fontWeight: 600 }}>To Stake ({flexStakePercent}%):</span>
-                                <span style={{ color: '#FF1493', fontWeight: 700 }}>${formatNumber(stakeValue)}</span>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                <span style={{ color: '#FF1493', fontSize: '0.8rem' }}>Est. LP Tokens:</span>
-                                <span style={{ color: '#FF1493', fontWeight: 700 }}>~{formatNumber(estLpTokens)} LP</span>
-                              </div>
-                              {flexStakePercent < 100 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                  <span style={{ color: '#4CAF50', fontWeight: 600 }}>To Wallet ({100 - flexStakePercent}%):</span>
-                                  <span style={{ color: '#4CAF50', fontWeight: 700 }}>${formatNumber(walletValue)} PLS</span>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#4CAF50', fontWeight: 600 }}>To Wallet (PLS):</span>
-                              <span style={{ color: '#4CAF50', fontWeight: 700 }}>${formatNumber(walletValue)}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Liquidity Notice */}
-                  <div style={{
-                    background: 'rgba(255,152,0,0.1)',
-                    border: '1px solid rgba(255,152,0,0.3)',
-                    borderRadius: '8px',
-                    padding: '10px',
-                    marginBottom: '16px',
-                    fontSize: '0.7rem',
-                    color: '#FF9800',
-                    textAlign: 'center',
-                  }}>
-                    ⚠️ Liquidity Notice: If selected tokens lack liquidity, transaction may fail
-                  </div>
-
-                  {/* Action Button */}
-                  <button
-                    className="action-btn primary"
-                    onClick={async () => {
-                      const selectedCount = Object.keys(selectedFlexTokens).length;
-                      if (!provider || selectedCount === 0) return;
-                      
-                      try {
-                        setFlexLoading(true);
-                        const signer = await provider.getSigner();
-                        const dapper = new ethers.Contract(DAPPER_ADDRESS, DAPPER_ABI, signer);
-                        
-                        if (selectedFlexTokens.pls && parseFloat(selectedFlexTokens.pls) > 0) {
-                          const amountWei = ethers.parseEther(selectedFlexTokens.pls.toString());
-                          const tx = await dapper.zapPLS({ value: amountWei });
-                          showToast('⚡ Zapping PLS...', 'info');
-                          await tx.wait();
-                          
-                          if (flexOutputMode === 'stake') {
-                            showToast(`✅ ${flexStakePercent}% staked at 10% APR, No Lock!`, 'success');
-                          } else {
-                            showToast('✅ Converted to PLS in wallet!', 'success');
-                          }
-                          setSelectedFlexTokens({});
-                          refreshBalances();
-                        } else {
-                          showToast('Please select PLS to zap (other tokens coming soon)', 'info');
-                        }
-                      } catch (err) {
-                        console.error('Flex zap error:', err);
-                        showToast('Zap failed: ' + err.message, 'error');
-                      } finally {
-                        setFlexLoading(false);
-                      }
-                    }}
-                    disabled={flexLoading || Object.keys(selectedFlexTokens).length === 0}
-                    style={{
-                      background: flexOutputMode === 'stake' 
-                        ? 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)'
-                        : 'linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%)',
-                      border: 'none',
-                    }}
-                  >
-                    {flexLoading ? 'Processing...' : 
-                     flexOutputMode === 'stake' ? `⚡ Zap & Stake ${flexStakePercent}%` : '💰 Convert to PLS'}
-                  </button>
-
-                  {/* Success Notice */}
-                  {flexOutputMode === 'stake' && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '12px',
-                      background: 'linear-gradient(135deg, rgba(255,20,147,0.1) 0%, rgba(255,105,180,0.05) 100%)',
-                      border: '1px solid #FF1493',
-                      borderRadius: '8px',
-                      textAlign: 'center',
-                    }}>
-                      <div style={{ color: '#FF1493', fontSize: '0.8rem', fontWeight: 600 }}>
-                        🎯 After Zap: {flexStakePercent}% staked • 10% APR • No Time Lock
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Fee Info */}
-                  <div className="fee-breakdown" style={{ marginTop: '16px' }}>
-                    <div className="fee-title" style={{ color: '#FF1493' }}>
-                      FLEX FEES 
-                      <a href="/docs/DapperFlexPinkPaper.docx" download style={{ fontSize: '0.7rem', color: '#FF69B4', marginLeft: '8px' }}>
-                        📄 Pink Paper
-                      </a>
-                    </div>
-                    <div className="fee-row"><span>Entry Fee</span><span style={{color: '#FFD700'}}>1%</span></div>
-                    <div className="fee-row"><span>Exit Fee</span><span style={{color: '#FFD700'}}>1%</span></div>
-                    <div className="fee-row"><span>APR</span><span style={{color: '#4CAF50'}}>10%</span></div>
-                    <div className="fee-row"><span>Lock Period</span><span style={{color: '#4CAF50'}}>None</span></div>
-                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center' }}>
-                      All fees → Growth Engine for DTGC buybacks
                     </div>
                   </div>
                 </div>
@@ -9340,20 +9000,6 @@ export default function App() {
                     <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px'}}>📥 Download .docx</div>
                   </div>
                 </a>
-                <a href="/docs/DapperFlexPinkPaper.docx" download style={{
-                  display: "flex", alignItems: "center", gap: "12px", padding: "16px",
-                  background: "var(--card-bg)", borderRadius: "12px",
-                  textDecoration: "none", color: "inherit",
-                  border: "1px solid rgba(255,20,147,0.3)",
-                  transition: "all 0.3s ease",
-                }}>
-                  <span style={{fontSize: "2.5rem"}}>💎⚡</span>
-                  <div>
-                    <div style={{fontFamily: "Cinzel, serif", fontWeight: 700, color: "#FF1493", fontSize: "1.1rem"}}>DAPPER PINK PAPER</div>
-                    <div style={{fontSize: "0.8rem", color: "var(--text-secondary)"}}>Flex Protocol • One-Click LP Zapper</div>
-                    <div style={{fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "4px"}}>📥 Download .docx</div>
-                  </div>
-                </a>
               </div>
 
               <div className="wp-card">
@@ -9419,9 +9065,6 @@ export default function App() {
                 </div>
               </div>
 
-
-              {/* Dapper One-Click LP Zapper */}
-              <DapperComponent provider={provider} account={account} />
               <div className="wp-card">
                 <h3 className="wp-card-title gold-text">📈 Dynamic APR System</h3>
                 <div className="wp-card-content">
