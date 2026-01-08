@@ -9061,7 +9061,7 @@ export default function App() {
                   <span style={{ fontSize: '2rem' }}>🚀</span>
                   <div>
                     <h3 style={{ color: '#4CAF50', fontSize: '1.3rem', margin: 0, fontFamily: 'Cinzel, serif' }}>V4 UNLIMITED MULTI-STAKE</h3>
-                    <p style={{ color: '#888', fontSize: '0.8rem', margin: '4px 0 0' }}>First on PulseChain • Deployed January 5, 2026</p>
+                    <p style={{ color: '#888', fontSize: '0.8rem', margin: '4px 0 0' }}>PulseChain's first official V4 contract stake utility</p>
                   </div>
                   <span style={{ marginLeft: 'auto', background: 'linear-gradient(135deg, #4CAF50, #2E7D32)', padding: '4px 12px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 700, color: '#fff' }}>LIVE</span>
                 </div>
