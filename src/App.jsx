@@ -10389,7 +10389,7 @@ export default function App() {
               V4 Multi-Stake on PulseChain
             </div>
             <div style={{ fontSize: '0.65rem', color: '#4CAF50', marginTop: '4px', letterSpacing: '1px' }}>
-              ✨ First Unlimited Staking Protocol
+              ✨ PulseChain's first official V4 contract stake utility
             </div>
           </div>
           <div className="footer-links">
