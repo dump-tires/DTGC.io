@@ -3252,6 +3252,7 @@ export default function App() {
   const [flexSuccess, setFlexSuccess] = useState(null); // {lpAmount, plsReturned, totalValue}
   const [showFlexCalculator, setShowFlexCalculator] = useState(false);
   const [flexStakes, setFlexStakes] = useState([]); // Track Flex stakes
+  const [flexHistory, setFlexHistory] = useState([]); // Track completed Flex stakes for Treasury
   const DAPPER_ADDRESS = "0xc7fe28708ba913d6bdf1e7eac2c75f2158d978de";
   const DAPPER_ABI = ["function zapPLS() external payable", "function zapToken(address token, uint256 amount) external"];
   
@@ -6207,28 +6208,64 @@ export default function App() {
                 
                 const lpAmount = parseFloat(ethers.formatEther(stake.amount));
                 const lpTypeNum = Number(stake.lpType);
-                const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
                 const rawLpApr = Number(stake.aprBps) / 100;
+                const lockPeriodDays = Number(stake.lockPeriod) / 86400; // Convert seconds to days
                 
-                positions.push({
-                  id: `lp-stake-${originalIndex}`,
-                  stakeIndex: originalIndex, // V4: needed for withdraw
-                  type: 'LP',
-                  isLP: true,
-                  amount: lpAmount,
-                  startTime: Number(stake.startTime) * 1000,
-                  endTime: Number(stake.unlockTime) * 1000,
-                  lockPeriod: Number(stake.lockPeriod),
-                  apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
-                  boostMultiplier: Number(stake.boostBps) / 10000, // Fixed: boostBps is basis points (20000 = 2x)
-                  lpType: lpTypeNum,
-                  tier: lpTierName,
-                  tierName: lpTierName,
-                  isActive: stake.isActive,
-                  timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
-                  isV4: true,
-                });
-                console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount);
+                // Check if this is a Flex stake:
+                // - APR is around 10% (9-12%)
+                // - OR lock period is 0 or very short (< 1 day)
+                // - OR lpType is 2 (Flex type)
+                const isFlexStake = (rawLpApr >= 9 && rawLpApr <= 12) || lockPeriodDays < 1 || lpTypeNum === 2;
+                
+                console.log(`📊 LP Stake analysis: APR=${rawLpApr}%, lockDays=${lockPeriodDays}, lpType=${lpTypeNum}, isFlex=${isFlexStake}`);
+                
+                if (isFlexStake) {
+                  // This is a Flex stake - add to Flex category
+                  positions.push({
+                    id: `v4-flex-stake-${originalIndex}`,
+                    stakeIndex: originalIndex,
+                    type: 'FLEX LP',
+                    isLP: true,
+                    isFlex: true,
+                    amount: lpAmount,
+                    startTime: Number(stake.startTime) * 1000,
+                    endTime: 0, // No lock
+                    lockPeriod: 0,
+                    apr: 10,
+                    bonus: 0,
+                    tier: 5,
+                    tierName: 'FLEX',
+                    lpType: 2,
+                    isActive: stake.isActive,
+                    timeRemaining: 0,
+                    isV4: true,
+                  });
+                  console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR`);
+                } else {
+                  // Regular Diamond/Diamond+ stake
+                  const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+                  
+                  positions.push({
+                    id: `lp-stake-${originalIndex}`,
+                    stakeIndex: originalIndex,
+                    type: 'LP',
+                    isLP: true,
+                    isFlex: false,
+                    amount: lpAmount,
+                    startTime: Number(stake.startTime) * 1000,
+                    endTime: Number(stake.unlockTime) * 1000,
+                    lockPeriod: Number(stake.lockPeriod),
+                    apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
+                    boostMultiplier: Number(stake.boostBps) / 10000,
+                    lpType: lpTypeNum,
+                    tier: lpTierName,
+                    tierName: lpTierName,
+                    isActive: stake.isActive,
+                    timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
+                    isV4: true,
+                  });
+                  console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount);
+                }
               });
             }
             
@@ -6779,10 +6816,10 @@ export default function App() {
                       cursor: 'pointer',
                       boxShadow: `0 2px 10px ${tierColor}40`,
                     }}
-                    title={`${pos.tierName || 'Stake'} #${idx + 1}`}
+                    title={`${pos.tierName || 'Stake'} • ${formatNumber(pos.amount)} ${pos.isLP ? 'LP' : 'DTGC'} @ ${pos.apr?.toFixed(1) || '?'}% APR`}
                   >
                     <span style={{ fontSize: '1.3rem' }}>{tierEmoji}</span>
-                    <span style={{ fontSize: '0.4rem', fontWeight: 700, color: tierColor }}>V4</span>
+                    <span style={{ fontSize: '0.4rem', fontWeight: 700, color: pos.isV4 ? '#4CAF50' : '#FF9800' }}>{pos.isV4 ? 'V4' : 'V3'}</span>
                   </div>
                 );
               })}
@@ -9289,7 +9326,7 @@ export default function App() {
                           fontWeight: 700,
                           color: '#FFF',
                           letterSpacing: '1px',
-                        }}>V4 • {stakedPositions.filter(p => p.isActive !== false).length} ACTIVE</span>
+                        }}>V4 • {stakedPositions.filter(p => p.isActive !== false && !p.isFlex && p.tierName !== 'FLEX').length} ACTIVE</span>
                       )}
                     </h3>
                     <button
@@ -9312,7 +9349,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {stakedPositions.map((pos) => {
+                  {stakedPositions.filter(p => !p.isFlex && p.tierName !== 'FLEX').map((pos) => {
                     const now = Date.now();
                     const isLocked = now < pos.endTime;
                     const daysLeft = Math.max(0, Math.ceil((pos.endTime - now) / (24 * 60 * 60 * 1000)));
@@ -9501,7 +9538,7 @@ export default function App() {
               )}
 
               {/* 💗 FLEX STAKES SECTION - Pink Box */}
-              {!TESTNET_MODE && account && flexStakes.length > 0 && (
+              {!TESTNET_MODE && account && (flexStakes.length > 0 || stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX').length > 0) && (
                 <div style={{
                   maxWidth: '700px',
                   margin: '20px auto 0',
@@ -9518,16 +9555,193 @@ export default function App() {
                     marginBottom: '16px',
                     textAlign: 'center',
                     color: '#FF1493',
-                  }}>💗 YOUR FLEX STAKES</h3>
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                  }}>
+                    💗 YOUR FLEX STAKES
+                    <span style={{
+                      background: 'linear-gradient(135deg, #FF1493, #FF69B4)',
+                      padding: '3px 10px',
+                      borderRadius: '12px',
+                      fontSize: '0.6rem',
+                      fontWeight: 700,
+                      color: '#FFF',
+                    }}>10% APR • NO LOCK</span>
+                  </h3>
                   
+                  {/* Contract Flex Stakes from LPStakingFlexV4 */}
+                  {stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX').map((stake, idx) => {
+                    const now = Date.now();
+                    const daysStaked = Math.max(0, (now - stake.startTime) / (24 * 60 * 60 * 1000));
+                    const lpValue = stake.amount * (livePrices.dtgc || 0.0005) * 2; // LP is ~2x DTGC value
+                    const pendingRewards = (stake.amount * 0.10 / 365) * daysStaked;
+                    const rewardValue = pendingRewards * (livePrices.dtgc || 0.0005);
+                    
+                    return (
+                      <div key={stake.id || `contract-flex-${idx}`} style={{
+                        background: 'rgba(0,0,0,0.3)',
+                        borderRadius: '16px',
+                        padding: '20px',
+                        marginBottom: '12px',
+                        border: '1px solid rgba(255,20,147,0.3)',
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                          <div>
+                            <div style={{ color: '#FF1493', fontWeight: 700, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              💗 Flex Stake #{idx + 1}
+                              <span style={{
+                                background: '#4CAF50',
+                                color: '#fff',
+                                fontSize: '0.5rem',
+                                padding: '2px 6px',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                              }}>NO LOCK</span>
+                              <span style={{
+                                background: 'linear-gradient(135deg, #FF1493, #9C27B0)',
+                                color: '#fff',
+                                fontSize: '0.5rem',
+                                padding: '2px 6px',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                              }}>FLEX V4</span>
+                            </div>
+                            <div style={{ color: '#FF69B4', fontSize: '0.8rem', marginTop: '4px' }}>
+                              10% APR • {daysStaked.toFixed(1)} days staked
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '1.3rem' }}>
+                              {formatNumber(stake.amount, 2)} LP
+                            </div>
+                            <div style={{ color: '#aaa', fontSize: '0.75rem' }}>
+                              ≈ ${formatNumber(lpValue, 2)}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Pending Rewards */}
+                        <div style={{
+                          background: 'rgba(76,175,80,0.15)',
+                          border: '1px solid rgba(76,175,80,0.3)',
+                          borderRadius: '12px',
+                          padding: '12px',
+                          marginBottom: '12px',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#4CAF50', fontSize: '0.85rem' }}>💰 Pending Rewards</span>
+                            <div style={{ textAlign: 'right' }}>
+                              <span style={{ color: '#4CAF50', fontWeight: 700, fontSize: '1.1rem' }}>
+                                +{formatNumber(pendingRewards, 4)} LP
+                              </span>
+                              <div style={{ color: '#81C784', fontSize: '0.7rem' }}>
+                                ≈ ${formatNumber(rewardValue, 4)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Action Buttons */}
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const signer = await provider.getSigner();
+                                const flexContract = new ethers.Contract(
+                                  CONTRACT_ADDRESSES.lpStakingFlexV4,
+                                  LP_STAKING_FLEX_V4_ABI,
+                                  signer
+                                );
+                                showToast('🎁 Claiming Flex rewards...', 'info');
+                                const tx = await flexContract.claimRewards(stake.stakeIndex);
+                                await tx.wait();
+                                showToast('✅ Flex rewards claimed!', 'success');
+                                fetchStakedPosition();
+                              } catch (err) {
+                                showToast(`❌ Claim failed: ${err.message}`, 'error');
+                              }
+                            }}
+                            disabled={loading}
+                            style={{
+                              flex: 1,
+                              padding: '10px 16px',
+                              background: 'linear-gradient(135deg, #4CAF50, #2E7D32)',
+                              border: 'none',
+                              borderRadius: '12px',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              color: '#fff',
+                              cursor: loading ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            🎁 Claim Rewards
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const signer = await provider.getSigner();
+                                const flexContract = new ethers.Contract(
+                                  CONTRACT_ADDRESSES.lpStakingFlexV4,
+                                  LP_STAKING_FLEX_V4_ABI,
+                                  signer
+                                );
+                                showToast('💗 Withdrawing Flex stake...', 'info');
+                                const tx = await flexContract.withdraw(stake.stakeIndex);
+                                await tx.wait();
+                                
+                                // Record to Flex History
+                                const historyRecord = {
+                                  id: `flex-history-${Date.now()}`,
+                                  lpAmount: stake.amount,
+                                  lpValueUsd: lpValue,
+                                  rewardsLp: pendingRewards,
+                                  rewardsUsd: rewardValue,
+                                  daysStaked: daysStaked,
+                                  startDate: stake.startTime,
+                                  endDate: Date.now(),
+                                  profitLoss: rewardValue, // Flex has no penalty, so profit = rewards
+                                };
+                                setFlexHistory(prev => [historyRecord, ...prev]);
+                                
+                                showToast(`✅ Flex stake ended! ${formatNumber(stake.amount, 2)} LP + ${formatNumber(pendingRewards, 4)} LP rewards returned to wallet (≈ $${formatNumber(lpValue + rewardValue, 2)})`, 'success');
+                                fetchStakedPosition();
+                              } catch (err) {
+                                showToast(`❌ Withdraw failed: ${err.message}`, 'error');
+                              }
+                            }}
+                            disabled={loading}
+                            style={{
+                              flex: 1,
+                              padding: '10px 16px',
+                              background: 'linear-gradient(135deg, #FF1493, #FF69B4)',
+                              border: 'none',
+                              borderRadius: '12px',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              color: '#fff',
+                              cursor: loading ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            💗 Withdraw All
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {/* In-Memory Flex Stakes (from Dapper zap) */}
                   {flexStakes.map((stake, idx) => {
+                    const contractFlexCount = stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX').length;
+                    const stakeNum = contractFlexCount + idx + 1;
                     const now = Date.now();
                     const daysStaked = (now - stake.timestamp) / (24 * 60 * 60 * 1000);
                     const stakeValue = stake.stakeValue || stake.totalValue || 0;
                     const pendingRewards = (stakeValue * 0.10 / 365) * daysStaked;
                     
                     return (
-                      <div key={stake.id || idx} style={{
+                      <div key={stake.id || `memory-flex-${idx}`} style={{
                         background: 'rgba(0,0,0,0.3)',
                         borderRadius: '16px',
                         padding: '20px',
@@ -9537,7 +9751,7 @@ export default function App() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                           <div>
                             <div style={{ color: '#FF1493', fontWeight: 700, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              💗 Flex LP Stake #{idx + 1}
+                              💗 Flex LP #{stakeNum}
                               <span style={{
                                 background: '#4CAF50',
                                 color: '#fff',
@@ -9546,9 +9760,17 @@ export default function App() {
                                 borderRadius: '8px',
                                 fontWeight: 700,
                               }}>NO LOCK</span>
+                              <span style={{
+                                background: '#9C27B0',
+                                color: '#fff',
+                                fontSize: '0.5rem',
+                                padding: '2px 6px',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                              }}>DAPPER</span>
                             </div>
                             <div style={{ color: '#FF69B4', fontSize: '0.8rem', marginTop: '4px' }}>
-                              10% APR • {daysStaked.toFixed(1)} days staked
+                              10% APR • {daysStaked.toFixed(1)} days • LP in wallet
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
@@ -9607,14 +9829,43 @@ export default function App() {
                                 showToast('💗 Withdrawing Flex stake...', 'info');
                                 const tx = await flexContract.withdraw(stake.stakeIndex);
                                 await tx.wait();
-                                showToast('✅ Flex stake withdrawn!', 'success');
+                                
+                                // Record to history
+                                const historyRecord = {
+                                  id: `flex-history-${Date.now()}`,
+                                  lpAmount: stake.lpAmount || stake.amount,
+                                  lpValueUsd: stakeValue,
+                                  rewardsLp: pendingRewards / (livePrices.dtgc || 0.0005),
+                                  rewardsUsd: pendingRewards,
+                                  daysStaked: daysStaked,
+                                  startDate: stake.timestamp,
+                                  endDate: Date.now(),
+                                  profitLoss: pendingRewards,
+                                };
+                                setFlexHistory(prev => [historyRecord, ...prev]);
+                                
+                                showToast(`✅ Flex stake ended! LP + rewards returned to wallet`, 'success');
                                 fetchStakedPosition();
                               } catch (err) {
                                 showToast(`❌ Withdraw failed: ${err.message}`, 'error');
                               }
                             } else {
-                              // In-memory stake from Dapper zap - LP is in wallet
-                              showToast('💗 LP tokens are already in your wallet from the Dapper zap!', 'info');
+                              // In-memory stake from Dapper zap - record and remove
+                              const historyRecord = {
+                                id: `flex-history-${Date.now()}`,
+                                lpAmount: stake.lpAmount || 0,
+                                lpValueUsd: stakeValue,
+                                rewardsLp: pendingRewards / (livePrices.dtgc || 0.0005),
+                                rewardsUsd: pendingRewards,
+                                daysStaked: daysStaked,
+                                startDate: stake.timestamp,
+                                endDate: Date.now(),
+                                profitLoss: pendingRewards,
+                                plsReturned: stake.plsReturned || 0,
+                              };
+                              setFlexHistory(prev => [historyRecord, ...prev]);
+                              setFlexStakes(prev => prev.filter(s => s.id !== stake.id));
+                              showToast(`✅ Flex stake recorded! ${formatNumber(stake.lpAmount || 0, 2)} LP in wallet • +$${formatNumber(pendingRewards, 2)} rewards earned`, 'success');
                             }
                           }}
                           disabled={loading}
@@ -9632,7 +9883,7 @@ export default function App() {
                             opacity: loading ? 0.7 : 1,
                           }}
                         >
-                          💗 {stake.stakeIndex !== undefined ? 'Withdraw LP + Rewards' : 'LP in Wallet ✓'}
+                          💗 {stake.stakeIndex !== undefined ? 'Withdraw LP + Rewards' : 'Complete & Record ✓'}
                         </button>
                       </div>
                     );
@@ -11804,8 +12055,110 @@ export default function App() {
               </div>
               
               <p style={{ color: '#888', fontSize: '0.85rem', marginBottom: '24px', textAlign: 'center' }}>
-                Your completed stakes displayed as gold bars • {stakeHistory.length} total records
+                Your completed stakes displayed as gold bars • {stakeHistory.length + flexHistory.length} total records
               </p>
+
+              {/* 💗 FLEX HISTORY SECTION */}
+              {flexHistory.length > 0 && (
+                <div style={{
+                  marginBottom: '24px',
+                  padding: '20px',
+                  background: 'linear-gradient(135deg, rgba(255,20,147,0.15) 0%, rgba(255,105,180,0.05) 100%)',
+                  borderRadius: '16px',
+                  border: '2px solid #FF1493',
+                }}>
+                  <h3 style={{
+                    color: '#FF1493',
+                    fontFamily: 'Cinzel, serif',
+                    fontSize: '1rem',
+                    letterSpacing: '2px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}>
+                    💗 FLEX STAKE HISTORY
+                    <span style={{
+                      background: '#FF1493',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      fontSize: '0.6rem',
+                      color: '#fff',
+                    }}>{flexHistory.length}</span>
+                  </h3>
+                  
+                  {/* Flex Summary */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '12px',
+                    marginBottom: '16px',
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '10px',
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#888', fontSize: '0.65rem' }}>TOTAL LP</div>
+                      <div style={{ color: '#FF1493', fontWeight: 700 }}>{formatNumber(flexHistory.reduce((sum, r) => sum + (r.lpAmount || 0), 0), 2)}</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#888', fontSize: '0.65rem' }}>REWARDS EARNED</div>
+                      <div style={{ color: '#4CAF50', fontWeight: 700 }}>+${formatNumber(flexHistory.reduce((sum, r) => sum + (r.rewardsUsd || 0), 0), 2)}</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#888', fontSize: '0.65rem' }}>NET P&L</div>
+                      <div style={{ 
+                        color: flexHistory.reduce((sum, r) => sum + (r.profitLoss || 0), 0) >= 0 ? '#4CAF50' : '#FF6B6B', 
+                        fontWeight: 700 
+                      }}>
+                        {flexHistory.reduce((sum, r) => sum + (r.profitLoss || 0), 0) >= 0 ? '+' : ''}
+                        ${formatNumber(flexHistory.reduce((sum, r) => sum + (r.profitLoss || 0), 0), 2)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Flex Records */}
+                  {flexHistory.map((record, idx) => (
+                    <div key={record.id || idx} style={{
+                      background: 'rgba(0,0,0,0.4)',
+                      borderRadius: '10px',
+                      padding: '14px',
+                      marginBottom: idx < flexHistory.length - 1 ? '10px' : 0,
+                      border: `1px solid ${record.profitLoss >= 0 ? 'rgba(76,175,80,0.3)' : 'rgba(255,107,107,0.3)'}`,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div>
+                          <div style={{ color: '#FF1493', fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            💗 Flex Stake #{idx + 1}
+                            <span style={{
+                              background: record.profitLoss >= 0 ? '#4CAF50' : '#FF6B6B',
+                              color: '#fff',
+                              fontSize: '0.5rem',
+                              padding: '2px 6px',
+                              borderRadius: '6px',
+                            }}>{record.profitLoss >= 0 ? 'PROFIT' : 'LOSS'}</span>
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.7rem', marginTop: '4px' }}>
+                            {record.daysStaked?.toFixed(1) || 0} days • Ended {record.endDate ? new Date(record.endDate).toLocaleDateString() : 'N/A'}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: '#FFD700', fontWeight: 700 }}>{formatNumber(record.lpAmount || 0, 2)} LP</div>
+                          <div style={{ color: '#FF69B4', fontSize: '0.7rem' }}>≈ ${formatNumber(record.lpValueUsd || 0, 2)}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: record.profitLoss >= 0 ? '#4CAF50' : '#FF6B6B', fontWeight: 700, fontSize: '1.1rem' }}>
+                            {record.profitLoss >= 0 ? '+' : ''}${formatNumber(record.profitLoss || 0, 2)}
+                          </div>
+                          <div style={{ color: '#81C784', fontSize: '0.65rem' }}>
+                            +{formatNumber(record.rewardsLp || 0, 4)} LP rewards
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Summary Stats */}
               {stakeHistory.length > 0 && (
