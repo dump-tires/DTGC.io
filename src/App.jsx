@@ -9634,7 +9634,6 @@ export default function App() {
                         >
                           💗 {stake.stakeIndex !== undefined ? 'Withdraw LP + Rewards' : 'LP in Wallet ✓'}
                         </button>
-                        </button>
                       </div>
                     );
                   })}
