@@ -182,7 +182,7 @@ const V5_STAKING_TIERS = [
     id: 0,
     name: 'SILVER',
     icon: '🥈',
-    minInvest: 200,
+    minInvest: 5,
     lockDays: 60,
     holdDays: 60,
     apr: 15.4,     // Reduced 30% from 22%
@@ -196,7 +196,7 @@ const V5_STAKING_TIERS = [
     id: 1,
     name: 'GOLD',
     icon: '🥇',
-    minInvest: 500,
+    minInvest: 5,
     lockDays: 90,
     holdDays: 90,
     apr: 16.8,     // Reduced 30% from 24%
@@ -228,7 +228,7 @@ const V5_DIAMOND_TIER = {
   id: 3,
   name: 'DIAMOND',
   icon: '💎',
-  minInvest: 1,               // No minimum - anyone can stake!
+  minInvest: 5,               // Minimum $5
   maxInvest: 25000,           // Maximum $25,000
   lockDays: 90,
   holdDays: 90,
@@ -247,7 +247,7 @@ const V5_DIAMOND_PLUS_TIER = {
   id: 4,
   name: 'DIAMOND+',
   icon: '💜💎',
-  minInvest: 1,               // No minimum - anyone can stake!
+  minInvest: 5,               // Minimum $5
   maxInvest: 25000,           // Maximum $25,000
   lockDays: 90,
   holdDays: 90,
