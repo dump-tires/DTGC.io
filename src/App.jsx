@@ -6494,6 +6494,24 @@ export default function App() {
                       <div style={{ fontSize: '0.65rem', color: '#4CAF50', fontWeight: 600, marginBottom: '2px' }}>REWARDS</div>
                       <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>{formatNumber(totalRewards)}</div>
                     </div>
+                    
+                    {/* Flex Total - Pink Heart */}
+                    <div 
+                      onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
+                      style={{
+                        flex: 1,
+                        background: 'rgba(255,20,147,0.15)',
+                        border: '1px solid rgba(255,20,147,0.4)',
+                        borderRadius: '8px',
+                        padding: '6px 8px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.65rem', color: '#FF1493', fontWeight: 600, marginBottom: '2px' }}>💗 FLEX</div>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#FF69B4' }}>10% APR</div>
+                    </div>
                   </div>
                 );
               })()}
@@ -6647,11 +6665,12 @@ export default function App() {
                   case 'WHALE': return '#2196F3';
                   case 'DIAMOND': return '#00BCD4';
                   case 'DIAMOND+': return '#9C27B0';
+                  case 'FLEX': return '#FF1493';
                   default: return '#D4AF37';
                 }
               };
               const tierColor = getTierColor(tierName);
-              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜💎' : tierName === 'DIAMOND' ? '💎' : '🥇';
+              const tierIcon = tierName === 'SILVER' ? '🥈' : tierName === 'GOLD' ? '🥇' : tierName === 'WHALE' ? '🐋' : tierName === 'DIAMOND+' ? '💜💎' : tierName === 'DIAMOND' ? '💎' : tierName === 'FLEX' ? '💗' : '🥇';
 
               return (
                 <>
@@ -7904,6 +7923,47 @@ export default function App() {
                 </div>
                   );
                 })()}
+
+                {/* FLEX Tier Card */}
+                <div
+                  className={`tier-card flex ${isFlexTier ? 'selected' : ''}`}
+                  onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
+                  style={{ 
+                    flex: '0 1 280px', 
+                    maxWidth: '320px', 
+                    background: 'linear-gradient(135deg, rgba(255,20,147,0.15) 0%, rgba(255,105,180,0.1) 50%, rgba(255,182,193,0.05) 100%)', 
+                    border: isFlexTier ? '3px solid #FF1493' : '2px solid #FF1493',
+                    boxShadow: isFlexTier ? '0 0 20px rgba(255,20,147,0.5)' : '0 8px 32px rgba(255,20,147,0.2)',
+                    transform: isFlexTier ? 'scale(1.02)' : 'scale(1)',
+                    transition: 'all 0.3s ease',
+                  }}
+                >
+                  <div className="tier-icon" style={{ fontSize: '2.5rem' }}>💗⚡</div>
+                  <div className="tier-name" style={{ color: '#FF1493' }}>FLEX</div>
+                  <div className="tier-subtitle" style={{ color: '#FF69B4' }}>COIN CLEAN • NO LOCK!</div>
+                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    Requires $1,000+ Diamond/Diamond+
+                  </div>
+                  <div className="tier-apr-container">
+                    <div className="tier-apr" style={{ color: '#FF1493', fontSize: '2.2rem' }}>10.0%</div>
+                    <div className="tier-apr-label">APR</div>
+                  </div>
+                  <div className="tier-features">
+                    <div className="tier-feature">
+                      <span className="tier-feature-label">Lock</span>
+                      <span className="tier-feature-value" style={{ color: '#4CAF50', fontWeight: '700' }}>NONE</span>
+                    </div>
+                    <div className="tier-feature">
+                      <span className="tier-feature-label">Tax</span>
+                      <span className="tier-feature-value" style={{ color: '#FFD700', fontWeight: '700' }}>2%</span>
+                    </div>
+                    <div className="tier-feature">
+                      <span className="tier-feature-label">Exit</span>
+                      <span className="tier-feature-value" style={{ color: '#4CAF50', fontWeight: '700' }}>Anytime</span>
+                    </div>
+                  </div>
+                  <span className="tier-badge" style={{ background: 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)' }}>FLEX</span>
+                </div>
               </div>
 
               {/* LP Staking Rewards Remaining */}
