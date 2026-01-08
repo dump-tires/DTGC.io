@@ -1,4 +1,5 @@
-import DapperComponent from './components/DapperComponent';import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
+import DapperComponent from './components/DapperComponent';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { ethers } from 'ethers';
 // WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
 // import { EthereumProvider } from '@walletconnect/ethereum-provider';
