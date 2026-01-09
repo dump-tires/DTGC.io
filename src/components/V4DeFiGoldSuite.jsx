@@ -43,7 +43,7 @@ const CONFIG = {
   EXPLORER: 'https://scan.pulsechain.com',
 };
 
-// All major PulseX tokens - VERIFIED ADDRESSES
+// All major PulseX tokens - VERIFIED ADDRESSES (lowercase to avoid checksum issues)
 const TOKENS = {
   PLS: { 
     address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
@@ -54,7 +54,7 @@ const TOKENS = {
     isNative: true,
   },
   DTGC: { 
-    address: '0xd0676B28a457371d58d47e5247b439114e40eb0f', 
+    address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', 
     symbol: 'DTGC', 
     name: 'DT Gold Coin', 
     decimals: 18, 
@@ -62,7 +62,7 @@ const TOKENS = {
     isNative: false,
   },
   URMOM: { 
-    address: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',
+    address: '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0',
     symbol: 'URMOM', 
     name: 'URMOM', 
     decimals: 18, 
@@ -163,6 +163,15 @@ const PAIR_ABI = [
   'function token0() external view returns (address)',
   'function balanceOf(address owner) view returns (uint256)',
 ];
+
+// Helper to normalize addresses for ethers v6
+const getAddr = (addr) => {
+  try {
+    return ethers.getAddress(addr.toLowerCase());
+  } catch {
+    return addr;
+  }
+};
 
 // Styles
 const styles = {
@@ -313,7 +322,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const tokenPromises = Object.entries(TOKENS).map(async ([symbol, token]) => {
         if (token.isNative) return;
         try {
-          const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
+          const contract = new ethers.Contract(getAddr(token.address), ERC20_ABI, provider);
           const bal = await contract.balanceOf(userAddress);
           newBalances[symbol] = parseFloat(ethers.formatUnits(bal, token.decimals));
         } catch {
@@ -403,7 +412,10 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           const token1 = TOKENS[sym1];
           if (!token0 || !token1) return;
           
-          const lpAddr = await factory.getPair(token0.address, token1.address);
+          const addr0 = getAddr(token0.address);
+          const addr1 = getAddr(token1.address);
+          
+          const lpAddr = await factory.getPair(addr0, addr1);
           if (!lpAddr || lpAddr === ethers.ZeroAddress) return;
           
           const lpContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
@@ -432,15 +444,18 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const toTokenData = TOKENS[to];
       if (!fromTokenData || !toTokenData) { setToAmount(''); return; }
       
+      const fromAddr = getAddr(fromTokenData.address);
+      const toAddr = getAddr(toTokenData.address);
+      
       const amountIn = ethers.parseUnits(inputAmount, fromTokenData.decimals);
-      let path = [fromTokenData.address, toTokenData.address];
+      let path = [fromAddr, toAddr];
       let amounts;
       
       try {
         amounts = await router.getAmountsOut(amountIn, path);
       } catch {
-        if (fromTokenData.address !== CONFIG.WPLS && toTokenData.address !== CONFIG.WPLS) {
-          path = [fromTokenData.address, CONFIG.WPLS, toTokenData.address];
+        if (fromAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase() && toAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase()) {
+          path = [fromAddr, getAddr(CONFIG.WPLS), toAddr];
           amounts = await router.getAmountsOut(amountIn, path);
         }
       }
@@ -472,14 +487,17 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const toTokenData = TOKENS[toToken];
       const deadline = getDeadline();
       
+      const fromAddr = getAddr(fromTokenData.address);
+      const toAddr = getAddr(toTokenData.address);
+      
       const inputAmount = ethers.parseUnits(fromAmount, fromTokenData.decimals);
       const expectedOutput = ethers.parseUnits(toAmount, toTokenData.decimals);
       const amountOutMin = expectedOutput * BigInt(10000 - CONFIG.SLIPPAGE_BPS) / 10000n;
       
-      let path = [fromTokenData.address, toTokenData.address];
+      let path = [fromAddr, toAddr];
       try { await router.getAmountsOut(inputAmount, path); } catch {
-        if (fromTokenData.address !== CONFIG.WPLS && toTokenData.address !== CONFIG.WPLS) {
-          path = [fromTokenData.address, CONFIG.WPLS, toTokenData.address];
+        if (fromAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase() && toAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase()) {
+          path = [fromAddr, getAddr(CONFIG.WPLS), toAddr];
         }
       }
       
@@ -488,7 +506,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(amountOutMin, path, userAddress, deadline, { value: inputAmount });
         await tx.wait();
       } else if (toToken === 'PLS') {
-        const tokenContract = new ethers.Contract(fromTokenData.address, ERC20_ABI, signer);
+        const tokenContract = new ethers.Contract(fromAddr, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
         if (allowance < inputAmount) {
           showToastMsg('Approving ' + fromToken + '...', 'info');
@@ -499,7 +517,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         const tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline);
         await tx.wait();
       } else {
-        const tokenContract = new ethers.Contract(fromTokenData.address, ERC20_ABI, signer);
+        const tokenContract = new ethers.Contract(fromAddr, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
         if (allowance < inputAmount) {
           showToastMsg('Approving ' + fromToken + '...', 'info');
@@ -532,17 +550,27 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const token1 = TOKENS[lpToken1];
       if (!token0 || !token1) return;
       
-      const lpAddr = await factory.getPair(token0.address, token1.address);
+      const addr0 = getAddr(token0.address);
+      const addr1 = getAddr(token1.address);
+      
+      console.log('Fetching pair for:', addr0, addr1);
+      const lpAddr = await factory.getPair(addr0, addr1);
+      console.log('Pair address:', lpAddr);
+      
       if (lpAddr && lpAddr !== ethers.ZeroAddress) {
         setPairAddress(lpAddr);
         const pairContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
         const [reserves, pairToken0] = await Promise.all([pairContract.getReserves(), pairContract.token0()]);
-        const isToken0First = pairToken0.toLowerCase() === token0.address.toLowerCase();
+        const isToken0First = pairToken0.toLowerCase() === addr0.toLowerCase();
         setPairReserves({ reserve0: isToken0First ? reserves[0] : reserves[1], reserve1: isToken0First ? reserves[1] : reserves[0] });
+        console.log('Reserves:', reserves[0].toString(), reserves[1].toString());
       } else {
         setPairAddress(null); setPairReserves(null);
       }
-    } catch { setPairAddress(null); setPairReserves(null); }
+    } catch (err) {
+      console.error('Pair fetch error:', err);
+      setPairAddress(null); setPairReserves(null);
+    }
   }, [provider, lpToken0, lpToken1]);
 
   useEffect(() => { fetchPairInfo(); }, [fetchPairInfo]);
@@ -570,6 +598,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const token0 = TOKENS[lpToken0];
       const token1 = TOKENS[lpToken1];
       
+      const addr0 = getAddr(token0.address);
+      const addr1 = getAddr(token1.address);
+      
       const amount0Desired = ethers.parseUnits(lpAmount0, token0.decimals);
       const amount1Desired = ethers.parseUnits(lpAmount1, token1.decimals);
       const amount0Min = amount0Desired * BigInt(10000 - CONFIG.SLIPPAGE_BPS) / 10000n;
@@ -577,31 +608,31 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const deadline = getDeadline();
       
       if (lpToken1 === 'PLS') {
-        const tokenContract = new ethers.Contract(token0.address, ERC20_ABI, signer);
+        const tokenContract = new ethers.Contract(addr0, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
         if (allowance < amount0Desired) {
           showToastMsg('Approving ' + lpToken0 + '...', 'info');
           await (await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait();
         }
         showToastMsg('Adding liquidity...', 'info');
-        await (await router.addLiquidityETH(token0.address, amount0Desired, amount0Min, amount1Min, userAddress, deadline, { value: amount1Desired })).wait();
+        await (await router.addLiquidityETH(addr0, amount0Desired, amount0Min, amount1Min, userAddress, deadline, { value: amount1Desired })).wait();
       } else if (lpToken0 === 'PLS') {
-        const tokenContract = new ethers.Contract(token1.address, ERC20_ABI, signer);
+        const tokenContract = new ethers.Contract(addr1, ERC20_ABI, signer);
         const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
         if (allowance < amount1Desired) {
           showToastMsg('Approving ' + lpToken1 + '...', 'info');
           await (await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait();
         }
         showToastMsg('Adding liquidity...', 'info');
-        await (await router.addLiquidityETH(token1.address, amount1Desired, amount1Min, amount0Min, userAddress, deadline, { value: amount0Desired })).wait();
+        await (await router.addLiquidityETH(addr1, amount1Desired, amount1Min, amount0Min, userAddress, deadline, { value: amount0Desired })).wait();
       } else {
-        const token0Contract = new ethers.Contract(token0.address, ERC20_ABI, signer);
-        const token1Contract = new ethers.Contract(token1.address, ERC20_ABI, signer);
+        const token0Contract = new ethers.Contract(addr0, ERC20_ABI, signer);
+        const token1Contract = new ethers.Contract(addr1, ERC20_ABI, signer);
         const [allowance0, allowance1] = await Promise.all([token0Contract.allowance(userAddress, CONFIG.ROUTER), token1Contract.allowance(userAddress, CONFIG.ROUTER)]);
         if (allowance0 < amount0Desired) { showToastMsg('Approving ' + lpToken0 + '...', 'info'); await (await token0Contract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait(); }
         if (allowance1 < amount1Desired) { showToastMsg('Approving ' + lpToken1 + '...', 'info'); await (await token1Contract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait(); }
         showToastMsg('Adding liquidity...', 'info');
-        await (await router.addLiquidity(token0.address, token1.address, amount0Desired, amount1Desired, amount0Min, amount1Min, userAddress, deadline)).wait();
+        await (await router.addLiquidity(addr0, addr1, amount0Desired, amount1Desired, amount0Min, amount1Min, userAddress, deadline)).wait();
       }
       
       showToastMsg(`✅ Added ${lpToken0}/${lpToken1} liquidity!`, 'success');
