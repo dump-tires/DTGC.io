@@ -19,6 +19,9 @@ import { ethers } from 'ethers';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CONFIG = {
+  // PublicNode RPC - Free, fast, no API key needed
+  RPC_URL: 'https://pulsechain.publicnode.com',
+  
   ROUTER: '0x165C3410fC91EF562C50559f7d2289fEbed552d9',
   FACTORY: '0x1715a3E4A142d8b698131108995174F37aEBA10D',
   

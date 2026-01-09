@@ -473,7 +473,7 @@ const PULSECHAIN_API = {
   holders: '/api/holders',
   tokenInfo: '/api/token-info',
   // Direct RPC for contract calls (doesn't have CORS issues)
-  rpc: 'https://rpc.pulsechain.com',
+  rpc: 'https://pulsechain.publicnode.com',
 };
 
 // Wallets to EXCLUDE from ticker (DAO, Dev, LP, Burn, Staking Rewards)
@@ -3884,7 +3884,7 @@ export default function App() {
         }
         
         console.log('🔍 Checking LP stake for:', addr);
-        const rpc = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+        const rpc = new ethers.JsonRpcProvider('https://pulsechain.publicnode.com');
         const lpContract = new ethers.Contract(
           CONTRACT_ADDRESSES.lpStakingV3,
           FALLBACK_LP_STAKING_V3_ABI,
@@ -3927,7 +3927,7 @@ export default function App() {
         }
         
         console.log('🔍 Checking DTGC stake for:', addr);
-        const rpc = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+        const rpc = new ethers.JsonRpcProvider('https://pulsechain.publicnode.com');
         const contract = new ethers.Contract(
           CONTRACT_ADDRESSES.stakingV3,
           FALLBACK_STAKING_V3_ABI,
@@ -4113,7 +4113,7 @@ export default function App() {
   const fetchTotalStaked = useCallback(async () => {
     try {
       // Use public RPC to query contract
-      const provider = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+      const provider = new ethers.JsonRpcProvider('https://pulsechain.publicnode.com');
       const stakingContract = new ethers.Contract(
         CONTRACT_ADDRESSES.stakingV4,
         ['function totalStaked() external view returns (uint256)'],
@@ -4433,7 +4433,7 @@ export default function App() {
   // Fetch DTGC burns from blockchain
   const fetchDtgcBurns = useCallback(async () => {
     try {
-      const rpcProvider = new ethers.JsonRpcProvider('https://rpc.pulsechain.com');
+      const rpcProvider = new ethers.JsonRpcProvider('https://pulsechain.publicnode.com');
       const dtgcContract = new ethers.Contract(
         DTGC_TOKEN_ADDRESS,
         ['function balanceOf(address) view returns (uint256)'],
@@ -4667,7 +4667,7 @@ export default function App() {
                   chainId: '0x171',
                   chainName: 'PulseChain',
                   nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
-                  rpcUrls: ['https://rpc.pulsechain.com'],
+                  rpcUrls: ['https://pulsechain.publicnode.com'],
                   blockExplorerUrls: ['https://otter.pulsechain.com'],
                 }],
               });
@@ -4804,7 +4804,7 @@ export default function App() {
                   chainId: '0x171',
                   chainName: 'PulseChain',
                   nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
-                  rpcUrls: ['https://rpc.pulsechain.com'],
+                  rpcUrls: ['https://pulsechain.publicnode.com'],
                   blockExplorerUrls: ['https://otter.pulsechain.com'],
                 }],
               });
@@ -5029,7 +5029,7 @@ export default function App() {
           icons: [`${window.location.origin}/favicon1.png`],
         },
         rpcMap: {
-          [CHAIN_ID]: 'https://rpc.pulsechain.com',
+          [CHAIN_ID]: 'https://pulsechain.publicnode.com',
         },
       });
 
@@ -5123,7 +5123,7 @@ export default function App() {
                   chainId: '0x171',
                   chainName: 'PulseChain',
                   nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
-                  rpcUrls: ['https://rpc.pulsechain.com'],
+                  rpcUrls: ['https://pulsechain.publicnode.com'],
                   blockExplorerUrls: ['https://otter.pulsechain.com'],
                 }],
               });
@@ -6223,7 +6223,7 @@ export default function App() {
     // RPC endpoints to try (primary + backups)
     const RPC_ENDPOINTS = [
       null, // null = use connected wallet provider first
-      'https://rpc.pulsechain.com',
+      'https://pulsechain.publicnode.com',
       'https://pulsechain-rpc.publicnode.com',
       'https://rpc-pulsechain.g4mm4.io',
     ];
