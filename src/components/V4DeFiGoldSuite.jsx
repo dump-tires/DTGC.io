@@ -196,112 +196,107 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     return () => clearInterval(interval);
   }, [fetchLivePrices]);
 
-  // Full wallet scan via PulseScan API
+  // Optimized LP fetch - parallel calls (defined first so scanWalletTokens can use it)
+  const fetchLpBalancesOptimized = useCallback(async () => {
+    if (!provider || !userAddress) return {};
+    try {
+      const factory = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
+      const pairs = Object.entries(CONFIG.LP_PAIRS);
+      
+      // Get all pair addresses in parallel
+      const pairAddresses = await Promise.all(
+        pairs.map(([, pair]) => factory.getPair(CONFIG.TOKENS[pair.token0].address, CONFIG.TOKENS[pair.token1].address).catch(() => ethers.ZeroAddress))
+      );
+      
+      // Get all LP balances in parallel
+      const balancePromises = pairAddresses.map((addr, i) => {
+        if (!addr || addr === ethers.ZeroAddress) return Promise.resolve({ name: pairs[i][0], balance: 0, address: null });
+        const lpContract = new ethers.Contract(addr, ERC20_ABI, provider);
+        return lpContract.balanceOf(userAddress).then(bal => ({ name: pairs[i][0], balance: parseFloat(ethers.formatEther(bal)), address: addr })).catch(() => ({ name: pairs[i][0], balance: 0, address: null }));
+      });
+      
+      const results = await Promise.all(balancePromises);
+      const lpBalances = {};
+      results.forEach(r => { if (r.balance > 0) lpBalances[r.name] = { address: r.address, balance: r.balance }; });
+      return lpBalances;
+    } catch { return {}; }
+  }, [provider, userAddress]);
+
+  // OPTIMIZED: Full wallet scan - parallel calls, PulseScan API first
   const scanWalletTokens = useCallback(async () => {
     if (!provider || !userAddress) return;
     setLoadingBalances(true);
-    showToast('🔍 Scanning wallet for all tokens...', 'info');
+    showToast('🔍 Scanning...', 'info');
     
     try {
       const foundTokens = [];
-      const checkedAddresses = new Set();
+      const seenAddresses = new Set();
       
-      // 1. PLS balance
-      const plsBal = await provider.getBalance(userAddress);
+      // PARALLEL: Fetch PLS balance + PulseScan API + LP balances ALL AT ONCE
+      const [plsBal, pulseScanData, lpData] = await Promise.all([
+        provider.getBalance(userAddress),
+        fetch(`${CONFIG.PULSESCAN_API}/addresses/${userAddress}/token-balances`).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetchLpBalancesOptimized(),
+      ]);
+      
+      // 1. Add PLS
       const plsBalFormatted = ethers.formatEther(plsBal);
-      if (parseFloat(plsBalFormatted) > 0) {
-        foundTokens.push({ symbol: 'PLS', name: 'PulseChain', address: null, decimals: 18, balance: plsBalFormatted, icon: '💜', color: '#E1BEE7', valueUsd: parseFloat(plsBalFormatted) * livePrices.pls, price: livePrices.pls, hasLiquidity: true });
+      const plsBalNum = parseFloat(plsBalFormatted);
+      if (plsBalNum > 0) {
+        foundTokens.push({ symbol: 'PLS', name: 'PulseChain', address: null, decimals: 18, balance: plsBalFormatted, icon: '💜', color: '#E1BEE7', valueUsd: plsBalNum * livePrices.pls, price: livePrices.pls, hasLiquidity: true });
       }
-      setBalances(prev => ({ ...prev, PLS: parseFloat(plsBalFormatted) }));
+      setBalances(prev => ({ ...prev, PLS: plsBalNum }));
       
-      // 2. Known tokens
-      for (const token of CONFIG.KNOWN_TOKENS) {
-        if (!token.address) continue;
-        checkedAddresses.add(token.address.toLowerCase());
-        try {
-          const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
-          const bal = await contract.balanceOf(userAddress);
-          if (bal > 0n) {
-            const balFormatted = ethers.formatUnits(bal, token.decimals);
-            let price = 0;
-            const sym = token.symbol.toUpperCase();
-            if (sym === 'DTGC') price = livePrices.dtgc;
-            else if (sym === 'URMOM') price = livePrices.urmom;
-            else if (sym === 'PLSX') price = livePrices.plsx;
-            else if (sym === 'HEX') price = livePrices.hex;
-            else if (sym === 'WPLS') price = livePrices.pls;
-            else if (sym === 'INC') price = livePrices.inc;
-            foundTokens.push({ ...token, balance: balFormatted, valueUsd: parseFloat(balFormatted) * price, price, hasLiquidity: true });
-            setBalances(prev => ({ ...prev, [sym]: parseFloat(balFormatted) }));
-          }
-        } catch (e) {}
-      }
-      
-      // 3. PulseScan API - ALL tokens
-      try {
-        const apiUrl = `${CONFIG.PULSESCAN_API}/addresses/${userAddress}/token-balances`;
-        const response = await fetch(apiUrl);
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            for (const item of data) {
-              const tokenAddr = item.token?.address?.toLowerCase();
-              if (!tokenAddr || checkedAddresses.has(tokenAddr)) continue;
-              checkedAddresses.add(tokenAddr);
-              const decimals = parseInt(item.token?.decimals) || 18;
-              const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
-              if (bal <= 0) continue;
-              const tokenSymbol = (item.token?.symbol || '').toUpperCase();
-              let price = 0;
-              if (tokenSymbol === 'URMOM') price = livePrices.urmom;
-              else if (tokenSymbol === 'DTGC') price = livePrices.dtgc;
-              else if (tokenSymbol === 'PLSX') price = livePrices.plsx;
-              else if (tokenSymbol === 'HEX') price = livePrices.hex;
-              else if (tokenSymbol === 'WPLS') price = livePrices.pls;
-              foundTokens.push({ symbol: item.token?.symbol || 'UNKNOWN', name: item.token?.name || 'Unknown', address: item.token?.address, decimals, balance: bal.toString(), icon: price > 0 ? '💰' : '🔸', color: price > 0 ? '#4CAF50' : '#888', valueUsd: bal * price, price, hasLiquidity: price > 0 });
-            }
-          }
+      // 2. Process PulseScan data (ALL tokens in one response!)
+      if (Array.isArray(pulseScanData)) {
+        for (const item of pulseScanData) {
+          const tokenAddr = item.token?.address?.toLowerCase();
+          if (!tokenAddr || seenAddresses.has(tokenAddr)) continue;
+          seenAddresses.add(tokenAddr);
+          
+          const decimals = parseInt(item.token?.decimals) || 18;
+          const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
+          if (bal <= 0) continue;
+          
+          const sym = (item.token?.symbol || '').toUpperCase();
+          let price = 0, icon = '🔸', color = '#888', hasLiquidity = false;
+          
+          // Price lookup for known tokens
+          if (sym === 'DTGC') { price = livePrices.dtgc; icon = '🪙'; color = '#FFD700'; hasLiquidity = true; }
+          else if (sym === 'URMOM') { price = livePrices.urmom; icon = '🔥'; color = '#FF9800'; hasLiquidity = true; }
+          else if (sym === 'PLSX') { price = livePrices.plsx; icon = '🔷'; color = '#00BCD4'; hasLiquidity = true; }
+          else if (sym === 'HEX') { price = livePrices.hex; icon = '⬡'; color = '#FF00FF'; hasLiquidity = true; }
+          else if (sym === 'WPLS') { price = livePrices.pls; icon = '💜'; color = '#E1BEE7'; hasLiquidity = true; }
+          else if (sym === 'INC') { price = livePrices.inc; icon = '💎'; color = '#9C27B0'; hasLiquidity = true; }
+          else if (sym === 'DAI' || sym === 'USDC' || sym === 'USDT') { price = 1; icon = '💵'; color = '#26A17B'; hasLiquidity = true; }
+          
+          foundTokens.push({ symbol: item.token?.symbol || 'UNKNOWN', name: item.token?.name || 'Unknown', address: item.token?.address, decimals, balance: bal.toString(), icon, color, valueUsd: bal * price, price, hasLiquidity });
+          
+          // Update swap balances for our 3 tokens
+          if (sym === 'DTGC' || sym === 'URMOM') setBalances(prev => ({ ...prev, [sym]: bal }));
         }
-      } catch (e) { console.log('PulseScan API error:', e.message); }
+      }
       
-      // Sort
+      // Sort: liquidity first, then by USD value
       foundTokens.sort((a, b) => {
         if (a.hasLiquidity && !b.hasLiquidity) return -1;
         if (!a.hasLiquidity && b.hasLiquidity) return 1;
-        if (b.valueUsd !== a.valueUsd) return b.valueUsd - a.valueUsd;
-        return parseFloat(b.balance) - parseFloat(a.balance);
+        return (b.valueUsd || 0) - (a.valueUsd || 0);
       });
       
       setWalletTokens(foundTokens);
+      setLpBalances(lpData || {});
       setLastScanTime(Date.now());
       const total = foundTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0);
       setTotalPortfolioValue(total);
-      await fetchLpBalances();
-      showToast(`✅ Found ${foundTokens.length} tokens ($${total.toFixed(2)})`, 'success');
+      showToast(`✅ ${foundTokens.length} tokens ($${total.toFixed(2)})`, 'success');
     } catch (err) {
       console.error('Scan error:', err);
-      showToast('Scan failed: ' + err.message, 'error');
+      showToast('Scan failed', 'error');
     } finally { setLoadingBalances(false); }
-  }, [provider, userAddress, livePrices, showToast]);
+  }, [provider, userAddress, livePrices, showToast, fetchLpBalancesOptimized]);
 
-  const fetchLpBalances = useCallback(async () => {
-    if (!provider || !userAddress) return;
-    try {
-      const factory = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
-      const newLpBalances = {};
-      for (const [pairName, pair] of Object.entries(CONFIG.LP_PAIRS)) {
-        const token0Addr = CONFIG.TOKENS[pair.token0].address;
-        const token1Addr = CONFIG.TOKENS[pair.token1].address;
-        const lpAddress = await factory.getPair(token0Addr, token1Addr);
-        if (lpAddress && lpAddress !== ethers.ZeroAddress) {
-          const lpContract = new ethers.Contract(lpAddress, ERC20_ABI, provider);
-          const lpBal = await lpContract.balanceOf(userAddress);
-          newLpBalances[pairName] = { address: lpAddress, balance: parseFloat(ethers.formatEther(lpBal)) };
-        }
-      }
-      setLpBalances(newLpBalances);
-    } catch (err) { console.error('LP error:', err); }
-  }, [provider, userAddress]);
+  // LP balances now handled by fetchLpBalancesOptimized in scanWalletTokens
 
   useEffect(() => {
     if (activeTab === 'portfolio' && userAddress && walletTokens.length === 0) scanWalletTokens();
