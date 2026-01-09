@@ -26,7 +26,9 @@ import { ethers } from 'ethers';
 const CONFIG = {
   RPC_URL: 'https://pulsechain.publicnode.com',
   ROUTER: '0x165C3410fC91EF562C50559f7d2289fEbed552d9',
+  ROUTER_V2: '0x636f6407B90661b73b1C0F7e24F4C79f624d0738',
   FACTORY: '0x1715a3E4A142d8b698131108995174F37aEBA10D',
+  FACTORY_V2: '0x29eA7545DEf87022BAdc76323F373EA1e707C523',
   WPLS: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
   
   FEES: {
@@ -402,7 +404,8 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const fetchLpPositions = useCallback(async () => {
     if (!provider || !userAddress) return;
     try {
-      const factory = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
+      const factoryV1 = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
+      const factoryV2 = new ethers.Contract(CONFIG.FACTORY_V2, FACTORY_ABI, provider);
       const positions = [];
       const pairsToCheck = [['DTGC', 'PLS'], ['DTGC', 'URMOM'], ['URMOM', 'PLS'], ['PLSX', 'PLS'], ['HEX', 'PLS']];
       
@@ -415,7 +418,18 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           const addr0 = getAddr(token0.address);
           const addr1 = getAddr(token1.address);
           
-          const lpAddr = await factory.getPair(addr0, addr1);
+          // Try V1 first, then V2
+          let lpAddr = null;
+          try {
+            lpAddr = await factoryV1.getPair(addr0, addr1);
+          } catch {}
+          
+          if (!lpAddr || lpAddr === ethers.ZeroAddress) {
+            try {
+              lpAddr = await factoryV2.getPair(addr0, addr1);
+            } catch {}
+          }
+          
           if (!lpAddr || lpAddr === ethers.ZeroAddress) return;
           
           const lpContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
@@ -501,29 +515,38 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         }
       }
       
+      // Helper to safely check and approve
+      const checkAndApprove = async (tokenAddr, tokenSymbol, amount) => {
+        try {
+          const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
+          let allowance = 0n;
+          try {
+            allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
+          } catch (e) {
+            console.log('Allowance check failed, assuming 0:', e.message);
+          }
+          if (allowance < amount) {
+            showToastMsg('Approving ' + tokenSymbol + '...', 'info');
+            const tx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
+            await tx.wait();
+          }
+        } catch (e) {
+          console.error('Approval error:', e);
+          throw new Error(`Failed to approve ${tokenSymbol}: ${e.message}`);
+        }
+      };
+      
       if (fromToken === 'PLS') {
         showToastMsg('Swapping PLS...', 'info');
         const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(amountOutMin, path, userAddress, deadline, { value: inputAmount });
         await tx.wait();
       } else if (toToken === 'PLS') {
-        const tokenContract = new ethers.Contract(fromAddr, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
-        if (allowance < inputAmount) {
-          showToastMsg('Approving ' + fromToken + '...', 'info');
-          const approveTx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
-          await approveTx.wait();
-        }
+        await checkAndApprove(fromAddr, fromToken, inputAmount);
         showToastMsg('Swapping...', 'info');
         const tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline);
         await tx.wait();
       } else {
-        const tokenContract = new ethers.Contract(fromAddr, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
-        if (allowance < inputAmount) {
-          showToastMsg('Approving ' + fromToken + '...', 'info');
-          const approveTx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
-          await approveTx.wait();
-        }
+        await checkAndApprove(fromAddr, fromToken, inputAmount);
         showToastMsg('Swapping...', 'info');
         const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline);
         await tx.wait();
@@ -545,7 +568,6 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const fetchPairInfo = useCallback(async () => {
     if (!provider || !lpToken0 || !lpToken1 || lpToken0 === lpToken1) { setPairAddress(null); setPairReserves(null); return; }
     try {
-      const factory = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
       const token0 = TOKENS[lpToken0];
       const token1 = TOKENS[lpToken1];
       if (!token0 || !token1) return;
@@ -553,19 +575,49 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const addr0 = getAddr(token0.address);
       const addr1 = getAddr(token1.address);
       
-      console.log('Fetching pair for:', addr0, addr1);
-      const lpAddr = await factory.getPair(addr0, addr1);
-      console.log('Pair address:', lpAddr);
+      console.log('Fetching pair for:', lpToken0, lpToken1, addr0, addr1);
+      
+      // Try V1 factory first, then V2
+      let lpAddr = null;
+      let usedFactory = 'V1';
+      
+      try {
+        const factoryV1 = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
+        lpAddr = await factoryV1.getPair(addr0, addr1);
+        console.log('V1 Pair address:', lpAddr);
+      } catch (e) {
+        console.log('V1 factory error:', e.message);
+      }
+      
+      if (!lpAddr || lpAddr === ethers.ZeroAddress) {
+        try {
+          const factoryV2 = new ethers.Contract(CONFIG.FACTORY_V2, FACTORY_ABI, provider);
+          lpAddr = await factoryV2.getPair(addr0, addr1);
+          usedFactory = 'V2';
+          console.log('V2 Pair address:', lpAddr);
+        } catch (e) {
+          console.log('V2 factory error:', e.message);
+        }
+      }
       
       if (lpAddr && lpAddr !== ethers.ZeroAddress) {
         setPairAddress(lpAddr);
-        const pairContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
-        const [reserves, pairToken0] = await Promise.all([pairContract.getReserves(), pairContract.token0()]);
-        const isToken0First = pairToken0.toLowerCase() === addr0.toLowerCase();
-        setPairReserves({ reserve0: isToken0First ? reserves[0] : reserves[1], reserve1: isToken0First ? reserves[1] : reserves[0] });
-        console.log('Reserves:', reserves[0].toString(), reserves[1].toString());
+        console.log('Found pair on', usedFactory, ':', lpAddr);
+        
+        try {
+          const pairContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
+          const [reserves, pairToken0] = await Promise.all([pairContract.getReserves(), pairContract.token0()]);
+          const isToken0First = pairToken0.toLowerCase() === addr0.toLowerCase();
+          setPairReserves({ reserve0: isToken0First ? reserves[0] : reserves[1], reserve1: isToken0First ? reserves[1] : reserves[0] });
+          console.log('Reserves:', reserves[0].toString(), reserves[1].toString());
+        } catch (e) {
+          console.log('Reserve fetch error:', e.message);
+          setPairReserves(null);
+        }
       } else {
-        setPairAddress(null); setPairReserves(null);
+        console.log('No pair found on V1 or V2');
+        setPairAddress(null); 
+        setPairReserves(null);
       }
     } catch (err) {
       console.error('Pair fetch error:', err);
@@ -607,30 +659,38 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const amount1Min = amount1Desired * BigInt(10000 - CONFIG.SLIPPAGE_BPS) / 10000n;
       const deadline = getDeadline();
       
-      if (lpToken1 === 'PLS') {
-        const tokenContract = new ethers.Contract(addr0, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
-        if (allowance < amount0Desired) {
-          showToastMsg('Approving ' + lpToken0 + '...', 'info');
-          await (await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait();
+      // Helper to safely check and approve
+      const checkAndApprove = async (tokenAddr, tokenSymbol, amount) => {
+        try {
+          const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
+          let allowance = 0n;
+          try {
+            allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
+          } catch (e) {
+            console.log('Allowance check failed, assuming 0:', e.message);
+          }
+          if (allowance < amount) {
+            showToastMsg('Approving ' + tokenSymbol + '...', 'info');
+            const tx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
+            await tx.wait();
+          }
+        } catch (e) {
+          console.error('Approval error:', e);
+          throw new Error(`Failed to approve ${tokenSymbol}: ${e.message}`);
         }
+      };
+      
+      if (lpToken1 === 'PLS') {
+        await checkAndApprove(addr0, lpToken0, amount0Desired);
         showToastMsg('Adding liquidity...', 'info');
         await (await router.addLiquidityETH(addr0, amount0Desired, amount0Min, amount1Min, userAddress, deadline, { value: amount1Desired })).wait();
       } else if (lpToken0 === 'PLS') {
-        const tokenContract = new ethers.Contract(addr1, ERC20_ABI, signer);
-        const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
-        if (allowance < amount1Desired) {
-          showToastMsg('Approving ' + lpToken1 + '...', 'info');
-          await (await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait();
-        }
+        await checkAndApprove(addr1, lpToken1, amount1Desired);
         showToastMsg('Adding liquidity...', 'info');
         await (await router.addLiquidityETH(addr1, amount1Desired, amount1Min, amount0Min, userAddress, deadline, { value: amount0Desired })).wait();
       } else {
-        const token0Contract = new ethers.Contract(addr0, ERC20_ABI, signer);
-        const token1Contract = new ethers.Contract(addr1, ERC20_ABI, signer);
-        const [allowance0, allowance1] = await Promise.all([token0Contract.allowance(userAddress, CONFIG.ROUTER), token1Contract.allowance(userAddress, CONFIG.ROUTER)]);
-        if (allowance0 < amount0Desired) { showToastMsg('Approving ' + lpToken0 + '...', 'info'); await (await token0Contract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait(); }
-        if (allowance1 < amount1Desired) { showToastMsg('Approving ' + lpToken1 + '...', 'info'); await (await token1Contract.approve(CONFIG.ROUTER, ethers.MaxUint256)).wait(); }
+        await checkAndApprove(addr0, lpToken0, amount0Desired);
+        await checkAndApprove(addr1, lpToken1, amount1Desired);
         showToastMsg('Adding liquidity...', 'info');
         await (await router.addLiquidity(addr0, addr1, amount0Desired, amount1Desired, amount0Min, amount1Min, userAddress, deadline)).wait();
       }
