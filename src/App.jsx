@@ -4618,14 +4618,26 @@ export default function App() {
     }
 
     // MAINNET MODE
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
     if (!window.ethereum) {
-      showToast('Please install MetaMask', 'error');
+      // On mobile without wallet, show helpful message
+      if (isMobile) {
+        showToast('📱 Tap a wallet button above to open this site securely', 'info');
+      } else {
+        showToast('Please install MetaMask or another Web3 wallet', 'error');
+      }
       return;
     }
 
     try {
       setLoading(true);
       console.log('🔗 Connecting wallet...');
+      
+      // On mobile, show connection happening
+      if (isMobile) {
+        showToast('🔗 Connecting...', 'info');
+      }
       
       // Request accounts directly first
       let accounts;
@@ -4653,6 +4665,9 @@ export default function App() {
       const currentChainId = parseInt(chainId, 16);
 
       if (currentChainId !== CHAIN_ID) {
+        if (isMobile) {
+          showToast('⏳ Switching to PulseChain...', 'info');
+        }
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
@@ -4714,8 +4729,16 @@ export default function App() {
       return;
     }
 
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
     // Check if any wallet provider exists
     if (!window.ethereum) {
+      // On mobile, try deep link first
+      if (isMobile) {
+        openInWalletBrowser(walletType);
+        return;
+      }
+      
       // Only redirect to download if NO wallet is installed at all
       const downloadUrls = {
         internetmoney: 'https://internetmoney.io/',
@@ -4731,6 +4754,10 @@ export default function App() {
 
     try {
       setLoading(true);
+      
+      if (isMobile) {
+        showToast('🔗 Connecting...', 'info');
+      }
       
       // Use the appropriate provider
       let ethProvider = window.ethereum;
@@ -4966,37 +4993,10 @@ export default function App() {
       // If on mobile browser without wallet injection, show wallet selector with deep links
       if (needsDeepLink) {
         setLoading(false);
-        showToast('📱 Select a wallet to open this site in its dApp browser', 'info');
         
-        // Create a better mobile wallet selection UI
-        const walletChoice = window.confirm(
-          '🦊 MetaMask\n\nTap OK to open in MetaMask\'s browser.\nTap Cancel to see more wallet options.'
-        );
-        
-        if (walletChoice) {
-          openInWalletBrowser('metamask');
-        } else {
-          const otherWallet = window.prompt(
-            'Enter wallet number:\n\n' +
-            '1 = Trust Wallet\n' +
-            '2 = Coinbase Wallet\n' +
-            '3 = Rainbow\n' +
-            '4 = OKX Wallet\n' +
-            '5 = TokenPocket'
-          );
-          
-          const walletMap = {
-            '1': 'trust',
-            '2': 'coinbase', 
-            '3': 'rainbow',
-            '4': 'okx',
-            '5': 'tokenpocket'
-          };
-          
-          if (walletMap[otherWallet]) {
-            openInWalletBrowser(walletMap[otherWallet]);
-          }
-        }
+        // Show a cleaner mobile wallet selector
+        setShowWalletModal(true);
+        showToast('📱 Select a wallet to open this site', 'info');
         return;
       }
 
@@ -5071,14 +5071,24 @@ export default function App() {
       return;
     }
 
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
     if (!window.ethereum) {
-      showToast('No wallet detected. Please install MetaMask or another Web3 wallet.', 'error');
+      if (isMobile) {
+        showToast('📱 Tap a wallet button above to open in wallet app', 'info');
+      } else {
+        showToast('No wallet detected. Please install MetaMask or another Web3 wallet.', 'error');
+      }
       return;
     }
 
     try {
       setLoading(true);
       console.log('🔗 Quick Connect starting...');
+      
+      if (isMobile) {
+        showToast('🔗 Connecting to wallet...', 'info');
+      }
       
       // Request accounts directly from provider first
       let accounts;
@@ -5181,21 +5191,62 @@ export default function App() {
       coinbase: `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(currentUrl)}`,
       tokenpocket: `tpoutside://open?url=${encodeURIComponent(currentUrl)}`,
       okx: `okx://wallet/dapp/details?dappUrl=${encodeURIComponent(currentUrl)}`,
-      rabby: `https://rabby.io/dapp?url=${encodeURIComponent(currentUrl)}`, // Rabby uses standard injection
+      rabby: `https://rabby.io/dapp?url=${encodeURIComponent(currentUrl)}`,
       internetmoney: `https://internetmoney.io/open?url=${encodeURIComponent(currentUrl)}`,
     };
 
     const link = deepLinks[walletType];
     if (link) {
       console.log(`📱 Opening ${walletType} with deep link:`, link);
-      window.location.href = link;
+      
+      // For iOS, try both methods
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      
+      if (isIOS) {
+        // iOS needs direct navigation
+        window.location.href = link;
+      } else {
+        // Android can use both - try opening in new context first
+        const opened = window.open(link, '_self');
+        if (!opened) {
+          window.location.href = link;
+        }
+      }
     }
   };
 
   // Enhanced mobile browser detection - check if we're in a wallet's dApp browser
   const isMobileBrowser = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  
+  // Check for specific wallet browsers
+  const isMetaMaskBrowser = !!(window.ethereum?.isMetaMask);
+  const isTrustBrowser = !!(window.ethereum?.isTrust || window.trustwallet);
+  const isCoinbaseBrowser = !!(window.ethereum?.isCoinbaseWallet || window.coinbaseWalletExtension);
+  const isOKXBrowser = !!window.okxwallet;
   const isInDappBrowser = !!window.ethereum; // If ethereum is injected, we're in a dApp browser
   const needsDeepLink = isMobileBrowser && !isInDappBrowser; // Mobile browser without wallet injection
+  
+  // Auto-connect when inside a wallet browser (after a small delay to let things load)
+  useEffect(() => {
+    if (isMobileBrowser && isInDappBrowser && !account && !loading) {
+      // We're in a wallet's dApp browser - try to auto-connect
+      const autoConnect = async () => {
+        try {
+          console.log('📱 Detected wallet browser, attempting auto-connect...');
+          // Small delay to ensure wallet is ready
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (window.ethereum && !account) {
+            await connectWallet();
+          }
+        } catch (err) {
+          console.log('Auto-connect skipped:', err.message);
+        }
+      };
+      autoConnect();
+    }
+  }, [isMobileBrowser, isInDappBrowser, account, loading]);
 
   // Format balance with currency conversion
   const formatBalanceWithCurrency = (balance, tokenType = 'dtgc') => {
@@ -12975,75 +13026,88 @@ export default function App() {
               {needsDeepLink && (
                 <>
                   <div style={{ 
-                    background: 'rgba(76,175,80,0.1)', 
-                    border: '1px solid rgba(76,175,80,0.3)', 
-                    borderRadius: '12px', 
-                    padding: '12px', 
-                    marginBottom: '8px',
+                    background: 'linear-gradient(135deg, rgba(76,175,80,0.15), rgba(76,175,80,0.05))', 
+                    border: '2px solid rgba(76,175,80,0.4)', 
+                    borderRadius: '16px', 
+                    padding: '16px', 
+                    marginBottom: '12px',
                     textAlign: 'center'
                   }}>
-                    <div style={{ fontSize: '0.8rem', color: '#4CAF50', fontWeight: 600, marginBottom: '4px' }}>
-                      📱 Mobile Detected
+                    <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>📱</div>
+                    <div style={{ fontSize: '1rem', color: '#4CAF50', fontWeight: 700, marginBottom: '6px' }}>
+                      Open in Wallet App
                     </div>
-                    <div style={{ fontSize: '0.7rem', color: '#888' }}>
-                      Tap your wallet below to open this site in its dApp browser
+                    <div style={{ fontSize: '0.8rem', color: '#aaa', lineHeight: 1.4 }}>
+                      Tap your wallet below to open this site securely
                     </div>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                     <button
                       onClick={() => openInWalletBrowser('metamask')}
                       style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                        padding: '14px 10px', background: 'rgba(245,133,50,0.15)',
-                        border: '2px solid #F5851A', borderRadius: '12px',
-                        color: '#F5851A', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                        padding: '20px 12px', background: 'linear-gradient(135deg, rgba(245,133,50,0.2), rgba(245,133,50,0.05))',
+                        border: '2px solid #F5851A', borderRadius: '16px',
+                        color: '#F5851A', fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+                        minHeight: '90px', transition: 'all 0.2s ease',
+                        WebkitTapHighlightColor: 'transparent',
                       }}
                     >
-                      🦊 MetaMask
-                    </button>
-                    <button
-                      onClick={() => openInWalletBrowser('coinbase')}
-                      style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                        padding: '14px 10px', background: 'rgba(0,82,255,0.15)',
-                        border: '2px solid #0052FF', borderRadius: '12px',
-                        color: '#0052FF', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
-                      }}
-                    >
-                      🔵 Coinbase
-                    </button>
-                    <button
-                      onClick={() => openInWalletBrowser('okx')}
-                      style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                        padding: '14px 10px', background: 'rgba(255,255,255,0.1)',
-                        border: '2px solid #fff', borderRadius: '12px',
-                        color: '#fff', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
-                      }}
-                    >
-                      ⬜ OKX
+                      <span style={{ fontSize: '2rem' }}>🦊</span>
+                      MetaMask
                     </button>
                     <button
                       onClick={() => openInWalletBrowser('trust')}
                       style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
-                        padding: '14px 10px', background: 'rgba(51,117,187,0.15)',
-                        border: '2px solid #3375BB', borderRadius: '12px',
-                        color: '#3375BB', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                        padding: '20px 12px', background: 'linear-gradient(135deg, rgba(51,117,187,0.2), rgba(51,117,187,0.05))',
+                        border: '2px solid #3375BB', borderRadius: '16px',
+                        color: '#3375BB', fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+                        minHeight: '90px', transition: 'all 0.2s ease',
+                        WebkitTapHighlightColor: 'transparent',
                       }}
                     >
-                      🛡️ Trust
+                      <span style={{ fontSize: '2rem' }}>🛡️</span>
+                      Trust Wallet
+                    </button>
+                    <button
+                      onClick={() => openInWalletBrowser('coinbase')}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                        padding: '20px 12px', background: 'linear-gradient(135deg, rgba(0,82,255,0.2), rgba(0,82,255,0.05))',
+                        border: '2px solid #0052FF', borderRadius: '16px',
+                        color: '#0052FF', fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+                        minHeight: '90px', transition: 'all 0.2s ease',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <span style={{ fontSize: '2rem' }}>🔵</span>
+                      Coinbase
+                    </button>
+                    <button
+                      onClick={() => openInWalletBrowser('okx')}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                        padding: '20px 12px', background: 'linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))',
+                        border: '2px solid #888', borderRadius: '16px',
+                        color: '#fff', fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+                        minHeight: '90px', transition: 'all 0.2s ease',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <span style={{ fontSize: '2rem' }}>⬜</span>
+                      OKX Wallet
                     </button>
                   </div>
                   
                   <div style={{ 
-                    display: 'flex', alignItems: 'center', gap: '12px', margin: '12px 0 4px',
-                    color: '#555', fontSize: '0.75rem',
+                    display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0 8px',
+                    color: '#555', fontSize: '0.8rem',
                   }}>
-                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
-                    <span>already in dApp browser?</span>
-                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.15)' }} />
+                    <span>already in wallet browser?</span>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.15)' }} />
                   </div>
                 </>
               )}
@@ -13056,23 +13120,27 @@ export default function App() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '16px',
-                  padding: needsDeepLink ? '14px 18px' : '20px 24px',
+                  padding: needsDeepLink ? '16px 20px' : '20px 24px',
                   background: 'linear-gradient(135deg, #D4AF37, #B8860B)',
                   border: '2px solid #FFD700',
-                  borderRadius: '14px',
+                  borderRadius: '16px',
                   color: '#000',
-                  fontSize: needsDeepLink ? '0.95rem' : '1.1rem',
+                  fontSize: needsDeepLink ? '1rem' : '1.1rem',
                   cursor: loading ? 'wait' : 'pointer',
                   transition: 'all 0.3s ease',
                   boxShadow: '0 6px 20px rgba(212,175,55,0.4)',
                   fontWeight: 700,
+                  minHeight: needsDeepLink ? '70px' : 'auto',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                <span style={{ fontSize: needsDeepLink ? '1.3rem' : '1.8rem' }}>⚡</span>
+                <span style={{ fontSize: needsDeepLink ? '1.5rem' : '1.8rem' }}>⚡</span>
                 <div style={{ textAlign: 'left', flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: needsDeepLink ? '0.95rem' : '1.1rem' }}>Quick Connect</div>
-                  <div style={{ fontSize: '0.7rem', opacity: 0.8, fontWeight: 500 }}>
-                    {needsDeepLink ? 'If already in wallet browser' : 'Auto-detect your browser wallet'}
+                  <div style={{ fontWeight: 800, fontSize: needsDeepLink ? '1rem' : '1.1rem' }}>
+                    {needsDeepLink ? 'Connect Here' : 'Quick Connect'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.8, fontWeight: 500 }}>
+                    {needsDeepLink ? 'If you opened this in wallet browser' : 'Auto-detect your browser wallet'}
                   </div>
                 </div>
                 {!needsDeepLink && <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '4px 10px', borderRadius: '8px' }}>RECOMMENDED</span>}
@@ -13319,31 +13387,31 @@ export default function App() {
               }}>
                 <p style={{
                   color: '#D4AF37',
-                  fontSize: '0.85rem',
+                  fontSize: '0.9rem',
                   fontWeight: 600,
                   textAlign: 'center',
-                  marginBottom: '12px',
+                  marginBottom: '14px',
                 }}>
                   📱 On Mobile? Open in Wallet Browser
                 </p>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
                   <button
                     onClick={() => openInWalletBrowser('metamask')}
                     style={{
-                      flex: '1',
-                      minWidth: '100px',
-                      padding: '12px 12px',
+                      padding: '14px 12px',
                       background: 'linear-gradient(135deg, #E27625, #CD6116)',
                       border: 'none',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       color: '#fff',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
+                      gap: '8px',
+                      minHeight: '50px',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     🦊 MetaMask
@@ -13351,20 +13419,20 @@ export default function App() {
                   <button
                     onClick={() => openInWalletBrowser('trust')}
                     style={{
-                      flex: '1',
-                      minWidth: '100px',
-                      padding: '12px 12px',
+                      padding: '14px 12px',
                       background: 'linear-gradient(135deg, #3375BB, #0500FF)',
                       border: 'none',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       color: '#fff',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
+                      gap: '8px',
+                      minHeight: '50px',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     🛡️ Trust
@@ -13372,102 +13440,46 @@ export default function App() {
                   <button
                     onClick={() => openInWalletBrowser('coinbase')}
                     style={{
-                      flex: '1',
-                      minWidth: '100px',
-                      padding: '12px 12px',
+                      padding: '14px 12px',
                       background: 'linear-gradient(135deg, #0052FF, #0033CC)',
                       border: 'none',
-                      borderRadius: '10px',
+                      borderRadius: '12px',
                       color: '#fff',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
+                      gap: '8px',
+                      minHeight: '50px',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     🔵 Coinbase
                   </button>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
                   <button
                     onClick={() => openInWalletBrowser('okx')}
                     style={{
-                      flex: '1',
-                      minWidth: '100px',
-                      padding: '12px 12px',
-                      background: 'linear-gradient(135deg, #121212, #333)',
-                      border: '1px solid #666',
-                      borderRadius: '10px',
+                      padding: '14px 12px',
+                      background: 'linear-gradient(135deg, #000, #333)',
+                      border: '1px solid #555',
+                      borderRadius: '12px',
                       color: '#fff',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
+                      gap: '8px',
+                      minHeight: '50px',
+                      WebkitTapHighlightColor: 'transparent',
                     }}
                   >
-                    ⬛ OKX
-                  </button>
-                  <button
-                    onClick={() => openInWalletBrowser('rainbow')}
-                    style={{
-                      flex: '1',
-                      minWidth: '100px',
-                      padding: '12px 12px',
-                      background: 'linear-gradient(135deg, #FF6B6B, #4ECDC4)',
-                      border: 'none',
-                      borderRadius: '10px',
-                      color: '#fff',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    🌈 Rainbow
-                  </button>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(window.location.href);
-                      showToast('URL copied! Paste in your wallet browser', 'success');
-                    }}
-                    style={{
-                      flex: '1',
-                      minWidth: '100px',
-                      padding: '12px 12px',
-                      background: 'rgba(212,175,55,0.2)',
-                      border: '1px solid #D4AF37',
-                      borderRadius: '10px',
-                      color: '#D4AF37',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    📋 Copy URL
+                    ⬜ OKX
                   </button>
                 </div>
-                <p style={{
-                  color: '#666',
-                  fontSize: '0.7rem',
-                  textAlign: 'center',
-                  marginTop: '12px',
-                  lineHeight: 1.4,
-                }}>
-                  Tap a button to open this dApp in your wallet's browser
-                </p>
               </div>
             </div>
             )}
