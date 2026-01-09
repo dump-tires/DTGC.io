@@ -183,8 +183,8 @@ const styles = {
   swapButtonDisabled: { background: 'rgba(255,255,255,0.1)', color: '#666', cursor: 'not-allowed' },
   flipButton: { width: '40px', height: '40px', background: 'linear-gradient(135deg, #D4AF37, #B8960C)', border: 'none', borderRadius: '50%', color: '#000', fontSize: '1.2rem', cursor: 'pointer', margin: '-12px auto', display: 'block', position: 'relative', zIndex: 10 },
   balanceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', marginBottom: '8px', border: '1px solid rgba(255,255,255,0.05)' },
-  selectDropdown: { position: 'absolute', top: '100%', left: 0, right: 0, background: '#1a1a2e', border: '1px solid rgba(212, 175, 55, 0.3)', borderRadius: '12px', marginTop: '8px', overflow: 'hidden', zIndex: 1000, maxHeight: '300px', overflowY: 'auto' },
-  selectOption: { display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', cursor: 'pointer', color: '#fff', transition: 'background 0.2s', borderBottom: '1px solid rgba(255,255,255,0.05)' },
+  selectDropdown: { position: 'absolute', top: '100%', right: 0, background: '#1a1a2e', border: '1px solid rgba(212, 175, 55, 0.3)', borderRadius: '12px', marginTop: '8px', overflow: 'hidden', zIndex: 1000, maxHeight: '300px', overflowY: 'auto', minWidth: '280px', width: 'max-content' },
+  selectOption: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', cursor: 'pointer', color: '#fff', transition: 'background 0.2s', borderBottom: '1px solid rgba(255,255,255,0.05)' },
   infoRow: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem' },
   toast: { position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', borderRadius: '8px', color: '#fff', fontWeight: 500, zIndex: 10000, maxWidth: '90%', textAlign: 'center' },
   toastSuccess: { background: 'rgba(76, 175, 80, 0.95)' },
@@ -629,14 +629,14 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               onClick={() => { onChange(symbol); setShow(false); }}
               onMouseEnter={(e) => e.target.style.background = 'rgba(212, 175, 55, 0.1)'}
               onMouseLeave={(e) => e.target.style.background = symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent'}>
-              <span style={{ fontSize: '1.2rem' }}>{token.logo}</span>
-              <div style={{ flex: 1 }}>
+              <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>{token.logo}</span>
+              <div style={{ minWidth: '70px' }}>
                 <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{symbol}</div>
                 <div style={{ fontSize: '0.7rem', color: '#888' }}>{token.name}</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.8rem' }}>{formatNumber(balances[symbol] || 0)}</div>
-                <div style={{ fontSize: '0.7rem', color: '#4CAF50' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
+              <div style={{ textAlign: 'right', marginLeft: 'auto', minWidth: '100px' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 500, whiteSpace: 'nowrap' }}>{formatNumber(balances[symbol] || 0)}</div>
+                <div style={{ fontSize: '0.75rem', color: '#4CAF50', whiteSpace: 'nowrap' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
               </div>
             </div>
           ))}
