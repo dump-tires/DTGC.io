@@ -1,4 +1,5 @@
 import DapperComponent from './components/DapperComponent';
+import V4DeFiGoldSuite from './components/V4DeFiGoldSuite';
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
 // WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
@@ -3160,6 +3161,9 @@ export default function App() {
   // Admin Access Logs Panel (Ctrl+Shift+L to toggle)
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [adminLogs, setAdminLogs] = useState([]);
+  
+  // V4 DeFi Gold Suite Modal
+  const [showDeFiSuite, setShowDeFiSuite] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -7458,6 +7462,7 @@ export default function App() {
                 <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { handleNavClick('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
                 <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { handleNavClick('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
                 <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
+                <button onClick={() => { setShowDeFiSuite(true); setMobileMenuOpen(false); }} style={{ background: 'linear-gradient(135deg, #D4AF37, #B8960C)', color: '#000', fontWeight: 700 }}>🏆 DeFi Suite</button>
               </div>
             )}
 
@@ -7468,6 +7473,7 @@ export default function App() {
               <button className={`nav-link ${activeTab === 'whitepaper' ? 'active' : ''}`} onClick={() => handleNavClick('whitepaper')}>Whitepaper</button>
               <button className={`nav-link ${activeTab === 'links' ? 'active' : ''}`} onClick={() => handleNavClick('links')}>Links</button>
               <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleNavClick('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
+              <button onClick={() => setShowDeFiSuite(true)} style={{ background: 'linear-gradient(135deg, #D4AF37, #B8960C)', color: '#000', fontWeight: 700, padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '0.85rem' }}>🏆 DeFi Suite</button>
             </nav>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -13636,6 +13642,28 @@ export default function App() {
               Close
             </button>
           </div>
+        </div>
+      )}
+
+      {/* V4 DeFi Gold Suite Modal */}
+      {showDeFiSuite && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px',
+          overflowY: 'auto',
+        }}>
+          <V4DeFiGoldSuite
+            provider={provider}
+            signer={signer}
+            userAddress={account}
+            onClose={() => setShowDeFiSuite(false)}
+          />
         </div>
       )}
 
