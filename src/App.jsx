@@ -13608,15 +13608,68 @@ export default function App() {
               </h3>
               <div style={{
                 padding: '16px',
-                background: 'rgba(255,152,0,0.1)',
-                border: '1px solid rgba(255,152,0,0.3)',
+                background: 'rgba(76,175,80,0.1)',
+                border: '1px solid rgba(76,175,80,0.3)',
                 borderRadius: '12px',
                 textAlign: 'center',
               }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🔍</div>
-                <div style={{ color: '#FF9800', fontWeight: 600, marginBottom: '4px' }}>Audit In Progress</div>
-                <div style={{ color: '#888', fontSize: '0.8rem' }}>
-                  Smart contract audit pending. Results will be published here upon completion.
+                <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>✅</div>
+                <div style={{ color: '#4CAF50', fontWeight: 700, marginBottom: '8px', fontSize: '1.1rem' }}>Audit Complete</div>
+                <div style={{ color: '#aaa', fontSize: '0.85rem', marginBottom: '12px' }}>
+                  Audited by <span style={{ color: '#D4AF37', fontWeight: 600 }}>Dessert Finance</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: '1fr 1fr', 
+                    gap: '8px',
+                    fontSize: '0.75rem',
+                    color: '#888',
+                    textAlign: 'left',
+                    padding: '10px',
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '8px',
+                  }}>
+                    <div><strong style={{ color: '#4CAF50' }}>LPStakingV4:</strong> Low Risk ✓</div>
+                    <div><strong style={{ color: '#4CAF50' }}>DTGCStakingV4:</strong> Low Risk ✓</div>
+                    <div><strong style={{ color: '#aaa' }}>No Mint Functions:</strong> ✓</div>
+                    <div><strong style={{ color: '#aaa' }}>No User Fund Access:</strong> ✓</div>
+                  </div>
+                  <a
+                    href="/DTGC-Audit-Dessert-Finance.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '12px 16px',
+                      background: 'linear-gradient(135deg, #D4AF37, #B8860B)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#000',
+                      fontWeight: 700,
+                      textDecoration: 'none',
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    📄 View Full Audit Report
+                  </a>
+                  <a
+                    href="https://dessertswap.finance"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#D4AF37',
+                      fontSize: '0.75rem',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    🍰 Verify on DessertSwap.Finance →
+                  </a>
                 </div>
               </div>
             </div>
