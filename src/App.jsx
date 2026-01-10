@@ -3507,12 +3507,12 @@ export default function App() {
     }
   }, [account, provider, livePrices]);
   
-  // Auto-scan when Flex panel opens (only if qualified)
+  // Auto-scan when Flex panel opens
   useEffect(() => {
-    if (isFlexTier && account && qualifiesForFlex && walletTokens.length === 0 && !scanningWallet) {
+    if (isFlexTier && account && walletTokens.length === 0 && !scanningWallet) {
       scanWalletTokens();
     }
-  }, [isFlexTier, account, qualifiesForFlex, walletTokens.length, scanningWallet, scanWalletTokens]);
+  }, [isFlexTier, account, walletTokens.length, scanningWallet, scanWalletTokens]);
   const [gasSpeed, setGasSpeed] = useState('fast'); // 'normal', 'fast', 'urgent'
   
   // LP Staking Contract Rewards Remaining
