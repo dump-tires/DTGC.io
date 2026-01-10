@@ -9189,7 +9189,14 @@ export default function App() {
                         // Separate PLS and ERC20 tokens
                         const plsEntry = selectedFlexTokens['pls'];
                         const erc20Entries = Object.entries(selectedFlexTokens)
-                          .filter(([key, data]) => key !== 'pls' && data?.address);
+                          .filter(([key, data]) => key !== 'pls' && data?.address && parseFloat(data?.amount || 0) > 0);
+                        
+                        // Early exit if nothing to zap
+                        if (!plsEntry?.amount && erc20Entries.length === 0) {
+                          showToast('❌ No tokens selected to zap', 'error');
+                          setFlexLoading(false);
+                          return;
+                        }
                         
                         // STEP 1: Batch check all allowances in parallel
                         showToast('🔍 Checking approvals...', 'info');
@@ -9237,14 +9244,16 @@ export default function App() {
                         const zapTxs = [];
                         
                         // Zap PLS if selected
-                        if (plsEntry && parseFloat(plsEntry.amount) > 0) {
-                          const amountWei = ethers.parseEther(plsEntry.amount.toString());
+                        if (plsEntry && parseFloat(plsEntry?.amount || 0) > 0) {
+                          const plsAmount = parseFloat(plsEntry.amount);
+                          const amountWei = ethers.parseEther(plsAmount.toString());
                           zapTxs.push(dapper.zapPLS({ value: amountWei }));
                         }
                         
                         // Zap all ERC20 tokens
                         for (const check of tokenChecks) {
-                          if (parseFloat(check.tokenData?.amount) > 0) {
+                          const tokenAmount = parseFloat(check.tokenData?.amount || 0);
+                          if (tokenAmount > 0 && check.amountWei > 0n) {
                             zapTxs.push(dapper.zapToken(check.tokenData.address, check.amountWei));
                           }
                         }
