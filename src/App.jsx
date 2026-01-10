@@ -565,12 +565,12 @@ const VIDEOS = {
 
 const TESTNET_MODE = false; // MAINNET PRODUCTION
 
-// Password Protection
+// Password Protection - DISABLED FOR LAUNCH
 const SITE_PASSWORD = 'GOLD$tack91!';
-const PASSWORD_ENABLED = true;
+const PASSWORD_ENABLED = false; // 🚀 LAUNCHED - Password gate removed
 
 // IP Logging Configuration
-const LOG_ACCESS_ATTEMPTS = true;
+const LOG_ACCESS_ATTEMPTS = false; // Disabled after launch
 const LOG_ENDPOINT = 'https://api.ipify.org?format=json'; // Get visitor IP
 
 const TESTNET_CONFIG = {
