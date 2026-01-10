@@ -1,8 +1,6 @@
 {
-  "rewrites": [
-    { "source": "/og-image.png", "destination": "/og-image.png" },
-    { "source": "/favicon.ico", "destination": "/favicon.ico" },
-    { "source": "/favicon1.png", "destination": "/favicon1.png" },
-    { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
