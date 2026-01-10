@@ -3350,14 +3350,41 @@ export default function App() {
     if (!account || !provider) return;
     
     setScanningWallet(true);
-    showToast('🔍 Deep scanning wallet for ALL tokens...', 'info');
+    showToast('🔍 Quick scanning wallet...', 'info');
     
     try {
       const foundTokens = [];
       const checkedAddresses = new Set();
       
-      // 1. Add PLS balance first
-      const plsBal = await provider.getBalance(account);
+      // 1. Get PLS balance + all known token balances IN PARALLEL
+      const plsPromise = provider.getBalance(account);
+      
+      // Batch all known token balance checks
+      const knownTokenPromises = KNOWN_TOKENS.filter(t => t.address).map(async (token) => {
+        try {
+          const contract = new ethers.Contract(token.address, [
+            'function balanceOf(address) view returns (uint256)',
+          ], provider);
+          const bal = await contract.balanceOf(account);
+          return { token, bal };
+        } catch {
+          return { token, bal: 0n };
+        }
+      });
+      
+      // 2. Fetch PulseScan API data simultaneously
+      const apiPromise = fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${account}/token-balances`)
+        .then(r => r.ok ? r.json() : [])
+        .catch(() => []);
+      
+      // Wait for all parallel requests
+      const [plsBal, knownResults, apiData] = await Promise.all([
+        plsPromise,
+        Promise.all(knownTokenPromises),
+        apiPromise,
+      ]);
+      
+      // Process PLS
       const plsBalFormatted = ethers.formatEther(plsBal);
       if (parseFloat(plsBalFormatted) > 0) {
         foundTokens.push({
@@ -3373,185 +3400,94 @@ export default function App() {
         });
       }
       
-      // 2. Check known tokens first
-      for (const token of KNOWN_TOKENS) {
-        if (!token.address) continue;
+      // Process known tokens (already have balances)
+      for (const { token, bal } of knownResults) {
         checkedAddresses.add(token.address.toLowerCase());
-        try {
-          const contract = new ethers.Contract(token.address, [
-            'function balanceOf(address) view returns (uint256)',
-          ], provider);
+        if (bal > 0n) {
+          const balFormatted = ethers.formatUnits(bal, token.decimals);
+          let price = 0;
+          if (token.symbol === 'DTGC') price = livePrices.dtgc || 0;
+          else if (token.symbol === 'URMOM') price = livePrices.urmom || 0;
+          else if (token.symbol === 'PLSX') price = livePrices.plsx || 0;
+          else if (token.symbol === 'HEX') price = livePrices.hex || 0;
+          else if (token.symbol === 'WPLS') price = livePrices.pls || 0.00003;
+          else if (token.symbol === 'USDC' || token.symbol === 'USDT' || token.symbol === 'DAI') price = 1;
+          else if (token.symbol === 'WETH') price = 3500;
+          else if (token.symbol === 'WBTC') price = 100000;
+          else if (token.symbol === 'INC') price = livePrices.inc || 0.0001;
           
-          const bal = await contract.balanceOf(account);
-          if (bal > 0n) {
-            const balFormatted = ethers.formatUnits(bal, token.decimals);
-            
-            let price = 0;
-            if (token.symbol === 'DTGC') price = livePrices.dtgc || 0;
-            else if (token.symbol === 'URMOM') price = livePrices.urmom || 0;
-            else if (token.symbol === 'PLSX') price = livePrices.plsx || 0;
-            else if (token.symbol === 'HEX') price = livePrices.hex || 0;
-            else if (token.symbol === 'WPLS') price = livePrices.pls || 0.00003;
-            else if (token.symbol === 'USDC' || token.symbol === 'USDT' || token.symbol === 'DAI') price = 1;
-            else if (token.symbol === 'WETH') price = 3500;
-            else if (token.symbol === 'WBTC') price = 100000;
-            else if (token.symbol === 'INC') price = livePrices.inc || 0.0001;
-            
-            foundTokens.push({
-              ...token,
-              balance: balFormatted,
-              valueUsd: parseFloat(balFormatted) * price,
-              price: price,
-              hasLiquidity: true,
-            });
-          }
-        } catch (e) {
-          // Skip failed tokens
+          foundTokens.push({
+            ...token,
+            balance: balFormatted,
+            valueUsd: parseFloat(balFormatted) * price,
+            price: price,
+            hasLiquidity: true,
+          });
         }
       }
       
-      // 3. PulseScan API - Get ALL token balances
-      try {
-        const apiUrl = `https://api.scan.pulsechain.com/api/v2/addresses/${account}/token-balances`;
-        const response = await fetch(apiUrl);
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            for (const item of data) {
-              const tokenAddr = item.token?.address?.toLowerCase();
-              if (!tokenAddr || checkedAddresses.has(tokenAddr)) continue;
-              checkedAddresses.add(tokenAddr);
-              
-              const decimals = item.token?.decimals || 18;
-              const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
-              if (bal <= 0) continue;
-              
-              const tokenSymbol = item.token?.symbol?.toUpperCase() || '';
-              
-              // Check if this is a known liquid token
-              const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
-              
-              // Try to get price from DEX
-              let price = 0;
-              let hasLiquidity = isKnownLiquid; // Default to true for known liquid tokens
-              try {
-                price = await getTokenPriceFromDex(item.token?.address, decimals);
-                if (price > 0) hasLiquidity = true;
-              } catch (e) {}
-              
-              // Use live prices for known tokens
-              if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
-              else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
-              else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
-              else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
-              else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
-              
-              foundTokens.push({
-                symbol: item.token?.symbol || 'UNKNOWN',
-                name: item.token?.name || 'Unknown Token',
-                address: item.token?.address,
-                decimals: decimals,
-                balance: bal.toString(),
-                icon: hasLiquidity ? '💰' : '🔸',
-                color: hasLiquidity ? '#4CAF50' : '#888',
-                valueUsd: bal * price,
-                price: price,
-                isUnknown: !hasLiquidity,
-                hasLiquidity: hasLiquidity,
-              });
-            }
+      // 3. Process API data (already fetched in parallel)
+      if (Array.isArray(apiData)) {
+        // Batch price lookups for unknown tokens - limit to top 20 by balance
+        const unknownTokens = apiData
+          .filter(item => {
+            const tokenAddr = item.token?.address?.toLowerCase();
+            return tokenAddr && !checkedAddresses.has(tokenAddr);
+          })
+          .slice(0, 20); // Limit to prevent too many calls
+        
+        // Get prices in parallel (max 5 concurrent)
+        const pricePromises = unknownTokens.map(async (item) => {
+          const tokenAddr = item.token?.address?.toLowerCase();
+          checkedAddresses.add(tokenAddr);
+          
+          const decimals = item.token?.decimals || 18;
+          const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
+          if (bal <= 0) return null;
+          
+          const tokenSymbol = item.token?.symbol?.toUpperCase() || '';
+          const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
+          
+          // Use cached prices for known symbols
+          let price = 0;
+          let hasLiquidity = isKnownLiquid;
+          
+          if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
+          else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
+          else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
+          else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
+          else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
+          else if (bal * 0.00001 > 0.01) { // Only fetch DEX price if balance worth checking (>$0.01 at min price)
+            try {
+              price = await getTokenPriceFromDex(item.token?.address, decimals);
+              if (price > 0) hasLiquidity = true;
+            } catch {}
           }
-        }
-      } catch (e) {
-        console.log('PulseScan API error:', e.message);
+          
+          return {
+            symbol: item.token?.symbol || 'UNKNOWN',
+            name: item.token?.name || 'Unknown Token',
+            address: item.token?.address,
+            decimals: decimals,
+            balance: bal.toString(),
+            icon: hasLiquidity ? '💰' : '🔸',
+            color: hasLiquidity ? '#4CAF50' : '#888',
+            valueUsd: bal * price,
+            price: price,
+            isUnknown: !hasLiquidity,
+            hasLiquidity: hasLiquidity,
+          };
+        });
+        
+        const priceResults = await Promise.all(pricePromises);
+        foundTokens.push(...priceResults.filter(Boolean));
       }
       
-      // 4. Also try token transfers endpoint for any missed tokens
-      try {
-        const txApiUrl = `https://api.scan.pulsechain.com/api/v2/addresses/${account}/token-transfers?type=ERC-20`;
-        const txResponse = await fetch(txApiUrl);
-        if (txResponse.ok) {
-          const txData = await txResponse.json();
-          const items = txData.items || txData || [];
-          if (Array.isArray(items)) {
-            for (const tx of items.slice(0, 100)) { // Check last 100 transfers
-              const tokenAddr = tx.token?.address?.toLowerCase();
-              if (!tokenAddr || checkedAddresses.has(tokenAddr)) continue;
-              checkedAddresses.add(tokenAddr);
-              
-              // Check if we still have balance
-              try {
-                const contract = new ethers.Contract(tx.token.address, [
-                  'function balanceOf(address) view returns (uint256)',
-                  'function decimals() view returns (uint8)',
-                  'function symbol() view returns (string)',
-                  'function name() view returns (string)',
-                ], provider);
-                
-                const bal = await contract.balanceOf(account);
-                if (bal > 0n) {
-                  let decimals = tx.token?.decimals || 18;
-                  try { decimals = await contract.decimals(); } catch {}
-                  
-                  let symbol = tx.token?.symbol || 'UNKNOWN';
-                  try { symbol = await contract.symbol(); } catch {}
-                  
-                  let name = tx.token?.name || 'Unknown Token';
-                  try { name = await contract.name(); } catch {}
-                  
-                  const balFormatted = ethers.formatUnits(bal, decimals);
-                  const tokenSymbol = symbol.toUpperCase();
-                  
-                  // Check if this is a known liquid token (reuse tokenAddr from outer scope)
-                  const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
-                  
-                  // Try to get price
-                  let price = 0;
-                  let hasLiquidity = isKnownLiquid; // Default to true for known liquid tokens
-                  try {
-                    price = await getTokenPriceFromDex(tx.token.address, decimals);
-                    if (price > 0) hasLiquidity = true;
-                  } catch (e) {}
-                  
-                  // Use live prices for known tokens
-                  if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
-                  else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
-                  else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
-                  else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
-                  else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
-                  
-                  foundTokens.push({
-                    symbol: symbol,
-                    name: name,
-                    address: tx.token.address,
-                    decimals: decimals,
-                    balance: balFormatted,
-                    icon: hasLiquidity ? '💰' : '🔸',
-                    color: hasLiquidity ? '#4CAF50' : '#888',
-                    valueUsd: parseFloat(balFormatted) * price,
-                    price: price,
-                    isUnknown: !hasLiquidity,
-                    hasLiquidity: hasLiquidity,
-                  });
-                }
-              } catch (e) {
-                // Skip failed tokens
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.log('Token transfers API error:', e.message);
-      }
-      
-      // 5. Sort: tokens with liquidity/value first, then by USD value, then by balance
+      // 4. Sort: tokens with liquidity/value first
       foundTokens.sort((a, b) => {
-        // Tokens with liquidity first
         if (a.hasLiquidity && !b.hasLiquidity) return -1;
         if (!a.hasLiquidity && b.hasLiquidity) return 1;
-        // Then by USD value
         if (b.valueUsd !== a.valueUsd) return b.valueUsd - a.valueUsd;
-        // Then by raw balance
         return parseFloat(b.balance) - parseFloat(a.balance);
       });
       
@@ -3561,7 +3497,7 @@ export default function App() {
       const withValue = foundTokens.filter(t => t.valueUsd > 0).length;
       const totalValue = foundTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0);
       
-      showToast(`🎉 Found ${foundTokens.length} tokens! ${withValue} with liquidity ($${totalValue.toFixed(2)} total)`, 'success');
+      showToast(`🎉 Found ${foundTokens.length} tokens! ${withValue} with value ($${totalValue.toFixed(2)})`, 'success');
       
     } catch (err) {
       console.error('Wallet scan error:', err);
@@ -9292,41 +9228,72 @@ export default function App() {
                         const signer = await provider.getSigner();
                         const dapper = new ethers.Contract(DAPPER_ADDRESS, DAPPER_ABI, signer);
                         
-                        // Process each selected token
-                        for (const [key, tokenData] of Object.entries(selectedFlexTokens)) {
-                          const amount = parseFloat(tokenData?.amount) || 0;
-                          if (amount <= 0) continue;
+                        // Separate PLS and ERC20 tokens
+                        const plsEntry = selectedFlexTokens['pls'];
+                        const erc20Entries = Object.entries(selectedFlexTokens)
+                          .filter(([key, data]) => key !== 'pls' && data?.address);
+                        
+                        // STEP 1: Batch check all allowances in parallel
+                        showToast('🔍 Checking approvals...', 'info');
+                        const allowanceChecks = erc20Entries.map(async ([key, tokenData]) => {
+                          const tokenContract = new ethers.Contract(tokenData.address, [
+                            'function approve(address spender, uint256 amount) returns (bool)',
+                            'function allowance(address owner, address spender) view returns (uint256)',
+                          ], signer);
                           
-                          if (key === 'pls' || !tokenData?.address) {
-                            // Native PLS
-                            const amountWei = ethers.parseEther(amount.toString());
-                            const tx = await dapper.zapPLS({ value: amountWei });
-                            showToast(`⚡ Zapping ${amount.toFixed(2)} PLS...`, 'info');
-                            await tx.wait();
-                          } else {
-                            // ERC20 Token - need approval first
-                            const tokenContract = new ethers.Contract(tokenData.address, [
-                              'function approve(address spender, uint256 amount) returns (bool)',
-                              'function allowance(address owner, address spender) view returns (uint256)',
-                            ], signer);
-                            
-                            const decimals = parseInt(tokenData.decimals) || 18;
-                            const amountWei = ethers.parseUnits(amount.toString(), decimals);
-                            
-                            // Check allowance
-                            const allowance = await tokenContract.allowance(account, DAPPER_ADDRESS);
-                            if (allowance < amountWei) {
-                              showToast(`🔓 Approving ${tokenData.symbol}...`, 'info');
-                              const approveTx = await tokenContract.approve(DAPPER_ADDRESS, ethers.MaxUint256);
-                              await approveTx.wait();
-                            }
-                            
-                            // Zap token
-                            showToast(`⚡ Zapping ${amount.toFixed(4)} ${tokenData.symbol}...`, 'info');
-                            const tx = await dapper.zapToken(tokenData.address, amountWei);
-                            await tx.wait();
+                          const decimals = parseInt(tokenData.decimals) || 18;
+                          const amount = parseFloat(tokenData?.amount) || 0;
+                          const amountWei = ethers.parseUnits(amount.toString(), decimals);
+                          const allowance = await tokenContract.allowance(account, DAPPER_ADDRESS);
+                          
+                          return {
+                            key,
+                            tokenData,
+                            tokenContract,
+                            amountWei,
+                            needsApproval: allowance < amountWei,
+                          };
+                        });
+                        
+                        const tokenChecks = await Promise.all(allowanceChecks);
+                        const needApproval = tokenChecks.filter(t => t.needsApproval);
+                        
+                        // STEP 2: Batch approve all tokens that need it (parallel sends, sequential confirms)
+                        if (needApproval.length > 0) {
+                          showToast(`🔓 Approving ${needApproval.length} token(s)...`, 'info');
+                          
+                          // Send all approval txs at once
+                          const approvalTxs = await Promise.all(
+                            needApproval.map(t => 
+                              t.tokenContract.approve(DAPPER_ADDRESS, ethers.MaxUint256)
+                            )
+                          );
+                          
+                          // Wait for all approvals to confirm
+                          await Promise.all(approvalTxs.map(tx => tx.wait()));
+                          showToast('✅ All approvals confirmed!', 'success');
+                        }
+                        
+                        // STEP 3: Execute all zaps
+                        showToast('⚡ Executing zaps...', 'info');
+                        const zapTxs = [];
+                        
+                        // Zap PLS if selected
+                        if (plsEntry && parseFloat(plsEntry.amount) > 0) {
+                          const amountWei = ethers.parseEther(plsEntry.amount.toString());
+                          zapTxs.push(dapper.zapPLS({ value: amountWei }));
+                        }
+                        
+                        // Zap all ERC20 tokens
+                        for (const check of tokenChecks) {
+                          if (parseFloat(check.tokenData?.amount) > 0) {
+                            zapTxs.push(dapper.zapToken(check.tokenData.address, check.amountWei));
                           }
                         }
+                        
+                        // Send all zaps and wait for confirmations
+                        const sentTxs = await Promise.all(zapTxs);
+                        await Promise.all(sentTxs.map(tx => tx.wait()));
                         
                         // Calculate totals for celebration
                         const totalValueUsd = Object.entries(selectedFlexTokens).reduce((sum, [key, data]) => {
@@ -9351,16 +9318,32 @@ export default function App() {
                             timestamp: Date.now(),
                             apr: 10,
                           };
-                          // Add to flex stakes
                           setFlexStakes(prev => [...prev, newFlexStake]);
-                          // Show pink celebration popup
                           setFlexSuccess(newFlexStake);
                           showToast(`🎉 Flex LP Created! ${flexStakePercent}% staked at 10% APR!`, 'success');
                         } else {
                           showToast('✅ Converted to PLS in wallet!', 'success');
                         }
+                        
+                        // Update local state instead of full rescan (faster)
+                        const zappedAddresses = new Set(
+                          Object.entries(selectedFlexTokens)
+                            .map(([k, v]) => k === 'pls' ? null : v?.address?.toLowerCase())
+                            .filter(Boolean)
+                        );
+                        const zappedPls = !!selectedFlexTokens['pls'];
+                        
+                        setWalletTokens(prev => prev.filter(t => {
+                          if (t.symbol === 'PLS' && zappedPls) return false;
+                          if (t.address && zappedAddresses.has(t.address.toLowerCase())) return false;
+                          return true;
+                        }));
+                        
                         setSelectedFlexTokens({});
-                        scanWalletTokens(); // Refresh balances
+                        
+                        // Light refresh after 3s to update any remaining balances
+                        setTimeout(() => scanWalletTokens(), 3000);
+                        
                       } catch (err) {
                         console.error('Flex zap error:', err);
                         showToast('Zap failed: ' + err.message, 'error');
