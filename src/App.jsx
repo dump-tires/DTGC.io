@@ -156,7 +156,7 @@ const DTGC_TOKEN_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
 // ═══════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
-//                    V4 GOLD PAPER TOKENOMICS (91% CONTROLLED)
+//                    V4 GOLD PAPER TOKENOMICS
 // ═══════════════════════════════════════════════════════════════
 
 const DTGC_TOKENOMICS = {
@@ -3991,7 +3991,7 @@ export default function App() {
     trackedPctOfFloat: 8.0, // Approximate
     trackedPctOfTotal: 0.72, // 7.2M / 1B
     publicFloat: DTGC_TOTAL_SUPPLY * 0.09, // ~90M (9%)
-    controlledSupply: DTGC_TOTAL_SUPPLY * 0.91, // ~910M (91%)
+    controlledSupply: 0, // Calculated dynamically from wallet balances
     loading: true,
     lastUpdated: null,
     error: null,
@@ -4184,7 +4184,7 @@ export default function App() {
       
       // If no excluded wallets found in first page, use known values
       if (controlledSupply === 0) {
-        controlledSupply = 820000000 + 87000000; // ~907M (Dev + LP)
+        controlledSupply = 820000000 + 87000000; // Dev Wallet + LP (fallback estimates)
       }
       
       // Calculate actual public float
@@ -4257,7 +4257,7 @@ export default function App() {
         trackedPctOfFloat: (fallbackTracked / fallbackFloat * 100),
         trackedPctOfTotal: (fallbackTracked / DTGC_TOTAL_SUPPLY * 100),
         publicFloat: fallbackFloat,
-        controlledSupply: DTGC_TOTAL_SUPPLY * 0.91,
+        controlledSupply: DTGC_TOTAL_SUPPLY - fallbackFloat, // Calculated from float
         loading: false,
         error: err.message,
       }));
