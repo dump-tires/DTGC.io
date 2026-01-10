@@ -3507,12 +3507,12 @@ export default function App() {
     }
   }, [account, provider, livePrices]);
   
-  // Auto-scan when Flex panel opens
+  // Auto-scan when Flex panel opens (only if qualified)
   useEffect(() => {
-    if (isFlexTier && account && walletTokens.length === 0 && !scanningWallet) {
+    if (isFlexTier && account && qualifiesForFlex && walletTokens.length === 0 && !scanningWallet) {
       scanWalletTokens();
     }
-  }, [isFlexTier, account, walletTokens.length, scanningWallet, scanWalletTokens]);
+  }, [isFlexTier, account, qualifiesForFlex, walletTokens.length, scanningWallet, scanWalletTokens]);
   const [gasSpeed, setGasSpeed] = useState('fast'); // 'normal', 'fast', 'urgent'
   
   // LP Staking Contract Rewards Remaining
@@ -3802,6 +3802,42 @@ export default function App() {
     if (withdrawnFlexRef.current) return [];
     return flexStakes.filter(s => !isBlacklisted(s.id));
   }, [flexStakes, isBlacklisted]);
+  
+  // ═══════════════════════════════════════════════════════════════
+  // FLEX TIER REQUIREMENT: Calculate Diamond+ stake value ($300 minimum)
+  // ═══════════════════════════════════════════════════════════════
+  const diamondPlusStakeValue = useMemo(() => {
+    // Get all Diamond+ stakes from stakedPositions
+    const diamondPlusStakes = stakedPositions.filter(p => 
+      p.tierName === 'DIAMOND+' || p.lpType === 1
+    );
+    
+    // Calculate total LP amount staked in Diamond+
+    const totalLpAmount = diamondPlusStakes.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    
+    // LP value calculation: Each LP token ≈ 2x the DTGC value (since it's 50/50)
+    // Using DTGC price and URMOM price to estimate LP value
+    const dtgcPrice = livePrices.dtgc || 0.0002;
+    const urmomPrice = livePrices.urmom || 0.0000001;
+    
+    // LP token value ≈ sqrt(DTGC_reserve * URMOM_reserve) * 2 / LP_supply
+    // Simplified: Each LP ≈ $value based on DTGC price (conservative estimate)
+    const lpTokenPrice = dtgcPrice * 50000; // Approximate LP value per token
+    
+    const totalValueUsd = totalLpAmount * lpTokenPrice;
+    
+    console.log('💎 Diamond+ stake check:', { 
+      stakes: diamondPlusStakes.length, 
+      totalLp: totalLpAmount.toFixed(4), 
+      valueUsd: totalValueUsd.toFixed(2) 
+    });
+    
+    return totalValueUsd;
+  }, [stakedPositions, livePrices.dtgc, livePrices.urmom]);
+  
+  // Check if user qualifies for Flex tier ($300+ in Diamond+)
+  const FLEX_MINIMUM_STAKE = 300; // $300 minimum Diamond+ stake
+  const qualifiesForFlex = diamondPlusStakeValue >= FLEX_MINIMUM_STAKE;
   
   // ═══════════════════════════════════════════════════════════════
   // DEBUG: Expose contract inspection to browser console
@@ -6943,28 +6979,32 @@ export default function App() {
                   return (
                     <div
                       onClick={() => {
-                        setIsFlexTier(true);
-                        setSelectedTier(null);
-                        setIsLP(false);
+                        if (qualifiesForFlex) {
+                          setIsFlexTier(true);
+                          setSelectedTier(null);
+                          setIsLP(false);
+                        } else {
+                          showToast(`🔒 Requires $300+ in Diamond+ stakes. You have $${diamondPlusStakeValue.toFixed(2)}`, 'error');
+                        }
                       }}
                       style={{
                         width: '44px',
                         height: '44px',
-                        background: 'rgba(255,20,147,0.1)',
-                        border: '2px dashed #FF1493',
+                        background: qualifiesForFlex ? 'rgba(255,20,147,0.1)' : 'rgba(100,100,100,0.1)',
+                        border: qualifiesForFlex ? '2px dashed #FF1493' : '2px dashed #666',
                         borderRadius: '10px',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 10px rgba(255,20,147,0.2)',
-                        opacity: 0.7,
+                        cursor: qualifiesForFlex ? 'pointer' : 'not-allowed',
+                        boxShadow: qualifiesForFlex ? '0 2px 10px rgba(255,20,147,0.2)' : 'none',
+                        opacity: qualifiesForFlex ? 0.7 : 0.4,
                       }}
-                      title="Open Flex Staking Panel"
+                      title={qualifiesForFlex ? "Open Flex Staking Panel" : "Requires $300+ Diamond+ stake"}
                     >
-                      <span style={{ fontSize: '1.1rem' }}>💗</span>
-                      <span style={{ fontSize: '0.35rem', fontWeight: 700, color: '#FF1493' }}>+ FLEX</span>
+                      <span style={{ fontSize: '1.1rem' }}>{qualifiesForFlex ? '💗' : '🔒'}</span>
+                      <span style={{ fontSize: '0.35rem', fontWeight: 700, color: qualifiesForFlex ? '#FF1493' : '#666' }}>+ FLEX</span>
                     </div>
                   );
                 }
@@ -7109,20 +7149,29 @@ export default function App() {
                     
                     {/* Flex Total - Pink Heart */}
                     <div 
-                      onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
+                      onClick={() => { 
+                        if (qualifiesForFlex) {
+                          setIsFlexTier(true); 
+                          setSelectedTier(null); 
+                          setIsLP(false); 
+                        } else {
+                          showToast(`🔒 Requires $300+ in Diamond+ stakes`, 'error');
+                        }
+                      }}
                       style={{
                         flex: 1,
-                        background: 'rgba(255,20,147,0.15)',
-                        border: '1px solid rgba(255,20,147,0.4)',
+                        background: qualifiesForFlex ? 'rgba(255,20,147,0.15)' : 'rgba(100,100,100,0.15)',
+                        border: qualifiesForFlex ? '1px solid rgba(255,20,147,0.4)' : '1px solid rgba(100,100,100,0.4)',
                         borderRadius: '8px',
                         padding: '6px 8px',
                         textAlign: 'center',
-                        cursor: 'pointer',
+                        cursor: qualifiesForFlex ? 'pointer' : 'not-allowed',
                         transition: 'all 0.2s ease',
+                        opacity: qualifiesForFlex ? 1 : 0.5,
                       }}
                     >
-                      <div style={{ fontSize: '0.65rem', color: '#FF1493', fontWeight: 600, marginBottom: '2px' }}>💗 FLEX</div>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#FF69B4' }}>10% APR</div>
+                      <div style={{ fontSize: '0.65rem', color: qualifiesForFlex ? '#FF1493' : '#888', fontWeight: 600, marginBottom: '2px' }}>{qualifiesForFlex ? '💗' : '🔒'} FLEX</div>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: qualifiesForFlex ? '#FF69B4' : '#666' }}>10% APR</div>
                     </div>
                   </div>
                 );
@@ -7774,21 +7823,48 @@ export default function App() {
                 })()}
                 {/* Pink Flex Coin Clean Box */}
                 <div 
-                  onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
+                  onClick={() => { 
+                    if (qualifiesForFlex) {
+                      setIsFlexTier(true); 
+                      setSelectedTier(null); 
+                      setIsLP(false); 
+                    } else {
+                      showToast(`🔒 Requires $300+ in Diamond+ stakes. You have $${diamondPlusStakeValue.toFixed(2)}`, 'error');
+                    }
+                  }}
                   style={{
                     textAlign: 'center', 
                     padding: '10px 15px', 
-                    background: 'linear-gradient(135deg, rgba(255,20,147,0.2) 0%, rgba(255,105,180,0.15) 100%)', 
+                    background: qualifiesForFlex 
+                      ? 'linear-gradient(135deg, rgba(255,20,147,0.2) 0%, rgba(255,105,180,0.15) 100%)' 
+                      : 'linear-gradient(135deg, rgba(100,100,100,0.2) 0%, rgba(80,80,80,0.15) 100%)', 
                     borderRadius: '8px', 
-                    border: '2px solid #FF1493',
-                    cursor: 'pointer',
+                    border: qualifiesForFlex ? '2px solid #FF1493' : '2px solid #666',
+                    cursor: qualifiesForFlex ? 'pointer' : 'not-allowed',
                     transition: 'all 0.3s ease',
                     minWidth: '100px',
+                    opacity: qualifiesForFlex ? 1 : 0.6,
+                    position: 'relative',
                   }}
                 >
-                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>💗 FLEX</div>
-                  <div style={{fontSize: '0.6rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
-                  <div style={{fontSize: '0.5rem', color: '#FF1493', marginTop: '2px'}}>10% APR</div>
+                  {!qualifiesForFlex && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '-8px',
+                      right: '-8px',
+                      background: '#FF5722',
+                      color: '#fff',
+                      fontSize: '0.5rem',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                      fontWeight: 700,
+                    }}>🔒</div>
+                  )}
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: qualifiesForFlex ? '#FF1493' : '#888'}}>{qualifiesForFlex ? '💗' : '🔒'} FLEX</div>
+                  <div style={{fontSize: '0.6rem', color: qualifiesForFlex ? '#FF69B4' : '#666', fontWeight: 600}}>COIN CLEAN</div>
+                  <div style={{fontSize: '0.5rem', color: qualifiesForFlex ? '#FF1493' : '#888', marginTop: '2px'}}>
+                    {qualifiesForFlex ? '10% APR' : '$300+ D+ REQ'}
+                  </div>
                 </div>
                 
                 {/* Calculator Icon - Stake Forecaster */}
@@ -8562,26 +8638,61 @@ export default function App() {
 
                 {/* FLEX Tier Card */}
                 <div
-                  className={`tier-card flex ${isFlexTier ? 'selected' : ''}`}
-                  onClick={() => { setIsFlexTier(true); setSelectedTier(null); setIsLP(false); }}
+                  className={`tier-card flex ${isFlexTier ? 'selected' : ''} ${!qualifiesForFlex ? 'locked' : ''}`}
+                  onClick={() => { 
+                    if (qualifiesForFlex) {
+                      setIsFlexTier(true); 
+                      setSelectedTier(null); 
+                      setIsLP(false); 
+                    } else {
+                      showToast(`🔒 Requires $300+ in Diamond+ stakes. You have $${diamondPlusStakeValue.toFixed(2)}`, 'error');
+                    }
+                  }}
                   style={{ 
                     flex: '0 1 280px', 
                     maxWidth: '320px', 
-                    background: 'linear-gradient(135deg, rgba(255,20,147,0.15) 0%, rgba(255,105,180,0.1) 50%, rgba(255,182,193,0.05) 100%)', 
-                    border: isFlexTier ? '3px solid #FF1493' : '2px solid #FF1493',
-                    boxShadow: isFlexTier ? '0 0 20px rgba(255,20,147,0.5)' : '0 8px 32px rgba(255,20,147,0.2)',
+                    background: qualifiesForFlex 
+                      ? 'linear-gradient(135deg, rgba(255,20,147,0.15) 0%, rgba(255,105,180,0.1) 50%, rgba(255,182,193,0.05) 100%)'
+                      : 'linear-gradient(135deg, rgba(100,100,100,0.15) 0%, rgba(80,80,80,0.1) 50%, rgba(60,60,60,0.05) 100%)', 
+                    border: isFlexTier ? '3px solid #FF1493' : (qualifiesForFlex ? '2px solid #FF1493' : '2px solid #666'),
+                    boxShadow: isFlexTier ? '0 0 20px rgba(255,20,147,0.5)' : (qualifiesForFlex ? '0 8px 32px rgba(255,20,147,0.2)' : '0 4px 16px rgba(0,0,0,0.3)'),
                     transform: isFlexTier ? 'scale(1.02)' : 'scale(1)',
                     transition: 'all 0.3s ease',
+                    opacity: qualifiesForFlex ? 1 : 0.7,
+                    cursor: qualifiesForFlex ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  <div className="tier-icon" style={{ fontSize: '2.5rem' }}>💗⚡</div>
-                  <div className="tier-name" style={{ color: '#FF1493' }}>FLEX</div>
-                  <div className="tier-subtitle" style={{ color: '#FF69B4' }}>COIN CLEAN • NO LOCK!</div>
-                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    Requires $300+ Diamond/Diamond+
+                  {!qualifiesForFlex && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      background: 'rgba(255,0,0,0.8)',
+                      color: '#fff',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                    }}>
+                      🔒 LOCKED
+                    </div>
+                  )}
+                  <div className="tier-icon" style={{ fontSize: '2.5rem' }}>{qualifiesForFlex ? '💗⚡' : '🔒💗'}</div>
+                  <div className="tier-name" style={{ color: qualifiesForFlex ? '#FF1493' : '#888' }}>FLEX</div>
+                  <div className="tier-subtitle" style={{ color: qualifiesForFlex ? '#FF69B4' : '#666' }}>COIN CLEAN • NO LOCK!</div>
+                  <div className="tier-min-invest" style={{ 
+                    fontSize: '0.7rem', 
+                    color: qualifiesForFlex ? '#4CAF50' : '#FF5722', 
+                    marginBottom: '8px',
+                    fontWeight: qualifiesForFlex ? 400 : 600,
+                  }}>
+                    {qualifiesForFlex 
+                      ? `✅ Qualified: $${diamondPlusStakeValue.toFixed(0)} Diamond+`
+                      : `⚠️ Need $300+ Diamond+ ($${diamondPlusStakeValue.toFixed(0)} staked)`
+                    }
                   </div>
                   <div className="tier-apr-container">
-                    <div className="tier-apr" style={{ color: '#FF1493', fontSize: '2.2rem' }}>10.0%</div>
+                    <div className="tier-apr" style={{ color: qualifiesForFlex ? '#FF1493' : '#888', fontSize: '2.2rem' }}>10.0%</div>
                     <div className="tier-apr-label">APR</div>
                   </div>
                   <div className="tier-features">
@@ -8598,7 +8709,11 @@ export default function App() {
                       <span className="tier-feature-value" style={{ color: '#4CAF50', fontWeight: '700' }}>Anytime</span>
                     </div>
                   </div>
-                  <span className="tier-badge" style={{ background: 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)' }}>FLEX</span>
+                  <span className="tier-badge" style={{ 
+                    background: qualifiesForFlex 
+                      ? 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)' 
+                      : 'linear-gradient(135deg, #666 0%, #888 100%)' 
+                  }}>FLEX</span>
                 </div>
               </div>
 
@@ -8842,8 +8957,60 @@ export default function App() {
                 </div>
               )}
 
+              {/* FLEX STAKING PANEL - LOCKED (Not Qualified) */}
+              {isFlexTier && account && !qualifiesForFlex && (
+                <div className="staking-panel" style={{
+                  background: 'linear-gradient(135deg, rgba(100,100,100,0.1) 0%, rgba(80,80,80,0.05) 100%)',
+                  border: '2px solid #666',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                  maxWidth: '500px',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '4rem', marginBottom: '16px' }}>🔒</div>
+                  <h3 className="panel-title" style={{ color: '#888' }}>
+                    FLEX TIER LOCKED
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: '#aaa', marginBottom: '16px' }}>
+                    Requires <span style={{ color: '#9C27B0', fontWeight: 700 }}>$300+ in Diamond+ Stakes</span>
+                  </p>
+                  <div style={{
+                    background: 'rgba(156,39,176,0.1)',
+                    border: '1px solid rgba(156,39,176,0.3)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    marginBottom: '16px',
+                  }}>
+                    <div style={{ color: '#9C27B0', fontSize: '0.8rem', marginBottom: '8px' }}>Your Diamond+ Stakes</div>
+                    <div style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 700 }}>
+                      ${diamondPlusStakeValue.toFixed(2)}
+                    </div>
+                    <div style={{ color: '#FF5722', fontSize: '0.8rem', marginTop: '8px' }}>
+                      Need ${(FLEX_MINIMUM_STAKE - diamondPlusStakeValue).toFixed(2)} more
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: '#888', marginBottom: '16px' }}>
+                    Stake in Diamond+ tier (DTGC/URMOM LP) to unlock the Flex Zapper
+                  </p>
+                  <button
+                    onClick={() => { setIsFlexTier(false); setSelectedTier(4); setIsLP(true); }}
+                    style={{
+                      padding: '12px 24px',
+                      background: 'linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    💎 Go to Diamond+ Staking
+                  </button>
+                </div>
+              )}
+
               {/* FLEX STAKING PANEL - COMPREHENSIVE MULTI-TOKEN */}
-              {isFlexTier && account && (
+              {isFlexTier && account && qualifiesForFlex && (
                 <div className="staking-panel" style={{
                   background: 'linear-gradient(135deg, rgba(255,20,147,0.1) 0%, rgba(255,105,180,0.05) 100%)',
                   border: '2px solid #FF1493',
@@ -10670,6 +10837,7 @@ export default function App() {
                   <div>
                     <div style={{fontFamily: "Cinzel, serif", fontWeight: 700, color: "#FF1493", fontSize: "1.1rem"}}>DAPPER PINK PAPER</div>
                     <div style={{fontSize: "0.8rem", color: "var(--text-secondary)"}}>Flex Protocol • One-Click LP Zapper</div>
+                    <div style={{fontSize: "0.65rem", color: "#9C27B0", marginTop: "2px"}}>🔒 Requires $300+ Diamond+ Stake</div>
                     <div style={{fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "4px"}}>📥 Download .docx</div>
                   </div>
                 </a>
@@ -10739,8 +10907,43 @@ export default function App() {
               </div>
 
 
-              {/* Dapper One-Click LP Zapper */}
-              <DapperComponent provider={provider} account={account} />
+              {/* Dapper One-Click LP Zapper - Requires $300+ Diamond+ Stake */}
+              {qualifiesForFlex ? (
+                <DapperComponent provider={provider} account={account} />
+              ) : (
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(100,100,100,0.1) 0%, rgba(80,80,80,0.05) 100%)',
+                  border: '2px solid #666',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  marginBottom: '24px',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '12px' }}>🔒💗</div>
+                  <h3 style={{ color: '#888', marginBottom: '8px', fontFamily: 'Cinzel, serif' }}>DAPPER FLEX ZAPPER</h3>
+                  <p style={{ color: '#aaa', fontSize: '0.85rem', marginBottom: '16px' }}>
+                    Requires <span style={{ color: '#9C27B0', fontWeight: 700 }}>$300+ in Diamond+ Stakes</span>
+                  </p>
+                  <div style={{
+                    background: 'rgba(156,39,176,0.1)',
+                    border: '1px solid rgba(156,39,176,0.3)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '12px',
+                  }}>
+                    <div style={{ color: '#9C27B0', fontSize: '0.75rem', marginBottom: '4px' }}>Your Diamond+ Stakes</div>
+                    <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 700 }}>${diamondPlusStakeValue.toFixed(2)}</div>
+                    {diamondPlusStakeValue < FLEX_MINIMUM_STAKE && (
+                      <div style={{ color: '#FF5722', fontSize: '0.7rem', marginTop: '4px' }}>
+                        Need ${(FLEX_MINIMUM_STAKE - diamondPlusStakeValue).toFixed(2)} more to unlock
+                      </div>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '0.7rem', color: '#666' }}>
+                    Stake DTGC/URMOM LP in Diamond+ tier to access the Flex Zapper
+                  </p>
+                </div>
+              )}
               <div className="wp-card">
                 <h3 className="wp-card-title gold-text">📈 Dynamic APR System</h3>
                 <div className="wp-card-content">
