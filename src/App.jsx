@@ -9250,29 +9250,65 @@ export default function App() {
                           showToast('✅ All approvals confirmed!', 'success');
                         }
                         
-                        // STEP 3: Execute all zaps
+                        // STEP 3: Execute zaps with per-token error handling
                         showToast('⚡ Executing zaps...', 'info');
-                        const zapTxs = [];
+                        const successfulZaps = [];
+                        const skippedTokens = [];
                         
-                        // Zap PLS if selected
+                        // Zap PLS if selected (PLS always has liquidity)
                         if (plsEntry && parseFloat(plsEntry?.amount || 0) > 0) {
-                          const plsAmount = parseFloat(plsEntry.amount);
-                          const plsAmountStr = toFixedString(plsAmount, 18);
-                          const amountWei = ethers.parseEther(plsAmountStr);
-                          zapTxs.push(dapper.zapPLS({ value: amountWei }));
-                        }
-                        
-                        // Zap all ERC20 tokens
-                        for (const check of tokenChecks) {
-                          const tokenAmount = parseFloat(check.tokenData?.amount || 0);
-                          if (tokenAmount > 0 && check.amountWei > 0n) {
-                            zapTxs.push(dapper.zapToken(check.tokenData.address, check.amountWei));
+                          try {
+                            const plsAmount = parseFloat(plsEntry.amount);
+                            const plsAmountStr = toFixedString(plsAmount, 18);
+                            const amountWei = ethers.parseEther(plsAmountStr);
+                            // Pre-check with estimateGas
+                            await dapper.zapPLS.estimateGas({ value: amountWei });
+                            const tx = await dapper.zapPLS({ value: amountWei });
+                            successfulZaps.push({ tx, symbol: 'PLS', amount: plsAmount });
+                          } catch (err) {
+                            console.warn('PLS zap failed:', err.message);
+                            skippedTokens.push('PLS');
                           }
                         }
                         
-                        // Send all zaps and wait for confirmations
-                        const sentTxs = await Promise.all(zapTxs);
-                        await Promise.all(sentTxs.map(tx => tx.wait()));
+                        // Zap ERC20 tokens with individual error handling
+                        for (const check of tokenChecks) {
+                          const tokenAmount = parseFloat(check.tokenData?.amount || 0);
+                          const symbol = check.tokenData?.symbol || 'Token';
+                          
+                          // Skip tokens without liquidity
+                          if (!check.tokenData?.hasLiquidity) {
+                            console.log(`Skipping ${symbol} - no liquidity`);
+                            skippedTokens.push(symbol);
+                            continue;
+                          }
+                          
+                          if (tokenAmount > 0 && check.amountWei > 0n) {
+                            try {
+                              // Pre-check with estimateGas to catch reverts early
+                              await dapper.zapToken.estimateGas(check.tokenData.address, check.amountWei);
+                              const tx = await dapper.zapToken(check.tokenData.address, check.amountWei);
+                              successfulZaps.push({ tx, symbol, amount: tokenAmount });
+                            } catch (err) {
+                              console.warn(`${symbol} zap failed:`, err.message);
+                              skippedTokens.push(symbol);
+                            }
+                          }
+                        }
+                        
+                        // Check if any zaps succeeded
+                        if (successfulZaps.length === 0) {
+                          throw new Error(`No tokens could be zapped. ${skippedTokens.length > 0 ? `Skipped: ${skippedTokens.join(', ')} (no liquidity path)` : ''}`);
+                        }
+                        
+                        // Report skipped tokens if any
+                        if (skippedTokens.length > 0) {
+                          showToast(`⚠️ Skipped ${skippedTokens.join(', ')} (no liquidity)`, 'warning');
+                        }
+                        
+                        // Wait for all successful zaps to confirm
+                        showToast(`⏳ Confirming ${successfulZaps.length} zap(s)...`, 'info');
+                        await Promise.all(successfulZaps.map(z => z.tx.wait()));
                         
                         // Calculate totals for celebration
                         const totalValueUsd = Object.entries(selectedFlexTokens).reduce((sum, [key, data]) => {
