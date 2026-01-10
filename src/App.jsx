@@ -5429,7 +5429,6 @@ export default function App() {
         showToast('Unable to get token price. Please try again.', 'error');
         return;
       }
-      // Convert currency to USD first, then to tokens
       const valueUsd = convertFromCurrency(amount);
       amount = valueUsd / priceUsd;
     }
@@ -5469,25 +5468,20 @@ export default function App() {
         return;
       }
       
-      // Show stake video if enabled
       if (VIDEOS_ENABLED) {
         setStakingTierName(tierData.name);
         setShowStakeVideo(true);
       }
       
-      // Show start modal
       setModalType('start');
       setModalOpen(true);
       setLoading(true);
       
-      // Simulate transaction delay
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Calculate fee (5% entry fee - V5)
       const fee = amount * (V5_FEES.entryFee / 100);
       const stakedAmount = amount - fee;
       
-      // Create position
       const newPosition = {
         id: Date.now(),
         tier: tierData.name,
@@ -5500,7 +5494,6 @@ export default function App() {
         rewards: 0,
       };
       
-      // Update balances
       const newBalances = {
         ...testnetBalances,
         dtgc: isLP ? testnetBalances.dtgc : testnetBalances.dtgc - amount,
@@ -5521,45 +5514,21 @@ export default function App() {
       return;
     }
 
-    // MAINNET - Real staking
+    // MAINNET - Real staking (OPTIMIZED FOR SPEED)
     if (!signer || !account) {
       showToast('Please connect your wallet first', 'error');
       return;
     }
 
-    // Check balance before proceeding
+    // Quick balance check
     const walletBalance = isLP 
       ? (selectedTier === 4 ? parseFloat(lpDtgcUrmomBalance) : parseFloat(lpDtgcPlsBalance))
       : parseFloat(dtgcBalance);
     
-    if (walletBalance <= 0) {
-      showToast(`❌ You have no ${isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC'} tokens to stake!`, 'error');
-      return;
-    }
-    
-    if (amount > walletBalance) {
+    if (walletBalance <= 0 || amount > walletBalance) {
       showToast(`❌ Insufficient balance! You have ${formatNumber(walletBalance)} ${isLP ? 'LP' : 'DTGC'}`, 'error');
       return;
     }
-
-    // NOTE: Multiple stakes allowed - contract will handle if there are restrictions
-    // Previously blocked LP stakes if existing - now letting contract decide
-    if (isLP) {
-      const existingLpStake = stakedPositions.find(p => p.isLP);
-      if (existingLpStake) {
-        console.log('ℹ️ User has existing LP stake, attempting to add another:', existingLpStake);
-        // Don't block - let contract handle it
-      }
-    }
-
-    console.log('💰 Pre-flight checks passed:', { 
-      walletBalance, 
-      stakingAmount: amount, 
-      isLP, 
-      selectedTier,
-      tokenType: isLP ? (selectedTier === 4 ? 'DTGC/URMOM LP' : 'DTGC/PLS LP') : 'DTGC',
-      existingPositions: stakedPositions.length
-    });
 
     try {
       setLoading(true);
@@ -5568,206 +5537,72 @@ export default function App() {
 
       const amountWei = ethers.parseEther(amount.toString());
 
-      // Determine which token and contract to use
-      let tokenAddress;
-      if (isLP) {
-        // Use correct LP token based on tier
-        tokenAddress = selectedTier === 4 ? CONTRACT_ADDRESSES.lpDtgcUrmom : CONTRACT_ADDRESSES.lpDtgcPls;
-      } else {
-        tokenAddress = CONTRACTS.DTGC;
-      }
+      // Determine token and contract addresses
+      const tokenAddress = isLP 
+        ? (selectedTier === 4 ? CONTRACT_ADDRESSES.lpDtgcUrmom : CONTRACT_ADDRESSES.lpDtgcPls)
+        : CONTRACTS.DTGC;
       
-      // ═══════════════════════════════════════════════════════════════
-      // V4 vs V3 CONTRACT SELECTION
-      // ═══════════════════════════════════════════════════════════════
-      let stakingAddress;
-      let stakingABI;
       const useV4 = USE_V4_CONTRACTS && (isLP 
         ? CONTRACT_ADDRESSES.lpStakingV4 !== '0x0000000000000000000000000000000000000000'
         : CONTRACT_ADDRESSES.stakingV4 !== '0x0000000000000000000000000000000000000000');
       
-      if (useV4) {
-        console.log('🚀 Using V4 contracts (unlimited multi-stake)');
-        stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV4 : CONTRACT_ADDRESSES.stakingV4;
-        stakingABI = isLP ? LP_STAKING_V4_ABI : STAKING_V4_ABI;
-      } else {
-        console.log('📦 Using V3 contracts (single stake per type)');
-        stakingAddress = isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3;
-        stakingABI = isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI;
-      }
+      const stakingAddress = useV4 
+        ? (isLP ? CONTRACT_ADDRESSES.lpStakingV4 : CONTRACT_ADDRESSES.stakingV4)
+        : (isLP ? CONTRACT_ADDRESSES.lpStakingV3 : CONTRACT_ADDRESSES.stakingV3);
+      const stakingABI = useV4
+        ? (isLP ? LP_STAKING_V4_ABI : STAKING_V4_ABI)
+        : (isLP ? LP_STAKING_V3_ABI : STAKING_V3_ABI);
 
-      console.log('🔄 Starting stake process...', { 
-        tokenAddress, 
-        stakingAddress, 
-        amount, 
-        amountWei: amountWei.toString(),
-        isLP: isLP,
-        selectedTier: selectedTier,
-        tierName: tierData.name
-      });
+      console.log('🚀 FAST STAKE:', { amount, isLP, tier: selectedTier, v4: useV4 });
 
-      // Step 1: Check and approve token spending
-      showToast('Step 1/2: Checking approval...', 'info');
-      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
-
-      const currentAllowance = await tokenContract.allowance(account, stakingAddress);
-      console.log('📋 Current allowance:', currentAllowance.toString());
-      
-      if (currentAllowance < amountWei) {
-        console.log('🔓 Requesting token approval...');
-        showToast('Step 1/2: Approve tokens in wallet...', 'info');
-        const approveTx = await tokenContract.approve(stakingAddress, ethers.MaxUint256);
-        console.log('⏳ Approval tx sent:', approveTx.hash);
-        await approveTx.wait();
-        console.log('✅ Approval confirmed!');
-        showToast('Token approval confirmed!', 'success');
-      } else {
-        console.log('✅ Already approved, skipping approval step');
-      }
-
-      // Step 2: Stake tokens
-      console.log('🔄 Sending stake transaction...');
-      showToast('Step 2/2: Confirm stake in wallet...', 'info');
-      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
-      console.log('📜 Contract address:', stakingAddress);
-
-      // Get current gas price and apply speed multiplier
-      const gasSpeedMultipliers = { normal: 100n, fast: 150n, urgent: 200n };
-      const multiplier = gasSpeedMultipliers[gasSpeed] || 150n;
+      // Get gas price with speed multiplier (default to FAST for speed)
+      const gasSpeedMultipliers = { normal: 100n, fast: 200n, urgent: 300n };
+      const multiplier = gasSpeedMultipliers[gasSpeed] || 200n; // Default FAST
       let gasPrice;
       try {
         const feeData = await provider.getFeeData();
-        const baseGasPrice = feeData.gasPrice || 0n;
-        gasPrice = (baseGasPrice * multiplier) / 100n;
-        console.log(`⛽ Gas price: ${ethers.formatUnits(baseGasPrice, 'gwei')} gwei → ${gasSpeed} (${multiplier}%) → ${ethers.formatUnits(gasPrice, 'gwei')} gwei`);
+        gasPrice = ((feeData.gasPrice || 0n) * multiplier) / 100n;
       } catch (e) {
-        console.warn('Could not get gas price, using default');
-        gasPrice = undefined; // Let wallet decide
+        gasPrice = undefined;
       }
+
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+      const stakingContract = new ethers.Contract(stakingAddress, stakingABI, signer);
+
+      // STEP 1: Check allowance (fast RPC call)
+      const currentAllowance = await tokenContract.allowance(account, stakingAddress);
+      
+      if (currentAllowance < amountWei) {
+        showToast('🔓 Approving tokens...', 'info');
+        const txOpts = gasPrice ? { gasPrice, gasLimit: 100000n } : { gasLimit: 100000n };
+        const approveTx = await tokenContract.approve(stakingAddress, ethers.MaxUint256, txOpts);
+        console.log('⏳ Approval tx:', approveTx.hash);
+        await approveTx.wait(1); // Wait for 1 confirmation only
+        console.log('✅ Approved!');
+      }
+
+      // STEP 2: Stake with FIXED gas limit (skip estimation for speed)
+      showToast('⚡ Staking...', 'info');
+      const FIXED_GAS_LIMITS = { lp: 350000n, dtgc: 280000n };
+      const gasLimit = isLP ? FIXED_GAS_LIMITS.lp : FIXED_GAS_LIMITS.dtgc;
+      const txOpts = gasPrice ? { gasPrice, gasLimit } : { gasLimit };
 
       let stakeTx;
-      try {
-        if (isLP) {
-          // LP Staking - amount and lpType (0=Diamond/PLS, 1=Diamond+/URMOM)
-          const lpType = selectedTier === 4 ? 1 : 0; // Diamond+ = 1, Diamond = 0
-          console.log('📤 LP Stake params:', { amount: amountWei.toString(), lpType, contract: stakingAddress, gasSpeed });
-          
-          // Estimate gas and add 50% buffer for safety
-          let gasLimit = 300000n; // Default fallback
-          try {
-            const gasEstimate = await stakingContract.stake.estimateGas(amountWei, lpType);
-            gasLimit = (gasEstimate * 150n) / 100n; // Add 50% buffer
-            console.log('⛽ Gas estimate:', gasEstimate.toString(), '→ Using limit:', gasLimit.toString());
-          } catch (gasErr) {
-            console.error('⛽ Gas estimation failed - transaction will likely revert!');
-            console.error('⛽ Error:', gasErr.message || gasErr);
-            console.error('⛽ Reason:', gasErr.reason || 'unknown');
-            
-            // Try to extract revert reason
-            let revertReason = 'Unknown contract error';
-            if (gasErr.reason) revertReason = gasErr.reason;
-            else if (gasErr.data?.message) revertReason = gasErr.data.message;
-            else if (gasErr.error?.message) revertReason = gasErr.error.message;
-            else if (gasErr.message?.includes('execution reverted')) {
-              const match = gasErr.message.match(/reason="([^"]+)"/);
-              if (match) revertReason = match[1];
-            }
-            
-            showToast(`❌ Contract rejected: ${revertReason}`, 'error');
-            setLoading(false);
-            return;
-          }
-          
-          console.log('📤 Calling stake function with explicit gas... (waiting for wallet response)');
-          
-          // Build transaction options with gas price for speed
-          const txOptions = { gasLimit };
-          if (gasPrice) txOptions.gasPrice = gasPrice;
-          
-          // Wrap in timeout to handle wallets that don't return properly
-          const stakePromise = stakingContract.stake(amountWei, lpType, txOptions);
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('TIMEOUT_CHECK_CHAIN')), 120000) // 2 min timeout
-          );
-          
-          try {
-            stakeTx = await Promise.race([stakePromise, timeoutPromise]);
-            console.log('✅ Stake call returned successfully');
-          } catch (raceErr) {
-            if (raceErr.message === 'TIMEOUT_CHECK_CHAIN') {
-              console.warn('⚠️ Wallet response timeout - transaction may have succeeded!');
-              showToast('⚠️ Wallet timeout - check your wallet/blockchain for tx status', 'warning');
-              setLoading(false);
-              setModalOpen(false);
-              // Refresh balances to check if stake went through
-              setTimeout(async () => {
-                try {
-                  if (selectedTier === 4) {
-                    const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
-                    const lpBal = await lpUrmomContract.balanceOf(account);
-                    setLpDtgcUrmomBalance(ethers.formatEther(lpBal));
-                  } else {
-                    const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
-                    const lpBal = await lpPlsContract.balanceOf(account);
-                    setLpDtgcPlsBalance(ethers.formatEther(lpBal));
-                  }
-                } catch (e) { console.warn('Balance refresh error:', e); }
-              }, 3000);
-              return;
-            }
-            throw raceErr;
-          }
-        } else {
-          // Regular Staking - amount and tier
-          console.log('📤 Stake params:', { amount: amountWei.toString(), tier: selectedTier, contract: stakingAddress, gasSpeed });
-          
-          // Estimate gas and add 50% buffer for safety
-          let gasLimit = 250000n; // Default fallback
-          try {
-            const gasEstimate = await stakingContract.stake.estimateGas(amountWei, selectedTier);
-            gasLimit = (gasEstimate * 150n) / 100n; // Add 50% buffer
-            console.log('⛽ Gas estimate:', gasEstimate.toString(), '→ Using limit:', gasLimit.toString());
-          } catch (gasErr) {
-            console.error('⛽ Gas estimation failed - transaction will likely revert!');
-            console.error('⛽ Error:', gasErr.message || gasErr);
-            
-            // Try to extract revert reason
-            let revertReason = 'Unknown contract error';
-            if (gasErr.reason) revertReason = gasErr.reason;
-            else if (gasErr.data?.message) revertReason = gasErr.data.message;
-            else if (gasErr.error?.message) revertReason = gasErr.error.message;
-            else if (gasErr.message?.includes('execution reverted')) {
-              const match = gasErr.message.match(/reason="([^"]+)"/);
-              if (match) revertReason = match[1];
-            }
-            
-            showToast(`❌ Contract rejected: ${revertReason}`, 'error');
-            setLoading(false);
-            return;
-          }
-          
-          // Build transaction options with gas price for speed
-          const txOptions = { gasLimit };
-          if (gasPrice) txOptions.gasPrice = gasPrice;
-          
-          console.log('📤 Calling stake function with explicit gas... (waiting for wallet response)');
-          stakeTx = await stakingContract.stake(amountWei, selectedTier, txOptions);
-          console.log('✅ Stake call returned successfully');
-        }
-      } catch (stakeCallErr) {
-        console.error('❌ Stake call failed:', stakeCallErr);
-        console.error('❌ Error code:', stakeCallErr.code);
-        console.error('❌ Error reason:', stakeCallErr.reason);
-        throw stakeCallErr;
+      if (isLP) {
+        const lpType = selectedTier === 4 ? 1 : 0;
+        stakeTx = await stakingContract.stake(amountWei, lpType, txOpts);
+      } else {
+        stakeTx = await stakingContract.stake(amountWei, selectedTier, txOpts);
       }
 
-      console.log('⏳ Stake tx sent:', stakeTx.hash);
-      showToast(`Transaction sent! Hash: ${stakeTx.hash.slice(0,10)}...`, 'info');
+      console.log('⏳ Stake tx:', stakeTx.hash);
+      showToast(`📤 TX sent: ${stakeTx.hash.slice(0,10)}...`, 'info');
       
-      await stakeTx.wait();
+      // Wait for 1 confirmation (faster than default)
+      await stakeTx.wait(1);
       console.log('✅ Stake confirmed!');
 
-      // Show stake video if enabled
+      // Show success immediately
       if (VIDEOS_ENABLED) {
         setStakingTierName(tierData.name);
         setShowStakeVideo(true);
@@ -5777,88 +5612,44 @@ export default function App() {
       setModalType('end');
       setStakeAmount('');
       setStakeInputMode('tokens');
-      showToast(`✅ Successfully staked ${formatNumber(amount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name} tier!`, 'success');
+      showToast(`✅ Staked ${formatNumber(amount)} ${isLP ? 'LP' : 'DTGC'} in ${tierData.name}!`, 'success');
 
-      // Refresh balances
-      try {
-        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
-        const dtgcBal = await dtgcContract.balanceOf(account);
-        setDtgcBalance(ethers.formatEther(dtgcBal));
-
-        // Refresh correct LP balance based on tier
-        if (isLP) {
-          if (selectedTier === 4) {
-            // Diamond+ (DTGC/URMOM LP)
-            const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
-            const lpBal = await lpUrmomContract.balanceOf(account);
-            setLpDtgcUrmomBalance(ethers.formatEther(lpBal));
-          } else {
-            // Diamond (DTGC/PLS LP)
-            const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
-            const lpBal = await lpPlsContract.balanceOf(account);
-            setLpDtgcPlsBalance(ethers.formatEther(lpBal));
-          }
+      // PARALLEL balance refresh in background (don't block UI)
+      setTimeout(async () => {
+        try {
+          const refreshPromises = [
+            new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider).balanceOf(account),
+            new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider).balanceOf(account),
+            new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider).balanceOf(account),
+          ];
+          const [dtgcBal, lpPlsBal, lpUrmomBal] = await Promise.all(refreshPromises);
+          setDtgcBalance(ethers.formatEther(dtgcBal));
+          setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
+          setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
+          console.log('✅ Balances refreshed');
+        } catch (e) {
+          console.warn('Balance refresh error:', e);
         }
-      } catch (refreshErr) {
-        console.warn('Balance refresh error:', refreshErr);
-      }
+      }, 1000);
 
-      // Close modal after short delay to show success
-      setTimeout(() => {
-        setModalOpen(false);
-      }, 1500);
+      // Close modal after short delay
+      setTimeout(() => setModalOpen(false), 1500);
 
     } catch (err) {
       console.error('❌ Staking error:', err);
-      console.error('Error code:', err.code);
-      console.error('Error message:', err.message);
       setLoading(false);
       setModalOpen(false);
 
-      // Parse error for user-friendly message
-      console.error('❌ Full stake error:', err);
-      
-      let errorMessage = 'Unknown error';
-      
-      // Check for common error patterns
-      if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
-        showToast('Transaction rejected by user', 'info');
-        return;
-      } else if (err.message?.includes('user rejected')) {
+      if (err.code === 'ACTION_REJECTED' || err.code === 4001 || err.message?.includes('user rejected')) {
         showToast('Transaction cancelled', 'info');
         return;
-      } else if (err.code === -32002) {
-        showToast('Please check your wallet for pending request', 'info');
+      }
+      if (err.code === -32002) {
+        showToast('Check wallet for pending request', 'info');
         return;
       }
       
-      // Try to extract revert reason
-      if (err.reason) {
-        errorMessage = err.reason;
-      } else if (err.data?.message) {
-        errorMessage = err.data.message;
-      } else if (err.error?.message) {
-        errorMessage = err.error.message;
-      } else if (err.message) {
-        // Parse common contract revert messages
-        const msg = err.message.toLowerCase();
-        if (msg.includes('already staked') || msg.includes('active stake')) {
-          errorMessage = 'You already have an active stake in this tier';
-        } else if (msg.includes('insufficient') || msg.includes('exceeds balance')) {
-          errorMessage = 'Insufficient token balance';
-        } else if (msg.includes('not enough') || msg.includes('empty')) {
-          errorMessage = 'Reward pool may be empty - contact admin';
-        } else if (msg.includes('paused')) {
-          errorMessage = 'Contract is currently paused';
-        } else if (msg.includes('minimum')) {
-          errorMessage = 'Amount below minimum stake requirement';
-        } else if (msg.includes('transfer failed')) {
-          errorMessage = 'Token transfer failed - check approval';
-        } else {
-          errorMessage = err.message.slice(0, 80);
-        }
-      }
-      
+      let errorMessage = err.reason || err.data?.message || err.error?.message || err.message?.slice(0, 80) || 'Unknown error';
       showToast(`❌ Staking failed: ${errorMessage}`, 'error');
     }
   };
