@@ -9198,6 +9198,15 @@ export default function App() {
                           return;
                         }
                         
+                        // Helper: Convert number to fixed string (no scientific notation)
+                        const toFixedString = (num, decimals = 18) => {
+                          if (num === 0) return '0';
+                          // Convert to string with enough decimal places
+                          const str = num.toFixed(decimals);
+                          // Remove trailing zeros after decimal point
+                          return str.replace(/\.?0+$/, '') || '0';
+                        };
+                        
                         // STEP 1: Batch check all allowances in parallel
                         showToast('🔍 Checking approvals...', 'info');
                         const allowanceChecks = erc20Entries.map(async ([key, tokenData]) => {
@@ -9208,7 +9217,9 @@ export default function App() {
                           
                           const decimals = parseInt(tokenData.decimals) || 18;
                           const amount = parseFloat(tokenData?.amount) || 0;
-                          const amountWei = ethers.parseUnits(amount.toString(), decimals);
+                          // Use toFixedString to avoid scientific notation
+                          const amountStr = toFixedString(amount, decimals);
+                          const amountWei = ethers.parseUnits(amountStr, decimals);
                           const allowance = await tokenContract.allowance(account, DAPPER_ADDRESS);
                           
                           return {
@@ -9246,7 +9257,8 @@ export default function App() {
                         // Zap PLS if selected
                         if (plsEntry && parseFloat(plsEntry?.amount || 0) > 0) {
                           const plsAmount = parseFloat(plsEntry.amount);
-                          const amountWei = ethers.parseEther(plsAmount.toString());
+                          const plsAmountStr = toFixedString(plsAmount, 18);
+                          const amountWei = ethers.parseEther(plsAmountStr);
                           zapTxs.push(dapper.zapPLS({ value: amountWei }));
                         }
                         
