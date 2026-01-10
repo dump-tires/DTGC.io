@@ -1,0 +1,55 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="50%" style="stop-color:#16213e"/>
+      <stop offset="100%" style="stop-color:#0f0f23"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700"/>
+      <stop offset="50%" style="stop-color:#D4AF37"/>
+      <stop offset="100%" style="stop-color:#B8860B"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  
+  <!-- Gold accent lines -->
+  <line x1="0" y1="0" x2="300" y2="0" stroke="#D4AF37" stroke-width="4"/>
+  <line x1="0" y1="0" x2="0" y2="200" stroke="#D4AF37" stroke-width="4"/>
+  <line x1="1200" y1="630" x2="900" y2="630" stroke="#D4AF37" stroke-width="4"/>
+  <line x1="1200" y1="630" x2="1200" y2="430" stroke="#D4AF37" stroke-width="4"/>
+  
+  <!-- Gold coin icon -->
+  <circle cx="600" cy="200" r="80" fill="none" stroke="url(#gold)" stroke-width="6" filter="url(#glow)"/>
+  <circle cx="600" cy="200" r="60" fill="url(#gold)" opacity="0.3"/>
+  <text x="600" y="220" text-anchor="middle" fill="#FFD700" font-size="60" font-family="Arial Black" filter="url(#glow)">₿</text>
+  
+  <!-- Main Title -->
+  <text x="600" y="340" text-anchor="middle" fill="url(#gold)" font-size="72" font-family="Georgia, serif" font-weight="bold" filter="url(#glow)">DTGC.io</text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="400" text-anchor="middle" fill="#FFFFFF" font-size="32" font-family="Arial" font-weight="bold">DT GOLD COIN</text>
+  
+  <!-- Tagline -->
+  <text x="600" y="450" text-anchor="middle" fill="#D4AF37" font-size="24" font-family="Arial">The Gold Standard of PulseChain Staking</text>
+  
+  <!-- Features row -->
+  <text x="600" y="520" text-anchor="middle" fill="#888888" font-size="20" font-family="Arial">
+    ✅ V4 AUDITED  •  💎 UP TO 70% APR  •  🔥 ZERO TAX  •  🏛️ DAO GOVERNANCE
+  </text>
+  
+  <!-- Bottom accent -->
+  <rect x="400" y="570" width="400" height="4" fill="url(#gold)" rx="2"/>
+  
+  <!-- Website -->
+  <text x="600" y="605" text-anchor="middle" fill="#666666" font-size="18" font-family="Arial">https://dtgc.io</text>
+</svg>
