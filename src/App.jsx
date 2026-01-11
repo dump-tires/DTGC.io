@@ -2989,6 +2989,16 @@ const DexScreenerWidget = () => {
 const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, getCurrencySymbol, convertToCurrency }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+  
+  // Remember last valid positions to prevent flicker during RPC delays
+  const lastValidPositions = React.useRef([]);
+  
+  React.useEffect(() => {
+    // Only update ref if we have actual positions
+    if (stakedPositions && stakedPositions.length > 0) {
+      lastValidPositions.current = stakedPositions;
+    }
+  }, [stakedPositions]);
 
   React.useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -2996,13 +3006,19 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  if (!account || !stakedPositions || stakedPositions.length === 0) return null;
+  // Use current positions if available, otherwise use last known good positions
+  const displayPositions = (stakedPositions && stakedPositions.length > 0) 
+    ? stakedPositions 
+    : lastValidPositions.current;
+  
+  // Only hide if no account OR we've never had positions
+  if (!account || (displayPositions.length === 0 && lastValidPositions.current.length === 0)) return null;
 
   // Categorize stakes
-  const diamondLP = stakedPositions.filter(p => p.isLP && p.lpType !== 1 && p.tierName !== 'FLEX');
-  const diamondPlusLP = stakedPositions.filter(p => p.isLP && p.lpType === 1 && p.tierName !== 'FLEX');
-  const flexStakes = stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX');
-  const dtgcStakes = stakedPositions.filter(p => !p.isLP && !p.isFlex && p.tierName !== 'FLEX');
+  const diamondLP = displayPositions.filter(p => p.isLP && p.lpType !== 1 && p.tierName !== 'FLEX');
+  const diamondPlusLP = displayPositions.filter(p => p.isLP && p.lpType === 1 && p.tierName !== 'FLEX');
+  const flexStakes = displayPositions.filter(p => p.isFlex || p.tierName === 'FLEX');
+  const dtgcStakes = displayPositions.filter(p => !p.isLP && !p.isFlex && p.tierName !== 'FLEX');
   
   const totalDiamondLP = diamondLP.reduce((sum, p) => sum + (p.amount || 0), 0);
   const totalDiamondPlusLP = diamondPlusLP.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -3047,7 +3063,7 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
             {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
           </div>
           <div style={{ color: 'rgba(0,0,0,0.6)', fontSize: '0.45rem', fontWeight: 600 }}>
-            {stakedPositions.length} STAKE{stakedPositions.length !== 1 ? 'S' : ''}
+            {displayPositions.length} STAKE{displayPositions.length !== 1 ? 'S' : ''}
           </div>
         </div>
       </div>
@@ -3951,6 +3967,11 @@ export default function App() {
   const [lpPosition, setLpPosition] = useState(null);
   const [stakedPositions, setStakedPositions] = useState([]);
   const [sidebarKey, setSidebarKey] = useState(0); // Key to force sidebar re-render
+  const [positionsLoading, setPositionsLoading] = useState(false); // Track stake fetch state
+  
+  // Persist last known good positions - survives RPC failures
+  const lastKnownPositionsRef = useRef([]);
+  const hasEverLoadedPositions = useRef(false); // Track if we ever successfully loaded
   
   // 💗 CONSOLIDATED FLEX CONTROLS
   const [flexClaimPercent, setFlexClaimPercent] = useState(100); // % of rewards to claim
@@ -4047,17 +4068,21 @@ export default function App() {
   }, [stakedPositions, flexStakes, blacklistStake]);
   
   // FILTERED GETTERS - these filter out blacklisted stakes
+  // Uses lastKnownPositionsRef as fallback to prevent flicker
   const getVisiblePositions = useCallback(() => {
-    return stakedPositions.filter(p => !isBlacklisted(p.id) && !(withdrawnFlexRef.current && (p.isFlex || p.tierName === 'FLEX')));
+    const positions = stakedPositions.length > 0 ? stakedPositions : lastKnownPositionsRef.current;
+    return positions.filter(p => !isBlacklisted(p.id) && !(withdrawnFlexRef.current && (p.isFlex || p.tierName === 'FLEX')));
   }, [stakedPositions, isBlacklisted]);
   
   const getVisibleFlexPositions = useCallback(() => {
     if (withdrawnFlexRef.current) return [];
-    return stakedPositions.filter(p => (p.isFlex || p.tierName === 'FLEX') && !isBlacklisted(p.id));
+    const positions = stakedPositions.length > 0 ? stakedPositions : lastKnownPositionsRef.current;
+    return positions.filter(p => (p.isFlex || p.tierName === 'FLEX') && !isBlacklisted(p.id));
   }, [stakedPositions, isBlacklisted]);
   
   const getVisibleNonFlexPositions = useCallback(() => {
-    return stakedPositions.filter(p => !p.isFlex && p.tierName !== 'FLEX' && !isBlacklisted(p.id));
+    const positions = stakedPositions.length > 0 ? stakedPositions : lastKnownPositionsRef.current;
+    return positions.filter(p => !p.isFlex && p.tierName !== 'FLEX' && !isBlacklisted(p.id));
   }, [stakedPositions, isBlacklisted]);
   
   const getVisibleFlexStakes = useCallback(() => {
@@ -5145,6 +5170,7 @@ export default function App() {
     setLpBalance('0');
     setPlsBalance('0');
     setStakedPositions([]);
+    lastKnownPositionsRef.current = []; // Clear cached positions
     setAvailableAccounts([]);
     setWalletStep('select');
     setSelectedWalletType(null);
@@ -5186,6 +5212,7 @@ export default function App() {
         
         // Clear old positions so they refresh for new account
         setStakedPositions([]);
+        lastKnownPositionsRef.current = []; // Clear cached positions for old account
         
         showToast(`✅ Switched to ${newAccount.slice(0,6)}...${newAccount.slice(-4)}`, 'success');
       }
@@ -6354,13 +6381,16 @@ export default function App() {
                                 err.code === 'CALL_EXCEPTION' ||
                                 err.code === 'UNPREDICTABLE_GAS_LIMIT';
       
-      if (isNoPositionError) {
-        showToast('⚠️ No active stake found on V3 contract. Clearing stale UI data...', 'info');
-        // Auto-clear the stale position
-        setStakedPositions([]);
+      if (isNoPositionError && positionId) {
+        showToast('⚠️ No active stake found. Removing stale entry from UI...', 'info');
+        // Only remove THIS specific position, not all of them
+        setStakedPositions(prev => prev.filter(p => p.id !== positionId));
         setTimeout(() => {
-          showToast('✅ Stale data cleared. Position may have already been withdrawn.', 'success');
+          showToast('✅ Stale entry removed. Stake may have already been withdrawn.', 'success');
         }, 1500);
+      } else if (isNoPositionError) {
+        showToast('⚠️ Stake not found on contract. Please refresh the page.', 'info');
+        // Don't clear all positions - user should refresh
       } else {
         showToast(`Emergency withdrawal failed: ${err.message?.slice(0, 50) || 'Unknown error'}`, 'error');
       }
@@ -6686,8 +6716,8 @@ export default function App() {
               }
             }
             
-            setStakedPositions(positions);
-            console.log('📊 V4 Total positions found:', positions.length);
+            // Don't set positions here - wait until V3 check completes
+            console.log('📊 V4 positions found so far:', positions.length);
             
             // DON'T return - also fetch V3 legacy positions below!
             // return; // Success with V4!
@@ -6795,8 +6825,18 @@ export default function App() {
           console.warn('⚠️ V3 fetch also had issues:', v3Err.message);
         }
 
-        setStakedPositions(positions);
-        console.log('📊 Total positions (V3+V4):', positions.length);
+        // Only update if we found positions - don't clear with empty array
+        if (positions.length > 0) {
+          setStakedPositions(positions);
+          lastKnownPositionsRef.current = positions; // Save as last known good
+          console.log('📊 Total positions (V3+V4):', positions.length);
+        } else if (lastKnownPositionsRef.current.length > 0) {
+          // No positions found but we had them before - keep the last known good
+          console.log('⚠️ No positions from RPC - preserving last known:', lastKnownPositionsRef.current.length);
+          setStakedPositions(lastKnownPositionsRef.current);
+        } else {
+          console.log('⚠️ No positions found and no cached positions');
+        }
         return; // Success!
 
       } catch (err) {
@@ -7283,7 +7323,7 @@ export default function App() {
         )}
         
         {/* EXPANDED STAKE WIDGET */}
-        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0)) && !stakeWidgetMinimized && (
+        {account && (TESTNET_MODE ? (testnetBalances.positions?.length > 0) : (stakedPositions.length > 0 || lastKnownPositionsRef.current.length > 0)) && !stakeWidgetMinimized && (
             // Expanded view - full widget with diamond selector
             <div style={{
               position: 'fixed',
@@ -12944,7 +12984,7 @@ export default function App() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* CALCULATOR FAB - BOTTOM RIGHT (Below Treasure Vault) */}
       {/* ═══════════════════════════════════════════════════════════════ */}
-      {!TESTNET_MODE && account && stakedPositions.length > 0 && (
+      {!TESTNET_MODE && account && (stakedPositions.length > 0 || lastKnownPositionsRef.current.length > 0) && (
         <button
           onClick={() => setShowStakeCalculator(true)}
           style={{
