@@ -1,5 +1,6 @@
 import DapperComponent from './components/DapperComponent';
 import PricingPage from './pages/PricingPage';
+import V4DeFiGoldSuite from './components/V4DeFiGoldSuite';
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
 // SaaS Config System - enables white-label customization
@@ -7520,7 +7521,8 @@ export default function App() {
                 <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { handleNavClick('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
                 <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { handleNavClick('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
                 <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
-                <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'saas' ? '#000' : '#D4AF37' }}>🏛️ DeFi Suite</button>
+                <button className={activeTab === 'gold' ? 'active' : ''} onClick={() => { handleNavClick('gold'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'gold' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'gold' ? '#000' : '#D4AF37' }}>🏛️ Gold DeFi Suite</button>
+                <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #4CAF50, #388E3C)' : 'rgba(76,175,80,0.15)', color: activeTab === 'saas' ? '#fff' : '#4CAF50' }}>🏭 SaaS Platform</button>
               </div>
             )}
 
@@ -7532,23 +7534,42 @@ export default function App() {
               <button className={`nav-link ${activeTab === 'links' ? 'active' : ''}`} onClick={() => handleNavClick('links')}>Links</button>
               <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleNavClick('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
               <button 
-                className={`nav-link ${activeTab === 'saas' ? 'active' : ''}`} 
-                onClick={() => handleNavClick('saas')} 
+                className={`nav-link ${activeTab === 'gold' ? 'active' : ''}`} 
+                onClick={() => handleNavClick('gold')} 
                 style={{ 
-                  background: activeTab === 'saas' 
+                  background: activeTab === 'gold' 
                     ? 'linear-gradient(135deg, #D4AF37, #B8860B)' 
                     : 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))',
                   border: '1px solid rgba(212,175,55,0.4)',
                   borderRadius: '8px',
                   padding: '8px 16px',
-                  color: activeTab === 'saas' ? '#000' : '#D4AF37',
+                  color: activeTab === 'gold' ? '#000' : '#D4AF37',
                   fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px'
                 }}
               >
-                🏛️ <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>DeFi</span><span>Suite</span></span>
+                🏛️ <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>Gold</span><span>Suite</span></span>
+              </button>
+              <button 
+                className={`nav-link ${activeTab === 'saas' ? 'active' : ''}`} 
+                onClick={() => handleNavClick('saas')} 
+                style={{ 
+                  background: activeTab === 'saas' 
+                    ? 'linear-gradient(135deg, #4CAF50, #388E3C)' 
+                    : 'linear-gradient(135deg, rgba(76,175,80,0.15), rgba(76,175,80,0.05))',
+                  border: '1px solid rgba(76,175,80,0.4)',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  color: activeTab === 'saas' ? '#fff' : '#4CAF50',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                🏭 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>SaaS</span><span>Platform</span></span>
               </button>
             </nav>
 
@@ -12222,6 +12243,16 @@ export default function App() {
             </section>
           )}
 
+          {/* GOLD DEFI SUITE TAB - PulseX Tools */}
+          {activeTab === 'gold' && (
+            <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
+              <V4DeFiGoldSuite 
+                userAddress={account}
+                isDark={isDark}
+              />
+            </section>
+          )}
+
           {/* SAAS TAB - White-Label Staking Platform */}
           {activeTab === 'saas' && (
             <PricingPage />
@@ -12274,7 +12305,8 @@ export default function App() {
             <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>💎 LP Staking V4</button>
             <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>
             <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>
-            <button onClick={() => handleNavClick('saas')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#D4AF37' }}>🏛️ DeFi Suite</button>
+            <button onClick={() => handleNavClick('gold')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#D4AF37' }}>🏛️ Gold Suite</button>
+            <button onClick={() => handleNavClick('saas')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#4CAF50' }}>🏭 SaaS Platform</button>
             <a href="https://t.me/dtgoldcoin" target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />

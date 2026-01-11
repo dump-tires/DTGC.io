@@ -174,22 +174,22 @@ export default function PricingPage() {
         <div style={{ 
           display: 'inline-block',
           padding: '8px 20px',
-          background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.05))',
-          border: '1px solid rgba(212,175,55,0.4)',
+          background: 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.05))',
+          border: '1px solid rgba(76,175,80,0.4)',
           borderRadius: '30px',
           fontSize: '0.8rem',
-          color: '#D4AF37',
+          color: '#4CAF50',
           fontWeight: 600,
           marginBottom: '20px',
         }}>
-          🏛️ GOLD DEFI SUITE
+          🏭 SAAS PLATFORM
         </div>
         
         <h1 style={{ 
           fontSize: 'clamp(2rem, 5vw, 3rem)', 
           fontWeight: 800, 
           marginBottom: '16px',
-          background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+          background: 'linear-gradient(135deg, #4CAF50 0%, #81C784 100%)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           fontFamily: 'Cinzel, serif',
