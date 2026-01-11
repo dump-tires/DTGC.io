@@ -1,6 +1,8 @@
 import DapperComponent from './components/DapperComponent';
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
+// SaaS Config System - enables white-label customization
+import { useSaaSConfig, useBranding, useTiers, useContracts, useFeatures, DEFAULT_CONFIG } from './SaaSApp';
 // WalletConnect v2 - Install: npm install @walletconnect/ethereum-provider @walletconnect/modal
 // import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import {
@@ -3057,6 +3059,19 @@ const StakeModal = ({ isOpen, onClose, type, amount, tier }) => {
 // ═══════════════════════════════════════════════════════════════
 
 export default function App() {
+  // ═══════════════════════════════════════════════════════════════
+  // SAAS CONFIG - White-label customization
+  // ═══════════════════════════════════════════════════════════════
+  const saasConfig = useSaaSConfig();
+  const branding = useBranding();
+  const configTiers = useTiers();
+  const configContracts = useContracts();
+  const features = useFeatures();
+  
+  // Use config values (with fallbacks for safety)
+  const PLATFORM_NAME = branding?.name || 'DTGC';
+  const PRIMARY_COLOR = branding?.colors?.primary || '#FFD700';
+  
   // Password gate state (mainnet only)
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window !== 'undefined' && PASSWORD_ENABLED) {
@@ -7435,10 +7450,10 @@ export default function App() {
         <header className={`nav-header ${scrolled ? 'scrolled' : ''}`} style={TESTNET_MODE ? {top: '40px'} : {}}>
           <div className="nav-content">
             <div className="logo-section">
-              <div className="logo-mark">DT</div>
+              <div className="logo-mark">{PLATFORM_NAME.slice(0, 2)}</div>
               <div className="logo-text-group">
-                <span className="logo-text gold-text">DTGC</span>
-                <span className="logo-tagline">dtgc.io</span>
+                <span className="logo-text gold-text">{PLATFORM_NAME}</span>
+                <span className="logo-tagline">{saasConfig?.socials?.website?.replace('https://', '') || 'dtgc.io'}</span>
               </div>
               {/* Mobile Menu Toggle */}
               <button 
@@ -12156,41 +12171,41 @@ export default function App() {
               marginBottom: '12px'
             }}>
               <img 
-                src="/favicon1.png" 
-                alt="DTGC" 
+                src={branding?.logo || "/favicon1.png"}
+                alt={PLATFORM_NAME}
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'contain',
-                  filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.6)) drop-shadow(0 0 20px rgba(212,175,55,0.4)) drop-shadow(0 0 30px rgba(212,175,55,0.2))',
+                  filter: `drop-shadow(0 0 10px ${PRIMARY_COLOR}99) drop-shadow(0 0 20px ${PRIMARY_COLOR}66) drop-shadow(0 0 30px ${PRIMARY_COLOR}33)`,
                   animation: 'goldGlow 3s ease-in-out infinite'
                 }}
               />
               <div style={{
                 position: 'absolute',
                 inset: '-10px',
-                background: 'radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%)',
+                background: `radial-gradient(circle, ${PRIMARY_COLOR}4D 0%, transparent 70%)`,
                 borderRadius: '50%',
                 animation: 'pulse 2s ease-in-out infinite',
                 zIndex: -1
               }} />
             </div>
-            <div style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 600, letterSpacing: '2px' }}>
-              V4 Multi-Stake on PulseChain
+            <div style={{ fontSize: '0.9rem', color: PRIMARY_COLOR, fontWeight: 600, letterSpacing: '2px' }}>
+              {branding?.tagline || 'V4 Multi-Stake on PulseChain'}
             </div>
             <div style={{ fontSize: '0.65rem', color: '#4CAF50', marginTop: '4px', letterSpacing: '1px' }}>
-              ✨ PulseChain's first official V4 contract stake utility
+              ✨ {saasConfig?.chain === 'pulsechain' ? "PulseChain's first official V4 contract stake utility" : `Staking on ${saasConfig?.chain || 'PulseChain'}`}
             </div>
           </div>
           <div className="footer-links">
-            <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>🚀 Staking V4</button>
-            <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>💎 LP Staking V4</button>
-            <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>
-            <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>
-            <a href={SOCIAL_LINKS.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
+            {features?.singleStaking && <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>🚀 Staking</button>}
+            {features?.lpStaking && <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>💎 LP Staking</button>}
+            {features?.dao && <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>}
+            {features?.whitepaper && <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>}
+            {saasConfig?.socials?.telegram && <a href={saasConfig.socials.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>}
           </div>
           <div className="footer-divider" />
-          <p className="footer-text">© 2026 dtgc.io • V4 Multi-Stake Protocol on PulseChain</p>
+          <p className="footer-text">© 2026 {saasConfig?.socials?.website?.replace('https://', '') || 'dtgc.io'} • {PLATFORM_NAME} on {saasConfig?.chain || 'PulseChain'}</p>
         </footer>
 
         {/* DexScreener Widget */}
