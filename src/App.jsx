@@ -11748,15 +11748,13 @@ export default function App() {
                   const ENTRY_FEE = 3.75 / 100;
                   const EXIT_FEE = 3.75 / 100;
 
-                  // Calculate rewards for each tier (after entry fee)
+                  // Calculate rewards for each tier (NO FEES - pure APR)
                   const calcTierResult = (amt, apr) => {
-                    const afterEntry = amt * (1 - ENTRY_FEE);
-                    const rewards = afterEntry * (apr / 100) * (months / 12);
-                    const totalBeforeExit = afterEntry + rewards;
-                    const afterExit = totalBeforeExit * (1 - EXIT_FEE);
+                    const rewards = amt * (apr / 100) * (months / 12);
+                    const grossValue = amt + rewards;
                     // Apply price change
-                    const finalValue = afterExit * (1 + priceChange / 100);
-                    return { afterEntry, rewards, afterExit, finalValue };
+                    const finalValue = grossValue * (1 + priceChange / 100);
+                    return { invested: amt, rewards, grossValue, finalValue };
                   };
 
                   const silverResult = calcTierResult(silverAmt, APRS.silver);
@@ -11766,15 +11764,21 @@ export default function App() {
                   const diamondPlusResult = calcTierResult(diamondPlusAmt, APRS.diamondPlus);
 
                   const totalRewards = silverResult.rewards + goldResult.rewards + whaleResult.rewards + diamondResult.rewards + diamondPlusResult.rewards;
+                  const totalGrossValue = silverResult.grossValue + goldResult.grossValue + whaleResult.grossValue + diamondResult.grossValue + diamondPlusResult.grossValue;
                   const totalFinalValue = silverResult.finalValue + goldResult.finalValue + whaleResult.finalValue + diamondResult.finalValue + diamondPlusResult.finalValue;
+                  
+                  // Calculate with fees for comparison
+                  const entryFeePaid = investment * ENTRY_FEE;
+                  const exitFeePaid = totalGrossValue * EXIT_FEE;
+                  const totalFees = entryFeePaid + exitFeePaid;
+                  const valueAfterFees = (investment - entryFeePaid + totalRewards) * (1 - EXIT_FEE) * (1 + priceChange / 100);
+                  
                   const netGainLoss = totalFinalValue - investment;
                   const netPercent = (netGainLoss / investment) * 100;
                   const blendedAPR = ((silverPct/100)*APRS.silver + (goldPct/100)*APRS.gold + (whalePct/100)*APRS.whale + (diamondPct/100)*APRS.diamond + (diamondPlusPct/100)*APRS.diamondPlus);
 
-                  // Calculate breakeven price drop
-                  const rewardsOnly = totalRewards;
-                  const totalAfterFees = investment * (1 - ENTRY_FEE) * (1 - EXIT_FEE);
-                  const breakeven = ((rewardsOnly * (1 - EXIT_FEE)) / totalAfterFees) * 100;
+                  // Calculate breakeven price drop (what % price can drop before you lose money)
+                  const breakeven = (totalRewards / investment) * 100;
 
                   return (
                     <>
@@ -11800,6 +11804,25 @@ export default function App() {
                           <span style={{ color: '#D4AF37' }}>Blended APR: <b>{blendedAPR.toFixed(1)}%</b></span>
                           <span style={{ color: '#4CAF50' }}>Total Rewards: <b>${totalRewards.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b></span>
                           <span style={{ color: '#2196F3' }}>Breakeven Drop: <b>{breakeven.toFixed(1)}%</b></span>
+                        </div>
+                        
+                        {/* After Fees Box */}
+                        <div style={{ 
+                          marginTop: '16px', 
+                          padding: '12px', 
+                          background: 'rgba(255,152,0,0.15)', 
+                          borderRadius: '10px',
+                          border: '1px solid rgba(255,152,0,0.4)'
+                        }}>
+                          <div style={{ fontSize: '0.75rem', color: '#FF9800', marginBottom: '6px' }}>
+                            💰 After 3.75% Entry + 3.75% Exit Fees (~${totalFees.toLocaleString(undefined, { maximumFractionDigits: 0 })} total)
+                          </div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: valueAfterFees >= investment ? '#4CAF50' : '#F44336' }}>
+                            ${valueAfterFees.toLocaleString(undefined, { maximumFractionDigits: 0 })} 
+                            <span style={{ fontSize: '0.85rem', marginLeft: '8px' }}>
+                              ({valueAfterFees >= investment ? '+' : ''}${(valueAfterFees - investment).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -12007,17 +12030,22 @@ export default function App() {
                     const apr = APRS[stake.tier] || 16.8;
                     const months = stake.tier === 'silver' ? 2 : stake.tier === 'whale' ? 6 : 3;
                     
-                    const afterEntry = amount * (1 - ENTRY_FEE);
-                    const rewards = afterEntry * (apr / 100) * (months / 12);
-                    const totalBeforeExit = afterEntry + rewards;
-                    const afterExit = totalBeforeExit * (1 - EXIT_FEE);
+                    // Pure APR calculation (no fees)
+                    const rewards = amount * (apr / 100) * (months / 12);
+                    const grossValue = amount + rewards;
                     
-                    return { ...stake, amount, apr, months, afterEntry, rewards, afterExit };
+                    // With fees calculation
+                    const afterEntry = amount * (1 - ENTRY_FEE);
+                    const rewardsAfterFees = afterEntry * (apr / 100) * (months / 12);
+                    const afterExit = (afterEntry + rewardsAfterFees) * (1 - EXIT_FEE);
+                    
+                    return { ...stake, amount, apr, months, rewards, grossValue, afterExit };
                   });
                   
                   const totalInvested = results.reduce((sum, r) => sum + r.amount, 0);
                   const totalRewards = results.reduce((sum, r) => sum + r.rewards, 0);
-                  const totalAfterExit = results.reduce((sum, r) => sum + r.afterExit, 0);
+                  const totalGrossValue = results.reduce((sum, r) => sum + r.grossValue, 0);
+                  const totalAfterFees = results.reduce((sum, r) => sum + r.afterExit, 0);
                   const avgApr = totalInvested > 0 ? results.reduce((sum, r) => sum + (r.amount / totalInvested) * r.apr, 0) : 0;
                   
                   if (totalInvested <= 0) {
@@ -12040,13 +12068,16 @@ export default function App() {
                           <div style={{ color: '#4CAF50', fontSize: '1.4rem', fontWeight: 700 }}>+${totalRewards.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
                         </div>
                         <div>
-                          <div style={{ color: '#888', fontSize: '0.75rem' }}>After All Exits</div>
-                          <div style={{ color: '#2196F3', fontSize: '1.4rem', fontWeight: 700 }}>${totalAfterExit.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem' }}>Gross Return</div>
+                          <div style={{ color: '#2196F3', fontSize: '1.4rem', fontWeight: 700 }}>${totalGrossValue.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
                         </div>
                         <div>
-                          <div style={{ color: '#888', fontSize: '0.75rem' }}>Blended APR</div>
-                          <div style={{ color: '#9C27B0', fontSize: '1.4rem', fontWeight: 700 }}>{avgApr.toFixed(1)}%</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem' }}>After 7.5% Fees</div>
+                          <div style={{ color: '#FF9800', fontSize: '1.4rem', fontWeight: 700 }}>${totalAfterFees.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
                         </div>
+                      </div>
+                      <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+                        <span style={{ color: '#9C27B0', fontSize: '0.9rem' }}>Blended APR: <b>{avgApr.toFixed(1)}%</b></span>
                       </div>
                       
                       {/* Per-Position Breakdown */}
