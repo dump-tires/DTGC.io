@@ -4509,6 +4509,19 @@ export default function App() {
       const dtgcRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7');
       const dtgcData = await dtgcRes.json();
       
+      // PLS price from WPLS pairs
+      let plsPrice = 0.00003;
+      try {
+        const plsRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0xA1077a294dDE1B09bB078844df40758a5D0f9a27');
+        const plsData = await plsRes.json();
+        if (plsData?.pairs?.length > 0) {
+          const bestPair = plsData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          plsPrice = parseFloat(bestPair?.priceUsd) || plsPrice;
+        }
+      } catch (e) {
+        console.warn('PLS price fetch failed:', e.message);
+      }
+      
       // DexScreener returns { pairs: [...] } or { pair: {...} }
       const urmomPair = urmomData?.pair || urmomData?.pairs?.[0];
       const dtgcPair = dtgcData?.pair || dtgcData?.pairs?.[0];
@@ -4523,16 +4536,18 @@ export default function App() {
         throw new Error('Invalid price data');
       }
       
-      setLivePrices({
+      setLivePrices(prev => ({
+        ...prev,
         urmom: urmomPrice,
         dtgc: dtgcPrice,
+        pls: plsPrice,
         dtgcMarketCap: dtgcMarketCap,
         lastUpdated: new Date(),
         loading: false,
         error: null,
-      });
+      }));
       
-      console.log('📊 Live prices updated:', { urmom: urmomPrice, dtgc: dtgcPrice, marketCap: dtgcMarketCap });
+      console.log('📊 Live prices updated:', { urmom: urmomPrice, dtgc: dtgcPrice, pls: plsPrice, marketCap: dtgcMarketCap });
       // Toast only shown on manual refresh, not auto-refresh
     } catch (err) {
       console.error('Failed to fetch live prices:', err);
@@ -4602,6 +4617,13 @@ export default function App() {
         lastUpdated: new Date(),
       });
       
+      // Also update livePrices with PLS/PLSX for reward calculations
+      setLivePrices(prev => ({
+        ...prev,
+        pls: plsPrice,
+        plsx: plsxPrice,
+      }));
+      
       console.log('💰 Crypto prices updated:', { 
         btc: cgData?.bitcoin?.usd, 
         eth: cgData?.ethereum?.usd, 
@@ -4636,13 +4658,14 @@ export default function App() {
       const urmomPrice = parseFloat(urmomData?.pair?.priceUsd || urmomData?.pairs?.[0]?.priceUsd || BURN_STATS.urmomPrice);
       const dtgcPrice = parseFloat(dtgcData?.pair?.priceUsd || dtgcData?.pairs?.[0]?.priceUsd || BURN_STATS.dtgcPrice);
       
-      setLivePrices({
+      setLivePrices(prev => ({
+        ...prev,
         urmom: urmomPrice,
         dtgc: dtgcPrice,
         lastUpdated: new Date(),
         loading: false,
         error: null,
-      });
+      }));
       
       showToast(`🟢 Prices updated: URMOM $${urmomPrice.toFixed(7)} | DTGC $${dtgcPrice.toFixed(7)}`, 'success');
     } catch (err) {
