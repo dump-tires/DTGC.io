@@ -2785,17 +2785,22 @@ const StakeVideoModal = ({ onComplete, tierName, isDark }) => {
 
 // Floating DexScreener Widget (bottom-left corner) - Miniature & Expandable
 const DexScreenerWidget = () => {
-  const [isExpanded, setIsExpanded] = React.useState(false);
-  const [isMinimized, setIsMinimized] = React.useState(false);
-  const [activeChart, setActiveChart] = React.useState('dtgc');
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [isMinimized, setIsMinimized] = React.useState(window.innerWidth < 768); // Start minimized on mobile
+  const [activeChart, setActiveChart] = React.useState('dtgc');
 
   // Detect mobile viewport
   React.useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Auto-minimize on mobile resize
+      if (mobile && !isMinimized) setIsMinimized(true);
+    };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [isMinimized]);
 
   const chartUrls = {
     dtgc: 'https://dexscreener.com/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7?embed=1&theme=dark&trades=0&info=0',
@@ -2813,12 +2818,12 @@ const DexScreenerWidget = () => {
         onClick={() => setIsMinimized(false)}
         style={{
           position: 'fixed',
-          bottom: '20px',
-          left: '20px',
-          width: '50px',
-          height: '50px',
+          bottom: isMobile ? '15px' : '20px',
+          left: isMobile ? '15px' : '20px',
+          width: isMobile ? '40px' : '50px',
+          height: isMobile ? '40px' : '50px',
           background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
-          border: '2px solid #D4AF37',
+          border: isMobile ? '1.5px solid #D4AF37' : '2px solid #D4AF37',
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
@@ -2832,7 +2837,7 @@ const DexScreenerWidget = () => {
         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         title="Open DexScreener Chart"
       >
-        <span style={{ fontSize: '1.5rem' }}>📊</span>
+        <span style={{ fontSize: isMobile ? '1.1rem' : '1.5rem' }}>📊</span>
       </div>
     );
   }
@@ -2978,6 +2983,165 @@ const DexScreenerWidget = () => {
         }}
         title={`${activeChart.toUpperCase()} DexScreener Chart`}
       />
+    </div>
+  );
+};
+
+// Floating LP Stakes Widget (top-left corner) - Shows staked LP positions
+const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, getCurrencySymbol, convertToCurrency }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (!account || !stakedPositions || stakedPositions.length === 0) return null;
+
+  // Categorize stakes
+  const diamondLP = stakedPositions.filter(p => p.isLP && p.lpType !== 1 && p.tierName !== 'FLEX');
+  const diamondPlusLP = stakedPositions.filter(p => p.isLP && p.lpType === 1 && p.tierName !== 'FLEX');
+  const flexStakes = stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX');
+  const dtgcStakes = stakedPositions.filter(p => !p.isLP && !p.isFlex && p.tierName !== 'FLEX');
+  
+  const totalDiamondLP = diamondLP.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalDiamondPlusLP = diamondPlusLP.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalFlexLP = flexStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalDTGCStaked = dtgcStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
+  
+  // Calculate USD values
+  const dtgcPrice = livePrices?.dtgc || 0;
+  const diamondLPValue = totalDiamondLP * dtgcPrice * 2;
+  const diamondPlusLPValue = totalDiamondPlusLP * dtgcPrice * 2;
+  const flexLPValue = totalFlexLP * dtgcPrice * 2;
+  const dtgcValueUsd = totalDTGCStaked * dtgcPrice;
+  const totalValueUsd = diamondLPValue + diamondPlusLPValue + flexLPValue + dtgcValueUsd;
+
+  // Minimized view - just show icon with total value
+  if (!isExpanded) {
+    return (
+      <div
+        onClick={() => setIsExpanded(true)}
+        style={{
+          position: 'fixed',
+          top: isMobile ? '70px' : '80px',
+          left: isMobile ? '10px' : '20px',
+          background: 'linear-gradient(135deg, rgba(212,175,55,0.95) 0%, rgba(184,150,12,0.95) 100%)',
+          borderRadius: '12px',
+          padding: isMobile ? '6px 10px' : '8px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer',
+          zIndex: 9997,
+          boxShadow: '0 4px 15px rgba(0,0,0,0.3), 0 0 20px rgba(212,175,55,0.3)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          transition: 'all 0.3s ease',
+        }}
+      >
+        <span style={{ fontSize: isMobile ? '0.9rem' : '1.1rem' }}>💎</span>
+        <div>
+          <div style={{ color: '#000', fontWeight: 700, fontSize: isMobile ? '0.65rem' : '0.75rem' }}>
+            {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
+          </div>
+          <div style={{ color: 'rgba(0,0,0,0.6)', fontSize: '0.45rem', fontWeight: 600 }}>
+            {stakedPositions.length} STAKE{stakedPositions.length !== 1 ? 'S' : ''}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded view - show breakdown by tier
+  return (
+    <div style={{
+      position: 'fixed',
+      top: isMobile ? '70px' : '80px',
+      left: isMobile ? '10px' : '20px',
+      background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+      borderRadius: '12px',
+      padding: '12px',
+      minWidth: isMobile ? '165px' : '185px',
+      zIndex: 9997,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.4), 0 0 20px rgba(212,175,55,0.2)',
+      border: '2px solid #D4AF37',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <span style={{ color: '#D4AF37', fontWeight: 700, fontSize: '0.75rem' }}>💎 MY STAKES</span>
+        <button
+          onClick={() => setIsExpanded(false)}
+          style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '0.8rem', padding: '2px 6px' }}
+        >✕</button>
+      </div>
+      
+      {/* Diamond LP (DTGC/PLS) */}
+      {totalDiamondLP > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(0,188,212,0.15)', borderRadius: '6px', border: '1px solid rgba(0,188,212,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#00BCD4', fontSize: '0.65rem', fontWeight: 600 }}>💎 Diamond</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalDiamondLP)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>DTGC/PLS LP</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(diamondLPValue).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Diamond+ LP (DTGC/URMOM) */}
+      {totalDiamondPlusLP > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(156,39,176,0.15)', borderRadius: '6px', border: '1px solid rgba(156,39,176,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#CE93D8', fontSize: '0.65rem', fontWeight: 600 }}>💜💎 Diamond+</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalDiamondPlusLP)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>DTGC/URMOM LP</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(diamondPlusLPValue).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* FLEX LP */}
+      {totalFlexLP > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(255,20,147,0.15)', borderRadius: '6px', border: '1px solid rgba(255,20,147,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#FF69B4', fontSize: '0.65rem', fontWeight: 600 }}>🎀 FLEX</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalFlexLP)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>No Lock LP</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(flexLPValue).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* DTGC Stakes */}
+      {totalDTGCStaked > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(255,215,0,0.1)', borderRadius: '6px', border: '1px solid rgba(255,215,0,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#FFD700', fontSize: '0.65rem', fontWeight: 600 }}>🪙 DTGC</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalDTGCStaked)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>{dtgcStakes.length} stake{dtgcStakes.length !== 1 ? 's' : ''}</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(dtgcValueUsd).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Total */}
+      <div style={{ borderTop: '1px solid rgba(212,175,55,0.3)', paddingTop: '8px', marginTop: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: '#D4AF37', fontSize: '0.7rem', fontWeight: 700 }}>TOTAL VALUE</span>
+          <span style={{ color: '#4CAF50', fontSize: '0.85rem', fontWeight: 800 }}>
+            {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 };
@@ -12529,6 +12693,16 @@ export default function App() {
 
         {/* DexScreener Widget */}
         <DexScreenerWidget />
+        
+        {/* Floating LP Stakes Widget (top-left) */}
+        <FloatingLPWidget 
+          account={account}
+          stakedPositions={stakedPositions}
+          livePrices={livePrices}
+          formatNumber={formatNumber}
+          getCurrencySymbol={getCurrencySymbol}
+          convertToCurrency={convertToCurrency}
+        />
 
         {/* Gold Records - Stake History (Above Calculator) */}
         <div
