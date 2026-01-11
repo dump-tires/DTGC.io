@@ -3269,6 +3269,7 @@ export default function App() {
     { symbol: 'PLSX', name: 'PulseX', address: '0x95b303987a60c71504d99aa1b13b4da07b0790ab', decimals: 18, icon: '🔷', color: '#00BCD4' },
     { symbol: 'HEX', name: 'HEX', address: '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39', decimals: 8, icon: '⬡', color: '#FF00FF' },
     { symbol: 'INC', name: 'Incentive', address: '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d', decimals: 18, icon: '💎', color: '#9C27B0' },
+    { symbol: 'pDAI', name: 'Pulse DAI', address: '0x6b175474e89094c44da98b954eedeac495271d0f', decimals: 18, icon: '📀', color: '#F5AC37' },
     { symbol: 'DAI', name: 'Dai from ETH', address: '0xefd766ccb38eaf1dfd701853bfce31359239f305', decimals: 18, icon: '📀', color: '#F5AC37' },
     { symbol: 'USDC', name: 'USDC from ETH', address: '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07', decimals: 6, icon: '💵', color: '#2775CA' },
     { symbol: 'USDT', name: 'USDT from ETH', address: '0x0cb6f5a34ad42ec934882a05265a7d5f59b51a2f', decimals: 6, icon: '💵', color: '#26A17B' },
@@ -3278,12 +3279,14 @@ export default function App() {
   
   // Tokens that are ALWAYS liquid - override any DEX check failures
   const LIQUID_TOKENS = new Set([
-    'URMOM', 'DTGC', 'PLS', 'WPLS', 'PLSX', 'HEX', 'INC', 'DAI', 'USDC', 'USDT', 'WETH', 'WBTC',
+    'URMOM', 'DTGC', 'PLS', 'WPLS', 'PLSX', 'HEX', 'INC', 'DAI', 'PDAI', 'USDC', 'USDT', 'WETH', 'WBTC',
     '0x636cc7d7c76298cde00025370461c59c0b2ef896', // URMOM
     '0xd0676b28a457371d58d47e5247b439114e40eb0f', // DTGC
     '0xa1077a294dde1b09bb078844df40758a5d0f9a27', // WPLS
     '0x95b303987a60c71504d99aa1b13b4da07b0790ab', // PLSX
     '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39', // HEX
+    '0x6b175474e89094c44da98b954eedeac495271d0f', // pDAI
+    '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d', // INC
   ]);
 
   // Live prices - must be defined before functions that use it
@@ -3303,46 +3306,76 @@ export default function App() {
   
   // WPLS address for price lookups
   const WPLS_ADDRESS = '0xa1077a294dde1b09bb078844df40758a5d0f9a27';
-  const PULSEX_FACTORY = '0x1715a3E4A142d8b698131108995174F37aEBA10D';
-  const PUMP_TIRES_FACTORY = '0x'; // pump.tires factory if available
+  const PULSEX_FACTORY_V2 = '0x1715a3E4A142d8b698131108995174F37aEBA10D';
+  const PULSEX_FACTORY_V1 = '0x29eA7545DEf87022BAdc76323F373EA1e707C523';
   
-  // Get token price from DEX liquidity
-  const getTokenPriceFromDex = async (tokenAddress, decimals) => {
-    if (!provider || !tokenAddress) return 0;
+  // Get token price AND liquidity from DEX (checks both V1 and V2)
+  const getTokenPriceAndLiquidity = async (tokenAddress, decimals) => {
+    if (!provider || !tokenAddress) return { price: 0, liquidityUsd: 0, hasLiquidity: false };
+    
     try {
-      // Try to find WPLS pair and calculate price
       const pairAbi = [
         'function getReserves() view returns (uint112, uint112, uint32)',
         'function token0() view returns (address)',
         'function token1() view returns (address)',
       ];
-      
-      // Calculate pair address (PulseX V2 style)
       const factoryAbi = ['function getPair(address, address) view returns (address)'];
-      const factory = new ethers.Contract(PULSEX_FACTORY, factoryAbi, provider);
-      const pairAddress = await factory.getPair(tokenAddress, WPLS_ADDRESS);
       
-      if (pairAddress && pairAddress !== '0x0000000000000000000000000000000000000000') {
-        const pair = new ethers.Contract(pairAddress, pairAbi, provider);
-        const [reserve0, reserve1] = await pair.getReserves();
-        const token0 = await pair.token0();
-        
-        const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
-        const tokenReserve = isToken0 ? reserve0 : reserve1;
-        const wplsReserve = isToken0 ? reserve1 : reserve0;
-        
-        if (tokenReserve > 0n) {
-          const plsPrice = livePrices.pls || 0.00003;
-          const wplsAmount = parseFloat(ethers.formatEther(wplsReserve));
-          const tokenAmount = parseFloat(ethers.formatUnits(tokenReserve, decimals));
-          const priceInPls = wplsAmount / tokenAmount;
-          return priceInPls * plsPrice;
+      // Try both V2 and V1 factories
+      const factories = [PULSEX_FACTORY_V2, PULSEX_FACTORY_V1];
+      let bestPrice = 0;
+      let bestLiquidityUsd = 0;
+      
+      for (const factoryAddr of factories) {
+        try {
+          const factory = new ethers.Contract(factoryAddr, factoryAbi, provider);
+          const pairAddress = await factory.getPair(tokenAddress, WPLS_ADDRESS);
+          
+          if (pairAddress && pairAddress !== '0x0000000000000000000000000000000000000000') {
+            const pair = new ethers.Contract(pairAddress, pairAbi, provider);
+            const [reserve0, reserve1] = await pair.getReserves();
+            const token0 = await pair.token0();
+            
+            const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
+            const tokenReserve = isToken0 ? reserve0 : reserve1;
+            const wplsReserve = isToken0 ? reserve1 : reserve0;
+            
+            if (tokenReserve > 0n && wplsReserve > 0n) {
+              const plsPrice = livePrices.pls || 0.00003;
+              const wplsAmount = parseFloat(ethers.formatEther(wplsReserve));
+              const tokenAmount = parseFloat(ethers.formatUnits(tokenReserve, decimals));
+              const priceInPls = wplsAmount / tokenAmount;
+              const price = priceInPls * plsPrice;
+              
+              // Calculate liquidity in USD (2x PLS reserve value)
+              const liquidityUsd = wplsAmount * plsPrice * 2;
+              
+              if (liquidityUsd > bestLiquidityUsd) {
+                bestPrice = price;
+                bestLiquidityUsd = liquidityUsd;
+              }
+            }
+          }
+        } catch (e) {
+          // Continue to next factory
         }
       }
-    } catch (e) {
-      // Pair doesn't exist or error
+      
+      return {
+        price: bestPrice,
+        liquidityUsd: bestLiquidityUsd,
+        hasLiquidity: bestLiquidityUsd > 0.01, // At least $0.01 liquidity
+      };
+    } catch (error) {
+      console.warn('Price lookup failed:', tokenAddress, error.message);
+      return { price: 0, liquidityUsd: 0, hasLiquidity: false };
     }
-    return 0;
+  };
+  
+  // Legacy wrapper for backward compatibility
+  const getTokenPriceFromDex = async (tokenAddress, decimals) => {
+    const result = await getTokenPriceAndLiquidity(tokenAddress, decimals);
+    return result.price;
   };
   
   // Scan wallet for ALL tokens - AGGRESSIVE SCANNER
@@ -3408,10 +3441,10 @@ export default function App() {
           let price = 0;
           if (token.symbol === 'DTGC') price = livePrices.dtgc || 0;
           else if (token.symbol === 'URMOM') price = livePrices.urmom || 0;
-          else if (token.symbol === 'PLSX') price = livePrices.plsx || 0;
+          else if (token.symbol === 'PLSX') price = livePrices.plsx || 0.00008;
           else if (token.symbol === 'HEX') price = livePrices.hex || 0;
           else if (token.symbol === 'WPLS') price = livePrices.pls || 0.00003;
-          else if (token.symbol === 'USDC' || token.symbol === 'USDT' || token.symbol === 'DAI') price = 1;
+          else if (token.symbol === 'USDC' || token.symbol === 'USDT' || token.symbol === 'DAI' || token.symbol === 'pDAI') price = 1;
           else if (token.symbol === 'WETH') price = 3500;
           else if (token.symbol === 'WBTC') price = 100000;
           else if (token.symbol === 'INC') price = livePrices.inc || 0.0001;
@@ -3421,6 +3454,7 @@ export default function App() {
             balance: balFormatted,
             valueUsd: parseFloat(balFormatted) * price,
             price: price,
+            liquidityUsd: 100000, // Known tokens always have liquidity
             hasLiquidity: true,
           });
         }
@@ -3448,21 +3482,30 @@ export default function App() {
           const tokenSymbol = item.token?.symbol?.toUpperCase() || '';
           const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
           
-          // Use cached prices for known symbols
+          // Use cached prices for known symbols, or fetch from DEX
           let price = 0;
           let hasLiquidity = isKnownLiquid;
+          let liquidityUsd = isKnownLiquid ? 100000 : 0; // Known tokens assumed liquid
           
           if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
           else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
           else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
           else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
-          else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
-          else if (bal * 0.00001 > 0.01) { // Only fetch DEX price if balance worth checking (>$0.01 at min price)
+          else if (tokenSymbol === 'WPLS' || tokenSymbol === 'PLS') price = livePrices.pls || 0.00003;
+          else if (tokenSymbol === 'PDAI' || tokenSymbol === 'DAI') price = 1;
+          else if (tokenSymbol === 'USDC' || tokenSymbol === 'USDT') price = 1;
+          else if (tokenSymbol === 'INC') price = livePrices.inc || 0.0001;
+          else {
+            // Fetch from DEX for unknown tokens - always try
             try {
-              price = await getTokenPriceFromDex(item.token?.address, decimals);
-              if (price > 0) hasLiquidity = true;
+              const dexResult = await getTokenPriceAndLiquidity(item.token?.address, decimals);
+              price = dexResult.price;
+              liquidityUsd = dexResult.liquidityUsd;
+              hasLiquidity = dexResult.hasLiquidity || isKnownLiquid;
             } catch {}
           }
+          
+          const valueUsd = bal * price;
           
           return {
             symbol: item.token?.symbol || 'UNKNOWN',
@@ -3472,8 +3515,9 @@ export default function App() {
             balance: bal.toString(),
             icon: hasLiquidity ? '💰' : '🔸',
             color: hasLiquidity ? '#4CAF50' : '#888',
-            valueUsd: bal * price,
+            valueUsd: valueUsd,
             price: price,
+            liquidityUsd: liquidityUsd,
             isUnknown: !hasLiquidity,
             hasLiquidity: hasLiquidity,
           };
@@ -3483,7 +3527,7 @@ export default function App() {
         foundTokens.push(...priceResults.filter(Boolean));
       }
       
-      // 4. Sort: tokens with liquidity/value first
+      // 4. Sort: tokens with liquidity/value first, then by value
       foundTokens.sort((a, b) => {
         if (a.hasLiquidity && !b.hasLiquidity) return -1;
         if (!a.hasLiquidity && b.hasLiquidity) return 1;
@@ -4256,6 +4300,50 @@ export default function App() {
       const dtgcRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7');
       const dtgcData = await dtgcRes.json();
       
+      // PLS price from DexScreener
+      let plsPrice = 0.00003;
+      try {
+        const plsRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0xA1077a294dDE1B09bB078844df40758a5D0f9a27');
+        const plsData = await plsRes.json();
+        if (plsData?.pairs?.length > 0) {
+          const bestPair = plsData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          plsPrice = parseFloat(bestPair?.priceUsd) || plsPrice;
+        }
+      } catch (e) {}
+      
+      // PLSX price from DexScreener
+      let plsxPrice = 0.00008;
+      try {
+        const plsxRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x95B303987A60C71504D99Aa1b13B4DA07b0790ab');
+        const plsxData = await plsxRes.json();
+        if (plsxData?.pairs?.length > 0) {
+          const bestPair = plsxData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          plsxPrice = parseFloat(bestPair?.priceUsd) || plsxPrice;
+        }
+      } catch (e) {}
+      
+      // HEX price from DexScreener
+      let hexPrice = 0.005;
+      try {
+        const hexRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39');
+        const hexData = await hexRes.json();
+        if (hexData?.pairs?.length > 0) {
+          const bestPair = hexData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          hexPrice = parseFloat(bestPair?.priceUsd) || hexPrice;
+        }
+      } catch (e) {}
+      
+      // INC price from DexScreener
+      let incPrice = 0.0001;
+      try {
+        const incRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d');
+        const incData = await incRes.json();
+        if (incData?.pairs?.length > 0) {
+          const bestPair = incData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          incPrice = parseFloat(bestPair?.priceUsd) || incPrice;
+        }
+      } catch (e) {}
+      
       // DexScreener returns { pairs: [...] } or { pair: {...} }
       const urmomPair = urmomData?.pair || urmomData?.pairs?.[0];
       const dtgcPair = dtgcData?.pair || dtgcData?.pairs?.[0];
@@ -4273,13 +4361,17 @@ export default function App() {
       setLivePrices({
         urmom: urmomPrice,
         dtgc: dtgcPrice,
+        pls: plsPrice,
+        plsx: plsxPrice,
+        hex: hexPrice,
+        inc: incPrice,
         dtgcMarketCap: dtgcMarketCap,
         lastUpdated: new Date(),
         loading: false,
         error: null,
       });
       
-      console.log('📊 Live prices updated:', { urmom: urmomPrice, dtgc: dtgcPrice, marketCap: dtgcMarketCap });
+      console.log('📊 Live prices updated:', { urmom: urmomPrice, dtgc: dtgcPrice, pls: plsPrice, plsx: plsxPrice, hex: hexPrice, marketCap: dtgcMarketCap });
       // Toast only shown on manual refresh, not auto-refresh
     } catch (err) {
       console.error('Failed to fetch live prices:', err);
@@ -4372,26 +4464,45 @@ export default function App() {
   const manualRefreshPrices = async () => {
     setLivePrices(prev => ({ ...prev, loading: true }));
     try {
-      const [urmomRes, dtgcRes] = await Promise.all([
+      const [urmomRes, dtgcRes, plsRes, plsxRes] = await Promise.all([
         fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0548656e272fec9534e180d3174cfc57ab6e10c0'),
         fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7'),
+        fetch('https://api.dexscreener.com/latest/dex/tokens/0xA1077a294dDE1B09bB078844df40758a5D0f9a27'),
+        fetch('https://api.dexscreener.com/latest/dex/tokens/0x95B303987A60C71504D99Aa1b13B4DA07b0790ab'),
       ]);
       
       const urmomData = await urmomRes.json();
       const dtgcData = await dtgcRes.json();
+      const plsData = await plsRes.json();
+      const plsxData = await plsxRes.json();
       
       const urmomPrice = parseFloat(urmomData?.pair?.priceUsd || urmomData?.pairs?.[0]?.priceUsd || BURN_STATS.urmomPrice);
       const dtgcPrice = parseFloat(dtgcData?.pair?.priceUsd || dtgcData?.pairs?.[0]?.priceUsd || BURN_STATS.dtgcPrice);
       
-      setLivePrices({
+      let plsPrice = 0.00003;
+      if (plsData?.pairs?.length > 0) {
+        const bestPair = plsData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+        plsPrice = parseFloat(bestPair?.priceUsd) || plsPrice;
+      }
+      
+      let plsxPrice = 0.00008;
+      if (plsxData?.pairs?.length > 0) {
+        const bestPair = plsxData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+        plsxPrice = parseFloat(bestPair?.priceUsd) || plsxPrice;
+      }
+      
+      setLivePrices(prev => ({
+        ...prev,
         urmom: urmomPrice,
         dtgc: dtgcPrice,
+        pls: plsPrice,
+        plsx: plsxPrice,
         lastUpdated: new Date(),
         loading: false,
         error: null,
-      });
+      }));
       
-      showToast(`🟢 Prices updated: URMOM $${urmomPrice.toFixed(7)} | DTGC $${dtgcPrice.toFixed(7)}`, 'success');
+      showToast(`🟢 Prices updated: URMOM $${urmomPrice.toFixed(7)} | DTGC $${dtgcPrice.toFixed(7)} | PLSX $${plsxPrice.toFixed(8)}`, 'success');
     } catch (err) {
       setLivePrices(prev => ({ ...prev, loading: false, error: 'Failed' }));
       showToast('⚠️ Price fetch failed', 'error');
