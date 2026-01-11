@@ -1,4 +1,5 @@
 import DapperComponent from './components/DapperComponent';
+import PricingPage from './pages/PricingPage';
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
 // SaaS Config System - enables white-label customization
@@ -3231,7 +3232,26 @@ export default function App() {
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState(null);
-  const [activeTab, setActiveTab] = useState('stake');
+  
+  // URL-based tab routing - supports /saas, /stake, /burn, /vote, /whitepaper, /links, /analytics
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
+      const hash = window.location.hash.toLowerCase().replace('#', '');
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      
+      const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'saas'];
+      
+      // Check URL param first: ?tab=saas
+      if (tabParam && validTabs.includes(tabParam)) return tabParam;
+      // Check path: /saas
+      if (path && validTabs.includes(path)) return path;
+      // Check hash: #saas
+      if (hash && validTabs.includes(hash)) return hash;
+    }
+    return 'stake';
+  });
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -4052,11 +4072,17 @@ export default function App() {
   // Gold flash state for nav clicks
   const [showGoldFlash, setShowGoldFlash] = useState(false);
 
-  // Handle navigation click with gold flash and scroll
+  // Handle navigation click with gold flash, scroll, and URL update
   const handleNavClick = (tab) => {
     setActiveTab(tab);
     setShowGoldFlash(true);
     setTimeout(() => setShowGoldFlash(false), 300);
+    
+    // Update URL without page reload (enables direct linking)
+    if (typeof window !== 'undefined') {
+      const newUrl = tab === 'stake' ? '/' : `/${tab}`;
+      window.history.pushState({ tab }, '', newUrl);
+    }
     
     // Scroll to content section after a brief delay
     setTimeout(() => {
@@ -4066,6 +4092,27 @@ export default function App() {
       }
     }, 100);
   };
+  
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = (event) => {
+      if (event.state?.tab) {
+        setActiveTab(event.state.tab);
+      } else {
+        // Parse URL on popstate
+        const path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
+        const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'saas'];
+        if (path && validTabs.includes(path)) {
+          setActiveTab(path);
+        } else {
+          setActiveTab('stake');
+        }
+      }
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Fetch live supply dynamics (wallet balances) from PulseChain API
   const fetchSupplyDynamics = useCallback(async () => {
@@ -7450,10 +7497,10 @@ export default function App() {
         <header className={`nav-header ${scrolled ? 'scrolled' : ''}`} style={TESTNET_MODE ? {top: '40px'} : {}}>
           <div className="nav-content">
             <div className="logo-section">
-              <div className="logo-mark">{PLATFORM_NAME.slice(0, 2)}</div>
+              <div className="logo-mark">DT</div>
               <div className="logo-text-group">
-                <span className="logo-text gold-text">{PLATFORM_NAME}</span>
-                <span className="logo-tagline">{saasConfig?.socials?.website?.replace('https://', '') || 'dtgc.io'}</span>
+                <span className="logo-text gold-text">DTGC</span>
+                <span className="logo-tagline">Gold DeFi Suite</span>
               </div>
               {/* Mobile Menu Toggle */}
               <button 
@@ -7473,6 +7520,7 @@ export default function App() {
                 <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { handleNavClick('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
                 <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { handleNavClick('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
                 <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
+                <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #9C27B0, #7B1FA2)' : '' }}>🏭 SaaS</button>
               </div>
             )}
 
@@ -7483,6 +7531,7 @@ export default function App() {
               <button className={`nav-link ${activeTab === 'whitepaper' ? 'active' : ''}`} onClick={() => handleNavClick('whitepaper')}>Whitepaper</button>
               <button className={`nav-link ${activeTab === 'links' ? 'active' : ''}`} onClick={() => handleNavClick('links')}>Links</button>
               <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleNavClick('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
+              <button className={`nav-link ${activeTab === 'saas' ? 'active' : ''}`} onClick={() => handleNavClick('saas')} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #9C27B0, #7B1FA2)' : 'transparent', color: activeTab === 'saas' ? '#fff' : '' }}>🏭 SaaS</button>
             </nav>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -12154,6 +12203,11 @@ export default function App() {
 
             </section>
           )}
+
+          {/* SAAS TAB - White-Label Staking Platform */}
+          {activeTab === 'saas' && (
+            <PricingPage />
+          )}
         </main>
 
         {/* Footer */}
@@ -12171,41 +12225,42 @@ export default function App() {
               marginBottom: '12px'
             }}>
               <img 
-                src={branding?.logo || "/favicon1.png"}
-                alt={PLATFORM_NAME}
+                src="/favicon1.png"
+                alt="DTGC"
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'contain',
-                  filter: `drop-shadow(0 0 10px ${PRIMARY_COLOR}99) drop-shadow(0 0 20px ${PRIMARY_COLOR}66) drop-shadow(0 0 30px ${PRIMARY_COLOR}33)`,
+                  filter: 'drop-shadow(0 0 10px rgba(212,175,55,0.6)) drop-shadow(0 0 20px rgba(212,175,55,0.4)) drop-shadow(0 0 30px rgba(212,175,55,0.2))',
                   animation: 'goldGlow 3s ease-in-out infinite'
                 }}
               />
               <div style={{
                 position: 'absolute',
                 inset: '-10px',
-                background: `radial-gradient(circle, ${PRIMARY_COLOR}4D 0%, transparent 70%)`,
+                background: 'radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%)',
                 borderRadius: '50%',
                 animation: 'pulse 2s ease-in-out infinite',
                 zIndex: -1
               }} />
             </div>
-            <div style={{ fontSize: '0.9rem', color: PRIMARY_COLOR, fontWeight: 600, letterSpacing: '2px' }}>
-              {branding?.tagline || 'V4 Multi-Stake on PulseChain'}
+            <div style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 600, letterSpacing: '2px' }}>
+              Gold DeFi Suite • V4 Multi-Stake
             </div>
             <div style={{ fontSize: '0.65rem', color: '#4CAF50', marginTop: '4px', letterSpacing: '1px' }}>
-              ✨ {saasConfig?.chain === 'pulsechain' ? "PulseChain's first official V4 contract stake utility" : `Staking on ${saasConfig?.chain || 'PulseChain'}`}
+              ✨ PulseChain's first official V4 contract stake utility
             </div>
           </div>
           <div className="footer-links">
-            {features?.singleStaking && <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>🚀 Staking</button>}
-            {features?.lpStaking && <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>💎 LP Staking</button>}
-            {features?.dao && <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>}
-            {features?.whitepaper && <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>}
-            {saasConfig?.socials?.telegram && <a href={saasConfig.socials.telegram} target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>}
+            <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>🚀 Staking V4</button>
+            <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>💎 LP Staking V4</button>
+            <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>
+            <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>
+            <button onClick={() => handleNavClick('saas')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#9C27B0' }}>🏭 SaaS</button>
+            <a href="https://t.me/dtgoldcoin" target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
-          <p className="footer-text">© 2026 {saasConfig?.socials?.website?.replace('https://', '') || 'dtgc.io'} • {PLATFORM_NAME} on {saasConfig?.chain || 'PulseChain'}</p>
+          <p className="footer-text">© 2026 dtgc.io • Gold DeFi Suite on PulseChain</p>
         </footer>
 
         {/* DexScreener Widget */}
