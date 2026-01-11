@@ -569,7 +569,7 @@ const TESTNET_MODE = false; // MAINNET PRODUCTION
 
 // Password Protection
 const SITE_PASSWORD = 'GOLD$tack91!';
-const PASSWORD_ENABLED = true;
+const PASSWORD_ENABLED = false;
 
 // IP Logging Configuration
 const LOG_ACCESS_ATTEMPTS = true;
