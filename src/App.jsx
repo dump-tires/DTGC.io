@@ -2985,6 +2985,172 @@ const DexScreenerWidget = () => {
   );
 };
 
+// Floating LP Stakes Widget (top-left corner) - Shows staked LP positions
+const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, getCurrencySymbol, convertToCurrency }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (!account || !stakedPositions || stakedPositions.length === 0) return null;
+
+  // Categorize stakes
+  const diamondLP = stakedPositions.filter(p => p.isLP && p.lpType !== 1 && p.tierName !== 'FLEX');
+  const diamondPlusLP = stakedPositions.filter(p => p.isLP && p.lpType === 1 && p.tierName !== 'FLEX');
+  const flexStakes = stakedPositions.filter(p => p.isFlex || p.tierName === 'FLEX');
+  const dtgcStakes = stakedPositions.filter(p => !p.isLP && !p.isFlex && p.tierName !== 'FLEX');
+  
+  const totalDiamondLP = diamondLP.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalDiamondPlusLP = diamondPlusLP.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalFlexLP = flexStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalDTGCStaked = dtgcStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
+  
+  // Calculate USD values
+  const dtgcPrice = livePrices?.dtgc || 0;
+  const plsPrice = livePrices?.pls || 0;
+  const diamondLPValue = totalDiamondLP * dtgcPrice * 2;
+  const diamondPlusLPValue = totalDiamondPlusLP * dtgcPrice * 2;
+  const flexLPValue = totalFlexLP * dtgcPrice * 2;
+  const dtgcValueUsd = totalDTGCStaked * dtgcPrice;
+  const totalValueUsd = diamondLPValue + diamondPlusLPValue + flexLPValue + dtgcValueUsd;
+  const totalValuePls = plsPrice > 0 ? (totalValueUsd / plsPrice) : 0;
+
+  // Minimized view - just show icon with total value
+  if (!isExpanded) {
+    return (
+      <div
+        onClick={() => setIsExpanded(true)}
+        style={{
+          position: 'fixed',
+          top: isMobile ? '70px' : '80px',
+          left: isMobile ? '10px' : '20px',
+          background: 'linear-gradient(135deg, rgba(212,175,55,0.95) 0%, rgba(184,150,12,0.95) 100%)',
+          borderRadius: '12px',
+          padding: isMobile ? '6px 10px' : '8px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer',
+          zIndex: 9997,
+          boxShadow: '0 4px 15px rgba(0,0,0,0.3), 0 0 20px rgba(212,175,55,0.3)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          transition: 'all 0.3s ease',
+        }}
+      >
+        <span style={{ fontSize: isMobile ? '0.9rem' : '1.1rem' }}>💎</span>
+        <div>
+          <div style={{ color: '#000', fontWeight: 700, fontSize: isMobile ? '0.65rem' : '0.75rem' }}>
+            {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
+          </div>
+          <div style={{ color: 'rgba(0,0,0,0.6)', fontSize: '0.45rem', fontWeight: 600 }}>
+            {stakedPositions.length} STAKE{stakedPositions.length !== 1 ? 'S' : ''}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded view - show breakdown by tier
+  return (
+    <div style={{
+      position: 'fixed',
+      top: isMobile ? '70px' : '80px',
+      left: isMobile ? '10px' : '20px',
+      background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
+      borderRadius: '12px',
+      padding: '12px',
+      minWidth: isMobile ? '165px' : '185px',
+      zIndex: 9997,
+      boxShadow: '0 4px 20px rgba(0,0,0,0.4), 0 0 20px rgba(212,175,55,0.2)',
+      border: '2px solid #D4AF37',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <span style={{ color: '#D4AF37', fontWeight: 700, fontSize: '0.75rem' }}>💎 MY STAKES</span>
+        <button
+          onClick={() => setIsExpanded(false)}
+          style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '0.8rem', padding: '2px 6px' }}
+        >✕</button>
+      </div>
+      
+      {/* Diamond LP (DTGC/PLS) */}
+      {totalDiamondLP > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(0,188,212,0.15)', borderRadius: '6px', border: '1px solid rgba(0,188,212,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#00BCD4', fontSize: '0.65rem', fontWeight: 600 }}>💎 Diamond</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalDiamondLP)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>DTGC/PLS LP</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(diamondLPValue).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Diamond+ LP (DTGC/URMOM) */}
+      {totalDiamondPlusLP > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(156,39,176,0.15)', borderRadius: '6px', border: '1px solid rgba(156,39,176,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#CE93D8', fontSize: '0.65rem', fontWeight: 600 }}>💜💎 Diamond+</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalDiamondPlusLP)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>DTGC/URMOM LP</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(diamondPlusLPValue).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* FLEX LP */}
+      {totalFlexLP > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(255,20,147,0.15)', borderRadius: '6px', border: '1px solid rgba(255,20,147,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#FF69B4', fontSize: '0.65rem', fontWeight: 600 }}>💗 FLEX</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalFlexLP)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>No Lock LP</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(flexLPValue).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* DTGC Stakes */}
+      {totalDTGCStaked > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(255,215,0,0.1)', borderRadius: '6px', border: '1px solid rgba(255,215,0,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#FFD700', fontSize: '0.65rem', fontWeight: 600 }}>🪙 DTGC</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalDTGCStaked)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>{dtgcStakes.length} stake{dtgcStakes.length !== 1 ? 's' : ''}</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(dtgcValueUsd).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Total */}
+      <div style={{ borderTop: '1px solid rgba(212,175,55,0.3)', paddingTop: '8px', marginTop: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: '#D4AF37', fontSize: '0.7rem', fontWeight: 700 }}>TOTAL</span>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ color: '#4CAF50', fontSize: '0.85rem', fontWeight: 800 }}>
+              {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
+            </div>
+            <div style={{ color: '#9C27B0', fontSize: '0.55rem' }}>
+              ≈ {formatNumber(totalValuePls, 0)} PLS
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Particles = () => {
   const particles = useMemo(() => 
     Array.from({ length: 12 }, (_, i) => ({
@@ -7131,6 +7297,8 @@ export default function App() {
                   const rewards = (pos.amount * (apr / 100) / 365) * daysStaked;
                   return sum + rewards;
                 }, 0);
+                const totalRewardsUsd = totalRewards * (livePrices.dtgc || 0);
+                const totalRewardsPls = livePrices.pls > 0 ? (totalRewardsUsd / livePrices.pls) : 0;
                 
                 return (
                   <div style={{
@@ -7176,7 +7344,8 @@ export default function App() {
                       textAlign: 'center',
                     }}>
                       <div style={{ fontSize: '0.65rem', color: '#4CAF50', fontWeight: 600, marginBottom: '2px' }}>REWARDS</div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>{formatNumber(totalRewards)}</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>{formatNumber(totalRewards)} DTGC</div>
+                      <div style={{ fontSize: '0.55rem', color: '#4CAF50' }}>${formatNumber(totalRewardsUsd, 2)} • <span style={{ color: '#9C27B0' }}>{formatNumber(totalRewardsPls, 0)} PLS</span></div>
                     </div>
                     
                     {/* Flex Total - Pink Heart */}
@@ -7346,6 +7515,7 @@ export default function App() {
 
               const stakeValueUsd = activePos.amount * (livePrices.dtgc || 0);
               const rewardValueUsd = currentRewards * (livePrices.dtgc || 0);
+              const rewardValuePls = livePrices.pls > 0 ? (rewardValueUsd / livePrices.pls) : 0;
 
               const getTierColor = (name) => {
                 switch(name) {
@@ -7402,8 +7572,11 @@ export default function App() {
                         <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4CAF50' }}>
                           +{formatNumber(currentRewards)} DTGC
                         </div>
-                        <div style={{ fontSize: '0.65rem', color: '#4CAF50' }}>
+                        <div style={{ fontSize: '0.6rem', color: '#4CAF50' }}>
                           ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValueUsd).value)}
+                        </div>
+                        <div style={{ fontSize: '0.55rem', color: '#9C27B0' }}>
+                          ≈ {formatNumber(rewardValuePls, 0)} PLS
                         </div>
                       </div>
                     </div>
@@ -7874,11 +8047,13 @@ export default function App() {
                     return total + rewards;
                   }, 0);
                   const rewardsValueUsd = totalPendingRewards * (livePrices.dtgc || 0);
+                  const rewardsValuePls = livePrices.pls > 0 ? (rewardsValueUsd / livePrices.pls) : 0;
                   return (
                     <div style={{textAlign: 'center', padding: '10px 15px', background: 'rgba(76,175,80,0.15)', borderRadius: '8px', border: '2px solid #4CAF50'}}>
                       <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#4CAF50'}}>+{formatNumber(totalPendingRewards)} 🎁</div>
                       <div style={{fontSize: '0.65rem', color: '#4CAF50', fontWeight: 600}}>PENDING REWARDS</div>
                       <div style={{fontSize: '0.6rem', color: '#4CAF50'}}>{getCurrencySymbol()}{formatNumber(convertToCurrency(rewardsValueUsd).value)}</div>
+                      <div style={{fontSize: '0.55rem', color: '#9C27B0'}}>≈ {formatNumber(rewardsValuePls, 0)} PLS</div>
                     </div>
                   );
                 })()}
@@ -9696,8 +9871,11 @@ export default function App() {
                             <div className="rewards-value" style={{fontSize: window.innerWidth < 768 ? '1rem' : '1.3rem', fontWeight: 800, color: '#4CAF50'}}>
                               +{formatNumber(currentRewards, window.innerWidth < 768 ? 1 : 2)} DTGC
                             </div>
-                            <div style={{fontSize: window.innerWidth < 768 ? '0.6rem' : '0.75rem', color: '#4CAF50', opacity: 0.9}}>
+                            <div style={{fontSize: window.innerWidth < 768 ? '0.55rem' : '0.7rem', color: '#4CAF50', opacity: 0.9}}>
                               ≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(rewardValue).value, 2)}
+                            </div>
+                            <div style={{fontSize: window.innerWidth < 768 ? '0.55rem' : '0.7rem', color: '#9C27B0', opacity: 0.9}}>
+                              ≈ {formatNumber(livePrices.pls > 0 ? (rewardValue / livePrices.pls) : 0, 0)} PLS
                             </div>
                             <div style={{display: 'flex', gap: '6px', marginTop: '8px', justifyContent: 'flex-end', flexWrap: 'wrap'}}>
                               {isLocked ? (
@@ -9799,6 +9977,7 @@ export default function App() {
                   return sum + rewards;
                 }, 0);
                 const rewardsValue = totalPendingRewards * (livePrices.dtgc || 0.0005) * 2;
+                const rewardsValuePls = livePrices.pls > 0 ? (rewardsValue / livePrices.pls) : 0;
                 
                 // Calculate averages
                 const avgDaysStaked = allFlexStakes.length > 0 
@@ -9897,7 +10076,8 @@ export default function App() {
                       }}>
                         <div style={{ fontSize: '0.7rem', color: '#4CAF50', marginBottom: '6px', fontWeight: 600 }}>PENDING REWARDS</div>
                         <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#4CAF50' }}>+{formatNumber(totalPendingRewards, 4)}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#888' }}>≈ ${formatNumber(rewardsValue, 4)}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#888' }}>≈ ${formatNumber(rewardsValue, 4)}</div>
+                        <div style={{ fontSize: '0.65rem', color: '#9C27B0' }}>≈ {formatNumber(rewardsValuePls, 0)} PLS</div>
                       </div>
                       
                       {/* Avg Time Staked */}
@@ -10202,6 +10382,8 @@ export default function App() {
                             const daysStaked = Math.max(0, (Date.now() - stakeTime) / (24 * 60 * 60 * 1000));
                             const lpAmount = stake.amount || stake.lpAmount || 0;
                             const rewards = (lpAmount * 0.10 / 365) * daysStaked;
+                            const rewardUsd = rewards * (livePrices.dtgc || 0.0005) * 2;
+                            const rewardPls = livePrices.pls > 0 ? (rewardUsd / livePrices.pls) : 0;
                             return (
                               <div key={stake.id || idx} style={{
                                 display: 'flex',
@@ -10215,9 +10397,14 @@ export default function App() {
                                 <span style={{ fontSize: '0.8rem', color: '#FF69B4' }}>
                                   #{idx + 1} • {formatNumber(lpAmount, 2)} LP • {formatNumber(daysStaked, 1)}d
                                 </span>
-                                <span style={{ fontSize: '0.8rem', color: '#4CAF50', fontWeight: 600 }}>
-                                  +{formatNumber(rewards, 4)} LP
-                                </span>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '0.8rem', color: '#4CAF50', fontWeight: 600 }}>
+                                    +{formatNumber(rewards, 4)} LP
+                                  </div>
+                                  <div style={{ fontSize: '0.6rem', color: '#4CAF50' }}>
+                                    ${formatNumber(rewardUsd, 2)} • <span style={{ color: '#9C27B0' }}>{formatNumber(rewardPls, 0)} PLS</span>
+                                  </div>
+                                </div>
                               </div>
                             );
                           })}
@@ -10287,7 +10474,8 @@ export default function App() {
                           <div style={{textAlign: 'right'}}>
                             <div style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>Rewards Earned</div>
                             <div style={{fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50'}}>+{formatNumber(currentRewards)} {pos.isLP ? 'LP' : 'DTGC'}</div>
-                            <div style={{fontSize: '0.85rem', color: '#4CAF50', opacity: 0.8}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(currentRewards * (livePrices.dtgc || 0)).value)}</div>
+                            <div style={{fontSize: '0.75rem', color: '#4CAF50', opacity: 0.8}}>≈ {getCurrencySymbol()}{formatNumber(convertToCurrency(currentRewards * (livePrices.dtgc || 0)).value)}</div>
+                            <div style={{fontSize: '0.7rem', color: '#9C27B0', opacity: 0.8}}>≈ {formatNumber(livePrices.pls > 0 ? ((currentRewards * (livePrices.dtgc || 0)) / livePrices.pls) : 0, 0)} PLS</div>
                             <button
                               onClick={() => handleUnstake(pos.id)}
                               style={{
@@ -12317,6 +12505,16 @@ export default function App() {
 
         {/* DexScreener Widget */}
         <DexScreenerWidget />
+        
+        {/* Floating LP Stakes Widget (top-left) */}
+        <FloatingLPWidget 
+          account={account}
+          stakedPositions={stakedPositions}
+          livePrices={livePrices}
+          formatNumber={formatNumber}
+          getCurrencySymbol={getCurrencySymbol}
+          convertToCurrency={convertToCurrency}
+        />
 
         {/* Gold Records - Stake History (Above Calculator) */}
         <div
