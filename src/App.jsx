@@ -7520,7 +7520,7 @@ export default function App() {
                 <button className={activeTab === 'whitepaper' ? 'active' : ''} onClick={() => { handleNavClick('whitepaper'); setMobileMenuOpen(false); }}>📄 Whitepaper</button>
                 <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { handleNavClick('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
                 <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
-                <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #9C27B0, #7B1FA2)' : '' }}>🏭 SaaS</button>
+                <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'saas' ? '#000' : '#D4AF37' }}>🏛️ DeFi Suite</button>
               </div>
             )}
 
@@ -7531,7 +7531,25 @@ export default function App() {
               <button className={`nav-link ${activeTab === 'whitepaper' ? 'active' : ''}`} onClick={() => handleNavClick('whitepaper')}>Whitepaper</button>
               <button className={`nav-link ${activeTab === 'links' ? 'active' : ''}`} onClick={() => handleNavClick('links')}>Links</button>
               <button className={`nav-link ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleNavClick('analytics')} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : 'transparent' }}>📊 Analytics</button>
-              <button className={`nav-link ${activeTab === 'saas' ? 'active' : ''}`} onClick={() => handleNavClick('saas')} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #9C27B0, #7B1FA2)' : 'transparent', color: activeTab === 'saas' ? '#fff' : '' }}>🏭 SaaS</button>
+              <button 
+                className={`nav-link ${activeTab === 'saas' ? 'active' : ''}`} 
+                onClick={() => handleNavClick('saas')} 
+                style={{ 
+                  background: activeTab === 'saas' 
+                    ? 'linear-gradient(135deg, #D4AF37, #B8860B)' 
+                    : 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))',
+                  border: '1px solid rgba(212,175,55,0.4)',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  color: activeTab === 'saas' ? '#000' : '#D4AF37',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                🏛️ <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>DeFi</span><span>Suite</span></span>
+              </button>
             </nav>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -12256,7 +12274,7 @@ export default function App() {
             <button onClick={() => handleNavClick('stake')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>💎 LP Staking V4</button>
             <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>
             <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>
-            <button onClick={() => handleNavClick('saas')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#9C27B0' }}>🏭 SaaS</button>
+            <button onClick={() => handleNavClick('saas')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#D4AF37' }}>🏛️ DeFi Suite</button>
             <a href="https://t.me/dtgoldcoin" target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />
