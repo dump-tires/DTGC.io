@@ -3357,6 +3357,85 @@ export default function App() {
     return result.price;
   };
   
+  // Check if token is LP and get TVL info
+  const getLPTokenInfo = async (tokenAddress, userBalance, decimals) => {
+    if (!provider || !tokenAddress) return null;
+    
+    try {
+      const lpAbi = [
+        'function getReserves() view returns (uint112, uint112, uint32)',
+        'function token0() view returns (address)',
+        'function token1() view returns (address)',
+        'function totalSupply() view returns (uint256)',
+      ];
+      
+      const lp = new ethers.Contract(tokenAddress, lpAbi, provider);
+      
+      // Try to call getReserves - if it fails, not an LP token
+      const [[reserve0, reserve1], token0, token1, totalSupply] = await Promise.all([
+        lp.getReserves(),
+        lp.token0(),
+        lp.token1(),
+        lp.totalSupply(),
+      ]);
+      
+      // Get token symbols
+      const tokenAbi = ['function symbol() view returns (string)', 'function decimals() view returns (uint8)'];
+      const [t0Contract, t1Contract] = [
+        new ethers.Contract(token0, tokenAbi, provider),
+        new ethers.Contract(token1, tokenAbi, provider),
+      ];
+      
+      const [[symbol0, decimals0], [symbol1, decimals1]] = await Promise.all([
+        Promise.all([t0Contract.symbol(), t0Contract.decimals()]),
+        Promise.all([t1Contract.symbol(), t1Contract.decimals()]),
+      ]);
+      
+      // Get prices for underlying tokens
+      const getPrice = async (addr, sym) => {
+        const s = sym.toUpperCase();
+        if (s === 'WPLS' || s === 'PLS') return livePrices.pls || 0.00003;
+        if (s === 'DTGC') return livePrices.dtgc || 0;
+        if (s === 'URMOM') return livePrices.urmom || 0;
+        if (s === 'PLSX') return livePrices.plsx || 0;
+        if (s === 'HEX') return livePrices.hex || 0;
+        if (s === 'INC') return livePrices.inc || 0;
+        // Fetch from DEX for unknown
+        const result = await getTokenPriceAndLiquidity(addr, 18);
+        return result.price;
+      };
+      
+      const [price0, price1] = await Promise.all([
+        getPrice(token0, symbol0),
+        getPrice(token1, symbol1),
+      ]);
+      
+      // Calculate values
+      const r0 = parseFloat(ethers.formatUnits(reserve0, decimals0));
+      const r1 = parseFloat(ethers.formatUnits(reserve1, decimals1));
+      const supply = parseFloat(ethers.formatUnits(totalSupply, decimals));
+      const userBal = parseFloat(userBalance);
+      
+      const poolTVL = (r0 * price0) + (r1 * price1);
+      const userShare = userBal / supply;
+      const userValue = poolTVL * userShare;
+      
+      return {
+        isLP: true,
+        token0: { symbol: symbol0, reserve: r0, price: price0, value: r0 * price0 },
+        token1: { symbol: symbol1, reserve: r1, price: price1, value: r1 * price1 },
+        poolTVL,
+        totalSupply: supply,
+        userShare,
+        userValue,
+        pairName: `${symbol0}/${symbol1}`,
+      };
+    } catch (e) {
+      // Not an LP token or error
+      return null;
+    }
+  };
+  
   // Scan wallet for ALL tokens - AGGRESSIVE SCANNER
   const scanWalletTokens = useCallback(async () => {
     if (!account || !provider) return;
@@ -3490,21 +3569,37 @@ export default function App() {
           }
           // Tokens beyond limit will need rescan
           
-          const valueUsd = bal * price;
+          // Check if this might be an LP token (has LP in name or no price found)
+          let lpInfo = null;
+          const tokenName = (item.token?.name || '').toLowerCase();
+          const isLikelyLP = tokenName.includes('lp') || tokenName.includes('pair') || tokenName.includes('pulsex') || tokenName.includes('/');
+          
+          if (isLikelyLP && index < 10) {
+            try {
+              lpInfo = await getLPTokenInfo(item.token?.address, bal.toString(), decimals);
+              if (lpInfo) {
+                price = lpInfo.userValue / bal; // Price per LP token
+                hasLiquidity = true;
+              }
+            } catch {}
+          }
+          
+          const valueUsd = lpInfo ? lpInfo.userValue : (bal * price);
           
           return {
             symbol: item.token?.symbol || 'UNKNOWN',
-            name: item.token?.name || 'Unknown Token',
+            name: lpInfo ? `${lpInfo.pairName} LP` : (item.token?.name || 'Unknown Token'),
             address: item.token?.address,
             decimals: decimals,
             balance: bal.toString(),
-            icon: hasLiquidity ? '💰' : '🔸',
-            color: hasLiquidity ? '#4CAF50' : '#888',
+            icon: lpInfo ? '🔷' : (hasLiquidity ? '💰' : '🔸'),
+            color: lpInfo ? '#9C27B0' : (hasLiquidity ? '#4CAF50' : '#888'),
             valueUsd: valueUsd,
             price: price,
             liquidityUsd: liquidityUsd,
             isUnknown: !hasLiquidity,
-            hasLiquidity: hasLiquidity,
+            hasLiquidity: hasLiquidity || !!lpInfo,
+            lpInfo: lpInfo, // LP TVL data if applicable
           };
         });
         
@@ -9003,7 +9098,16 @@ export default function App() {
                                 <div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     <span style={{ color: token.color, fontWeight: 600, fontSize: '0.9rem' }}>{token.symbol}</span>
-                                    {token.hasLiquidity && (
+                                    {token.lpInfo && (
+                                      <span style={{ 
+                                        fontSize: '0.5rem', 
+                                        background: 'rgba(156,39,176,0.3)', 
+                                        padding: '2px 6px', 
+                                        borderRadius: '4px',
+                                        color: '#CE93D8'
+                                      }}>🔷 LP</span>
+                                    )}
+                                    {!token.lpInfo && token.hasLiquidity && (
                                       <span style={{ 
                                         fontSize: '0.5rem', 
                                         background: 'rgba(76,175,80,0.3)', 
@@ -9012,7 +9116,7 @@ export default function App() {
                                         color: '#4CAF50'
                                       }}>💧 LIQ</span>
                                     )}
-                                    {token.isUnknown && (
+                                    {token.isUnknown && !token.lpInfo && (
                                       <span style={{ 
                                         fontSize: '0.5rem', 
                                         background: 'rgba(255,152,0,0.3)', 
@@ -9023,6 +9127,11 @@ export default function App() {
                                     )}
                                   </div>
                                   <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>{token.name}</div>
+                                  {token.lpInfo && (
+                                    <div style={{ color: 'rgba(206,147,216,0.8)', fontSize: '0.55rem', marginTop: '2px' }}>
+                                      TVL: ${formatNumber(token.lpInfo.poolTVL)} • {(token.lpInfo.userShare * 100).toFixed(4)}% share
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
