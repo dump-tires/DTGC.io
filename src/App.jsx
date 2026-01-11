@@ -9020,6 +9020,62 @@ export default function App() {
                     )}
                   </div>
 
+                  {/* Quick Contracts Reference */}
+                  <details style={{
+                    marginBottom: '12px',
+                    background: 'rgba(212,175,55,0.1)',
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                  }}>
+                    <summary style={{ 
+                      cursor: 'pointer', 
+                      color: '#D4AF37', 
+                      fontWeight: 600, 
+                      fontSize: '0.75rem',
+                      userSelect: 'none',
+                    }}>
+                      📋 Quick Contracts (click to expand)
+                    </summary>
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {[
+                        { name: 'DTGC', addr: '0xd0676b28a457371d58d47e5247b439114e40eb0f' },
+                        { name: 'URMOM', addr: '0x636cc7d7c76298cde00025370461c59c0b2ef896' },
+                        { name: 'DTGC/PLS LP', addr: '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7' },
+                        { name: 'DTGC/URMOM LP', addr: '0x0548656e272fec9534e180d3174cfc57ab6e10c0' },
+                        { name: 'DTGCStakingV4', addr: '0x578e0DE613acb498652025f98c6aF52F0e4E7001' },
+                        { name: 'LPStakingV4', addr: '0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231' },
+                        { name: 'PLSX', addr: '0x95b303987a60c71504d99aa1b13b4da07b0790ab' },
+                        { name: 'HEX', addr: '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39' },
+                        { name: 'WPLS', addr: '0xa1077a294dde1b09bb078844df40758a5d0f9a27' },
+                      ].map(({ name, addr }) => (
+                        <div key={addr} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.65rem', flex: 1 }}>{name}</span>
+                          <code style={{ color: '#D4AF37', fontSize: '0.55rem', fontFamily: 'monospace' }}>
+                            {addr.slice(0, 6)}...{addr.slice(-4)}
+                          </code>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(addr);
+                              showToast(`📋 Copied ${name} address!`, 'success');
+                            }}
+                            style={{
+                              background: 'rgba(212,175,55,0.3)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '2px 6px',
+                              cursor: 'pointer',
+                              fontSize: '0.6rem',
+                              color: '#D4AF37',
+                            }}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+
                   {/* Token List with Checkboxes */}
                   <div style={{
                     maxHeight: '320px',
@@ -9124,6 +9180,31 @@ export default function App() {
                                         borderRadius: '4px',
                                         color: '#FF9800'
                                       }}>⚠️ NO LIQ</span>
+                                    )}
+                                    {/* Copy Contract Address Button */}
+                                    {token.address && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard.writeText(token.address);
+                                          showToast(`📋 Copied ${token.symbol} address!`, 'success');
+                                        }}
+                                        title={token.address}
+                                        style={{
+                                          fontSize: '0.5rem',
+                                          background: 'rgba(255,215,0,0.2)',
+                                          padding: '2px 5px',
+                                          borderRadius: '4px',
+                                          color: '#FFD700',
+                                          border: 'none',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '2px',
+                                        }}
+                                      >
+                                        📋
+                                      </button>
                                     )}
                                   </div>
                                   <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>{token.name}</div>
