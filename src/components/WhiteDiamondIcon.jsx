@@ -18,13 +18,14 @@ const WhiteDiamondIcon = ({ provider, account, onNavigate }) => {
       try {
         const contract = new ethers.Contract(
           WHITE_DIAMOND_ADDRESS,
-          ['function getStakesByOwner(address) view returns (uint256[])'],
+          ['function balanceOf(address) view returns (uint256)'],
           provider
         );
-        const tokenIds = await contract.getStakesByOwner(account);
-        setNftCount(tokenIds.length);
+        const balance = await contract.balanceOf(account);
+        setNftCount(Number(balance));
+        console.log('✅ White Diamond Icon: User has', Number(balance), 'NFTs');
       } catch (err) {
-        console.error('Error loading White Diamond NFT count:', err);
+        console.error('❌ White Diamond Icon Error:', err);
         setNftCount(0);
       } finally {
         setLoading(false);
@@ -32,7 +33,7 @@ const WhiteDiamondIcon = ({ provider, account, onNavigate }) => {
     };
 
     loadNFTCount();
-    const interval = setInterval(loadNFTCount, 30000); // Update every 30 seconds
+    const interval = setInterval(loadNFTCount, 30000);
 
     return () => clearInterval(interval);
   }, [provider, account]);

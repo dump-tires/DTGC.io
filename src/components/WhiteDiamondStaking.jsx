@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
+// ACTUAL DEPLOYED CONTRACT - matches what's on-chain
 const WHITE_DIAMOND_CONFIG = {
   CONTRACT_ADDRESS: '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
   LP_TOKEN: '0x670c972Bb5388E087a2934a063064d97278e01F3',
@@ -8,9 +9,6 @@ const WHITE_DIAMOND_CONFIG = {
   APR: 70,
   LOCK_DAYS: 90,
   MIN_STAKE: '1000',
-  ENTRY_FEE: 3.75,
-  EXIT_FEE: 3.75,
-  EARLY_EXIT_PENALTY: 20,
 };
 
 const ERC20_ABI = [
@@ -19,17 +17,18 @@ const ERC20_ABI = [
   'function approve(address spender, uint256 amount) returns (bool)',
 ];
 
+// CORRECT ABI - matches deployed contract
 const WHITE_DIAMOND_ABI = [
-  'function stake(uint256 amount, uint256 lpValueUSD) external returns (uint256)',
+  'function stake(uint256 amount) external returns (uint256)',
   'function withdraw(uint256 tokenId) external',
   'function claimRewards(uint256 tokenId) external',
   'function emergencyWithdraw(uint256 tokenId) external',
   'function getStakesByOwner(address owner) view returns (uint256[])',
-  'function getPosition(uint256 tokenId) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 rewards, uint256 lpValueUSD, bool active)',
-  'function calculateRewards(uint256 tokenId) view returns (uint256)',
-  'function totalStaked() view returns (uint256)',
-  'function totalNFTsMinted() view returns (uint256)',
-  'function totalRewardsPaid() view returns (uint256)',
+  'function getPosition(uint256 tokenId) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lastClaimTime, uint256 pending, bool isActive, uint256 timeRemaining)',
+  'function getStats() view returns (uint256 totalStaked, uint256 totalSupply, uint256 totalRewardsPaid, uint256 apr, uint256 lockTime)',
+  'function pendingRewards(uint256 tokenId) view returns (uint256)',
+  'function totalSupply() view returns (uint256)',
+  'function balanceOf(address) view returns (uint256)',
 ];
 
 const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
@@ -64,112 +63,98 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
 
   useEffect(() => {
     if (provider && userAddress) {
-      console.log('🔍 White Diamond: Component mounted with provider and address');
-      console.log('📍 Address:', userAddress);
+      console.log('✅ White Diamond: Component loaded');
+      console.log('📍 User:', userAddress);
       console.log('📍 Contract:', WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS);
       loadData();
       const interval = setInterval(loadData, 30000);
       return () => clearInterval(interval);
-    } else {
-      console.warn('⚠️ White Diamond: Missing provider or userAddress', { provider: !!provider, userAddress });
     }
   }, [provider, userAddress]);
 
   const loadData = async () => {
-    console.log('🔄 White Diamond: Starting data load...');
     await Promise.all([
       loadBalances(),
       loadUserStakes(),
       loadContractStats(),
       checkApproval(),
     ]);
-    console.log('✅ White Diamond: Data load complete');
   };
 
   const loadBalances = async () => {
     try {
-      console.log('💰 White Diamond: Loading balances...');
+      console.log('💰 Loading balances...');
       const lpContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.LP_TOKEN, ERC20_ABI, provider);
       const dtgcContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.REWARD_TOKEN, ERC20_ABI, provider);
       const [lpBal, dtgcBal] = await Promise.all([
         lpContract.balanceOf(userAddress),
         dtgcContract.balanceOf(userAddress),
       ]);
-      console.log('✅ LP Balance:', ethers.formatEther(lpBal), 'LP');
-      console.log('✅ DTGC Balance:', ethers.formatEther(dtgcBal), 'DTGC');
+      console.log('✅ LP:', ethers.formatEther(lpBal));
+      console.log('✅ DTGC:', ethers.formatEther(dtgcBal));
       setLpBalance(ethers.formatEther(lpBal));
       setDtgcBalance(ethers.formatEther(dtgcBal));
     } catch (error) {
       console.error('❌ Error loading balances:', error);
-      console.error('LP Token:', WHITE_DIAMOND_CONFIG.LP_TOKEN);
-      console.error('User Address:', userAddress);
     }
   };
 
   const loadUserStakes = async () => {
     try {
-      console.log('🔍 White Diamond: Loading user stakes...');
+      console.log('🔍 Loading NFTs...');
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, provider);
       const tokenIds = await contract.getStakesByOwner(userAddress);
-      console.log('📋 Token IDs found:', tokenIds.length, tokenIds.map(id => id.toString()));
+      console.log('📋 NFT IDs:', tokenIds.map(id => id.toString()));
       
       if (tokenIds.length === 0) {
-        console.log('ℹ️ No NFTs found for this address');
+        console.log('ℹ️ No NFTs found');
         setUserStakes([]);
         return;
       }
       
-      const stakes = await Promise.all(
-        tokenIds.map(async (tokenId) => {
-          console.log(`📊 Loading position for NFT #${tokenId.toString()}...`);
-          try {
-            const position = await contract.getPosition(tokenId);
-            const rewards = await contract.calculateRewards(tokenId);
-            console.log(`✅ NFT #${tokenId}: ${ethers.formatEther(position[0])} LP, Active: ${position[5]}`);
-            return {
+      const stakes = [];
+      for (const tokenId of tokenIds) {
+        try {
+          console.log(`📊 Loading NFT #${tokenId}...`);
+          const position = await contract.getPosition(tokenId);
+          // position returns: amount, startTime, unlockTime, lastClaimTime, pending, isActive, timeRemaining
+          if (position[5]) { // isActive
+            stakes.push({
               tokenId: tokenId.toString(),
               amount: ethers.formatEther(position[0]),
               startTime: Number(position[1]) * 1000,
               unlockTime: Number(position[2]) * 1000,
-              rewards: ethers.formatEther(rewards),
-              lpValueUSD: ethers.formatEther(position[4]),
-              active: position[5],
-            };
-          } catch (err) {
-            console.error(`❌ Error loading NFT #${tokenId}:`, err);
-            return null;
+              rewards: ethers.formatEther(position[4]), // pending rewards
+              active: position[5], // isActive
+            });
+            console.log(`✅ NFT #${tokenId}: ${ethers.formatEther(position[0])} LP`);
           }
-        })
-      );
+        } catch (err) {
+          console.error(`❌ Error loading NFT #${tokenId}:`, err);
+        }
+      }
       
-      const activeStakes = stakes.filter(s => s && s.active);
-      console.log(`✅ Active stakes: ${activeStakes.length}/${stakes.length}`);
-      setUserStakes(activeStakes);
+      console.log(`✅ Found ${stakes.length} active NFTs`);
+      setUserStakes(stakes);
     } catch (error) {
-      console.error('❌ Error loading stakes:', error);
-      console.error('Error details:', error.message);
-      console.error('Contract:', WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS);
+      console.error('❌ Error loading stakes:', error.message);
     }
   };
 
   const loadContractStats = async () => {
     try {
-      console.log('📊 White Diamond: Loading contract stats...');
+      console.log('📊 Loading contract stats...');
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, provider);
-      const [totalStaked, totalNFTs, totalRewardsPaid] = await Promise.all([
-        contract.totalStaked(),
-        contract.totalNFTsMinted(),
-        contract.totalRewardsPaid(),
-      ]);
-      
-      console.log('✅ Contract stats loaded');
+      const stats = await contract.getStats();
+      // getStats returns: totalStaked, totalSupply, totalRewardsPaid, apr, lockTime
+      console.log('✅ Stats loaded');
       setContractStats({
-        totalStaked: ethers.formatEther(totalStaked),
-        totalNFTs: totalNFTs.toString(),
-        totalRewardsPaid: ethers.formatEther(totalRewardsPaid),
+        totalStaked: ethers.formatEther(stats[0]),
+        totalNFTs: stats[1].toString(),
+        totalRewardsPaid: ethers.formatEther(stats[2]),
       });
     } catch (error) {
-      console.error('❌ Error loading contract stats:', error);
+      console.error('❌ Error loading stats:', error);
     }
   };
 
@@ -178,7 +163,6 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
       const lpContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.LP_TOKEN, ERC20_ABI, provider);
       const allowance = await lpContract.allowance(userAddress, WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS);
       const approved = allowance > ethers.parseEther('1000000');
-      console.log('🔐 Approval status:', approved);
       setIsApproved(approved);
     } catch (error) {
       console.error('❌ Error checking approval:', error);
@@ -186,33 +170,25 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
   };
 
   const calculateLPValueUSD = () => {
-    if (!stakeAmount || !livePrices || !livePrices.dtgc) {
-      console.log('⚠️ Cannot calculate USD value:', { stakeAmount, livePrices });
-      return 0;
-    }
+    if (!stakeAmount || !livePrices || !livePrices.dtgc) return 0;
     const lpAmount = parseFloat(stakeAmount);
     const dtgcPrice = livePrices.dtgc || 0;
-    const lpValueUSD = lpAmount * dtgcPrice * 2;
-    console.log(`💵 LP Value: ${lpAmount} LP × $${dtgcPrice} DTGC × 2 = $${lpValueUSD.toFixed(2)}`);
-    return lpValueUSD;
+    return lpAmount * dtgcPrice * 2;
   };
 
   const handleApprove = async () => {
     setLoading(true);
     try {
       if (!signer) {
-        alert('Please connect your wallet first');
+        alert('Please connect wallet');
         setLoading(false);
         return;
       }
-      console.log('🔓 Approving LP tokens...');
       const lpContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.LP_TOKEN, ERC20_ABI, signer);
       const tx = await lpContract.approve(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, ethers.MaxUint256);
-      console.log('⏳ Waiting for approval transaction...');
       await tx.wait();
       setIsApproved(true);
-      console.log('✅ Approval successful!');
-      alert('✅ Approval successful! You can now stake.');
+      alert('✅ Approved!');
     } catch (error) {
       console.error('❌ Approval error:', error);
       alert('❌ Approval failed: ' + error.message);
@@ -223,32 +199,26 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
 
   const handleStake = async () => {
     if (!stakeAmount || parseFloat(stakeAmount) < parseFloat(WHITE_DIAMOND_CONFIG.MIN_STAKE)) {
-      alert(`Minimum stake is ${WHITE_DIAMOND_CONFIG.MIN_STAKE} LP tokens`);
+      alert(`Minimum stake is ${WHITE_DIAMOND_CONFIG.MIN_STAKE} LP`);
       return;
     }
 
     setLoading(true);
     try {
       if (!signer) {
-        alert('Please connect your wallet first');
+        alert('Please connect wallet');
         setLoading(false);
         return;
       }
       
-      const lpValueUSD = calculateLPValueUSD();
-      console.log(`💎 Staking ${stakeAmount} LP (USD value: $${lpValueUSD.toFixed(2)})`);
-      
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const amount = ethers.parseEther(stakeAmount);
-      const lpValueWei = ethers.parseEther(lpValueUSD.toString());
       
-      console.log('📤 Sending stake transaction...');
-      const tx = await contract.stake(amount, lpValueWei);
-      console.log('⏳ Waiting for transaction confirmation...');
+      console.log(`💎 Staking ${stakeAmount} LP...`);
+      const tx = await contract.stake(amount);
       await tx.wait();
       
-      console.log('✅ Stake successful!');
-      alert(`✅ Staked ${stakeAmount} LP! NFT minted. LP Value: $${lpValueUSD.toFixed(2)}`);
+      alert(`✅ Staked ${stakeAmount} LP! NFT minted.`);
       setStakeAmount('');
       await loadData();
     } catch (error) {
@@ -263,16 +233,14 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
     setLoading(true);
     try {
       if (!signer) {
-        alert('Please connect your wallet first');
+        alert('Please connect wallet');
         setLoading(false);
         return;
       }
-      console.log(`🎁 Claiming rewards for NFT #${tokenId}...`);
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.claimRewards(tokenId);
       await tx.wait();
-      console.log('✅ Rewards claimed!');
-      alert('✅ Rewards claimed successfully!');
+      alert('✅ Rewards claimed!');
       await loadData();
     } catch (error) {
       console.error('❌ Claim error:', error);
@@ -286,16 +254,14 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
     setLoading(true);
     try {
       if (!signer) {
-        alert('Please connect your wallet first');
+        alert('Please connect wallet');
         setLoading(false);
         return;
       }
-      console.log(`💎 Withdrawing NFT #${tokenId}...`);
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.withdraw(tokenId);
       await tx.wait();
-      console.log('✅ Withdrawal successful!');
-      alert('✅ Withdrawn successfully! NFT burned.');
+      alert('✅ Withdrawn! NFT burned.');
       await loadData();
     } catch (error) {
       console.error('❌ Withdraw error:', error);
@@ -306,27 +272,23 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
   };
 
   const handleEmergencyWithdraw = async (tokenId) => {
-    if (!window.confirm(`⚠️ Emergency withdraw will forfeit ${WHITE_DIAMOND_CONFIG.EARLY_EXIT_PENALTY}% of rewards + exit fees. Continue?`)) {
-      return;
-    }
+    if (!window.confirm(`⚠️ Emergency withdraw = 20% penalty. Continue?`)) return;
 
     setLoading(true);
     try {
       if (!signer) {
-        alert('Please connect your wallet first');
+        alert('Please connect wallet');
         setLoading(false);
         return;
       }
-      console.log(`🚨 Emergency withdrawing NFT #${tokenId}...`);
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.emergencyWithdraw(tokenId);
       await tx.wait();
-      console.log('✅ Emergency withdrawal complete');
-      alert('✅ Emergency withdrawal complete. NFT burned.');
+      alert('✅ Emergency withdrawal complete');
       await loadData();
     } catch (error) {
-      console.error('❌ Emergency withdraw error:', error);
-      alert('❌ Emergency withdraw failed: ' + error.message);
+      console.error('❌ Emergency error:', error);
+      alert('❌ Emergency failed: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -409,7 +371,6 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
               fontSize: '0.85rem',
               cursor: 'pointer',
               marginBottom: '20px',
-              letterSpacing: '1px',
             }}
           >
             ⭐ NFT STAKING SYSTEM
@@ -439,7 +400,7 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
             </div>
             <div>
               <div style={{ fontSize: '2rem', fontWeight: 800, color: theme.gold }}>{formatNumber(contractStats.totalRewardsPaid)}</div>
-              <div style={{ fontSize: '0.85rem', color: theme.textMuted }}>Total Rewards Paid</div>
+              <div style={{ fontSize: '0.85rem', color: theme.textMuted }}>Rewards Paid</div>
             </div>
           </div>
         </div>
@@ -503,7 +464,7 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
           />
           {stakeAmount && usdValue > 0 && (
             <div style={{ fontSize: '0.85rem', color: '#4CAF50', marginTop: '8px', fontWeight: 600 }}>
-              💵 LP Value: ~${usdValue.toFixed(2)} USD (saved on NFT)
+              💵 LP Value: ~${usdValue.toFixed(2)} USD (estimate)
             </div>
           )}
         </div>
@@ -518,10 +479,9 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
         }}>
           <strong style={{ color: theme.gold }}>ℹ️ How it works:</strong><br/>
           • Stake URMOM/DTGC LP tokens and receive an NFT<br/>
-          • NFT stores your stake amount + USD value at mint<br/>
-          • {WHITE_DIAMOND_CONFIG.ENTRY_FEE}% entry fee, {WHITE_DIAMOND_CONFIG.EXIT_FEE}% exit fee<br/>
-          • {WHITE_DIAMOND_CONFIG.EARLY_EXIT_PENALTY}% penalty on early withdrawal<br/>
-          • View your NFTs in <button onClick={() => setShowWrapGuide(true)} style={{background:'none',border:'none',color:theme.gold,textDecoration:'underline',cursor:'pointer',fontSize:'0.85rem'}}>PulseX Gold 📦</button>
+          • 70% APR, 90-day lock, 3.75% fees<br/>
+          • 20% penalty on early withdrawal<br/>
+          • NFTs are tradeable ERC721 tokens
         </div>
 
         {!isApproved ? (
@@ -538,7 +498,6 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
               fontSize: '1.1rem',
               fontWeight: 700,
               cursor: loading ? 'not-allowed' : 'pointer',
-              letterSpacing: '1px',
             }}
           >
             {loading ? '⏳ Approving...' : '🔓 Approve LP Tokens'}
@@ -559,7 +518,6 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
               fontSize: '1.1rem',
               fontWeight: 700,
               cursor: loading || !stakeAmount ? 'not-allowed' : 'pointer',
-              letterSpacing: '1px',
             }}
           >
             {loading ? '⏳ Staking...' : '💎 Stake & Mint NFT'}
@@ -597,7 +555,6 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
                   borderRadius: '20px',
                   padding: '25px',
                   border: `2px solid ${theme.border}`,
-                  position: 'relative',
                   boxShadow: '0 4px 20px rgba(212,175,55,0.2)',
                 }}>
                   {/* NFT Card Header with Darth Vader Helmet */}
@@ -617,16 +574,7 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
                       justifyContent: 'center',
                       fontSize: '3rem',
                       boxShadow: '0 0 30px rgba(212,175,55,0.6)',
-                      position: 'relative',
                     }}>
-                      <div style={{
-                        position: 'absolute',
-                        width: '100%',
-                        height: '100%',
-                        borderRadius: '50%',
-                        background: 'radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%)',
-                        animation: 'pulse 2s ease-in-out infinite',
-                      }}/>
                       ⚔️
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -667,9 +615,9 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
                         </div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>USD Value</div>
+                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>Pending Rewards</div>
                         <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#4CAF50' }}>
-                          ${formatNumber(stake.lpValueUSD)}
+                          +{formatNumber(stake.rewards)}
                         </div>
                       </div>
                     </div>
@@ -680,9 +628,9 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
                       gap: '12px',
                     }}>
                       <div>
-                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>Pending Rewards</div>
+                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>APR</div>
                         <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#4CAF50' }}>
-                          +{formatNumber(stake.rewards)} DTGC
+                          70%
                         </div>
                       </div>
                       <div>
@@ -772,193 +720,6 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
           </div>
         )}
       </div>
-
-      {/* Diamond Paper Modal */}
-      {showDiamondPaper && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px',
-        }} onClick={() => setShowDiamondPaper(false)}>
-          <div style={{
-            background: theme.cardBg,
-            borderRadius: '20px',
-            padding: '40px',
-            maxWidth: '600px',
-            maxHeight: '80vh',
-            overflow: 'auto',
-            border: `2px solid ${theme.border}`,
-          }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontFamily: 'Cinzel, serif', color: theme.gold, marginBottom: '20px' }}>💎 White Diamond NFT System</h2>
-            <p style={{ lineHeight: '1.8', marginBottom: '15px' }}>
-              <strong>White Diamond</strong> is an NFT-based staking system where each stake is represented as a unique NFT token. Your stake amount and USD value are permanently recorded on the NFT.
-            </p>
-            
-            <h3 style={{ color: theme.gold, marginTop: '25px', marginBottom: '15px' }}>Key Features:</h3>
-            <ul style={{ lineHeight: '2', paddingLeft: '20px' }}>
-              <li>Each stake mints a unique NFT with Darth Vader helmet icon</li>
-              <li>NFT stores LP amount + USD value at time of staking</li>
-              <li>70% APR on URMOM/DTGC LP tokens</li>
-              <li>90-day lock period with early withdrawal option</li>
-              <li>NFTs are tradeable and transferable</li>
-              <li>View your NFTs in PulseX Gold Suite</li>
-            </ul>
-
-            <h3 style={{ color: theme.gold, marginTop: '25px', marginBottom: '15px' }}>Economics:</h3>
-            <ul style={{ lineHeight: '2', paddingLeft: '20px' }}>
-              <li>Entry Fee: {WHITE_DIAMOND_CONFIG.ENTRY_FEE}%</li>
-              <li>Exit Fee: {WHITE_DIAMOND_CONFIG.EXIT_FEE}%</li>
-              <li>Early Exit Penalty: {WHITE_DIAMOND_CONFIG.EARLY_EXIT_PENALTY}%</li>
-              <li>Minimum Stake: {WHITE_DIAMOND_CONFIG.MIN_STAKE} LP</li>
-            </ul>
-
-            <h3 style={{ color: theme.gold, marginTop: '25px', marginBottom: '15px' }}>Use Cases:</h3>
-            <ul style={{ lineHeight: '2', paddingLeft: '20px' }}>
-              <li>Trade your staked positions on NFT marketplaces</li>
-              <li>Use NFTs as collateral (future feature)</li>
-              <li>Gift staked positions to others</li>
-              <li>Track historical USD value of your LP</li>
-            </ul>
-
-            <div style={{ marginTop: '30px', textAlign: 'center' }}>
-              <a 
-                href="https://dtgc.io/diamond-paper" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-block',
-                  padding: '12px 30px',
-                  background: 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
-                  color: '#000',
-                  textDecoration: 'none',
-                  borderRadius: '25px',
-                  fontWeight: 700,
-                  marginRight: '10px',
-                }}
-              >
-                📄 Read Full Documentation
-              </a>
-              <button
-                onClick={() => setShowDiamondPaper(false)}
-                style={{
-                  padding: '12px 30px',
-                  background: 'transparent',
-                  border: `2px solid ${theme.border}`,
-                  color: theme.text,
-                  borderRadius: '25px',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Wrap/Unwrap Guide Modal */}
-      {showWrapGuide && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px',
-        }} onClick={() => setShowWrapGuide(false)}>
-          <div style={{
-            background: theme.cardBg,
-            borderRadius: '20px',
-            padding: '40px',
-            maxWidth: '700px',
-            maxHeight: '80vh',
-            overflow: 'auto',
-            border: `2px solid ${theme.border}`,
-          }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontFamily: 'Cinzel, serif', color: theme.gold, marginBottom: '20px' }}>📦 How to Get URMOM/DTGC LP</h2>
-            
-            <div style={{ marginBottom: '30px' }}>
-              <h3 style={{ color: theme.gold, marginBottom: '15px' }}>Step 1: Add Liquidity on PulseX</h3>
-              <ol style={{ lineHeight: '2', paddingLeft: '20px' }}>
-                <li>Go to <a href="https://pulsex.com/pools" target="_blank" style={{color:theme.gold}}>PulseX.com/pools</a></li>
-                <li>Click "Add Liquidity"</li>
-                <li>Select URMOM and DTGC tokens</li>
-                <li>Enter equal USD value of both tokens</li>
-                <li>Click "Supply" to add liquidity</li>
-                <li>Receive URMOM/DTGC LP tokens</li>
-              </ol>
-            </div>
-
-            <div style={{ marginBottom: '30px' }}>
-              <h3 style={{ color: theme.gold, marginBottom: '15px' }}>Step 2: View Your LP in PulseX Gold</h3>
-              <ol style={{ lineHeight: '2', paddingLeft: '20px' }}>
-                <li>Click the "PulseX Gold" tab in the header</li>
-                <li>Your LP tokens will appear in the scanner</li>
-                <li>Click on your LP to see details</li>
-                <li>View wrapped/unwrapped positions</li>
-              </ol>
-            </div>
-
-            <div style={{ marginBottom: '30px' }}>
-              <h3 style={{ color: theme.gold, marginBottom: '15px' }}>Step 3: Stake for White Diamond NFT</h3>
-              <ol style={{ lineHeight: '2', paddingLeft: '20px' }}>
-                <li>Return to White Diamond tab</li>
-                <li>Enter amount of LP to stake</li>
-                <li>Approve the LP token</li>
-                <li>Click "Stake & Mint NFT"</li>
-                <li>Receive your Darth Vader NFT!</li>
-              </ol>
-            </div>
-
-            <div style={{
-              background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.2)',
-              padding: '20px',
-              borderRadius: '12px',
-              marginBottom: '20px',
-            }}>
-              <strong style={{ color: theme.gold }}>💡 Pro Tip:</strong> The USD value of your LP is saved on the NFT at the time of staking. This lets you track your original investment value!
-            </div>
-
-            <button
-              onClick={() => setShowWrapGuide(false)}
-              style={{
-                width: '100%',
-                padding: '15px',
-                background: 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
-                border: 'none',
-                borderRadius: '12px',
-                color: '#000',
-                fontWeight: 700,
-                cursor: 'pointer',
-                fontSize: '1rem',
-              }}
-            >
-              Got It!
-            </button>
-          </div>
-        </div>
-      )}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.05); opacity: 0.8; }
-        }
-      `}</style>
     </div>
   );
 };
