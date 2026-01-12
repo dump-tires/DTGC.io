@@ -851,7 +851,11 @@ export default function WhiteDiamondStaking({ provider, signer, userAddress, onC
               disabled={!isContractDeployed}
             />
             <button
-              onClick={() => setStakeAmount(ethers.formatEther(lpBalance))}
+              onClick={() => {
+                // Use 99.8% to leave room for gas/rounding
+                const maxBalance = parseFloat(ethers.formatEther(lpBalance)) || 0;
+                setStakeAmount((maxBalance * 0.998).toFixed(6));
+              }}
               style={{
                 padding: '0 20px',
                 background: 'rgba(255,255,255,0.1)',

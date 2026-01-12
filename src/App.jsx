@@ -9247,11 +9247,16 @@ export default function App() {
                             return selectedTier === 4 ? lpDtgcUrmomBalance : lpDtgcPlsBalance;
                           };
                           if (stakeInputMode === 'tokens') {
-                            setStakeAmount(getBalance());
+                            // Use 99.8% to leave room for gas/rounding
+                            const maxBalance = parseFloat(getBalance()) || 0;
+                            const safeMax = (maxBalance * 0.998).toFixed(6);
+                            setStakeAmount(safeMax);
                           } else {
                             const maxTokens = parseFloat(getBalance()) || 0;
+                            // Use 99.8% to leave room for gas/rounding
+                            const safeMaxTokens = maxTokens * 0.998;
                             const priceUsd = livePrices.dtgc || 0;
-                            const valueUsd = maxTokens * priceUsd;
+                            const valueUsd = safeMaxTokens * priceUsd;
                             const currencyValue = convertToCurrency(valueUsd).value;
                             setStakeAmount(currencyValue.toFixed(2));
                           }
@@ -9545,7 +9550,7 @@ export default function App() {
                                   <button
                                     onClick={() => setSelectedFlexTokens(prev => ({
                                       ...prev,
-                                      [tokenKey]: { ...prev[tokenKey], amount: token.balance }
+                                      [tokenKey]: { ...prev[tokenKey], amount: (parseFloat(token.balance) * 0.998).toFixed(6) }
                                     }))}
                                     style={{
                                       padding: '6px 8px',

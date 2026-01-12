@@ -137,6 +137,20 @@ const TOKENS = {
   },
 };
 
+// Known LP pairs - pre-existing pools (for quick lookup)
+const KNOWN_PAIRS = {
+  'DTGC-PLS': '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
+  'PLS-DTGC': '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
+  'DTGC-URMOM': '0x670c972Bb5388E087a2934a063064d97278e01F3',
+  'URMOM-DTGC': '0x670c972Bb5388E087a2934a063064d97278e01F3',
+  'URMOM-PLS': '0x0548656e272fec9534e180d3174cfc57ab6e10c0',
+  'PLS-URMOM': '0x0548656e272fec9534e180d3174cfc57ab6e10c0',
+  'PLSX-PLS': '0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9',
+  'PLS-PLSX': '0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9',
+  'HEX-PLS': '0xf1f4ee610b2babb05c635f726ef8b0c568c8dc65',
+  'PLS-HEX': '0xf1f4ee610b2babb05c635f726ef8b0c568c8dc65',
+};
+
 // ABIs
 const ROUTER_ABI = [
   'function getAmountsOut(uint amountIn, address[] memory path) public view returns (uint[] memory amounts)',
@@ -577,32 +591,43 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       
       console.log('Fetching pair for:', lpToken0, lpToken1, addr0, addr1);
       
-      // Try V1 factory first, then V2
-      let lpAddr = null;
-      let usedFactory = 'V1';
+      // Check known pairs first (fast lookup)
+      const knownKey1 = `${lpToken0}-${lpToken1}`;
+      const knownKey2 = `${lpToken1}-${lpToken0}`;
+      let lpAddr = KNOWN_PAIRS[knownKey1] || KNOWN_PAIRS[knownKey2] || null;
       
-      try {
-        const factoryV1 = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
-        lpAddr = await factoryV1.getPair(addr0, addr1);
-        console.log('V1 Pair address:', lpAddr);
-      } catch (e) {
-        console.log('V1 factory error:', e.message);
-      }
-      
-      if (!lpAddr || lpAddr === ethers.ZeroAddress) {
+      if (lpAddr) {
+        console.log('Found in KNOWN_PAIRS:', lpAddr);
+      } else {
+        // Try V1 factory first, then V2
+        let usedFactory = 'V1';
+        
         try {
-          const factoryV2 = new ethers.Contract(CONFIG.FACTORY_V2, FACTORY_ABI, provider);
-          lpAddr = await factoryV2.getPair(addr0, addr1);
-          usedFactory = 'V2';
-          console.log('V2 Pair address:', lpAddr);
+          const factoryV1 = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
+          lpAddr = await factoryV1.getPair(addr0, addr1);
+          console.log('V1 Pair address:', lpAddr);
         } catch (e) {
-          console.log('V2 factory error:', e.message);
+          console.log('V1 factory error:', e.message);
+        }
+        
+        if (!lpAddr || lpAddr === ethers.ZeroAddress) {
+          try {
+            const factoryV2 = new ethers.Contract(CONFIG.FACTORY_V2, FACTORY_ABI, provider);
+            lpAddr = await factoryV2.getPair(addr0, addr1);
+            usedFactory = 'V2';
+            console.log('V2 Pair address:', lpAddr);
+          } catch (e) {
+            console.log('V2 factory error:', e.message);
+          }
+        }
+        
+        if (lpAddr && lpAddr !== ethers.ZeroAddress) {
+          console.log('Found pair on', usedFactory, ':', lpAddr);
         }
       }
       
       if (lpAddr && lpAddr !== ethers.ZeroAddress) {
         setPairAddress(lpAddr);
-        console.log('Found pair on', usedFactory, ':', lpAddr);
         
         try {
           const pairContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
@@ -848,7 +873,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             </div>
             <div style={styles.inputGroup}>
               <input type="number" placeholder="0.0" value={fromAmount} onChange={(e) => setFromAmount(e.target.value)} style={styles.input} />
-              <button onClick={() => setFromAmount((balances[fromToken] || 0).toString())} style={{ background: 'rgba(212,175,55,0.3)', border: 'none', borderRadius: '6px', padding: '4px 8px', color: '#D4AF37', fontSize: '0.7rem', cursor: 'pointer', marginRight: '8px' }}>MAX</button>
+              <button onClick={() => setFromAmount(((balances[fromToken] || 0) * 0.998).toFixed(6))} style={{ background: 'rgba(212,175,55,0.3)', border: 'none', borderRadius: '6px', padding: '4px 8px', color: '#D4AF37', fontSize: '0.7rem', cursor: 'pointer', marginRight: '8px' }}>MAX</button>
               <TokenSelector value={fromToken} onChange={setFromToken} show={showFromSelect} setShow={setShowFromSelect} excludeToken={toToken} />
             </div>
             {fromAmount && livePrices[fromToken] && <div style={styles.usdValue}>≈ {formatUSD(parseFloat(fromAmount) * livePrices[fromToken])}</div>}
@@ -1007,7 +1032,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             </div>
             <div style={styles.inputGroup}>
               <input type="number" placeholder="0.0" value={lpAmount0} onChange={(e) => setLpAmount0(e.target.value)} style={styles.input} />
-              <button onClick={() => setLpAmount0((balances[lpToken0] || 0).toString())} style={{ background: 'rgba(212,175,55,0.3)', border: 'none', borderRadius: '6px', padding: '4px 8px', color: '#D4AF37', fontSize: '0.7rem', cursor: 'pointer', marginRight: '8px' }}>MAX</button>
+              <button onClick={() => setLpAmount0(((balances[lpToken0] || 0) * 0.998).toFixed(6))} style={{ background: 'rgba(212,175,55,0.3)', border: 'none', borderRadius: '6px', padding: '4px 8px', color: '#D4AF37', fontSize: '0.7rem', cursor: 'pointer', marginRight: '8px' }}>MAX</button>
               <TokenSelector value={lpToken0} onChange={(v) => { setLpToken0(v); setLpAmount0(''); setLpAmount1(''); }} show={showLpToken0Select} setShow={setShowLpToken0Select} excludeToken={lpToken1} />
             </div>
             {lpAmount0 && livePrices[lpToken0] && <div style={styles.usdValue}>≈ {formatUSD(parseFloat(lpAmount0) * livePrices[lpToken0])}</div>}
@@ -1029,7 +1054,36 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           
           <div style={{ ...styles.card, padding: '12px 16px' }}>
             <div style={styles.infoRow}><span style={{ color: '#888' }}>Pair</span><span style={{ color: '#fff', fontWeight: 600 }}>{lpToken0}/{lpToken1}</span></div>
-            <div style={styles.infoRow}><span style={{ color: '#888' }}>Status</span><span style={{ color: pairAddress ? '#4CAF50' : '#FF9800' }}>{pairAddress ? '✓ Pool Exists' : '⚠️ New Pool'}</span></div>
+            <div style={styles.infoRow}>
+              <span style={{ color: '#888' }}>Status</span>
+              <span style={{ color: pairAddress ? '#4CAF50' : '#FF9800' }}>{pairAddress ? '✓ Pool Exists' : '⚠️ New Pool'}</span>
+            </div>
+            {pairAddress && (
+              <div style={styles.infoRow}>
+                <span style={{ color: '#888' }}>LP Address</span>
+                <a 
+                  href={`https://scan.pulsechain.com/address/${pairAddress}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: '#4CAF50', fontSize: '0.75rem', textDecoration: 'underline' }}
+                >
+                  {pairAddress.slice(0, 6)}...{pairAddress.slice(-4)} ↗
+                </a>
+              </div>
+            )}
+            {pairAddress && (
+              <div style={styles.infoRow}>
+                <span style={{ color: '#888' }}>View Chart</span>
+                <a 
+                  href={`https://dexscreener.com/pulsechain/${pairAddress}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: '#D4AF37', fontSize: '0.75rem', textDecoration: 'underline' }}
+                >
+                  DexScreener ↗
+                </a>
+              </div>
+            )}
             {lpAmount0 && lpAmount1 && (<div style={{ ...styles.infoRow, borderBottom: 'none' }}><span style={{ color: '#888' }}>Total Value</span><span style={{ color: '#4CAF50', fontWeight: 700 }}>{formatUSD((parseFloat(lpAmount0) * (livePrices[lpToken0] || 0)) + (parseFloat(lpAmount1) * (livePrices[lpToken1] || 0)))}</span></div>)}
           </div>
           
