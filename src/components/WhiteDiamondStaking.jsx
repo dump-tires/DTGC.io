@@ -30,7 +30,10 @@ const ERC20_ABI = [
   'function allowance(address owner, address spender) view returns (uint256)',
 ];
 
-const WhiteDiamondStaking = ({ provider, account, isDark }) => {
+const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
+  // Auto-detect theme from document
+  const [isDark, setIsDark] = useState(true);
+  
   const [lpBalance, setLpBalance] = useState('0');
   const [dtgcBalance, setDtgcBalance] = useState('0');
   const [stakeAmount, setStakeAmount] = useState('');
@@ -44,13 +47,27 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
   const [loading, setLoading] = useState(false);
   const [showDiamondPaper, setShowDiamondPaper] = useState(false);
 
+  // Auto-detect theme
   useEffect(() => {
-    if (provider && account) {
+    const checkTheme = () => {
+      const isDarkMode = document.body.classList.contains('dark') || 
+                        document.documentElement.classList.contains('dark') ||
+                        window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setIsDark(isDarkMode);
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (provider && userAddress) {
       loadData();
       const interval = setInterval(loadData, 30000); // Refresh every 30s
       return () => clearInterval(interval);
     }
-  }, [provider, account]);
+  }, [provider, userAddress]);
 
   const loadData = async () => {
     await Promise.all([
@@ -63,23 +80,28 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
 
   const loadBalances = async () => {
     try {
+      console.log('White Diamond: Loading balances for', userAddress);
       const lpContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.LP_TOKEN, ERC20_ABI, provider);
       const dtgcContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.REWARD_TOKEN, ERC20_ABI, provider);
       const [lpBal, dtgcBal] = await Promise.all([
-        lpContract.balanceOf(account),
-        dtgcContract.balanceOf(account),
+        lpContract.balanceOf(userAddress),
+        dtgcContract.balanceOf(userAddress),
       ]);
+      console.log('White Diamond: LP Balance:', ethers.formatEther(lpBal));
+      console.log('White Diamond: DTGC Balance:', ethers.formatEther(dtgcBal));
       setLpBalance(ethers.formatEther(lpBal));
       setDtgcBalance(ethers.formatEther(dtgcBal));
     } catch (error) {
       console.error('Error loading balances:', error);
+      console.error('LP Token:', WHITE_DIAMOND_CONFIG.LP_TOKEN);
+      console.error('User Address:', userAddress);
     }
   };
 
   const loadUserStakes = async () => {
     try {
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, provider);
-      const tokenIds = await contract.getStakesByOwner(account);
+      const tokenIds = await contract.getStakesByOwner(userAddress);
       
       const stakesData = await Promise.all(
         tokenIds.map(async (tokenId) => {
@@ -124,7 +146,7 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
   const checkApproval = async () => {
     try {
       const lpContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.LP_TOKEN, ERC20_ABI, provider);
-      const allowance = await lpContract.allowance(account, WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS);
+      const allowance = await lpContract.allowance(userAddress, WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS);
       setIsApproved(allowance > ethers.parseEther(WHITE_DIAMOND_CONFIG.MIN_STAKE));
     } catch (error) {
       console.error('Error checking approval:', error);
@@ -134,7 +156,11 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
   const handleApprove = async () => {
     setLoading(true);
     try {
-      const signer = await provider.getSigner();
+      if (!signer) {
+        alert('Please connect your wallet first');
+        setLoading(false);
+        return;
+      }
       const lpContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.LP_TOKEN, ERC20_ABI, signer);
       const tx = await lpContract.approve(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, ethers.MaxUint256);
       await tx.wait();
@@ -155,7 +181,11 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
 
     setLoading(true);
     try {
-      const signer = await provider.getSigner();
+      if (!signer) {
+        alert('Please connect your wallet first');
+        setLoading(false);
+        return;
+      }
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const amount = ethers.parseEther(stakeAmount);
       const tx = await contract.stake(amount);
@@ -173,7 +203,11 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
   const handleClaim = async (tokenId) => {
     setLoading(true);
     try {
-      const signer = await provider.getSigner();
+      if (!signer) {
+        alert('Please connect your wallet first');
+        setLoading(false);
+        return;
+      }
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.claimRewards(tokenId);
       await tx.wait();
@@ -189,7 +223,11 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
   const handleWithdraw = async (tokenId) => {
     setLoading(true);
     try {
-      const signer = await provider.getSigner();
+      if (!signer) {
+        alert('Please connect your wallet first');
+        setLoading(false);
+        return;
+      }
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.withdraw(tokenId);
       await tx.wait();
@@ -209,7 +247,11 @@ const WhiteDiamondStaking = ({ provider, account, isDark }) => {
 
     setLoading(true);
     try {
-      const signer = await provider.getSigner();
+      if (!signer) {
+        alert('Please connect your wallet first');
+        setLoading(false);
+        return;
+      }
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.emergencyWithdraw(tokenId);
       await tx.wait();
