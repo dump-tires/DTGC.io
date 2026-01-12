@@ -916,11 +916,10 @@ const getStyles = (isDark) => `
   .nav-content {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 8px 20px;
+    padding: 14px 40px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
   }
 
   .logo-section {
@@ -930,8 +929,8 @@ const getStyles = (isDark) => `
   }
 
   .logo-mark {
-    width: 36px;
-    height: 36px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 50%, var(--gold-dark) 100%);
     display: flex;
@@ -939,7 +938,7 @@ const getStyles = (isDark) => `
     justify-content: center;
     font-family: 'Cinzel', serif;
     font-weight: 900;
-    font-size: 0.9rem;
+    font-size: 1.1rem;
     color: #1A1A1A;
     box-shadow: var(--glow-gold);
     /* Removed bounce animation per user request */
@@ -949,9 +948,9 @@ const getStyles = (isDark) => `
 
   .logo-text {
     font-family: 'Cinzel', serif;
-    font-size: 1.2rem;
+    font-size: 1.5rem;
     font-weight: 800;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
   }
 
   .logo-tagline {
@@ -997,89 +996,6 @@ const getStyles = (isDark) => `
 
   .nav-link:hover::before, .nav-link.active::before { width: 80%; }
   .nav-link:hover, .nav-link.active { color: var(--gold); }
-
-  /* Price Dropdown */
-  .price-dropdown {
-    position: relative;
-  }
-
-  .price-dropdown-button {
-    padding: 6px 12px;
-    background: rgba(212,175,55,0.1);
-    border: 1px solid rgba(212,175,55,0.3);
-    border-radius: 8px;
-    color: #D4AF37;
-    font-size: 0.7rem;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s;
-  }
-
-  .price-dropdown-button:hover {
-    background: rgba(212,175,55,0.2);
-    border-color: rgba(212,175,55,0.5);
-  }
-
-  .price-dropdown-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    min-width: 200px;
-    background: ${isDark ? 'rgba(26, 26, 26, 0.98)' : 'rgba(255, 255, 255, 0.98)'};
-    backdrop-filter: blur(20px);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    z-index: 2000;
-  }
-
-  .price-section {
-    margin-bottom: 12px;
-  }
-
-  .price-section:last-child {
-    margin-bottom: 0;
-  }
-
-  .price-section-title {
-    font-size: 0.65rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 6px;
-    font-weight: 600;
-  }
-
-  .price-items {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .price-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px;
-    background: rgba(212,175,55,0.05);
-    border-radius: 6px;
-    font-size: 0.7rem;
-  }
-
-  .price-item-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 600;
-  }
-
-  .price-item-value {
-    font-weight: 700;
-  }
 
   .nav-right {
     display: flex;
@@ -3578,7 +3494,6 @@ export default function App() {
     }
     return 'stake';
   });
-  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -7973,91 +7888,49 @@ export default function App() {
               </button>
             </nav>
 
-            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Price Dropdown */}
-              <div className="price-dropdown">
-                <button
-                  className="price-dropdown-button"
-                  onClick={() => setShowPriceDropdown(!showPriceDropdown)}
-                  onBlur={() => setTimeout(() => setShowPriceDropdown(false), 200)}
-                >
-                  📊 Prices {showPriceDropdown ? '▲' : '▼'}
-                </button>
-                {showPriceDropdown && (
-                  <div className="price-dropdown-menu">
-                    {/* Metals */}
-                    <div className="price-section">
-                      <div className="price-section-title">💎 Precious Metals</div>
-                      <div className="price-items">
-                        <div className="price-item">
-                          <span className="price-item-label" style={{color: '#FFD700'}}>
-                            <img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />
-                            Gold
-                          </span>
-                          <span className="price-item-value" style={{color: '#FFD700'}}>
-                            ${metalPrices.gold.toLocaleString()}/oz
-                          </span>
-                        </div>
-                        <div className="price-item">
-                          <span className="price-item-label" style={{color: '#C0C0C0'}}>
-                            <img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />
-                            Silver
-                          </span>
-                          <span className="price-item-value" style={{color: '#C0C0C0'}}>
-                            ${metalPrices.silver.toFixed(2)}/oz
-                          </span>
-                        </div>
-                        <div className="price-item">
-                          <span className="price-item-label" style={{color: '#CD7F32'}}>
-                            <img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />
-                            Copper
-                          </span>
-                          <span className="price-item-value" style={{color: '#CD7F32'}}>
-                            ${metalPrices.copper.toFixed(2)}/lb
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Crypto */}
-                    <div className="price-section">
-                      <div className="price-section-title">₿ Crypto Majors</div>
-                      <div className="price-items">
-                        <div className="price-item">
-                          <span className="price-item-label" style={{color: '#F7931A'}}>₿ Bitcoin</span>
-                          <span className="price-item-value" style={{color: '#F7931A'}}>
-                            ${(cryptoPrices.btc/1000).toFixed(1)}K
-                          </span>
-                        </div>
-                        <div className="price-item">
-                          <span className="price-item-label" style={{color: '#627EEA'}}>Ξ Ethereum</span>
-                          <span className="price-item-value" style={{color: '#627EEA'}}>
-                            ${cryptoPrices.eth.toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* PulseChain */}
-                    <div className="price-section">
-                      <div className="price-section-title">⚡ PulseChain</div>
-                      <div className="price-items">
-                        <div className="price-item">
-                          <span className="price-item-label" style={{color: '#00D4AA'}}>PLS</span>
-                          <span className="price-item-value" style={{color: '#00D4AA'}}>
-                            ${cryptoPrices.pls.toFixed(8)}
-                          </span>
-                        </div>
-                        <div className="price-item">
-                          <span className="price-item-label" style={{color: '#9B59B6'}}>PLSX</span>
-                          <span className="price-item-value" style={{color: '#9B59B6'}}>
-                            ${cryptoPrices.plsx.toFixed(8)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* Metal & Crypto Prices - Compact Single Row */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '4px 10px',
+                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                borderRadius: '16px',
+                border: '1px solid rgba(212,175,55,0.2)',
+                fontSize: '0.6rem',
+              }}>
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(2)}</span>
+                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
+              </div>
+              {/* Crypto Prices - Compact */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'rgba(33,150,243,0.08)',
+                borderRadius: '16px',
+                border: '1px solid rgba(33,150,243,0.15)',
+                fontSize: '0.55rem',
+              }}>
+                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{(cryptoPrices.btc/1000).toFixed(1)}K</span>
+                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
+              </div>
+              {/* PLS/PLSX Prices */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'rgba(0,212,170,0.08)',
+                borderRadius: '16px',
+                border: '1px solid rgba(0,212,170,0.15)',
+                fontSize: '0.55rem',
+              }}>
+                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
+                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
               </div>
               {/* Security & Audit Button */}
               <button
@@ -8344,6 +8217,127 @@ export default function App() {
                   <div style={{fontSize: '0.6rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
                   <div style={{fontSize: '0.5rem', color: '#FF1493', marginTop: '2px'}}>10% APR</div>
                 </div>
+                
+                {/* White Diamond NFT Icon */}
+                {(() => {
+                  // Count active White Diamond NFTs
+                  const [whiteDiamondCount, setWhiteDiamondCount] = React.useState(0);
+                  
+                  React.useEffect(() => {
+                    const loadCount = async () => {
+                      if (!provider || !account) return;
+                      try {
+                        const WHITE_DIAMOND_ADDRESS = '0x326F86e7d594B55B7BA08DFE5195b10b159033fD';
+                        const contract = new ethers.Contract(
+                          WHITE_DIAMOND_ADDRESS,
+                          ['function getStakesByOwner(address) view returns (uint256[])'],
+                          provider
+                        );
+                        const tokenIds = await contract.getStakesByOwner(account);
+                        setWhiteDiamondCount(tokenIds.length);
+                      } catch (err) {
+                        console.error('Error loading White Diamond count:', err);
+                      }
+                    };
+                    loadCount();
+                    const interval = setInterval(loadCount, 30000);
+                    return () => clearInterval(interval);
+                  }, [provider, account]);
+                  
+                  return (
+                    <div 
+                      onClick={() => handleNavClick('whitediamond')}
+                      style={{
+                        textAlign: 'center',
+                        padding: '10px 15px',
+                        background: whiteDiamondCount > 0
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(212,175,55,0.2) 100%)'
+                          : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(212,175,55,0.1) 100%)',
+                        borderRadius: '8px',
+                        border: whiteDiamondCount > 0 
+                          ? '2px solid rgba(255,255,255,0.8)' 
+                          : '2px solid rgba(255,255,255,0.4)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        minWidth: '100px',
+                        boxShadow: whiteDiamondCount > 0 
+                          ? '0 0 25px rgba(255,255,255,0.4)' 
+                          : '0 0 15px rgba(255,255,255,0.2)',
+                        position: 'relative',
+                      }}
+                      title={`White Diamond NFT Staking${whiteDiamondCount > 0 ? ` - ${whiteDiamondCount} Active` : ''}`}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 0 35px rgba(255,255,255,0.6)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = whiteDiamondCount > 0 
+                          ? '0 0 25px rgba(255,255,255,0.4)' 
+                          : '0 0 15px rgba(255,255,255,0.2)';
+                      }}
+                    >
+                      {/* NFT Count Badge (only show if > 0) */}
+                      {whiteDiamondCount > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '-8px',
+                          right: '-8px',
+                          background: 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
+                          color: '#fff',
+                          borderRadius: '50%',
+                          width: '24px',
+                          height: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.65rem',
+                          fontWeight: 900,
+                          border: '2px solid var(--bg-primary)',
+                          boxShadow: '0 0 15px rgba(76,175,80,0.6)',
+                          animation: 'pulse 2s ease-in-out infinite',
+                        }}>
+                          {whiteDiamondCount}
+                        </div>
+                      )}
+                      
+                      {/* Diamond Icon with Darth Vader Helmet Effect */}
+                      <div style={{
+                        fontSize: '1.3rem',
+                        background: 'linear-gradient(135deg, #FFFFFF 0%, #D4AF37 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        fontWeight: 900,
+                        position: 'relative',
+                        filter: whiteDiamondCount > 0 ? 'drop-shadow(0 0 8px rgba(255,255,255,0.8))' : 'none',
+                      }}>
+                        💎
+                      </div>
+                      
+                      {/* Label */}
+                      <div style={{
+                        fontSize: '0.5rem',
+                        color: '#FFFFFF',
+                        fontWeight: 700,
+                        textShadow: '0 0 10px rgba(255,255,255,0.5)',
+                        letterSpacing: '0.5px',
+                      }}>
+                        WHITE
+                      </div>
+                      
+                      {/* NFT Subtitle */}
+                      <div style={{
+                        fontSize: '0.45rem',
+                        color: '#D4AF37',
+                        fontWeight: 700,
+                        marginTop: '2px',
+                        letterSpacing: '0.5px',
+                      }}>
+                        {whiteDiamondCount > 0 ? `${whiteDiamondCount} NFT${whiteDiamondCount > 1 ? 'S' : ''}` : 'NFT'}
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 {/* Calculator Icon - Stake Forecaster */}
                 <div 
@@ -12855,6 +12849,7 @@ export default function App() {
                 provider={provider}
                 signer={signer}
                 userAddress={account}
+                livePrices={livePrices}
                 onClose={() => setActiveTab('stake')}
               />
             </section>

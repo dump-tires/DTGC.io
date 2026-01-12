@@ -3,8 +3,8 @@ import { ethers } from 'ethers';
 
 const WHITE_DIAMOND_CONFIG = {
   CONTRACT_ADDRESS: '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
-  LP_TOKEN: '0x670c972Bb5388E087a2934a063064d97278e01F3', // URMOM/DTGC LP
-  REWARD_TOKEN: '0xD0676B28a457371D58d47E5247b439114e40Eb0F', // DTGC
+  LP_TOKEN: '0x670c972Bb5388E087a2934a063064d97278e01F3',  // URMOM/DTGC LP
+  REWARD_TOKEN: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',  // DTGC
   APR: 70,
   LOCK_DAYS: 90,
   MIN_STAKE: '1000',
@@ -13,25 +13,27 @@ const WHITE_DIAMOND_CONFIG = {
   EARLY_EXIT_PENALTY: 20,
 };
 
+const ERC20_ABI = [
+  'function balanceOf(address) view returns (uint256)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+];
+
 const WHITE_DIAMOND_ABI = [
-  'function stake(uint256 amount) external returns (uint256)',
+  'function stake(uint256 amount, uint256 lpValueUSD) external returns (uint256)',
   'function withdraw(uint256 tokenId) external',
   'function claimRewards(uint256 tokenId) external',
   'function emergencyWithdraw(uint256 tokenId) external',
-  'function getStakesByOwner(address user) external view returns (uint256[])',
-  'function getPosition(uint256 tokenId) external view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lastClaimTime, uint256 pending, bool isActive, uint256 timeRemaining)',
-  'function getStats() external view returns (uint256, uint256, uint256, uint256, uint256)',
-  'function balanceOf(address owner) external view returns (uint256)',
+  'function getStakesByOwner(address owner) view returns (uint256[])',
+  'function getPosition(uint256 tokenId) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 rewards, uint256 lpValueUSD, bool active)',
+  'function calculateRewards(uint256 tokenId) view returns (uint256)',
+  'function totalStaked() view returns (uint256)',
+  'function totalNFTsMinted() view returns (uint256)',
+  'function totalRewardsPaid() view returns (uint256)',
 ];
 
-const ERC20_ABI = [
-  'function balanceOf(address owner) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-];
-
-const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
-  // Auto-detect theme from document
+const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
+  // Auto-detect theme
   const [isDark, setIsDark] = useState(true);
   
   const [lpBalance, setLpBalance] = useState('0');
@@ -46,6 +48,7 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
   const [isApproved, setIsApproved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDiamondPaper, setShowDiamondPaper] = useState(false);
+  const [showWrapGuide, setShowWrapGuide] = useState(false);
 
   // Auto-detect theme
   useEffect(() => {
@@ -64,7 +67,7 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
   useEffect(() => {
     if (provider && userAddress) {
       loadData();
-      const interval = setInterval(loadData, 30000); // Refresh every 30s
+      const interval = setInterval(loadData, 30000);
       return () => clearInterval(interval);
     }
   }, [provider, userAddress]);
@@ -103,43 +106,44 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, provider);
       const tokenIds = await contract.getStakesByOwner(userAddress);
       
-      const stakesData = await Promise.all(
+      const stakes = await Promise.all(
         tokenIds.map(async (tokenId) => {
-          try {
-            const position = await contract.getPosition(tokenId);
-            return {
-              tokenId: tokenId.toString(),
-              amount: ethers.formatEther(position.amount),
-              startTime: Number(position.startTime),
-              unlockTime: Number(position.unlockTime),
-              pending: ethers.formatEther(position.pending),
-              isActive: position.isActive,
-              timeRemaining: Number(position.timeRemaining),
-            };
-          } catch (err) {
-            console.error(`Error loading stake ${tokenId}:`, err);
-            return null;
-          }
+          const position = await contract.getPosition(tokenId);
+          const rewards = await contract.calculateRewards(tokenId);
+          return {
+            tokenId: tokenId.toString(),
+            amount: ethers.formatEther(position[0]),
+            startTime: Number(position[1]) * 1000,
+            unlockTime: Number(position[2]) * 1000,
+            rewards: ethers.formatEther(rewards),
+            lpValueUSD: ethers.formatEther(position[4]),  // USD value stored on NFT
+            active: position[5],
+          };
         })
       );
-      setUserStakes(stakesData.filter((s) => s && s.isActive));
+      
+      setUserStakes(stakes.filter(s => s.active));
     } catch (error) {
       console.error('Error loading stakes:', error);
-      setUserStakes([]);
     }
   };
 
   const loadContractStats = async () => {
     try {
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, provider);
-      const stats = await contract.getStats();
+      const [totalStaked, totalNFTs, totalRewardsPaid] = await Promise.all([
+        contract.totalStaked(),
+        contract.totalNFTsMinted(),
+        contract.totalRewardsPaid(),
+      ]);
+      
       setContractStats({
-        totalStaked: ethers.formatEther(stats[0]),
-        totalNFTs: stats[1].toString(),
-        totalRewardsPaid: ethers.formatEther(stats[2]),
+        totalStaked: ethers.formatEther(totalStaked),
+        totalNFTs: totalNFTs.toString(),
+        totalRewardsPaid: ethers.formatEther(totalRewardsPaid),
       });
     } catch (error) {
-      console.error('Error loading stats:', error);
+      console.error('Error loading contract stats:', error);
     }
   };
 
@@ -147,10 +151,21 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
     try {
       const lpContract = new ethers.Contract(WHITE_DIAMOND_CONFIG.LP_TOKEN, ERC20_ABI, provider);
       const allowance = await lpContract.allowance(userAddress, WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS);
-      setIsApproved(allowance > ethers.parseEther(WHITE_DIAMOND_CONFIG.MIN_STAKE));
+      setIsApproved(allowance > ethers.parseEther('1000000'));
     } catch (error) {
       console.error('Error checking approval:', error);
     }
+  };
+
+  const calculateLPValueUSD = () => {
+    if (!stakeAmount || !livePrices) return 0;
+    // URMOM/DTGC LP: each LP token contains equal value of URMOM and DTGC
+    // So 1 LP = (0.5 * URMOM price) + (0.5 * DTGC price) for the tokens inside
+    // But typically we just double the DTGC value as estimation
+    const lpAmount = parseFloat(stakeAmount);
+    const dtgcPrice = livePrices.dtgc || 0;
+    const lpValueUSD = lpAmount * dtgcPrice * 2;  // Rough estimation
+    return lpValueUSD;
   };
 
   const handleApprove = async () => {
@@ -165,12 +180,13 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
       const tx = await lpContract.approve(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, ethers.MaxUint256);
       await tx.wait();
       setIsApproved(true);
-      alert('✅ LP tokens approved successfully!');
+      alert('✅ Approval successful! You can now stake.');
     } catch (error) {
       console.error('Approval error:', error);
-      alert('❌ Approval failed: ' + (error.reason || error.message));
+      alert('❌ Approval failed: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleStake = async () => {
@@ -186,18 +202,24 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
         setLoading(false);
         return;
       }
+      
+      const lpValueUSD = calculateLPValueUSD();
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const amount = ethers.parseEther(stakeAmount);
-      const tx = await contract.stake(amount);
+      const lpValueWei = ethers.parseEther(lpValueUSD.toString());
+      
+      const tx = await contract.stake(amount, lpValueWei);
       await tx.wait();
-      alert('✅ Stake successful! NFT minted to your wallet.');
+      
+      alert(`✅ Staked ${stakeAmount} LP! NFT minted. LP Value: $${lpValueUSD.toFixed(2)}`);
       setStakeAmount('');
       await loadData();
     } catch (error) {
       console.error('Stake error:', error);
-      alert('❌ Stake failed: ' + (error.reason || error.message));
+      alert('❌ Staking failed: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleClaim = async (tokenId) => {
@@ -215,9 +237,10 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
       await loadData();
     } catch (error) {
       console.error('Claim error:', error);
-      alert('❌ Claim failed: ' + (error.reason || error.message));
+      alert('❌ Claim failed: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleWithdraw = async (tokenId) => {
@@ -235,9 +258,10 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
       await loadData();
     } catch (error) {
       console.error('Withdraw error:', error);
-      alert('❌ Withdraw failed: ' + (error.reason || error.message));
+      alert('❌ Withdraw failed: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleEmergencyWithdraw = async (tokenId) => {
@@ -255,196 +279,221 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.emergencyWithdraw(tokenId);
       await tx.wait();
-      alert('✅ Emergency withdrawal complete.');
+      alert('✅ Emergency withdrawal complete. NFT burned.');
       await loadData();
     } catch (error) {
       console.error('Emergency withdraw error:', error);
-      alert('❌ Emergency withdraw failed: ' + (error.reason || error.message));
+      alert('❌ Emergency withdraw failed: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
-
-  const formatTime = (seconds) => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    return `${days}d ${hours}h`;
   };
 
   const formatNumber = (num) => {
     const n = parseFloat(num);
-    if (isNaN(n)) return '0.00';
-    if (n >= 1000000) return `${(n / 1000000).toFixed(2)}M`;
-    if (n >= 1000) return `${(n / 1000).toFixed(2)}K`;
+    if (isNaN(n)) return '0';
+    if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(2) + 'K';
     return n.toFixed(2);
   };
 
-  const bgColor = isDark ? '#1E1E1E' : '#F0EDE9';
-  const cardBg = isDark ? '#2A2A2A' : '#FFFFFF';
-  const textPrimary = isDark ? '#FFFFFF' : '#2A2520';
-  const textSecondary = isDark ? '#B0B0B0' : '#5A5550';
-  const borderColor = isDark ? '#444' : '#D0C8C0';
+  const formatTimeRemaining = (unlockTime) => {
+    const now = Date.now();
+    if (unlockTime <= now) return 'Unlocked';
+    const diff = unlockTime - now;
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    return `${days}d ${hours}h`;
+  };
+
+  const theme = {
+    bg: isDark ? '#1a1a1a' : '#ffffff',
+    cardBg: isDark ? '#2a2a2a' : '#f5f5f5',
+    text: isDark ? '#ffffff' : '#000000',
+    textMuted: isDark ? '#888888' : '#666666',
+    border: '#D4AF37',
+    gold: '#D4AF37',
+    gradient: isDark 
+      ? 'linear-gradient(135deg, rgba(212,175,55,0.1) 0%, rgba(212,175,55,0.05) 100%)'
+      : 'linear-gradient(135deg, rgba(212,175,55,0.2) 0%, rgba(212,175,55,0.1) 100%)',
+  };
 
   return (
-    <div style={{ fontFamily: 'Montserrat, sans-serif', color: textPrimary }}>
+    <div style={{ fontFamily: 'Montserrat, sans-serif', color: theme.text, maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+      
       {/* Header Stats */}
       <div style={{
-        background: `linear-gradient(135deg, ${isDark ? '#2A2A2A' : '#FFFFFF'}, ${isDark ? '#1E1E1E' : '#F5F3F0'})`,
+        background: theme.gradient,
         borderRadius: '20px',
-        padding: '30px',
+        padding: '40px 20px',
         marginBottom: '30px',
-        border: `2px solid ${isDark ? '#D4AF37' : '#C4A030'}`,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+        border: `1px solid ${theme.border}`,
         position: 'relative',
         overflow: 'hidden',
       }}>
-        <div style={{ position: 'absolute', top: '-20px', right: '-20px', fontSize: '120px', opacity: 0.05 }}>💎</div>
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
-            <h2 style={{ 
-              color: '#D4AF37', 
-              fontSize: '2rem', 
-              fontFamily: 'Cinzel, serif', 
-              fontWeight: 800,
-              margin: 0,
-              letterSpacing: '2px',
-            }}>
-              💎 WHITE DIAMOND
-            </h2>
-            <button
-              onClick={() => setShowDiamondPaper(true)}
-              style={{
-                background: 'linear-gradient(135deg, #FFD700, #FFA500)',
-                color: '#000',
-                padding: '8px 16px',
-                borderRadius: '20px',
-                border: 'none',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 4px 12px rgba(255,215,0,0.3)',
-              }}
-            >
-              ⭐ NFT
-            </button>
-          </div>
-          <p style={{ color: textSecondary, fontSize: '0.9rem', marginBottom: '20px', fontWeight: 500 }}>
-            URMOM/DTGC LP Staking | {WHITE_DIAMOND_CONFIG.APR}% APR | {WHITE_DIAMOND_CONFIG.LOCK_DAYS}-Day Lock | NFT-Based Ownership
-          </p>
-
-          {/* Stats Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
-            {[
-              { label: 'Total Staked', value: formatNumber(contractStats.totalStaked) + ' LP', icon: '💰' },
-              { label: 'Total NFTs', value: contractStats.totalNFTs, icon: '⚔️' },
-              { label: 'APR', value: WHITE_DIAMOND_CONFIG.APR + '%', icon: '📈' },
-              { label: 'Lock Period', value: WHITE_DIAMOND_CONFIG.LOCK_DAYS + ' Days', icon: '🔒' },
-              { label: 'Total Rewards', value: formatNumber(contractStats.totalRewardsPaid) + ' DTGC', icon: '🎁' },
-            ].map((stat, i) => (
-              <div key={i} style={{
-                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
-                padding: '15px',
-                borderRadius: '12px',
-                border: `1px solid ${isDark ? 'rgba(212,175,55,0.3)' : 'rgba(212,175,55,0.2)'}`,
-              }}>
-                <div style={{ fontSize: '0.7rem', color: textSecondary, textTransform: 'uppercase', marginBottom: '5px', letterSpacing: '1px' }}>
-                  {stat.icon} {stat.label}
-                </div>
-                <div style={{ color: '#D4AF37', fontSize: '1.5rem', fontWeight: 700 }}>
-                  {stat.value}
-                </div>
-              </div>
-            ))}
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          fontSize: '15rem',
+          opacity: 0.03,
+        }}>💎</div>
+        
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+          <h1 style={{
+            fontFamily: 'Cinzel, serif',
+            fontSize: '2.5rem',
+            color: theme.gold,
+            marginBottom: '10px',
+            letterSpacing: '3px',
+            textShadow: '0 0 20px rgba(212,175,55,0.5)',
+          }}>
+            💎 WHITE DIAMOND
+          </h1>
+          
+          <button
+            onClick={() => setShowDiamondPaper(true)}
+            style={{
+              background: 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '8px 20px',
+              color: '#000',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              marginBottom: '20px',
+              letterSpacing: '1px',
+            }}
+          >
+            ⭐ NFT STAKING SYSTEM
+          </button>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '20px',
+            marginTop: '20px',
+          }}>
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: theme.gold }}>{formatNumber(contractStats.totalStaked)}</div>
+              <div style={{ fontSize: '0.85rem', color: theme.textMuted }}>Total LP Staked</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: theme.gold }}>{contractStats.totalNFTs}</div>
+              <div style={{ fontSize: '0.85rem', color: theme.textMuted }}>NFTs Minted</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: theme.gold }}>{WHITE_DIAMOND_CONFIG.APR}%</div>
+              <div style={{ fontSize: '0.85rem', color: theme.textMuted }}>APR</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: theme.gold }}>{WHITE_DIAMOND_CONFIG.LOCK_DAYS}</div>
+              <div style={{ fontSize: '0.85rem', color: theme.textMuted }}>Days Lock</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: theme.gold }}>{formatNumber(contractStats.totalRewardsPaid)}</div>
+              <div style={{ fontSize: '0.85rem', color: theme.textMuted }}>Total Rewards Paid</div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Staking Section */}
+      {/* Staking Interface */}
       <div style={{
-        background: cardBg,
+        background: theme.cardBg,
         borderRadius: '20px',
         padding: '30px',
+        border: `1px solid ${theme.border}`,
         marginBottom: '30px',
-        border: `1px solid ${borderColor}`,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
       }}>
-        <h3 style={{ color: '#D4AF37', fontSize: '1.5rem', marginBottom: '20px', fontFamily: 'Cinzel, serif', fontWeight: 700 }}>
-          Create New Stake
-        </h3>
-
-        {/* Balances */}
-        <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.85rem', color: textSecondary }}>URMOM/DTGC LP Balance:</span>
-            <span style={{ fontSize: '0.95rem', fontWeight: 700, color: textPrimary }}>{formatNumber(lpBalance)} LP</span>
+        <h2 style={{ fontFamily: 'Cinzel, serif', color: theme.gold, marginBottom: '20px' }}>Stake LP & Mint NFT</h2>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontSize: '0.85rem', color: theme.textMuted, marginBottom: '5px' }}>Your LP Balance</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: theme.gold }}>{formatNumber(lpBalance)} LP</div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '0.85rem', color: textSecondary }}>DTGC Balance:</span>
-            <span style={{ fontSize: '0.95rem', fontWeight: 700, color: textPrimary }}>{formatNumber(dtgcBalance)} DTGC</span>
+          <div>
+            <div style={{ fontSize: '0.85rem', color: theme.textMuted, marginBottom: '5px' }}>DTGC Balance</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: theme.gold }}>{formatNumber(dtgcBalance)} DTGC</div>
           </div>
         </div>
 
-        {/* Input */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', color: textSecondary, marginBottom: '8px', fontWeight: 600 }}>
-            Stake Amount (Min: {WHITE_DIAMOND_CONFIG.MIN_STAKE} LP)
-          </label>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <input
-              type="number"
-              value={stakeAmount}
-              onChange={(e) => setStakeAmount(e.target.value)}
-              placeholder="0.00"
-              disabled={loading}
-              style={{
-                flex: 1,
-                padding: '15px',
-                fontSize: '1.1rem',
-                borderRadius: '12px',
-                border: `2px solid ${borderColor}`,
-                background: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
-                color: textPrimary,
-                outline: 'none',
-              }}
-            />
+        <div style={{ marginBottom: '15px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <label style={{ fontSize: '0.9rem', fontWeight: 600 }}>Amount to Stake</label>
             <button
               onClick={() => setStakeAmount(lpBalance)}
-              disabled={loading}
               style={{
-                padding: '15px 20px',
-                background: 'rgba(212,175,55,0.2)',
-                border: '2px solid #D4AF37',
-                borderRadius: '12px',
-                color: '#D4AF37',
-                fontWeight: 700,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontSize: '0.9rem',
+                background: 'none',
+                border: '1px solid ' + theme.gold,
+                borderRadius: '10px',
+                padding: '4px 12px',
+                color: theme.gold,
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                fontWeight: 600,
               }}
             >
               MAX
             </button>
           </div>
+          <input
+            type="number"
+            value={stakeAmount}
+            onChange={(e) => setStakeAmount(e.target.value)}
+            placeholder={`Min: ${WHITE_DIAMOND_CONFIG.MIN_STAKE} LP`}
+            style={{
+              width: '100%',
+              padding: '15px',
+              borderRadius: '12px',
+              border: `2px solid ${theme.border}`,
+              background: theme.bg,
+              color: theme.text,
+              fontSize: '1.1rem',
+              fontWeight: 600,
+            }}
+          />
+          {stakeAmount && (
+            <div style={{ fontSize: '0.85rem', color: '#4CAF50', marginTop: '8px' }}>
+              💵 LP Value: ~${calculateLPValueUSD().toFixed(2)} USD (saved on NFT)
+            </div>
+          )}
         </div>
 
-        {/* Action Button */}
+        <div style={{
+          background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.2)',
+          padding: '15px',
+          borderRadius: '10px',
+          marginBottom: '20px',
+          fontSize: '0.85rem',
+          lineHeight: '1.6',
+        }}>
+          <strong style={{ color: theme.gold }}>ℹ️ How it works:</strong><br/>
+          • Stake URMOM/DTGC LP tokens and receive an NFT<br/>
+          • NFT stores your stake amount + USD value at mint<br/>
+          • {WHITE_DIAMOND_CONFIG.ENTRY_FEE}% entry fee, {WHITE_DIAMOND_CONFIG.EXIT_FEE}% exit fee<br/>
+          • {WHITE_DIAMOND_CONFIG.EARLY_EXIT_PENALTY}% penalty on early withdrawal<br/>
+          • View your NFTs in <button onClick={() => setShowWrapGuide(true)} style={{background:'none',border:'none',color:theme.gold,textDecoration:'underline',cursor:'pointer',fontSize:'0.85rem'}}>PulseX Gold 📦</button>
+        </div>
+
         {!isApproved ? (
           <button
             onClick={handleApprove}
             disabled={loading}
             style={{
               width: '100%',
-              padding: '16px',
-              background: 'linear-gradient(135deg, #4CAF50, #8BC34A)',
+              padding: '18px',
+              background: 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
               border: 'none',
               borderRadius: '12px',
-              color: '#fff',
-              fontSize: '1rem',
+              color: '#000',
+              fontSize: '1.1rem',
               fontWeight: 700,
-              cursor: loading ? 'wait' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-              boxShadow: '0 4px 15px rgba(76,175,80,0.3)',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              letterSpacing: '1px',
             }}
           >
             {loading ? '⏳ Approving...' : '🔓 Approve LP Tokens'}
@@ -452,173 +501,225 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
         ) : (
           <button
             onClick={handleStake}
-            disabled={loading || !stakeAmount || parseFloat(stakeAmount) < parseFloat(WHITE_DIAMOND_CONFIG.MIN_STAKE)}
+            disabled={loading || !stakeAmount}
             style={{
               width: '100%',
-              padding: '16px',
-              background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+              padding: '18px',
+              background: loading || !stakeAmount 
+                ? 'linear-gradient(135deg, #666 0%, #888 100%)'
+                : 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
               border: 'none',
               borderRadius: '12px',
               color: '#000',
-              fontSize: '1rem',
+              fontSize: '1.1rem',
               fontWeight: 700,
-              cursor: (loading || !stakeAmount || parseFloat(stakeAmount) < parseFloat(WHITE_DIAMOND_CONFIG.MIN_STAKE)) ? 'not-allowed' : 'pointer',
-              opacity: (loading || !stakeAmount || parseFloat(stakeAmount) < parseFloat(WHITE_DIAMOND_CONFIG.MIN_STAKE)) ? 0.5 : 1,
-              boxShadow: '0 4px 15px rgba(255,215,0,0.4)',
+              cursor: loading || !stakeAmount ? 'not-allowed' : 'pointer',
+              letterSpacing: '1px',
             }}
           >
             {loading ? '⏳ Staking...' : '💎 Stake & Mint NFT'}
           </button>
         )}
-
-        {/* Info Box */}
-        <div style={{
-          marginTop: '20px',
-          padding: '16px',
-          background: isDark ? 'rgba(33,150,243,0.1)' : 'rgba(33,150,243,0.05)',
-          border: `1px solid ${isDark ? 'rgba(33,150,243,0.3)' : 'rgba(33,150,243,0.2)'}`,
-          borderRadius: '12px',
-        }}>
-          <div style={{ color: '#2196F3', fontWeight: 700, marginBottom: '10px', fontSize: '0.9rem' }}>
-            ℹ️ How It Works
-          </div>
-          <ul style={{ fontSize: '0.8rem', color: textSecondary, lineHeight: '1.8', margin: 0, paddingLeft: '20px' }}>
-            <li>Each stake creates a unique transferable NFT</li>
-            <li>Entry Fee: {WHITE_DIAMOND_CONFIG.ENTRY_FEE}% (collected in LP)</li>
-            <li>Exit Fee: {WHITE_DIAMOND_CONFIG.EXIT_FEE}% (collected in LP)</li>
-            <li>Early Exit Penalty: {WHITE_DIAMOND_CONFIG.EARLY_EXIT_PENALTY}% of rewards forfeited</li>
-            <li>Rewards accrue per-second at {WHITE_DIAMOND_CONFIG.APR}% APR</li>
-            <li>NFTs can be traded or transferred to other wallets</li>
-          </ul>
-        </div>
       </div>
 
-      {/* Your Stakes */}
-      <div style={{
-        background: cardBg,
-        borderRadius: '20px',
-        padding: '30px',
-        border: `1px solid ${borderColor}`,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-      }}>
-        <h3 style={{ color: '#D4AF37', fontSize: '1.5rem', marginBottom: '20px', fontFamily: 'Cinzel, serif', fontWeight: 700 }}>
-          Your Stakes ({userStakes.length})
-        </h3>
-
+      {/* Your NFT Stakes */}
+      <div>
+        <h2 style={{ fontFamily: 'Cinzel, serif', color: theme.gold, marginBottom: '20px' }}>Your White Diamond NFTs</h2>
+        
         {userStakes.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: textSecondary }}>
-            <div style={{ fontSize: '4rem', marginBottom: '20px', opacity: 0.3 }}>💎</div>
-            <p style={{ fontSize: '1rem' }}>No active stakes yet. Create your first White Diamond NFT stake above!</p>
+          <div style={{
+            textAlign: 'center',
+            padding: '60px 20px',
+            background: theme.cardBg,
+            borderRadius: '20px',
+            border: `1px dashed ${theme.border}`,
+          }}>
+            <div style={{ fontSize: '4rem', marginBottom: '10px', opacity: 0.3 }}>💎</div>
+            <div style={{ fontSize: '1.1rem', color: theme.textMuted }}>No staked positions yet</div>
+            <div style={{ fontSize: '0.85rem', color: theme.textMuted, marginTop: '5px' }}>Stake LP tokens to mint your first NFT</div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: '20px',
+          }}>
             {userStakes.map((stake) => {
-              const isUnlocked = stake.timeRemaining === 0;
+              const isUnlocked = Date.now() >= stake.unlockTime;
               return (
                 <div key={stake.tokenId} style={{
-                  background: `linear-gradient(135deg, ${isDark ? '#2A2A2A' : '#FFFFFF'}, ${isDark ? '#1E1E1E' : '#F8F7F5'})`,
-                  border: `2px solid #D4AF37`,
-                  borderRadius: '16px',
-                  padding: '20px',
+                  background: theme.cardBg,
+                  borderRadius: '20px',
+                  padding: '25px',
+                  border: `2px solid ${theme.border}`,
+                  position: 'relative',
                   boxShadow: '0 4px 20px rgba(212,175,55,0.2)',
                 }}>
-                  {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '2rem', filter: 'drop-shadow(0 0 8px #FFD700)' }}>⚔️</span>
-                      <span style={{ color: '#D4AF37', fontSize: '1.1rem', fontWeight: 700 }}>NFT #{stake.tokenId}</span>
-                    </div>
-                    <span style={{
-                      padding: '6px 12px',
-                      borderRadius: '20px',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      background: isUnlocked ? 'rgba(33,150,243,0.2)' : 'rgba(255,152,0,0.2)',
-                      color: isUnlocked ? '#2196F3' : '#FF9800',
-                      border: `1px solid ${isUnlocked ? '#2196F3' : '#FF9800'}`,
+                  {/* NFT Card Header with Darth Vader Helmet */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '20px',
+                  }}>
+                    <div style={{
+                      width: '80px',
+                      height: '80px',
+                      background: 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '3rem',
+                      boxShadow: '0 0 30px rgba(212,175,55,0.6)',
+                      position: 'relative',
                     }}>
-                      {isUnlocked ? 'Unlocked' : 'Locked'}
-                    </span>
-                  </div>
-
-                  {/* Details */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-                    {[
-                      { label: 'Staked Amount', value: formatNumber(stake.amount) + ' LP' },
-                      { label: 'Pending Rewards', value: formatNumber(stake.pending) + ' DTGC', highlight: true },
-                      { label: 'Time Remaining', value: isUnlocked ? 'Ready!' : formatTime(stake.timeRemaining) },
-                      { label: 'Unlock Date', value: new Date(stake.unlockTime * 1000).toLocaleDateString() },
-                    ].map((detail, i) => (
-                      <div key={i} style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        padding: '10px',
-                        borderBottom: i < 3 ? `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` : 'none',
+                      <div style={{
+                        position: 'absolute',
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        background: 'radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%)',
+                        animation: 'pulse 2s ease-in-out infinite',
+                      }}/>
+                      ⚔️
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        background: isUnlocked ? '#4CAF50' : '#FF9800',
+                        color: '#fff',
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        marginBottom: '5px',
                       }}>
-                        <span style={{ fontSize: '0.85rem', color: textSecondary }}>{detail.label}</span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: detail.highlight ? '#D4AF37' : textPrimary }}>
-                          {detail.value}
-                        </span>
+                        {isUnlocked ? '🔓 UNLOCKED' : '🔒 LOCKED'}
                       </div>
-                    ))}
+                      <div style={{
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        color: theme.gold,
+                        fontFamily: 'Cinzel, serif',
+                      }}>
+                        NFT #{stake.tokenId}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Actions */}
+                  {/* Stake Info */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '12px',
+                      marginBottom: '12px',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>LP Staked</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: theme.gold }}>
+                          {formatNumber(stake.amount)}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>USD Value</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#4CAF50' }}>
+                          ${formatNumber(stake.lpValueUSD)}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '12px',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>Pending Rewards</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#4CAF50' }}>
+                          +{formatNumber(stake.rewards)} DTGC
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>Time Remaining</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: isUnlocked ? '#4CAF50' : '#FF9800' }}>
+                          {formatTimeRemaining(stake.unlockTime)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      marginTop: '12px',
+                      fontSize: '0.7rem',
+                      color: theme.textMuted,
+                    }}>
+                      📅 Unlocks: {new Date(stake.unlockTime).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                       onClick={() => handleClaim(stake.tokenId)}
-                      disabled={loading || parseFloat(stake.pending) === 0}
+                      disabled={loading || parseFloat(stake.rewards) === 0}
                       style={{
                         flex: 1,
-                        padding: '10px',
-                        background: 'rgba(212,175,55,0.15)',
-                        border: '1px solid #D4AF37',
-                        borderRadius: '8px',
-                        color: '#D4AF37',
-                        fontWeight: 700,
+                        padding: '12px',
+                        background: loading || parseFloat(stake.rewards) === 0
+                          ? 'linear-gradient(135deg, #666 0%, #888 100%)'
+                          : 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
+                        border: 'none',
+                        borderRadius: '10px',
+                        color: '#fff',
                         fontSize: '0.85rem',
-                        cursor: (loading || parseFloat(stake.pending) === 0) ? 'not-allowed' : 'pointer',
-                        opacity: (loading || parseFloat(stake.pending) === 0) ? 0.3 : 1,
+                        fontWeight: 700,
+                        cursor: loading || parseFloat(stake.rewards) === 0 ? 'not-allowed' : 'pointer',
                       }}
                     >
-                      Claim
+                      🎁 Claim
                     </button>
-                    <button
-                      onClick={() => handleWithdraw(stake.tokenId)}
-                      disabled={loading || !isUnlocked}
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        background: 'rgba(76,175,80,0.15)',
-                        border: '1px solid #4CAF50',
-                        borderRadius: '8px',
-                        color: '#4CAF50',
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        cursor: (loading || !isUnlocked) ? 'not-allowed' : 'pointer',
-                        opacity: (loading || !isUnlocked) ? 0.3 : 1,
-                      }}
-                    >
-                      Withdraw
-                    </button>
-                    <button
-                      onClick={() => handleEmergencyWithdraw(stake.tokenId)}
-                      disabled={loading || isUnlocked}
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        background: 'rgba(244,67,54,0.15)',
-                        border: '1px solid #f44336',
-                        borderRadius: '8px',
-                        color: '#f44336',
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        cursor: (loading || isUnlocked) ? 'not-allowed' : 'pointer',
-                        opacity: (loading || isUnlocked) ? 0.3 : 1,
-                      }}
-                    >
-                      Emergency
-                    </button>
+                    
+                    {isUnlocked ? (
+                      <button
+                        onClick={() => handleWithdraw(stake.tokenId)}
+                        disabled={loading}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          background: loading
+                            ? 'linear-gradient(135deg, #666 0%, #888 100%)'
+                            : 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
+                          border: 'none',
+                          borderRadius: '10px',
+                          color: '#000',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        💎 Withdraw
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleEmergencyWithdraw(stake.tokenId)}
+                        disabled={loading}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          background: loading
+                            ? 'linear-gradient(135deg, #666 0%, #888 100%)'
+                            : 'linear-gradient(135deg, #F44336 0%, #E57373 100%)',
+                          border: 'none',
+                          borderRadius: '10px',
+                          color: '#fff',
+                          fontSize: '0.85rem',
+                          fontWeight: 700,
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        🚨 Emergency
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -631,70 +732,188 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress }) => {
       {showDiamondPaper && (
         <div style={{
           position: 'fixed',
-          inset: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           background: 'rgba(0,0,0,0.8)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 10000,
+          zIndex: 9999,
           padding: '20px',
         }} onClick={() => setShowDiamondPaper(false)}>
           <div style={{
-            background: cardBg,
-            border: `2px solid #D4AF37`,
+            background: theme.cardBg,
             borderRadius: '20px',
-            padding: '30px',
+            padding: '40px',
             maxWidth: '600px',
             maxHeight: '80vh',
-            overflowY: 'auto',
-            position: 'relative',
+            overflow: 'auto',
+            border: `2px solid ${theme.border}`,
           }} onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => setShowDiamondPaper(false)}
-              style={{
-                position: 'absolute',
-                top: '15px',
-                right: '15px',
-                background: 'none',
-                border: 'none',
-                color: textSecondary,
-                fontSize: '1.5rem',
-                cursor: 'pointer',
-                width: '30px',
-                height: '30px',
-              }}
-            >
-              ×
-            </button>
-            <h2 style={{ color: '#D4AF37', marginBottom: '20px', fontFamily: 'Cinzel, serif' }}>
-              💎 About White Diamond NFT Stakes
-            </h2>
-            <div style={{ color: textSecondary, lineHeight: '1.8', fontSize: '0.95rem' }}>
-              <p>White Diamond implements a revolutionary NFT-based staking system where each stake position is represented as a unique ERC-721 token.</p>
-              <h3 style={{ color: '#D4AF37', marginTop: '20px', fontSize: '1.1rem' }}>Key Features:</h3>
-              <ul style={{ paddingLeft: '20px' }}>
-                <li>Each stake = Unique transferable NFT</li>
-                <li>NFTs can be sold on secondary markets</li>
-                <li>Transfer ownership between wallets</li>
-                <li>Use as collateral in DeFi lending</li>
-                <li>Rewards transfer with NFT ownership</li>
-              </ul>
-              <h3 style={{ color: '#D4AF37', marginTop: '20px', fontSize: '1.1rem' }}>Economics:</h3>
-              <ul style={{ paddingLeft: '20px' }}>
-                <li>{WHITE_DIAMOND_CONFIG.APR}% APR on URMOM/DTGC LP tokens</li>
-                <li>{WHITE_DIAMOND_CONFIG.LOCK_DAYS}-day lock period with {WHITE_DIAMOND_CONFIG.ENTRY_FEE}% entry/{WHITE_DIAMOND_CONFIG.EXIT_FEE}% exit fees</li>
-                <li>Non-inflationary: rewards from pre-funded treasury</li>
-                <li>Early exit penalty: {WHITE_DIAMOND_CONFIG.EARLY_EXIT_PENALTY}% of accrued rewards</li>
-              </ul>
-              <p style={{ marginTop: '20px' }}>
-                <a href="/docs/White_Diamond_Paper.md" target="_blank" style={{ color: '#D4AF37', textDecoration: 'underline' }}>
-                  📄 Read Full Diamond Paper
-                </a>
-              </p>
+            <h2 style={{ fontFamily: 'Cinzel, serif', color: theme.gold, marginBottom: '20px' }}>💎 White Diamond NFT System</h2>
+            <p style={{ lineHeight: '1.8', marginBottom: '15px' }}>
+              <strong>White Diamond</strong> is an NFT-based staking system where each stake is represented as a unique NFT token. Your stake amount and USD value are permanently recorded on the NFT.
+            </p>
+            
+            <h3 style={{ color: theme.gold, marginTop: '25px', marginBottom: '15px' }}>Key Features:</h3>
+            <ul style={{ lineHeight: '2', paddingLeft: '20px' }}>
+              <li>Each stake mints a unique NFT with Darth Vader helmet icon</li>
+              <li>NFT stores LP amount + USD value at time of staking</li>
+              <li>70% APR on URMOM/DTGC LP tokens</li>
+              <li>90-day lock period with early withdrawal option</li>
+              <li>NFTs are tradeable and transferable</li>
+              <li>View your NFTs in PulseX Gold Suite</li>
+            </ul>
+
+            <h3 style={{ color: theme.gold, marginTop: '25px', marginBottom: '15px' }}>Economics:</h3>
+            <ul style={{ lineHeight: '2', paddingLeft: '20px' }}>
+              <li>Entry Fee: {WHITE_DIAMOND_CONFIG.ENTRY_FEE}%</li>
+              <li>Exit Fee: {WHITE_DIAMOND_CONFIG.EXIT_FEE}%</li>
+              <li>Early Exit Penalty: {WHITE_DIAMOND_CONFIG.EARLY_EXIT_PENALTY}%</li>
+              <li>Minimum Stake: {WHITE_DIAMOND_CONFIG.MIN_STAKE} LP</li>
+            </ul>
+
+            <h3 style={{ color: theme.gold, marginTop: '25px', marginBottom: '15px' }}>Use Cases:</h3>
+            <ul style={{ lineHeight: '2', paddingLeft: '20px' }}>
+              <li>Trade your staked positions on NFT marketplaces</li>
+              <li>Use NFTs as collateral (future feature)</li>
+              <li>Gift staked positions to others</li>
+              <li>Track historical USD value of your LP</li>
+            </ul>
+
+            <div style={{ marginTop: '30px', textAlign: 'center' }}>
+              <a 
+                href="https://dtgc.io/diamond-paper" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  padding: '12px 30px',
+                  background: 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
+                  color: '#000',
+                  textDecoration: 'none',
+                  borderRadius: '25px',
+                  fontWeight: 700,
+                  marginRight: '10px',
+                }}
+              >
+                📄 Read Full Documentation
+              </a>
+              <button
+                onClick={() => setShowDiamondPaper(false)}
+                style={{
+                  padding: '12px 30px',
+                  background: 'transparent',
+                  border: `2px solid ${theme.border}`,
+                  color: theme.text,
+                  borderRadius: '25px',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Wrap/Unwrap Guide Modal */}
+      {showWrapGuide && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px',
+        }} onClick={() => setShowWrapGuide(false)}>
+          <div style={{
+            background: theme.cardBg,
+            borderRadius: '20px',
+            padding: '40px',
+            maxWidth: '700px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            border: `2px solid ${theme.border}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontFamily: 'Cinzel, serif', color: theme.gold, marginBottom: '20px' }}>📦 How to Get URMOM/DTGC LP</h2>
+            
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{ color: theme.gold, marginBottom: '15px' }}>Step 1: Add Liquidity on PulseX</h3>
+              <ol style={{ lineHeight: '2', paddingLeft: '20px' }}>
+                <li>Go to <a href="https://pulsex.com/pools" target="_blank" style={{color:theme.gold}}>PulseX.com/pools</a></li>
+                <li>Click "Add Liquidity"</li>
+                <li>Select URMOM and DTGC tokens</li>
+                <li>Enter equal USD value of both tokens</li>
+                <li>Click "Supply" to add liquidity</li>
+                <li>Receive URMOM/DTGC LP tokens</li>
+              </ol>
+            </div>
+
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{ color: theme.gold, marginBottom: '15px' }}>Step 2: View Your LP in PulseX Gold</h3>
+              <ol style={{ lineHeight: '2', paddingLeft: '20px' }}>
+                <li>Click the "PulseX Gold" tab in the header</li>
+                <li>Your LP tokens will appear in the scanner</li>
+                <li>Click on your LP to see details</li>
+                <li>View wrapped/unwrapped positions</li>
+              </ol>
+            </div>
+
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{ color: theme.gold, marginBottom: '15px' }}>Step 3: Stake for White Diamond NFT</h3>
+              <ol style={{ lineHeight: '2', paddingLeft: '20px' }}>
+                <li>Return to White Diamond tab</li>
+                <li>Enter amount of LP to stake</li>
+                <li>Approve the LP token</li>
+                <li>Click "Stake & Mint NFT"</li>
+                <li>Receive your Darth Vader NFT!</li>
+              </ol>
+            </div>
+
+            <div style={{
+              background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.2)',
+              padding: '20px',
+              borderRadius: '12px',
+              marginBottom: '20px',
+            }}>
+              <strong style={{ color: theme.gold }}>💡 Pro Tip:</strong> The USD value of your LP is saved on the NFT at the time of staking. This lets you track your original investment value!
+            </div>
+
+            <button
+              onClick={() => setShowWrapGuide(false)}
+              style={{
+                width: '100%',
+                padding: '15px',
+                background: 'linear-gradient(135deg, #D4AF37 0%, #F4E5C3 100%)',
+                border: 'none',
+                borderRadius: '12px',
+                color: '#000',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontSize: '1rem',
+              }}
+            >
+              Got It!
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.05); opacity: 0.8; }
+        }
+      `}</style>
     </div>
   );
 };
