@@ -12,6 +12,8 @@ const WhiteDiamondNFTViewer = ({ provider, userAddress, isDark, onViewNFT }) => 
   const WHITE_DIAMOND_CONTRACT = '0x326F86e7d594B55B7BA08DFE5195b10b159033fD'; // Update with your contract
   
   const WHITE_DIAMOND_ABI = [
+    'function totalSupply() view returns (uint256)',
+    'function ownerOf(uint256) view returns (address)',
     'function balanceOf(address) view returns (uint256)',
     'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
     'function getPosition(uint256 tokenId) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lastClaimTime, uint256 pending, bool isActive, uint256 timeRemaining)',
@@ -29,37 +31,34 @@ const WhiteDiamondNFTViewer = ({ provider, userAddress, isDark, onViewNFT }) => 
     try {
       const contract = new ethers.Contract(WHITE_DIAMOND_CONTRACT, WHITE_DIAMOND_ABI, provider);
       
-      // Get NFT count
-      const balance = await contract.balanceOf(userAddress);
-      const nftCount = Number(balance);
-      
-      if (nftCount === 0) {
-        setNfts([]);
-        setLoading(false);
-        return;
-      }
+      // Get total minted
+      const totalSupply = await contract.totalSupply();
+      const totalMinted = Number(totalSupply);
       
       const nftData = [];
       
-      // Use tokenOfOwnerByIndex
-      for (let i = 0; i < nftCount; i++) {
+      // Check each token ID directly (enumeration is broken)
+      for (let tokenId = 0; tokenId <= Math.max(totalMinted, 10); tokenId++) {
         try {
-          const tokenId = await contract.tokenOfOwnerByIndex(userAddress, i);
-          const position = await contract.getPosition(tokenId);
-          // position: amount, startTime, unlockTime, lastClaimTime, pending, isActive, timeRemaining
+          const owner = await contract.ownerOf(tokenId);
           
-          if (position[5] && Number(position[0]) > 0) { // isActive and has amount
-            nftData.push({
-              tokenId: tokenId.toString(),
-              amount: ethers.formatEther(position[0]),
-              startTime: Number(position[1]) * 1000,
-              unlockTime: Number(position[2]) * 1000,
-              rewards: ethers.formatEther(position[4]), // pending
-              active: position[5],
-            });
+          if (owner.toLowerCase() === userAddress.toLowerCase()) {
+            const position = await contract.getPosition(tokenId);
+            // position: amount, startTime, unlockTime, lastClaimTime, pending, isActive, timeRemaining
+            
+            if (position[5] && Number(position[0]) > 0) { // isActive and has amount
+              nftData.push({
+                tokenId: tokenId.toString(),
+                amount: ethers.formatEther(position[0]),
+                startTime: Number(position[1]) * 1000,
+                unlockTime: Number(position[2]) * 1000,
+                rewards: ethers.formatEther(position[4]), // pending
+                active: position[5],
+              });
+            }
           }
         } catch (err) {
-          console.error(`Error loading White Diamond NFT at index ${i}:`, err);
+          // Token doesn't exist - skip
         }
       }
       

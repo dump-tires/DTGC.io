@@ -30,6 +30,7 @@ const WHITE_DIAMOND_ABI = [
   'function totalSupply() view returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
   'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
+  'function ownerOf(uint256 tokenId) view returns (address)',
 ];
 
 const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
@@ -105,54 +106,52 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
       console.log('🔍 Loading NFTs...');
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, provider);
       
-      // Get NFT count first
-      const balance = await contract.balanceOf(userAddress);
-      const nftCount = Number(balance);
-      console.log('📋 User has', nftCount, 'NFTs');
+      // Get total NFTs minted from contract
+      const totalSupply = await contract.totalSupply();
+      const totalMinted = Number(totalSupply);
+      console.log('📋 Total NFTs minted:', totalMinted);
       
-      if (nftCount === 0) {
-        console.log('ℹ️ No NFTs found');
-        setUserStakes([]);
-        return;
-      }
-      
+      // Contract enumeration is broken, so check each token ID directly
       const stakes = [];
       
-      // Use tokenOfOwnerByIndex instead of getStakesByOwner
-      for (let i = 0; i < nftCount; i++) {
+      // Check token IDs 0 through totalMinted
+      for (let tokenId = 0; tokenId <= Math.max(totalMinted, 10); tokenId++) {
         try {
-          const tokenId = await contract.tokenOfOwnerByIndex(userAddress, i);
-          console.log(`📊 Loading NFT #${tokenId.toString()} (index ${i})...`);
+          // Check if user owns this token
+          const owner = await contract.ownerOf(tokenId);
           
-          const position = await contract.getPosition(tokenId);
-          // position returns: amount, startTime, unlockTime, lastClaimTime, pending, isActive, timeRemaining
-          
-          const amountFormatted = ethers.formatEther(position[0]);
-          console.log(`   Token ID: ${tokenId.toString()}`);
-          console.log(`   Amount: ${amountFormatted} LP`);
-          console.log(`   Active: ${position[5]}`);
-          console.log(`   StartTime: ${new Date(Number(position[1]) * 1000).toLocaleString()}`);
-          console.log(`   UnlockTime: ${new Date(Number(position[2]) * 1000).toLocaleString()}`);
-          
-          if (position[5] && Number(position[0]) > 0) { // isActive and has amount
-            stakes.push({
-              tokenId: tokenId.toString(),
-              amount: ethers.formatEther(position[0]),
-              startTime: Number(position[1]) * 1000,
-              unlockTime: Number(position[2]) * 1000,
-              rewards: ethers.formatEther(position[4]), // pending rewards
-              active: position[5], // isActive
-            });
-            console.log(`✅ NFT #${tokenId.toString()}: ${amountFormatted} LP - ACTIVE`);
-          } else {
-            console.log(`⚠️ NFT #${tokenId.toString()}: Not active or zero amount`);
+          if (owner.toLowerCase() === userAddress.toLowerCase()) {
+            console.log(`✅ User owns NFT #${tokenId}`);
+            
+            // Get position data
+            const position = await contract.getPosition(tokenId);
+            const amountFormatted = ethers.formatEther(position[0]);
+            
+            console.log(`   Amount: ${amountFormatted} LP`);
+            console.log(`   Active: ${position[5]}`);
+            
+            if (position[5] && Number(position[0]) > 0) {
+              stakes.push({
+                tokenId: tokenId.toString(),
+                amount: ethers.formatEther(position[0]),
+                startTime: Number(position[1]) * 1000,
+                unlockTime: Number(position[2]) * 1000,
+                rewards: ethers.formatEther(position[4]),
+                active: position[5],
+              });
+              console.log(`✅ NFT #${tokenId}: ${amountFormatted} LP - ACTIVE`);
+            }
           }
         } catch (err) {
-          console.error(`❌ Error loading NFT at index ${i}:`, err.message);
+          // Token doesn't exist or user doesn't own it - skip
+          if (!err.message.includes('ERC721: invalid token ID') && 
+              !err.message.includes('owner query for nonexistent token')) {
+            console.error(`Error checking token #${tokenId}:`, err.message);
+          }
         }
       }
       
-      console.log(`✅ Found ${stakes.length}/${nftCount} active NFTs`);
+      console.log(`✅ Found ${stakes.length} active NFTs`);
       setUserStakes(stakes);
     } catch (error) {
       console.error('❌ Error loading stakes:', error.message);

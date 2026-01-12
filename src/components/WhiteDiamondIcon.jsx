@@ -18,12 +18,32 @@ const WhiteDiamondIcon = ({ provider, account, onNavigate }) => {
       try {
         const contract = new ethers.Contract(
           WHITE_DIAMOND_ADDRESS,
-          ['function balanceOf(address) view returns (uint256)'],
+          [
+            'function totalSupply() view returns (uint256)',
+            'function ownerOf(uint256) view returns (address)',
+          ],
           provider
         );
-        const balance = await contract.balanceOf(account);
-        setNftCount(Number(balance));
-        console.log('✅ White Diamond Icon: User has', Number(balance), 'NFTs');
+        
+        // Get total minted
+        const totalSupply = await contract.totalSupply();
+        const totalMinted = Number(totalSupply);
+        
+        // Count which tokens belong to user
+        let count = 0;
+        for (let tokenId = 0; tokenId <= Math.max(totalMinted, 10); tokenId++) {
+          try {
+            const owner = await contract.ownerOf(tokenId);
+            if (owner.toLowerCase() === account.toLowerCase()) {
+              count++;
+            }
+          } catch (err) {
+            // Token doesn't exist - skip
+          }
+        }
+        
+        setNftCount(count);
+        console.log('✅ White Diamond Icon: User has', count, 'NFTs');
       } catch (err) {
         console.error('❌ White Diamond Icon Error:', err);
         setNftCount(0);
