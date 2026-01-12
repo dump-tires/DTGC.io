@@ -8747,7 +8747,6 @@ export default function App() {
                     borderRadius: '2px',
                   }} />
                 </div>
-                </div>
               </div>
 
               {/* DAO Ecosystem (Treasury + LP Locked) */}
