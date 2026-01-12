@@ -641,17 +641,35 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   useEffect(() => { const timer = setTimeout(() => { if (lpAmount0) calculateLpAmount1(lpAmount0); }, 300); return () => clearTimeout(timer); }, [lpAmount0, calculateLpAmount1]);
 
   const addLiquidity = async () => {
-    if (!signer || !lpAmount0 || !lpAmount1) return;
+    if (!signer || !lpAmount0 || !lpAmount1) {
+      showToastMsg('Please enter both amounts', 'error');
+      return;
+    }
+    
+    if (!userAddress) {
+      showToastMsg('Please connect your wallet first', 'error');
+      return;
+    }
+    
     setLpLoading(true);
-    showToastMsg('Preparing...', 'info');
+    showToastMsg('Preparing transaction...', 'info');
     
     try {
-      const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, signer);
       const token0 = TOKENS[lpToken0];
       const token1 = TOKENS[lpToken1];
       
+      if (!token0 || !token1) {
+        throw new Error('Invalid token selection');
+      }
+      
       const addr0 = getAddr(token0.address);
       const addr1 = getAddr(token1.address);
+      
+      console.log('🔧 LP Creation Debug:');
+      console.log('  Token0:', lpToken0, addr0);
+      console.log('  Token1:', lpToken1, addr1);
+      console.log('  Amount0:', lpAmount0);
+      console.log('  Amount1:', lpAmount1);
       
       const amount0Desired = ethers.parseUnits(lpAmount0, token0.decimals);
       const amount1Desired = ethers.parseUnits(lpAmount1, token1.decimals);
@@ -661,46 +679,109 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       
       // Helper to safely check and approve
       const checkAndApprove = async (tokenAddr, tokenSymbol, amount) => {
+        console.log(`  Checking approval for ${tokenSymbol}...`);
         try {
           const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
           let allowance = 0n;
           try {
             allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
+            console.log(`  Current allowance: ${ethers.formatEther(allowance)}`);
           } catch (e) {
-            console.log('Allowance check failed, assuming 0:', e.message);
+            console.log('  Allowance check failed, assuming 0:', e.message);
           }
           if (allowance < amount) {
-            showToastMsg('Approving ' + tokenSymbol + '...', 'info');
+            showToastMsg(`Approving ${tokenSymbol}...`, 'info');
+            console.log(`  Approving ${tokenSymbol} for router...`);
             const tx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
             await tx.wait();
+            console.log(`  ✅ ${tokenSymbol} approved!`);
+          } else {
+            console.log(`  ✅ ${tokenSymbol} already approved`);
           }
         } catch (e) {
-          console.error('Approval error:', e);
-          throw new Error(`Failed to approve ${tokenSymbol}: ${e.message}`);
+          console.error('  Approval error:', e);
+          throw new Error(`Failed to approve ${tokenSymbol}: ${e.reason || e.message}`);
         }
       };
       
+      // Use V1 router for LP creation
+      const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, signer);
+      console.log('  Router:', CONFIG.ROUTER);
+      
       if (lpToken1 === 'PLS') {
+        // Token0/PLS pair - approve token0, send PLS as value
+        console.log('  Route: addLiquidityETH (token0 + native PLS)');
         await checkAndApprove(addr0, lpToken0, amount0Desired);
         showToastMsg('Adding liquidity...', 'info');
-        await (await router.addLiquidityETH(addr0, amount0Desired, amount0Min, amount1Min, userAddress, deadline, { value: amount1Desired })).wait();
+        const tx = await router.addLiquidityETH(
+          addr0, 
+          amount0Desired, 
+          amount0Min, 
+          amount1Min, 
+          userAddress, 
+          deadline, 
+          { value: amount1Desired }
+        );
+        console.log('  TX sent:', tx.hash);
+        await tx.wait();
+        console.log('  ✅ TX confirmed!');
       } else if (lpToken0 === 'PLS') {
+        // PLS/Token1 pair - approve token1, send PLS as value
+        console.log('  Route: addLiquidityETH (native PLS + token1)');
         await checkAndApprove(addr1, lpToken1, amount1Desired);
         showToastMsg('Adding liquidity...', 'info');
-        await (await router.addLiquidityETH(addr1, amount1Desired, amount1Min, amount0Min, userAddress, deadline, { value: amount0Desired })).wait();
+        const tx = await router.addLiquidityETH(
+          addr1, 
+          amount1Desired, 
+          amount1Min, 
+          amount0Min, 
+          userAddress, 
+          deadline, 
+          { value: amount0Desired }
+        );
+        console.log('  TX sent:', tx.hash);
+        await tx.wait();
+        console.log('  ✅ TX confirmed!');
       } else {
+        // Token0/Token1 pair (no native PLS)
+        console.log('  Route: addLiquidity (token0 + token1)');
         await checkAndApprove(addr0, lpToken0, amount0Desired);
         await checkAndApprove(addr1, lpToken1, amount1Desired);
         showToastMsg('Adding liquidity...', 'info');
-        await (await router.addLiquidity(addr0, addr1, amount0Desired, amount1Desired, amount0Min, amount1Min, userAddress, deadline)).wait();
+        const tx = await router.addLiquidity(
+          addr0, 
+          addr1, 
+          amount0Desired, 
+          amount1Desired, 
+          amount0Min, 
+          amount1Min, 
+          userAddress, 
+          deadline
+        );
+        console.log('  TX sent:', tx.hash);
+        await tx.wait();
+        console.log('  ✅ TX confirmed!');
       }
       
       showToastMsg(`✅ Added ${lpToken0}/${lpToken1} liquidity!`, 'success');
       setLpAmount0(''); setLpAmount1('');
       fetchAllBalances(); fetchPairInfo();
     } catch (err) {
-      console.error('LP error:', err);
-      showToastMsg(err.reason || err.message || 'Failed', 'error');
+      console.error('LP creation error:', err);
+      // Better error message extraction
+      let errorMsg = 'Transaction failed';
+      if (err.reason) {
+        errorMsg = err.reason;
+      } else if (err.message) {
+        if (err.message.includes('user rejected')) {
+          errorMsg = 'Transaction rejected by user';
+        } else if (err.message.includes('insufficient')) {
+          errorMsg = 'Insufficient balance';
+        } else {
+          errorMsg = err.message.slice(0, 80);
+        }
+      }
+      showToastMsg(errorMsg, 'error');
     }
     setLpLoading(false);
   };

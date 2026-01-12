@@ -1,6 +1,7 @@
 import DapperComponent from './components/DapperComponent';
 import PricingPage from './pages/PricingPage';
 import V4DeFiGoldSuite from './components/V4DeFiGoldSuite';
+import WhiteDiamondStaking from './components/WhiteDiamondStaking';
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
 // SaaS Config System - enables white-label customization
@@ -1201,11 +1202,51 @@ const getStyles = (isDark) => `
   @media (max-width: 768px) { 
     .tiers-grid { grid-template-columns: 1fr; }
     .tier-row-top { grid-template-columns: 1fr; }
-    .hero-title { font-size: 2.2rem; }
+    .hero-title { font-size: 1.8rem !important; letter-spacing: 2px !important; }
+    .hero-subtitle { font-size: 1rem !important; letter-spacing: 1px !important; margin-bottom: 20px !important; }
+    .hero-section { padding: 100px 15px 40px !important; }
+    .hero-stats { gap: 12px !important; }
+    .hero-stat { padding: 14px 18px !important; min-width: 130px !important; }
+    .hero-stat-value { font-size: 1.3rem !important; }
+    .hero-stat-label { font-size: 0.6rem !important; }
     .nav-content { flex-direction: column; gap: 14px; }
     .nav-links { display: none; }
-    .main-content { padding: 0 20px 50px; }
+    .main-content { padding: 0 10px 50px; }
     .mobile-menu-toggle { display: flex !important; }
+    .section-title { font-size: 1.3rem !important; letter-spacing: 1px !important; }
+    
+    /* Mobile Header - Compact DTGC logo */
+    .logo-section { gap: 8px !important; }
+    .logo-mark { 
+      width: 32px !important; 
+      height: 32px !important; 
+      font-size: 0.85rem !important; 
+    }
+    .logo-text { 
+      font-size: 1rem !important; 
+      letter-spacing: 1px !important; 
+    }
+    .logo-tagline { 
+      font-size: 0.5rem !important; 
+      letter-spacing: 2px !important; 
+      display: none !important; 
+    }
+    
+    /* Compact nav tabs on mobile */
+    .nav-tabs-container { 
+      padding: 0 8px !important; 
+      gap: 4px !important;
+    }
+    .nav-tab-btn { 
+      padding: 6px 10px !important; 
+      font-size: 0.65rem !important;
+    }
+    
+    /* Reduce tier card sizes */
+    .tier-card { padding: 16px !important; }
+    .tier-header { padding: 12px !important; }
+    .tier-name { font-size: 1rem !important; }
+    .tier-apr { font-size: 1.8rem !important; }
     
     /* Mobile Position Card Optimizations */
     .position-card-mobile {
@@ -1333,6 +1374,24 @@ const getStyles = (isDark) => `
   .tier-card.diamond.selected {
     border-color: var(--diamond-dark);
     box-shadow: var(--glow-diamond);
+  }
+
+  /* ⭐ WHITE DIAMOND NFT TIER */
+  .tier-card.white-diamond {
+    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(200,200,200,0.05) 100%);
+    border: 2px solid rgba(255,255,255,0.5);
+  }
+
+  .tier-card.white-diamond::before {
+    background: linear-gradient(90deg, #FFFFFF, #E8E8E8, #FFFFFF);
+    background-size: 200% auto;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .tier-card.white-diamond:hover {
+    border-color: #FFFFFF;
+    box-shadow: 0 0 30px rgba(255,255,255,0.4), 0 0 60px rgba(255,215,0,0.2);
+    transform: translateY(-8px) scale(1.02);
   }
 
   .tier-icon {
@@ -2789,7 +2848,7 @@ const StakeVideoModal = ({ onComplete, tierName, isDark }) => {
 // Floating DexScreener Widget (bottom-left corner) - Miniature & Expandable
 const DexScreenerWidget = () => {
   const [isExpanded, setIsExpanded] = React.useState(false);
-  const [isMinimized, setIsMinimized] = React.useState(false);
+  const [isMinimized, setIsMinimized] = React.useState(true); // START MINIMIZED
   const [activeChart, setActiveChart] = React.useState('dtgc');
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
 
@@ -2816,10 +2875,10 @@ const DexScreenerWidget = () => {
         onClick={() => setIsMinimized(false)}
         style={{
           position: 'fixed',
-          bottom: '20px',
-          left: '20px',
-          width: '50px',
-          height: '50px',
+          bottom: isMobile ? '12px' : '20px',
+          left: isMobile ? '12px' : '20px',
+          width: isMobile ? '40px' : '50px',
+          height: isMobile ? '40px' : '50px',
           background: 'linear-gradient(135deg, #1a1a2e 0%, #0d0d1a 100%)',
           border: '2px solid #D4AF37',
           borderRadius: '50%',
@@ -2835,7 +2894,7 @@ const DexScreenerWidget = () => {
         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         title="Open DexScreener Chart"
       >
-        <span style={{ fontSize: '1.5rem' }}>📊</span>
+        <span style={{ fontSize: isMobile ? '1.1rem' : '1.5rem' }}>📊</span>
       </div>
     );
   }
@@ -7758,6 +7817,7 @@ export default function App() {
                 <button className={activeTab === 'links' ? 'active' : ''} onClick={() => { handleNavClick('links'); setMobileMenuOpen(false); }}>🔗 Links</button>
                 <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
                 <button className={activeTab === 'gold' ? 'active' : ''} onClick={() => { handleNavClick('gold'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'gold' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'gold' ? '#000' : '#D4AF37' }}>🏆 PulseX Gold</button>
+                <button className={activeTab === 'whitediamond' ? 'active' : ''} onClick={() => { handleNavClick('whitediamond'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'whitediamond' ? 'linear-gradient(135deg, #FFFFFF, #B8B8B8)' : 'rgba(255,255,255,0.1)', color: activeTab === 'whitediamond' ? '#000' : '#FFF' }}>💎 White Diamond</button>
                 <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #4CAF50, #388E3C)' : 'rgba(76,175,80,0.15)', color: activeTab === 'saas' ? '#fff' : '#4CAF50' }}>🏭 SaaS Platform</button>
               </div>
             )}
@@ -7787,6 +7847,25 @@ export default function App() {
                 }}
               >
                 🏆 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>PulseX</span><span>Gold</span></span>
+              </button>
+              <button 
+                className={`nav-link ${activeTab === 'whitediamond' ? 'active' : ''}`} 
+                onClick={() => handleNavClick('whitediamond')} 
+                style={{ 
+                  background: activeTab === 'whitediamond' 
+                    ? 'linear-gradient(135deg, #FFFFFF, #B8B8B8)' 
+                    : 'linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))',
+                  border: '1px solid rgba(255,255,255,0.4)',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  color: activeTab === 'whitediamond' ? '#000' : '#FFF',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                💎 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>White</span><span>Diamond</span></span>
               </button>
               <button 
                 className={`nav-link ${activeTab === 'saas' ? 'active' : ''}`} 
@@ -8907,6 +8986,83 @@ export default function App() {
                 </div>
                   );
                 })()}
+
+                {/* ⭐ WHITE DIAMOND NFT TIER - Transferable! */}
+                <div
+                  className="tier-card white-diamond"
+                  onClick={() => handleNavClick('whitediamond')}
+                  style={{ 
+                    flex: '0 1 280px', 
+                    maxWidth: '320px', 
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(200,200,200,0.1) 50%, rgba(150,150,150,0.05) 100%)', 
+                    border: '2px solid #FFFFFF',
+                    boxShadow: '0 8px 32px rgba(255,255,255,0.2), 0 0 60px rgba(255,255,255,0.1)',
+                    position: 'relative',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {/* Gold Star NFT Badge */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+                    color: '#000',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    fontSize: '0.65rem',
+                    fontWeight: '800',
+                    boxShadow: '0 2px 8px rgba(255,215,0,0.5)',
+                    zIndex: 10,
+                  }}>
+                    ⭐ NFT
+                  </div>
+                  <div className="tier-icon" style={{ fontSize: '2.5rem' }}>💎</div>
+                  <div className="tier-name" style={{ 
+                    background: 'linear-gradient(135deg, #FFFFFF 0%, #E8E8E8 50%, #B8B8B8 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    fontWeight: '800',
+                  }}>WHITE DIAMOND</div>
+                  <div className="tier-subtitle" style={{ color: '#CCC' }}>LP STAKING • TRADEABLE NFT!</div>
+                  <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    Min: 1,000 LP
+                  </div>
+                  <div className="tier-apr-container">
+                    <div className="tier-apr" style={{ color: '#FFF', fontSize: '2.2rem' }}>70.0%</div>
+                    <div className="tier-apr-label">APR</div>
+                  </div>
+                  <div className="tier-features">
+                    <div className="tier-feature">
+                      <span className="tier-feature-label">Lock</span>
+                      <span className="tier-feature-value">90 Days</span>
+                    </div>
+                    <div className="tier-feature">
+                      <span className="tier-feature-label">Entry Fee</span>
+                      <span className="tier-feature-value">3.75%</span>
+                    </div>
+                    <div className="tier-feature">
+                      <span className="tier-feature-label" style={{ color: '#FFD700' }}>⭐ NFT</span>
+                      <span className="tier-feature-value" style={{ color: '#4CAF50', fontWeight: '700' }}>TRADEABLE!</span>
+                    </div>
+                  </div>
+                  {/* NFT Info Banner */}
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '8px',
+                    background: 'rgba(255,215,0,0.1)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,215,0,0.3)',
+                  }}>
+                    <div style={{ fontSize: '0.65rem', color: '#FFD700', fontWeight: '600', textAlign: 'center' }}>
+                      🔄 WRAP → TRADE → UNWRAP
+                    </div>
+                    <div style={{ fontSize: '0.55rem', color: '#888', textAlign: 'center', marginTop: '2px' }}>
+                      Sell your stake on OpenSea!
+                    </div>
+                  </div>
+                  <span className="tier-badge lp" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #B8B8B8 100%)', color: '#000' }}>NFT</span>
+                </div>
 
                 {/* FLEX Tier Card */}
                 <div
@@ -12529,6 +12685,18 @@ export default function App() {
           {activeTab === 'gold' && (
             <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
               <V4DeFiGoldSuite 
+                provider={provider}
+                signer={signer}
+                userAddress={account}
+                onClose={() => setActiveTab('stake')}
+              />
+            </section>
+          )}
+
+          {/* WHITE DIAMOND TAB - NFT Staking */}
+          {activeTab === 'whitediamond' && (
+            <section className="section-container" style={{ maxWidth: '1200px', margin: '0 auto' }}>
+              <WhiteDiamondStaking 
                 provider={provider}
                 signer={signer}
                 userAddress={account}
