@@ -1202,8 +1202,7 @@ const getStyles = (isDark) => `
     .tiers-grid { grid-template-columns: repeat(2, 1fr); }
   }
   @media (max-width: 1024px) {
-    /* Hide metal prices on smaller screens for cleaner header */
-    .price-ticker-compact { display: none !important; }
+    /* Tablet adjustments */
     .hero-section { padding: 150px 30px 60px !important; }
   }
   @media (max-width: 768px) { 
@@ -1279,10 +1278,7 @@ const getStyles = (isDark) => `
       font-size: 0.65rem !important;
     }
     
-    /* Hide price tickers on mobile for cleaner header */
-    .price-ticker-compact {
-      display: none !important;
-    }
+    /* Compact nav-right on mobile */
     .nav-right {
       gap: 4px !important;
     }
@@ -3511,6 +3507,7 @@ export default function App() {
   });
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
 
   // Testnet balances (stored in localStorage for persistence)
   const [testnetBalances, setTestnetBalances] = useState(() => {
@@ -7934,41 +7931,75 @@ export default function App() {
             </nav>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
-              {/* Consolidated Price Ticker - Hover to Expand */}
-              <div 
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 10px',
-                  background: isDark ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.05)',
-                  borderRadius: '16px',
-                  border: '1px solid rgba(212,175,55,0.15)',
-                  fontSize: '0.55rem',
-                  position: 'relative',
-                  cursor: 'default',
-                }}
-                className="price-ticker-compact"
-              >
-                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600 }}>🥇 ${metalPrices.gold.toLocaleString()}</span>
-                <span style={{ color: '#444' }}>|</span>
-                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600 }}>🥈 ${metalPrices.silver.toFixed(2)}</span>
-                <span style={{ color: '#444' }}>|</span>
-                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600 }}>🥉 ${metalPrices.copper.toFixed(2)}</span>
-              </div>
-              {/* PLS/PLSX Prices - Most Relevant for Users */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 8px',
-                background: 'rgba(0,212,170,0.08)',
-                borderRadius: '16px',
-                border: '1px solid rgba(0,212,170,0.15)',
-                fontSize: '0.55rem',
-              }}>
-                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
-                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
+              {/* Price Dropdown Button */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowPriceDropdown(!showPriceDropdown)}
+                  style={{
+                    padding: '6px 10px',
+                    background: showPriceDropdown ? 'rgba(76,175,80,0.2)' : 'transparent',
+                    border: '1px solid rgba(76,175,80,0.5)',
+                    borderRadius: '8px',
+                    color: '#4CAF50',
+                    fontSize: '1rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  title="Live Prices"
+                >
+                  💲
+                </button>
+                {/* Price Dropdown Menu */}
+                {showPriceDropdown && (
+                  <div 
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: '8px',
+                      background: isDark ? 'rgba(20,20,30,0.98)' : 'rgba(255,255,255,0.98)',
+                      border: '1px solid rgba(76,175,80,0.3)',
+                      borderRadius: '12px',
+                      padding: '12px 16px',
+                      minWidth: '200px',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                      zIndex: 1000,
+                    }}
+                    onMouseLeave={() => setShowPriceDropdown(false)}
+                  >
+                    <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '8px', letterSpacing: '1px' }}>📊 LIVE PRICES</div>
+                    {/* Metals */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#888', fontSize: '0.7rem' }}>🥇 Gold /oz</span>
+                        <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.8rem' }}>${metalPrices.gold.toLocaleString()}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#888', fontSize: '0.7rem' }}>🥈 Silver /oz</span>
+                        <span style={{ color: '#C0C0C0', fontWeight: 700, fontSize: '0.8rem' }}>${metalPrices.silver.toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#888', fontSize: '0.7rem' }}>🥉 Copper /lb</span>
+                        <span style={{ color: '#CD7F32', fontWeight: 700, fontSize: '0.8rem' }}>${metalPrices.copper.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    {/* Divider */}
+                    <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
+                    {/* Crypto */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#888', fontSize: '0.7rem' }}>💚 PLS</span>
+                        <span style={{ color: '#00D4AA', fontWeight: 700, fontSize: '0.8rem' }}>${cryptoPrices.pls.toFixed(8)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#888', fontSize: '0.7rem' }}>💜 PLSX</span>
+                        <span style={{ color: '#9B59B6', fontWeight: 700, fontSize: '0.8rem' }}>${cryptoPrices.plsx.toFixed(8)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {/* Security & Audit Button */}
               <button
