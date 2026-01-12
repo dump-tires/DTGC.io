@@ -29,6 +29,7 @@ const WHITE_DIAMOND_ABI = [
   'function pendingRewards(uint256 tokenId) view returns (uint256)',
   'function totalSupply() view returns (uint256)',
   'function balanceOf(address) view returns (uint256)',
+  'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
 ];
 
 const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
@@ -103,22 +104,33 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
     try {
       console.log('🔍 Loading NFTs...');
       const contract = new ethers.Contract(WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS, WHITE_DIAMOND_ABI, provider);
-      const tokenIds = await contract.getStakesByOwner(userAddress);
-      console.log('📋 NFT IDs:', tokenIds.map(id => id.toString()));
       
-      if (tokenIds.length === 0) {
+      // Get NFT count first
+      const balance = await contract.balanceOf(userAddress);
+      const nftCount = Number(balance);
+      console.log('📋 User has', nftCount, 'NFTs');
+      
+      if (nftCount === 0) {
         console.log('ℹ️ No NFTs found');
         setUserStakes([]);
         return;
       }
       
       const stakes = [];
-      for (const tokenId of tokenIds) {
+      
+      // Use tokenOfOwnerByIndex instead of getStakesByOwner
+      for (let i = 0; i < nftCount; i++) {
         try {
-          console.log(`📊 Loading NFT #${tokenId}...`);
+          const tokenId = await contract.tokenOfOwnerByIndex(userAddress, i);
+          console.log(`📊 Loading NFT #${tokenId} (index ${i})...`);
+          
           const position = await contract.getPosition(tokenId);
           // position returns: amount, startTime, unlockTime, lastClaimTime, pending, isActive, timeRemaining
-          if (position[5]) { // isActive
+          
+          console.log(`   Amount: ${ethers.formatEther(position[0])} LP`);
+          console.log(`   Active: ${position[5]}`);
+          
+          if (position[5] && Number(position[0]) > 0) { // isActive and has amount
             stakes.push({
               tokenId: tokenId.toString(),
               amount: ethers.formatEther(position[0]),
@@ -127,17 +139,20 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
               rewards: ethers.formatEther(position[4]), // pending rewards
               active: position[5], // isActive
             });
-            console.log(`✅ NFT #${tokenId}: ${ethers.formatEther(position[0])} LP`);
+            console.log(`✅ NFT #${tokenId}: ${ethers.formatEther(position[0])} LP - ACTIVE`);
+          } else {
+            console.log(`⚠️ NFT #${tokenId}: Not active or zero amount`);
           }
         } catch (err) {
-          console.error(`❌ Error loading NFT #${tokenId}:`, err);
+          console.error(`❌ Error loading NFT at index ${i}:`, err.message);
         }
       }
       
-      console.log(`✅ Found ${stakes.length} active NFTs`);
+      console.log(`✅ Found ${stakes.length}/${nftCount} active NFTs`);
       setUserStakes(stakes);
     } catch (error) {
       console.error('❌ Error loading stakes:', error.message);
+      setUserStakes([]);
     }
   };
 

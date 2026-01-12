@@ -12,9 +12,10 @@ const WhiteDiamondNFTViewer = ({ provider, userAddress, isDark, onViewNFT }) => 
   const WHITE_DIAMOND_CONTRACT = '0x326F86e7d594B55B7BA08DFE5195b10b159033fD'; // Update with your contract
   
   const WHITE_DIAMOND_ABI = [
-    'function getStakesByOwner(address owner) view returns (uint256[])',
-    'function getPosition(uint256 tokenId) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 rewards, uint256 lpValueUSD, bool active)',
-    'function calculateRewards(uint256 tokenId) view returns (uint256)',
+    'function balanceOf(address) view returns (uint256)',
+    'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
+    'function getPosition(uint256 tokenId) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lastClaimTime, uint256 pending, bool isActive, uint256 timeRemaining)',
+    'function pendingRewards(uint256 tokenId) view returns (uint256)',
   ];
 
   useEffect(() => {
@@ -27,28 +28,45 @@ const WhiteDiamondNFTViewer = ({ provider, userAddress, isDark, onViewNFT }) => 
     setLoading(true);
     try {
       const contract = new ethers.Contract(WHITE_DIAMOND_CONTRACT, WHITE_DIAMOND_ABI, provider);
-      const tokenIds = await contract.getStakesByOwner(userAddress);
       
-      const nftData = await Promise.all(
-        tokenIds.map(async (tokenId) => {
+      // Get NFT count
+      const balance = await contract.balanceOf(userAddress);
+      const nftCount = Number(balance);
+      
+      if (nftCount === 0) {
+        setNfts([]);
+        setLoading(false);
+        return;
+      }
+      
+      const nftData = [];
+      
+      // Use tokenOfOwnerByIndex
+      for (let i = 0; i < nftCount; i++) {
+        try {
+          const tokenId = await contract.tokenOfOwnerByIndex(userAddress, i);
           const position = await contract.getPosition(tokenId);
-          const rewards = await contract.calculateRewards(tokenId);
+          // position: amount, startTime, unlockTime, lastClaimTime, pending, isActive, timeRemaining
           
-          return {
-            tokenId: tokenId.toString(),
-            amount: ethers.formatEther(position[0]),
-            startTime: Number(position[1]) * 1000,
-            unlockTime: Number(position[2]) * 1000,
-            rewards: ethers.formatEther(rewards),
-            lpValueUSD: ethers.formatEther(position[4]),
-            active: position[5],
-          };
-        })
-      );
+          if (position[5] && Number(position[0]) > 0) { // isActive and has amount
+            nftData.push({
+              tokenId: tokenId.toString(),
+              amount: ethers.formatEther(position[0]),
+              startTime: Number(position[1]) * 1000,
+              unlockTime: Number(position[2]) * 1000,
+              rewards: ethers.formatEther(position[4]), // pending
+              active: position[5],
+            });
+          }
+        } catch (err) {
+          console.error(`Error loading White Diamond NFT at index ${i}:`, err);
+        }
+      }
       
-      setNfts(nftData.filter(n => n.active));
+      setNfts(nftData);
     } catch (error) {
       console.error('Error loading White Diamond NFTs:', error);
+      setNfts([]);
     } finally {
       setLoading(false);
     }
@@ -247,9 +265,9 @@ const WhiteDiamondNFTViewer = ({ provider, userAddress, isDark, onViewNFT }) => 
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.65rem', color: theme.textMuted }}>USD Value</div>
+                  <div style={{ fontSize: '0.65rem', color: theme.textMuted }}>APR</div>
                   <div style={{ fontSize: '1rem', fontWeight: 700, color: '#4CAF50' }}>
-                    ${formatNumber(nft.lpValueUSD)}
+                    70%
                   </div>
                 </div>
                 <div>
