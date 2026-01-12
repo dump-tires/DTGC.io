@@ -3475,6 +3475,7 @@ export default function App() {
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState(null);
+  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
   
   // URL-based tab routing - supports /saas, /stake, /burn, /vote, /whitepaper, /links, /analytics
   const [activeTab, setActiveTab] = useState(() => {
@@ -7889,117 +7890,198 @@ export default function App() {
               </button>
             </nav>
 
-            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {/* Metal & Crypto Prices - Compact Single Row */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '4px 10px',
-                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
-                borderRadius: '16px',
-                border: '1px solid rgba(212,175,55,0.2)',
-                fontSize: '0.6rem',
-              }}>
-                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
-                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(2)}</span>
-                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
-              </div>
-              {/* Crypto Prices - Compact */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 8px',
-                background: 'rgba(33,150,243,0.08)',
-                borderRadius: '16px',
-                border: '1px solid rgba(33,150,243,0.15)',
-                fontSize: '0.55rem',
-              }}>
-                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{(cryptoPrices.btc/1000).toFixed(1)}K</span>
-                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
-              </div>
-              {/* PLS/PLSX Prices */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 8px',
-                background: 'rgba(0,212,170,0.08)',
-                borderRadius: '16px',
-                border: '1px solid rgba(0,212,170,0.15)',
-                fontSize: '0.55rem',
-              }}>
-                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
-                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
-              </div>
+            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', position: 'relative' }}>
+              
+              {/* Collapsible Prices Dropdown */}
+              {!showPriceDropdown ? (
+                <button
+                  onClick={() => setShowPriceDropdown(true)}
+                  style={{
+                    padding: '8px 14px',
+                    background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.15)',
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    borderRadius: '8px',
+                    color: '#D4AF37',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                  title="View live prices"
+                >
+                  💰 Prices ▼
+                </button>
+              ) : (
+                <div style={{
+                  position: 'absolute',
+                  top: '50px',
+                  right: '0',
+                  background: isDark ? '#2a2a2a' : '#ffffff',
+                  border: '2px solid #D4AF37',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  minWidth: '300px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                  zIndex: 10000,
+                }}>
+                  {/* Close Button */}
+                  <button
+                    onClick={() => setShowPriceDropdown(false)}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: 'none',
+                      border: 'none',
+                      color: isDark ? '#fff' : '#000',
+                      fontSize: '1.2rem',
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                    }}
+                  >
+                    ✕
+                  </button>
+                  
+                  <h4 style={{ color: '#D4AF37', marginBottom: '12px', fontFamily: 'Cinzel, serif' }}>Live Prices</h4>
+                  
+                  {/* Metal Prices */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '0.7rem', color: isDark ? '#888' : '#666', marginBottom: '6px', fontWeight: 600 }}>Precious Metals</div>
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <img src="/gold_bar.png" alt="Gold" style={{width: '20px', height: '12px'}} />
+                        <span style={{ color: '#FFD700', fontWeight: 600, fontSize: '0.75rem' }}>${metalPrices.gold.toLocaleString()}/oz</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <img src="/silver_bar.png" alt="Silver" style={{width: '20px', height: '12px'}} />
+                        <span style={{ color: '#C0C0C0', fontWeight: 600, fontSize: '0.75rem' }}>${metalPrices.silver.toFixed(2)}/oz</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <img src="/copper_bar.png" alt="Copper" style={{width: '20px', height: '12px'}} />
+                        <span style={{ color: '#CD7F32', fontWeight: 600, fontSize: '0.75rem' }}>${metalPrices.copper.toFixed(2)}/lb</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Crypto Prices */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ fontSize: '0.7rem', color: isDark ? '#888' : '#666', marginBottom: '6px', fontWeight: 600 }}>Cryptocurrencies</div>
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                      <span style={{ color: '#F7931A', fontWeight: 600, fontSize: '0.75rem' }}>₿ ${(cryptoPrices.btc/1000).toFixed(1)}K</span>
+                      <span style={{ color: '#627EEA', fontWeight: 600, fontSize: '0.75rem' }}>Ξ ${cryptoPrices.eth.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  
+                  {/* PulseChain */}
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: isDark ? '#888' : '#666', marginBottom: '6px', fontWeight: 600 }}>PulseChain</div>
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                      <span style={{ color: '#00D4AA', fontWeight: 600, fontSize: '0.75rem' }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
+                      <span style={{ color: '#9B59B6', fontWeight: 600, fontSize: '0.75rem' }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Security & Audit Button */}
               <button
                 onClick={() => setShowSecurityModal(true)}
                 style={{
-                  padding: '6px 10px',
+                  padding: '8px 10px',
                   background: 'transparent',
                   border: '1px solid rgba(76,175,80,0.5)',
                   borderRadius: '8px',
                   color: '#4CAF50',
-                  fontSize: '0.75rem',
+                  fontSize: '0.85rem',
                   cursor: 'pointer',
-                  marginRight: '8px',
                 }}
                 title="Security & Audit Info"
               >
                 🛡️
               </button>
+              
+              {/* Theme Toggle */}
               <button className="theme-toggle" onClick={toggleTheme}>
                 {isDark ? '☀️' : '🌙'}
               </button>
-              {/* Change Address Button - only show when connected */}
-              {account && (
+              
+              {/* Wallet Connection Area */}
+              {!account ? (
+                // NOT CONNECTED - Show only Connect button
                 <button
+                  className="connect-btn"
                   onClick={() => setShowWalletModal(true)}
+                  disabled={loading}
+                  title="Connect your wallet"
                   style={{
-                    padding: '6px 10px',
-                    background: 'transparent',
-                    border: '1px solid rgba(212,175,55,0.5)',
+                    padding: '8px 16px',
+                    background: 'linear-gradient(135deg, #D4AF37, #F4E5C3)',
+                    border: 'none',
                     borderRadius: '8px',
-                    color: '#D4AF37',
-                    fontSize: '0.75rem',
-                    cursor: 'pointer',
-                    marginRight: '8px',
+                    color: '#000',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: loading ? 'not-allowed' : 'pointer',
                   }}
-                  title="Change wallet address"
                 >
-                  🔄
+                  {loading && <span className="spinner" />}
+                  🔗 Connect
                 </button>
-              )}
-              {/* Wallet Connection Buttons */}
-              {account ? (
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              ) : (
+                // CONNECTED - Show wallet management buttons
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  {/* Change Wallet Button */}
+                  <button
+                    onClick={() => setShowWalletModal(true)}
+                    style={{
+                      padding: '8px 10px',
+                      background: 'transparent',
+                      border: '1px solid rgba(212,175,55,0.5)',
+                      borderRadius: '8px',
+                      color: '#D4AF37',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                    }}
+                    title="Change wallet"
+                  >
+                    🔄
+                  </button>
+                  
                   {/* Switch Account Button */}
                   <button
                     onClick={switchWallet}
                     disabled={loading}
                     style={{
-                      padding: '8px 10px',
-                      background: 'rgba(76,175,80,0.2)',
+                      padding: '8px 12px',
+                      background: 'rgba(76,175,80,0.15)',
                       border: '1px solid rgba(76,175,80,0.5)',
-                      borderRadius: '8px 0 0 8px',
+                      borderRadius: '8px',
                       color: '#4CAF50',
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      cursor: loading ? 'wait' : 'pointer',
+                      cursor: loading ? 'not-allowed' : 'pointer',
                     }}
-                    title="Switch to different wallet account"
+                    title="Switch account"
                   >
-                    🔀
+                    ↔️ Switch
                   </button>
+                  
                   {/* Connected Address & Disconnect */}
                   <button
                     className="connect-btn connected"
                     onClick={disconnectWallet}
                     disabled={loading}
                     style={{
-                      borderRadius: '0 8px 8px 0',
+                      padding: '8px 12px',
+                      background: 'rgba(212,175,55,0.15)',
+                      border: '1px solid rgba(212,175,55,0.5)',
+                      borderRadius: '8px',
+                      color: '#D4AF37',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: loading ? 'not-allowed' : 'pointer',
                     }}
                     title="Click to disconnect"
                   >
@@ -8007,16 +8089,6 @@ export default function App() {
                     🔌 {formatAddress(account)}
                   </button>
                 </div>
-              ) : (
-                <button
-                  className="connect-btn"
-                  onClick={() => setShowWalletModal(true)}
-                  disabled={loading}
-                  title="Connect your wallet"
-                >
-                  {loading && <span className="spinner" />}
-                  🔗 Connect
-                </button>
               )}
             </div>
           </div>
