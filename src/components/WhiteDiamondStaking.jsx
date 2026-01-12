@@ -62,8 +62,8 @@ const WhiteDiamondStaking = ({ provider, account }) => {
       const lpBal = await lpContract.balanceOf(account);
       const dtgcBal = await dtgcContract.balanceOf(account);
       
-      setLpBalance(ethers.utils.formatEther(lpBal));
-      setDtgcBalance(ethers.utils.formatEther(dtgcBal));
+      setLpBalance(ethers.formatEther(lpBal));
+      setDtgcBalance(ethers.formatEther(dtgcBal));
     } catch (error) {
       console.error('Error loading balances:', error);
     }
@@ -79,12 +79,12 @@ const WhiteDiamondStaking = ({ provider, account }) => {
           const position = await contract.getPosition(tokenId);
           return {
             tokenId: tokenId.toString(),
-            amount: ethers.utils.formatEther(position.amount),
-            startTime: position.startTime.toNumber(),
-            unlockTime: position.unlockTime.toNumber(),
-            pending: ethers.utils.formatEther(position.pending),
+            amount: ethers.formatEther(position.amount),
+            startTime: Number(position.startTime),
+            unlockTime: Number(position.unlockTime),
+            pending: ethers.formatEther(position.pending),
             isActive: position.isActive,
-            timeRemaining: position.timeRemaining.toNumber()
+            timeRemaining: Number(position.timeRemaining)
           };
         })
       );
@@ -102,9 +102,9 @@ const WhiteDiamondStaking = ({ provider, account }) => {
       const stats = await contract.getStats();
       
       setContractStats({
-        totalStaked: ethers.utils.formatEther(stats[0]),
+        totalStaked: ethers.formatEther(stats[0]),
         totalNFTs: stats[1].toString(),
-        totalRewardsPaid: ethers.utils.formatEther(stats[2])
+        totalRewardsPaid: ethers.formatEther(stats[2])
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -115,7 +115,7 @@ const WhiteDiamondStaking = ({ provider, account }) => {
     try {
       const lpContract = new ethers.Contract(CONFIG.LP_TOKEN, ERC20_ABI, provider);
       const allowance = await lpContract.allowance(account, CONFIG.WHITE_DIAMOND_NFT);
-      setIsApproved(allowance.gt(ethers.utils.parseEther('1000')));
+      setIsApproved(allowance > ethers.parseEther('1000'));
     } catch (error) {
       console.error('Error checking approval:', error);
     }
@@ -124,11 +124,11 @@ const WhiteDiamondStaking = ({ provider, account }) => {
   const handleApprove = async () => {
     setLoading(true);
     try {
-      const signer = provider.getSigner();
+      const signer = await provider.getSigner();
       const lpContract = new ethers.Contract(CONFIG.LP_TOKEN, ERC20_ABI, signer);
       const tx = await lpContract.approve(
         CONFIG.WHITE_DIAMOND_NFT,
-        ethers.constants.MaxUint256
+        ethers.MaxUint256
       );
       await tx.wait();
       setIsApproved(true);
@@ -148,9 +148,9 @@ const WhiteDiamondStaking = ({ provider, account }) => {
 
     setLoading(true);
     try {
-      const signer = provider.getSigner();
+      const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONFIG.WHITE_DIAMOND_NFT, WHITE_DIAMOND_ABI, signer);
-      const amount = ethers.utils.parseEther(stakeAmount);
+      const amount = ethers.parseEther(stakeAmount);
       
       const tx = await contract.stake(amount);
       await tx.wait();
@@ -170,7 +170,7 @@ const WhiteDiamondStaking = ({ provider, account }) => {
   const handleClaim = async (tokenId) => {
     setLoading(true);
     try {
-      const signer = provider.getSigner();
+      const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONFIG.WHITE_DIAMOND_NFT, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.claimRewards(tokenId);
       await tx.wait();
@@ -189,7 +189,7 @@ const WhiteDiamondStaking = ({ provider, account }) => {
   const handleWithdraw = async (tokenId) => {
     setLoading(true);
     try {
-      const signer = provider.getSigner();
+      const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONFIG.WHITE_DIAMOND_NFT, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.withdraw(tokenId);
       await tx.wait();
@@ -206,13 +206,13 @@ const WhiteDiamondStaking = ({ provider, account }) => {
   };
 
   const handleEmergencyWithdraw = async (tokenId) => {
-    if (!confirm('⚠️ Emergency withdraw will forfeit 20% of rewards + exit fees. Continue?')) {
+    if (!window.confirm('⚠️ Emergency withdraw will forfeit 20% of rewards + exit fees. Continue?')) {
       return;
     }
 
     setLoading(true);
     try {
-      const signer = provider.getSigner();
+      const signer = await provider.getSigner();
       const contract = new ethers.Contract(CONFIG.WHITE_DIAMOND_NFT, WHITE_DIAMOND_ABI, signer);
       const tx = await contract.emergencyWithdraw(tokenId);
       await tx.wait();
