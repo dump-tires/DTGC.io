@@ -135,6 +135,63 @@ const TOKENS = {
     logo: '🟠',
     isNative: false,
   },
+  // Additional popular PulseChain tokens
+  WPLS: {
+    address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
+    symbol: 'WPLS',
+    name: 'Wrapped PLS',
+    decimals: 18,
+    logo: '💜',
+    isNative: false,
+  },
+  EHEX: {
+    address: '0x57fde0a71132198bbec939b98976993d8d89d225',
+    symbol: 'eHEX',
+    name: 'HEX from ETH',
+    decimals: 8,
+    logo: '⬡',
+    isNative: false,
+  },
+  LOAN: {
+    address: '0x9159f1d2a9f51998fc9ab03fbd8f7c44ae1bd8e7',
+    symbol: 'LOAN',
+    name: 'Liquid Loans',
+    decimals: 18,
+    logo: '🏦',
+    isNative: false,
+  },
+  PLSP: {
+    address: '0x3657952d7ba5a0a4799809552091a17a46e1ceeb',
+    symbol: 'PLSP',
+    name: 'PulsePot',
+    decimals: 12,
+    logo: '🎰',
+    isNative: false,
+  },
+  SPARK: {
+    address: '0x6386704cd6f7a584ea9d23ccca66af7eba5a727e',
+    symbol: 'SPARK',
+    name: 'SparkSwap',
+    decimals: 18,
+    logo: '⚡',
+    isNative: false,
+  },
+  NINE: {
+    address: '0x09b5de0c4b5b7ca05d5fd3b7be6ff4b21a68c20d',
+    symbol: '9MM',
+    name: '9mm',
+    decimals: 18,
+    logo: '🔫',
+    isNative: false,
+  },
+  PDX: {
+    address: '0x3a04f900357654bad3c4f45d4e10fcb96e0b45c9',
+    symbol: 'PDX',
+    name: 'PulseDogecoin',
+    decimals: 18,
+    logo: '🐕',
+    isNative: false,
+  },
 };
 
 // Known LP pairs - pre-existing pools (for quick lookup)
@@ -357,7 +414,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     if (userAddress && provider) fetchAllBalances();
   }, [userAddress, provider, fetchAllBalances]);
 
-  // Wallet scanner
+  // Wallet scanner - FAST multi-source approach
   const scanWalletTokens = useCallback(async () => {
     if (!provider || !userAddress) return;
     setLoadingBalances(true);
@@ -366,27 +423,81 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     try {
       const foundTokens = [];
       const seenAddresses = new Set();
+      const addr = userAddress.toLowerCase();
       
-      const [plsBal, pulseScanData] = await Promise.all([
-        provider.getBalance(userAddress),
-        fetch(`${CONFIG.PULSESCAN_API}/addresses/${userAddress}/token-balances`).then(r => r.ok ? r.json() : []).catch(() => []),
-      ]);
-      
+      // 1. Get PLS balance first (instant)
+      const plsBal = await provider.getBalance(userAddress);
       const plsBalNum = parseFloat(ethers.formatEther(plsBal));
       if (plsBalNum > 0) {
-        foundTokens.push({ symbol: 'PLS', name: 'PulseChain', address: null, decimals: 18, balance: plsBalNum, icon: '💜', usdValue: plsBalNum * livePrices.PLS, price: livePrices.PLS });
+        foundTokens.push({ 
+          symbol: 'PLS', 
+          name: 'PulseChain', 
+          address: null, 
+          decimals: 18, 
+          balance: plsBalNum, 
+          icon: '💜', 
+          usdValue: plsBalNum * (livePrices.PLS || 0.000018), 
+          price: livePrices.PLS || 0.000018 
+        });
+        seenAddresses.add('native');
       }
       setBalances(prev => ({ ...prev, PLS: plsBalNum }));
       
-      if (Array.isArray(pulseScanData)) {
-        for (const item of pulseScanData) {
+      // 2. Parallel fetch from multiple sources
+      const [pulseScanTokens, pulseScanV1Tokens, knownTokenBalances] = await Promise.all([
+        // PulseScan API v2
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`)
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => []),
+        // PulseScan API v1 (backup)
+        fetch(`https://api.scan.pulsechain.com/api?module=account&action=tokenlist&address=${addr}`)
+          .then(r => r.ok ? r.json() : { result: [] })
+          .then(d => d.result || [])
+          .catch(() => []),
+        // Direct RPC for known tokens (fastest, most reliable)
+        Promise.all(Object.entries(TOKENS).filter(([sym]) => sym !== 'PLS').map(async ([sym, token]) => {
+          try {
+            const contract = new ethers.Contract(token.address, ['function balanceOf(address) view returns (uint256)'], provider);
+            const bal = await contract.balanceOf(userAddress);
+            const balNum = parseFloat(ethers.formatUnits(bal, token.decimals));
+            if (balNum > 0.000001) {
+              return { symbol: sym, ...token, balance: balNum };
+            }
+          } catch {}
+          return null;
+        }))
+      ]);
+      
+      // Process known token balances first (highest priority)
+      for (const token of knownTokenBalances.filter(Boolean)) {
+        const tokenAddr = token.address?.toLowerCase();
+        if (tokenAddr && !seenAddresses.has(tokenAddr)) {
+          seenAddresses.add(tokenAddr);
+          const price = livePrices[token.symbol] || 0;
+          foundTokens.push({
+            symbol: token.symbol,
+            name: token.name,
+            address: token.address,
+            decimals: token.decimals,
+            balance: token.balance,
+            icon: token.logo || '🔸',
+            usdValue: token.balance * price,
+            price
+          });
+          setBalances(prev => ({ ...prev, [token.symbol]: token.balance }));
+        }
+      }
+      
+      // Process PulseScan v2 API response
+      if (Array.isArray(pulseScanTokens)) {
+        for (const item of pulseScanTokens) {
           const tokenAddr = item.token?.address?.toLowerCase();
           if (!tokenAddr || seenAddresses.has(tokenAddr)) continue;
           seenAddresses.add(tokenAddr);
           
           const decimals = parseInt(item.token?.decimals) || 18;
           const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
-          if (bal <= 0) continue;
+          if (bal <= 0.000001) continue;
           
           const sym = (item.token?.symbol || '').toUpperCase();
           const price = livePrices[sym] || 0;
@@ -395,21 +506,91 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             if (t.address?.toLowerCase() === tokenAddr) icon = t.logo;
           });
           
-          foundTokens.push({ symbol: item.token?.symbol || 'UNKNOWN', name: item.token?.name || 'Unknown', address: item.token?.address, decimals, balance: bal, icon, usdValue: bal * price, price });
+          foundTokens.push({ 
+            symbol: item.token?.symbol || 'UNKNOWN', 
+            name: item.token?.name || 'Unknown', 
+            address: item.token?.address, 
+            decimals, 
+            balance: bal, 
+            icon, 
+            usdValue: bal * price, 
+            price 
+          });
           if (TOKENS[sym]) setBalances(prev => ({ ...prev, [sym]: bal }));
         }
       }
       
+      // Process PulseScan v1 API response (backup)
+      if (Array.isArray(pulseScanV1Tokens)) {
+        for (const item of pulseScanV1Tokens) {
+          const tokenAddr = item.contractAddress?.toLowerCase();
+          if (!tokenAddr || seenAddresses.has(tokenAddr)) continue;
+          seenAddresses.add(tokenAddr);
+          
+          const decimals = parseInt(item.decimals) || 18;
+          const bal = parseFloat(item.balance || '0') / Math.pow(10, decimals);
+          if (bal <= 0.000001) continue;
+          
+          const sym = (item.symbol || '').toUpperCase();
+          const price = livePrices[sym] || 0;
+          let icon = '🔸';
+          Object.values(TOKENS).forEach(t => {
+            if (t.address?.toLowerCase() === tokenAddr) icon = t.logo;
+          });
+          
+          foundTokens.push({ 
+            symbol: item.symbol || 'UNKNOWN', 
+            name: item.name || 'Unknown', 
+            address: item.contractAddress, 
+            decimals, 
+            balance: bal, 
+            icon, 
+            usdValue: bal * price, 
+            price 
+          });
+          if (TOKENS[sym]) setBalances(prev => ({ ...prev, [sym]: bal }));
+        }
+      }
+      
+      // Fetch prices for tokens without prices from DexScreener (batch lookup)
+      const tokensNeedingPrices = foundTokens.filter(t => t.price === 0 && t.address && t.balance > 0);
+      if (tokensNeedingPrices.length > 0) {
+        try {
+          // DexScreener allows batch lookups - get prices for unknown tokens
+          const addressBatch = tokensNeedingPrices.slice(0, 30).map(t => t.address).join(',');
+          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addressBatch}`);
+          if (dexRes.ok) {
+            const dexData = await dexRes.json();
+            if (dexData?.pairs) {
+              for (const pair of dexData.pairs) {
+                const tokenAddr = pair.baseToken?.address?.toLowerCase();
+                const token = foundTokens.find(t => t.address?.toLowerCase() === tokenAddr);
+                if (token && pair.priceUsd) {
+                  token.price = parseFloat(pair.priceUsd);
+                  token.usdValue = token.balance * token.price;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.log('DexScreener price lookup failed:', e.message);
+        }
+      }
+      
+      // Sort by USD value (highest first)
       foundTokens.sort((a, b) => (b.usdValue || 0) - (a.usdValue || 0));
       setWalletTokens(foundTokens);
       setLastScanTime(Date.now());
       const total = foundTokens.reduce((sum, t) => sum + (t.usdValue || 0), 0);
       setTotalPortfolioValue(total);
-      await fetchLpPositions();
+      
+      // Fetch LP positions in background
+      fetchLpPositions();
+      
       showToastMsg(`✅ Found ${foundTokens.length} tokens (${formatUSD(total)})`, 'success');
     } catch (err) {
       console.error('Scan error:', err);
-      showToastMsg('Scan failed', 'error');
+      showToastMsg('Scan failed: ' + err.message, 'error');
     } finally {
       setLoadingBalances(false);
     }
@@ -418,44 +599,35 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const fetchLpPositions = useCallback(async () => {
     if (!provider || !userAddress) return;
     try {
-      const factoryV1 = new ethers.Contract(CONFIG.FACTORY, FACTORY_ABI, provider);
-      const factoryV2 = new ethers.Contract(CONFIG.FACTORY_V2, FACTORY_ABI, provider);
       const positions = [];
-      const pairsToCheck = [['DTGC', 'PLS'], ['DTGC', 'URMOM'], ['URMOM', 'PLS'], ['PLSX', 'PLS'], ['HEX', 'PLS']];
       
-      await Promise.all(pairsToCheck.map(async ([sym0, sym1]) => {
+      // Use KNOWN_PAIRS for instant lookup (no factory calls needed)
+      const lpPairs = [
+        { name: 'DTGC/PLS', address: KNOWN_PAIRS['DTGC-PLS'] },
+        { name: 'DTGC/URMOM', address: KNOWN_PAIRS['DTGC-URMOM'] },
+        { name: 'URMOM/PLS', address: KNOWN_PAIRS['URMOM-PLS'] },
+        { name: 'PLSX/PLS', address: KNOWN_PAIRS['PLSX-PLS'] },
+        { name: 'HEX/PLS', address: KNOWN_PAIRS['HEX-PLS'] },
+      ];
+      
+      // Parallel fetch all LP balances at once
+      const balances = await Promise.all(lpPairs.map(async (pair) => {
+        if (!pair.address) return null;
         try {
-          const token0 = TOKENS[sym0];
-          const token1 = TOKENS[sym1];
-          if (!token0 || !token1) return;
-          
-          const addr0 = getAddr(token0.address);
-          const addr1 = getAddr(token1.address);
-          
-          // Try V1 first, then V2
-          let lpAddr = null;
-          try {
-            lpAddr = await factoryV1.getPair(addr0, addr1);
-          } catch {}
-          
-          if (!lpAddr || lpAddr === ethers.ZeroAddress) {
-            try {
-              lpAddr = await factoryV2.getPair(addr0, addr1);
-            } catch {}
-          }
-          
-          if (!lpAddr || lpAddr === ethers.ZeroAddress) return;
-          
-          const lpContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
+          const lpContract = new ethers.Contract(pair.address, ['function balanceOf(address) view returns (uint256)'], provider);
           const lpBal = await lpContract.balanceOf(userAddress);
           const lpBalNum = parseFloat(ethers.formatEther(lpBal));
-          
-          if (lpBalNum > 0) positions.push({ name: `${sym0}/${sym1}`, address: lpAddr, balance: lpBalNum });
+          if (lpBalNum > 0.000001) {
+            return { name: pair.name, address: pair.address, balance: lpBalNum };
+          }
         } catch {}
+        return null;
       }));
       
-      setLpPositions(positions);
-    } catch {}
+      setLpPositions(balances.filter(Boolean));
+    } catch (err) {
+      console.error('LP positions error:', err);
+    }
   }, [provider, userAddress]);
 
   useEffect(() => {
