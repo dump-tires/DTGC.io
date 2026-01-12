@@ -4304,13 +4304,13 @@ export default function App() {
 
   // DTGC Supply Dynamics state
   const [supplyDynamics, setSupplyDynamics] = useState({
-    dao: SUPPLY_WALLETS.dao.expected,
+    dao: 0, // Shows as 0 until loaded
     dev: SUPPLY_WALLETS.dev.expected,
     lpLocked: SUPPLY_WALLETS.lpLocked.expected,
-    burned: 0,
-    staked: 0,
+    burned: 22240000, // ~22.24M (estimated)
+    staked: 30820000, // ~30.82M (estimated)
     circulating: SUPPLY_WALLETS.circulating.expected,
-    rewardsPool: 0,
+    rewardsPool: 82820000, // ~82.82M (estimated)
     lastUpdated: null,
   });
 
@@ -4365,37 +4365,36 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Fetch live supply dynamics (wallet balances) from PulseChain API
+  // Fetch live supply dynamics (wallet balances) from PulseChain API - PARALLEL for speed
   const fetchSupplyDynamics = useCallback(async () => {
     try {
-      // Fetch DAO Treasury balance
-      const daoRes = await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dao.address}/token-balances`);
-      const daoData = await daoRes.json();
-      const daoBalance = daoData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
-      const daoDtgc = daoBalance ? parseFloat(daoBalance.value) / 1e18 : 0;
+      // Parallel fetch ALL balances at once (4x faster!)
+      const [daoRes, devRes, burnRes, stakingRes] = await Promise.all([
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dao.address}/token-balances`).catch(() => null),
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dev.address}/token-balances`).catch(() => null),
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.burn.address}/token-balances`).catch(() => null),
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${CONTRACT_ADDRESSES.stakingV4}/token-balances`).catch(() => null),
+      ]);
 
-      // Fetch Dev Wallet balance (kept for internal tracking, not shown in UI)
-      const devRes = await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dev.address}/token-balances`);
-      const devData = await devRes.json();
-      const devBalance = devData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
-      const devDtgc = devBalance ? parseFloat(devBalance.value) / 1e18 : SUPPLY_WALLETS.dev.expected;
+      // Parse all responses in parallel
+      const [daoData, devData, burnData, stakingData] = await Promise.all([
+        daoRes?.ok ? daoRes.json() : [],
+        devRes?.ok ? devRes.json() : [],
+        burnRes?.ok ? burnRes.json() : [],
+        stakingRes?.ok ? stakingRes.json() : [],
+      ]);
 
-      // Fetch Burn address balance
-      const burnRes = await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.burn.address}/token-balances`);
-      const burnData = await burnRes.json();
-      const burnBalance = burnData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
-      const burnedDtgc = burnBalance ? parseFloat(burnBalance.value) / 1e18 : 0;
+      // Extract DTGC balances
+      const findDtgcBalance = (data) => {
+        if (!Array.isArray(data)) return 0;
+        const balance = data.find(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
+        return balance ? parseFloat(balance.value) / 1e18 : 0;
+      };
 
-      // Fetch Rewards Pool (V4 Staking Contract DTGC balance)
-      let rewardsPoolDtgc = 0;
-      try {
-        const stakingRes = await fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${CONTRACT_ADDRESSES.stakingV4}/token-balances`);
-        const stakingData = await stakingRes.json();
-        const stakingBalance = stakingData?.find?.(t => t.token?.address?.toLowerCase() === DTGC_TOKEN_ADDRESS.toLowerCase());
-        rewardsPoolDtgc = stakingBalance ? parseFloat(stakingBalance.value) / 1e18 : 0;
-      } catch (e) {
-        console.warn('Failed to fetch rewards pool:', e);
-      }
+      const daoDtgc = findDtgcBalance(daoData);
+      const devDtgc = findDtgcBalance(devData) || SUPPLY_WALLETS.dev.expected;
+      const burnedDtgc = findDtgcBalance(burnData);
+      const rewardsPoolDtgc = findDtgcBalance(stakingData);
 
       // Calculate circulating = Total - DAO - Dev - LP - Burned - Staked
       const totalSupply = DTGC_TOTAL_SUPPLY;
