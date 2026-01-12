@@ -8982,6 +8982,29 @@ export default function App() {
                       <span className="tier-feature-value" style={{ color: '#9C27B0', fontWeight: '700' }}>{V5_DIAMOND_PLUS_TIER.boost}x!!</span>
                     </div>
                   </div>
+                  {/* Multiplier Paper Link */}
+                  <a 
+                    href="/docs/DTGC_Multiplier_Paper.pdf" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      display: 'block',
+                      marginTop: '12px',
+                      padding: '8px 12px',
+                      background: 'rgba(156,39,176,0.15)',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(156,39,176,0.3)',
+                      textDecoration: 'none',
+                      textAlign: 'center',
+                      fontSize: '0.7rem',
+                      color: '#CE93D8',
+                      fontWeight: '600',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    📄 Multiplier Paper
+                  </a>
                   <span className="tier-badge lp" style={{ background: 'linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%)' }}>LP+</span>
                 </div>
                   );
