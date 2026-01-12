@@ -1056,7 +1056,7 @@ const getStyles = (isDark) => `
 
   /* Hero Section */
   .hero-section {
-    padding: 140px 40px 80px;
+    padding: 160px 40px 80px;
     text-align: center;
     position: relative;
   }
@@ -1201,12 +1201,17 @@ const getStyles = (isDark) => `
   @media (max-width: 1200px) { 
     .tiers-grid { grid-template-columns: repeat(2, 1fr); }
   }
+  @media (max-width: 1024px) {
+    /* Hide metal prices on smaller screens for cleaner header */
+    .price-ticker-compact { display: none !important; }
+    .hero-section { padding: 150px 30px 60px !important; }
+  }
   @media (max-width: 768px) { 
     .tiers-grid { grid-template-columns: 1fr; }
     .tier-row-top { grid-template-columns: 1fr; }
     .hero-title { font-size: 1.8rem !important; letter-spacing: 2px !important; }
     .hero-subtitle { font-size: 1rem !important; letter-spacing: 1px !important; margin-bottom: 20px !important; }
-    .hero-section { padding: 100px 15px 40px !important; }
+    .hero-section { padding: 130px 15px 40px !important; }
     .hero-stats { gap: 12px !important; }
     .hero-stat { padding: 14px 18px !important; min-width: 130px !important; }
     .hero-stat-value { font-size: 1.3rem !important; }
@@ -1272,6 +1277,14 @@ const getStyles = (isDark) => `
     }
     .position-card-mobile .date-display {
       font-size: 0.65rem !important;
+    }
+    
+    /* Hide price tickers on mobile for cleaner header */
+    .price-ticker-compact {
+      display: none !important;
+    }
+    .nav-right {
+      gap: 4px !important;
     }
   }
 
@@ -7920,37 +7933,30 @@ export default function App() {
               </button>
             </nav>
 
-            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {/* Metal & Crypto Prices - Compact Single Row */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '4px 10px',
-                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
-                borderRadius: '16px',
-                border: '1px solid rgba(212,175,55,0.2)',
-                fontSize: '0.6rem',
-              }}>
-                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
-                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(2)}</span>
-                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
+            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+              {/* Consolidated Price Ticker - Hover to Expand */}
+              <div 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 10px',
+                  background: isDark ? 'rgba(212,175,55,0.08)' : 'rgba(212,175,55,0.05)',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(212,175,55,0.15)',
+                  fontSize: '0.55rem',
+                  position: 'relative',
+                  cursor: 'default',
+                }}
+                className="price-ticker-compact"
+              >
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600 }}>🥇 ${metalPrices.gold.toLocaleString()}</span>
+                <span style={{ color: '#444' }}>|</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600 }}>🥈 ${metalPrices.silver.toFixed(2)}</span>
+                <span style={{ color: '#444' }}>|</span>
+                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600 }}>🥉 ${metalPrices.copper.toFixed(2)}</span>
               </div>
-              {/* Crypto Prices - Compact */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 8px',
-                background: 'rgba(33,150,243,0.08)',
-                borderRadius: '16px',
-                border: '1px solid rgba(33,150,243,0.15)',
-                fontSize: '0.55rem',
-              }}>
-                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{(cryptoPrices.btc/1000).toFixed(1)}K</span>
-                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
-              </div>
-              {/* PLS/PLSX Prices */}
+              {/* PLS/PLSX Prices - Most Relevant for Users */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
