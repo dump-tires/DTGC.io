@@ -327,15 +327,27 @@ const getV19CorrectedAPR = (contractApr, tierName, isLP = false) => {
     '2': 18.2,
   };
   
+  // Normalize tier name
+  let tier;
+  if (typeof tierName === 'number') {
+    const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
+    tier = TIER_NAMES[tierName] || 'GOLD';
+  } else {
+    tier = (tierName || 'GOLD').toString().toUpperCase();
+  }
+  
+  // ALWAYS use V19 correct APR for LP tiers (Diamond/Diamond+)
+  // This ensures correct payouts regardless of what contract returns
+  if (isLP && (tier === 'DIAMOND' || tier === 'DIAMOND+')) {
+    const correctedApr = V19_CORRECT_APRS[tier];
+    if (contractApr !== correctedApr) {
+      console.log(`🔧 V19 APR Correction (LP): ${contractApr}% → ${correctedApr}% for ${tier}`);
+    }
+    return correctedApr;
+  }
+  
   // If contract APR is absurdly high (>100%), use V19 corrected value
   if (contractApr > 100) {
-    let tier;
-    if (typeof tierName === 'number') {
-      const TIER_NAMES = ['SILVER', 'GOLD', 'WHALE'];
-      tier = TIER_NAMES[tierName] || 'GOLD';
-    } else {
-      tier = (tierName || 'GOLD').toString().toUpperCase();
-    }
     const correctedApr = V19_CORRECT_APRS[tier] || (isLP ? 42 : 16.8);
     console.log(`🔧 V19 APR Correction: ${contractApr}% → ${correctedApr}% for ${tier}`);
     return correctedApr;
@@ -4382,6 +4394,9 @@ export default function App() {
   // Fetch live supply dynamics (wallet balances) from PulseChain API - PARALLEL for speed
   const fetchSupplyDynamics = useCallback(async () => {
     try {
+      // URMOM token address for burned tracking
+      const URMOM_TOKEN = CONTRACT_ADDRESSES.urmom;
+      
       // Parallel fetch ALL balances - V4 + V5 contracts only (not V3)
       const [daoRes, devRes, burnRes, stakingV4Res, lpStakingV4Res, flexV4Res, whiteDiamondRes, tokenInfoRes] = await Promise.all([
         fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dao.address}/token-balances`).catch(() => null),
@@ -4416,9 +4431,18 @@ export default function App() {
         return balance ? parseFloat(balance.value) / 1e18 : 0;
       };
 
+      // Extract URMOM balance (for burned tracking)
+      const findUrmomBalance = (data) => {
+        if (!Array.isArray(data)) return 0;
+        const balance = data.find(t => t.token?.address?.toLowerCase() === URMOM_TOKEN.toLowerCase());
+        return balance ? parseFloat(balance.value) / 1e18 : 0;
+      };
+
       const daoDtgc = findDtgcBalance(daoData);
       const devDtgc = findDtgcBalance(devData) || SUPPLY_WALLETS.dev.expected;
-      const burnedDtgc = findDtgcBalance(burnData);
+      
+      // Burned = URMOM tokens in burn address
+      const burnedUrmom = findUrmomBalance(burnData);
       
       // Sum V4 + V5 staking contracts for total rewards pool
       const rewardsPoolDtgc = 
@@ -4432,13 +4456,13 @@ export default function App() {
 
       // Calculate circulating = Total - DAO - Dev - LP - Burned - Staked
       const totalSupply = DTGC_TOTAL_SUPPLY;
-      const circulating = totalSupply - daoDtgc - devDtgc - SUPPLY_WALLETS.lpLocked.expected - burnedDtgc;
+      const circulating = totalSupply - daoDtgc - devDtgc - SUPPLY_WALLETS.lpLocked.expected;
 
       setSupplyDynamics({
         dao: daoDtgc,
         dev: devDtgc,
         lpLocked: SUPPLY_WALLETS.lpLocked.expected,
-        burned: burnedDtgc,
+        burned: burnedUrmom, // URMOM burned
         staked: 0, // Will be updated from contract
         circulating: Math.max(0, circulating),
         rewardsPool: rewardsPoolDtgc,
@@ -4452,7 +4476,7 @@ export default function App() {
         setLiveHolders(prev => ({ ...prev, totalHolders: holderCount }));
       }
 
-      console.log('📊 Supply dynamics updated:', { dao: daoDtgc, burned: burnedDtgc, rewardsPool: rewardsPoolDtgc, holders: holderCount });
+      console.log('📊 Supply dynamics updated:', { dao: daoDtgc, burnedUrmom, rewardsPool: rewardsPoolDtgc, holders: holderCount });
     } catch (err) {
       console.warn('⚠️ Failed to fetch supply dynamics:', err.message);
       // Set loading false even on error
@@ -6740,7 +6764,17 @@ export default function App() {
                   console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR`);
                 } else {
                   // Regular Diamond/Diamond+ stake
-                  const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+                  // Determine tier from lpType AND validate with boostBps
+                  // lpType: 0 = Diamond (DTGC/PLS), 1 = Diamond+ (DTGC/URMOM)
+                  // boostBps: 15000 = 1.5x (Diamond), 20000 = 2.0x (Diamond+)
+                  const boostValue = Number(stake.boostBps) / 10000;
+                  
+                  // Use boostBps as primary indicator since it's more reliable
+                  // boostBps >= 1.8 means Diamond+ (2.0x), otherwise Diamond (1.5x)
+                  const isDiamondPlus = boostValue >= 1.8 || lpTypeNum === 1;
+                  const lpTierName = isDiamondPlus ? 'DIAMOND+' : 'DIAMOND';
+                  
+                  console.log(`📊 LP Tier detection: lpType=${lpTypeNum}, boostBps=${stake.boostBps} (${boostValue}x) → ${lpTierName}`);
                   
                   positions.push({
                     id: `lp-stake-${originalIndex}`,
@@ -6753,15 +6787,15 @@ export default function App() {
                     endTime: Number(stake.unlockTime) * 1000,
                     lockPeriod: Number(stake.lockPeriod),
                     apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
-                    boostMultiplier: Number(stake.boostBps) / 10000,
-                    lpType: lpTypeNum,
+                    boostMultiplier: boostValue,
+                    lpType: isDiamondPlus ? 1 : 0, // Normalize lpType based on boost
                     tier: lpTierName,
                     tierName: lpTierName,
                     isActive: stake.isActive,
                     timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
                     isV4: true,
                   });
-                  console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount);
+                  console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, `${lpAmount} LP @ ${getV19CorrectedAPR(rawLpApr, lpTierName, true)}% APR`);
                 }
               });
             }
@@ -6895,7 +6929,14 @@ export default function App() {
             
             if (lpAmount > 0) {
               const rawLpApr = Number(lpPosition[4] || 0) / 100;
-              const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+              const boostValue = Number(lpPosition[5] || 0) / 10000;
+              
+              // Use boostBps as primary indicator since it's more reliable
+              // boostBps >= 1.8 means Diamond+ (2.0x), otherwise Diamond (1.5x)
+              const isDiamondPlus = boostValue >= 1.8 || lpTypeNum === 1;
+              const lpTierName = isDiamondPlus ? 'DIAMOND+' : 'DIAMOND';
+              
+              console.log(`📊 V3 LP Tier detection: lpType=${lpTypeNum}, boost=${boostValue}x → ${lpTierName}`);
               
               // Check for duplicate from V4
               const existingV4LP = positions.find(p => p.isLP && p.amount === lpAmount && p.isV4);
@@ -6910,15 +6951,15 @@ export default function App() {
                   endTime: Number(lpPosition[2] || 0) * 1000,
                   lockPeriod: Number(lpPosition[3] || 0),
                   apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
-                  boostMultiplier: Number(lpPosition[5] || 0) / 10000,
-                  lpType: lpTypeNum,
+                  boostMultiplier: boostValue,
+                  lpType: isDiamondPlus ? 1 : 0, // Normalize based on boost
                   tier: lpTierName,
                   tierName: lpTierName,
                   isActive: lpIsActive || lpAmount > 0,
                   timeRemaining: Number(lpPosition[8] || 0),
                   isV4: false, // V3 Legacy
                 });
-                console.log('✅ Added V3 Legacy LP position');
+                console.log(`✅ Added V3 Legacy LP position: ${lpTierName} @ ${getV19CorrectedAPR(rawLpApr, lpTierName, true)}% APR`);
               }
             }
           }
@@ -8676,7 +8717,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Burned */}
+              {/* URMOM Burned */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(244,67,54,0.1) 0%, rgba(244,67,54,0.05) 100%)',
                 border: '1px solid rgba(244,67,54,0.3)',
@@ -8685,12 +8726,12 @@ export default function App() {
                 textAlign: 'center',
               }}>
                 <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🔥</div>
-                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>BURNED FOREVER</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>URMOM BURNED</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#F44336' }}>
                   {supplyDynamics.burned === null ? '⏳ Loading...' : formatNumber(supplyDynamics.burned)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#F44336', fontWeight: 600 }}>
-                  {supplyDynamics.burned === null ? '' : `${((supplyDynamics.burned / DTGC_TOTAL_SUPPLY) * 100).toFixed(2)}%`}
+                  {supplyDynamics.burned === null ? '' : `${((supplyDynamics.burned / 1000000000) * 100).toFixed(2)}%`}
                 </div>
                 <div style={{ 
                   height: '4px',
@@ -8700,11 +8741,12 @@ export default function App() {
                   marginTop: '4px'
                 }}>
                   <div style={{
-                    width: `${Math.min(((supplyDynamics.burned || 0) / DTGC_TOTAL_SUPPLY) * 100, 100)}%`,
+                    width: `${Math.min(((supplyDynamics.burned || 0) / 1000000000) * 100, 100)}%`,
                     height: '100%',
                     background: '#F44336',
                     borderRadius: '2px',
                   }} />
+                </div>
                 </div>
               </div>
 
