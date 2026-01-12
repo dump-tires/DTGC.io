@@ -538,7 +538,7 @@ const CONTRACT_ADDRESSES = {
   lpDtgcUrmom: '0x670c972Bb5388E087a2934a063064d97278e01F3',   // DTGC/URMOM LP (Diamond+)
   lpDtgcPls: '0xc33944a6020FB5620001A202Eaa67214A1AB9193',    // DTGC/PLS LP (Diamond)
   daoTreasury: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
-  // V3 Contracts (legacy)
+  // V3 Contracts (legacy - NOT used for rewards)
   stakingV3: '0x0ba3d882f21b935412608d181501d59e99a8D0f9',
   lpStakingV3: '0x7C328FFF32AD66a03218D8A953435283782Bc84F',
   daoVotingV3: '0x4828A40bEd10c373718cA10B53A34208636CD8C4',
@@ -546,7 +546,9 @@ const CONTRACT_ADDRESSES = {
   stakingV4: '0xEbC6802e6a2054FbF2Cb450aEc5E2916965b1718',
   lpStakingV4: '0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231',
   // Flex V4 - 10% APR No Lock LP Staking
-  lpStakingFlexV4: '0x5ccea11cab6a17659ce1860f5b0b6e4a8cea54d6', // Flex LP Staking - 10% APR No Lock
+  lpStakingFlexV4: '0x5ccea11cab6a17659ce1860f5b0b6e4a8cea54d6',
+  // V5 White Diamond NFT Staking - 70% APR 90 Day Lock
+  whiteDiamondNFT: '0x4424922Ee372268de9615b6e38E20cFD5e4b9D2D',
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -4268,7 +4270,7 @@ export default function App() {
       ...w,
       label: i < 3 ? `🐋 Whale ${i + 1}` : i < 8 ? `💎 Diamond ${i - 2}` : `🥇 Gold ${i - 7}`,
     })),
-    totalHolders: 50,
+    totalHolders: 0, // Will be fetched from API
     trackedBalance: HOLDER_WALLETS.reduce((sum, h) => sum + h.balance, 0), // ~7.2M from fallback
     trackedPctOfFloat: 8.0, // Approximate
     trackedPctOfTotal: 0.72, // 7.2M / 1B
@@ -4304,14 +4306,16 @@ export default function App() {
 
   // DTGC Supply Dynamics state
   const [supplyDynamics, setSupplyDynamics] = useState({
-    dao: 0, // Shows as 0 until loaded
+    dao: null, // null = loading
     dev: SUPPLY_WALLETS.dev.expected,
     lpLocked: SUPPLY_WALLETS.lpLocked.expected,
-    burned: 22240000, // ~22.24M (estimated)
-    staked: 30820000, // ~30.82M (estimated)
+    burned: null, // null = loading
+    staked: 30820000,
     circulating: SUPPLY_WALLETS.circulating.expected,
-    rewardsPool: 82820000, // ~82.82M (estimated)
+    rewardsPool: null, // null = loading
+    holderCount: null, // null = loading
     lastUpdated: null,
+    loading: true,
   });
 
   // Toast notification helper - defined early so all callbacks can use it
@@ -4368,20 +4372,31 @@ export default function App() {
   // Fetch live supply dynamics (wallet balances) from PulseChain API - PARALLEL for speed
   const fetchSupplyDynamics = useCallback(async () => {
     try {
-      // Parallel fetch ALL balances at once (4x faster!)
-      const [daoRes, devRes, burnRes, stakingRes] = await Promise.all([
+      // Parallel fetch ALL balances - V4 + V5 contracts only (not V3)
+      const [daoRes, devRes, burnRes, stakingV4Res, lpStakingV4Res, flexV4Res, whiteDiamondRes, tokenInfoRes] = await Promise.all([
         fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dao.address}/token-balances`).catch(() => null),
         fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.dev.address}/token-balances`).catch(() => null),
         fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${SUPPLY_WALLETS.burn.address}/token-balances`).catch(() => null),
+        // V4 Staking Contracts
         fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${CONTRACT_ADDRESSES.stakingV4}/token-balances`).catch(() => null),
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${CONTRACT_ADDRESSES.lpStakingV4}/token-balances`).catch(() => null),
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${CONTRACT_ADDRESSES.lpStakingFlexV4}/token-balances`).catch(() => null),
+        // V5 White Diamond NFT Staking
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${CONTRACT_ADDRESSES.whiteDiamondNFT}/token-balances`).catch(() => null),
+        // Token info for holder count
+        fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${DTGC_TOKEN_ADDRESS}`).catch(() => null),
       ]);
 
       // Parse all responses in parallel
-      const [daoData, devData, burnData, stakingData] = await Promise.all([
+      const [daoData, devData, burnData, stakingV4Data, lpStakingV4Data, flexV4Data, whiteDiamondData, tokenInfo] = await Promise.all([
         daoRes?.ok ? daoRes.json() : [],
         devRes?.ok ? devRes.json() : [],
         burnRes?.ok ? burnRes.json() : [],
-        stakingRes?.ok ? stakingRes.json() : [],
+        stakingV4Res?.ok ? stakingV4Res.json() : [],
+        lpStakingV4Res?.ok ? lpStakingV4Res.json() : [],
+        flexV4Res?.ok ? flexV4Res.json() : [],
+        whiteDiamondRes?.ok ? whiteDiamondRes.json() : [],
+        tokenInfoRes?.ok ? tokenInfoRes.json() : null,
       ]);
 
       // Extract DTGC balances
@@ -4394,7 +4409,16 @@ export default function App() {
       const daoDtgc = findDtgcBalance(daoData);
       const devDtgc = findDtgcBalance(devData) || SUPPLY_WALLETS.dev.expected;
       const burnedDtgc = findDtgcBalance(burnData);
-      const rewardsPoolDtgc = findDtgcBalance(stakingData);
+      
+      // Sum V4 + V5 staking contracts for total rewards pool
+      const rewardsPoolDtgc = 
+        findDtgcBalance(stakingV4Data) + 
+        findDtgcBalance(lpStakingV4Data) + 
+        findDtgcBalance(flexV4Data) +
+        findDtgcBalance(whiteDiamondData);
+
+      // Get holder count from token info
+      const holderCount = tokenInfo?.holders_count || 0;
 
       // Calculate circulating = Total - DAO - Dev - LP - Burned - Staked
       const totalSupply = DTGC_TOTAL_SUPPLY;
@@ -4408,12 +4432,21 @@ export default function App() {
         staked: 0, // Will be updated from contract
         circulating: Math.max(0, circulating),
         rewardsPool: rewardsPoolDtgc,
+        holderCount: holderCount,
         lastUpdated: new Date(),
+        loading: false,
       });
 
-      console.log('📊 Supply dynamics updated:', { dao: daoDtgc, dev: devDtgc, burned: burnedDtgc, rewardsPool: rewardsPoolDtgc });
+      // Update live holders with real holder count
+      if (holderCount > 0) {
+        setLiveHolders(prev => ({ ...prev, totalHolders: holderCount }));
+      }
+
+      console.log('📊 Supply dynamics updated:', { dao: daoDtgc, burned: burnedDtgc, rewardsPool: rewardsPoolDtgc, holders: holderCount });
     } catch (err) {
       console.warn('⚠️ Failed to fetch supply dynamics:', err.message);
+      // Set loading false even on error
+      setSupplyDynamics(prev => ({ ...prev, loading: false }));
     }
   }, []);
 
@@ -8468,10 +8501,10 @@ export default function App() {
                 <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🏛️</div>
                 <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>DAO TREASURY</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
-                  {formatNumber(supplyDynamics.dao)}
+                  {supplyDynamics.dao === null ? '⏳ Loading...' : formatNumber(supplyDynamics.dao)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#4CAF50', fontWeight: 600 }}>
-                  {((supplyDynamics.dao / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
+                  {supplyDynamics.dao === null ? '' : `${((supplyDynamics.dao / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%`}
                 </div>
                 <div style={{ 
                   fontSize: '0.6rem', 
@@ -8483,7 +8516,7 @@ export default function App() {
                   overflow: 'hidden'
                 }}>
                   <div style={{
-                    width: `${Math.max(0.5, (supplyDynamics.dao / DTGC_TOTAL_SUPPLY) * 100)}%`,
+                    width: `${Math.max(0.5, ((supplyDynamics.dao || 0) / DTGC_TOTAL_SUPPLY) * 100)}%`,
                     height: '100%',
                     background: '#4CAF50',
                     borderRadius: '2px',
@@ -8515,7 +8548,7 @@ export default function App() {
                 <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🏦</div>
                 <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>REWARDS POOL</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50' }}>
-                  {formatNumber(supplyDynamics.rewardsPool || 0)}
+                  {supplyDynamics.rewardsPool === null ? '⏳ Loading...' : formatNumber(supplyDynamics.rewardsPool)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#4CAF50', fontWeight: 600 }}>
                   Available for Payouts
@@ -8617,10 +8650,10 @@ export default function App() {
                 <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🔥</div>
                 <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>BURNED FOREVER</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#F44336' }}>
-                  {formatNumber(supplyDynamics.burned)}
+                  {supplyDynamics.burned === null ? '⏳ Loading...' : formatNumber(supplyDynamics.burned)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#F44336', fontWeight: 600 }}>
-                  {((supplyDynamics.burned / DTGC_TOTAL_SUPPLY) * 100).toFixed(2)}%
+                  {supplyDynamics.burned === null ? '' : `${((supplyDynamics.burned / DTGC_TOTAL_SUPPLY) * 100).toFixed(2)}%`}
                 </div>
                 <div style={{ 
                   height: '4px',
@@ -8630,7 +8663,7 @@ export default function App() {
                   marginTop: '4px'
                 }}>
                   <div style={{
-                    width: `${Math.min((supplyDynamics.burned / DTGC_TOTAL_SUPPLY) * 100, 100)}%`,
+                    width: `${Math.min(((supplyDynamics.burned || 0) / DTGC_TOTAL_SUPPLY) * 100, 100)}%`,
                     height: '100%',
                     background: '#F44336',
                     borderRadius: '2px',
@@ -8649,10 +8682,10 @@ export default function App() {
                 <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>🏦</div>
                 <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>DAO ECOSYSTEM</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#FF9800' }}>
-                  {formatNumber(supplyDynamics.dao + supplyDynamics.lpLocked)}
+                  {supplyDynamics.dao === null ? '⏳ Loading...' : formatNumber((supplyDynamics.dao || 0) + supplyDynamics.lpLocked)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#FF9800', fontWeight: 600 }}>
-                  {(((supplyDynamics.dao + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%
+                  {supplyDynamics.dao === null ? '' : `${((((supplyDynamics.dao || 0) + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}%`}
                 </div>
                 <div style={{ 
                   height: '4px',
@@ -8662,7 +8695,7 @@ export default function App() {
                   marginTop: '4px'
                 }}>
                   <div style={{
-                    width: `${((supplyDynamics.dao + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100}%`,
+                    width: `${(((supplyDynamics.dao || 0) + supplyDynamics.lpLocked) / DTGC_TOTAL_SUPPLY) * 100}%`,
                     height: '100%',
                     background: '#FF9800',
                     borderRadius: '2px',
@@ -8752,7 +8785,7 @@ export default function App() {
                   color: '#D4AF37',
                   fontWeight: 600
                 }}>
-                  <span>Total Holders: {liveHolders.totalHolders || '...'}</span>
+                  <span>TOTAL HOLDERS: {liveHolders.totalHolders > 0 ? liveHolders.totalHolders.toLocaleString() : (supplyDynamics.holderCount > 0 ? supplyDynamics.holderCount.toLocaleString() : '⏳')}</span>
                 </div>
               </div>
               <div className="ticker-track">
