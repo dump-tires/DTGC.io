@@ -64,7 +64,7 @@ const TOKENS = {
     isNative: false,
   },
   URMOM: { 
-    address: '0x636cc7d7c76298cde00025370461c59c0b2ef896',
+    address: '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0',
     symbol: 'URMOM', 
     name: 'URMOM', 
     decimals: 18, 
@@ -1163,9 +1163,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {[
                     { name: 'DTGC', addr: '0xd0676b28a457371d58d47e5247b439114e40eb0f' },
-                    { name: 'URMOM', addr: '0x636cc7d7c76298cde00025370461c59c0b2ef896' },
+                    { name: 'URMOM', addr: '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0' },
                     { name: 'DTGC/PLS LP', addr: '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7' },
-                    { name: 'DTGC/URMOM LP', addr: '0x0548656e272fec9534e180d3174cfc57ab6e10c0' },
+                    { name: 'DTGC/URMOM LP', addr: '0x670c972bb5388e087a2934a063064d97278e01f3' },
                     { name: 'DTGCStakingV4', addr: '0x578e0DE613acb498652025f98c6aF52F0e4E7001' },
                     { name: 'LPStakingV4', addr: '0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231' },
                     { name: 'PulseX Router', addr: '0x165C3410fC91EF562C50559f7d2289fEbed552d9' },
