@@ -3101,6 +3101,7 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
 
   // Minimized view - just show icon with total value
   if (!isExpanded) {
+    const totalStakes = displayPositions.length + whiteDiamondNFTs.length;
     return (
       <div
         onClick={() => setIsExpanded(true)}
@@ -3127,7 +3128,7 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
             {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
           </div>
           <div style={{ color: 'rgba(0,0,0,0.6)', fontSize: '0.45rem', fontWeight: 600 }}>
-            {displayPositions.length} STAKE{displayPositions.length !== 1 ? 'S' : ''}
+            {totalStakes} STAKE{totalStakes !== 1 ? 'S' : ''}
           </div>
         </div>
       </div>

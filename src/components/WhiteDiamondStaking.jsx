@@ -34,7 +34,7 @@ const WHITE_DIAMOND_ABI = [
   'function ownerOf(uint256 tokenId) view returns (address)',
 ];
 
-const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
+const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices, onStakesUpdate }) => {
   const [isDark, setIsDark] = useState(true);
   const [lpBalance, setLpBalance] = useState('0');
   const [dtgcBalance, setDtgcBalance] = useState('0');
@@ -154,9 +154,11 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
       
       console.log(`✅ Found ${stakes.length} active NFTs`);
       setUserStakes(stakes);
+      if (onStakesUpdate) onStakesUpdate(stakes);
     } catch (error) {
       console.error('❌ Error loading stakes:', error.message);
       setUserStakes([]);
+      if (onStakesUpdate) onStakesUpdate([]);
     }
   };
 
@@ -328,6 +330,35 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
     const days = Math.floor(diff / (24 * 60 * 60 * 1000));
     const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
     return `${days}d ${hours}h`;
+  };
+
+  // Calculate USD value for LP and DTGC tokens
+  const calculateUsdValue = (amount, tokenType) => {
+    if (!livePrices) {
+      console.log('⚠️ livePrices not available yet');
+      return 0;
+    }
+    
+    console.log('💰 Calculating USD value:', { amount, tokenType, dtgcPrice: livePrices.dtgc });
+    
+    if (tokenType === 'LP') {
+      // LP tokens are URMOM/DTGC pair - estimate based on DTGC price
+      const dtgcPrice = livePrices.dtgc || 0;
+      // Each LP token represents roughly 2x DTGC value (simplified)
+      return parseFloat(amount) * dtgcPrice * 2;
+    } else if (tokenType === 'DTGC') {
+      const dtgcPrice = livePrices.dtgc || 0;
+      return parseFloat(amount) * dtgcPrice;
+    }
+    return 0;
+  };
+
+  const formatUsd = (value) => {
+    if (!livePrices) return '...'; // Loading state
+    if (value === 0) return '$0.00';
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
+    return `$${value.toFixed(2)}`;
   };
 
   const theme = {
@@ -632,11 +663,17 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
                         <div style={{ fontSize: '1.2rem', fontWeight: 700, color: theme.gold }}>
                           {formatNumber(stake.amount)}
                         </div>
+                        <div style={{ fontSize: '0.7rem', color: '#4CAF50', marginTop: '2px' }}>
+                          {formatUsd(calculateUsdValue(stake.amount, 'LP'))}
+                        </div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.75rem', color: theme.textMuted }}>Pending Rewards</div>
                         <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#4CAF50' }}>
                           +{formatNumber(stake.rewards)}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#4CAF50', marginTop: '2px' }}>
+                          {formatUsd(calculateUsdValue(stake.rewards, 'DTGC'))}
                         </div>
                       </div>
                     </div>
