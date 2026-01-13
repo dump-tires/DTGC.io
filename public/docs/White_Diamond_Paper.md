@@ -1,275 +1,615 @@
-# 💎 White Diamond NFT Staking Protocol
+# 💎 WHITE DIAMOND PAPER
+## NFT-Based Staking Protocol - Technical Documentation
 
-> *"The power of the Empire, now in your portfolio"*
-
-**Version 4.0 | January 2026**
-
----
-
-## Executive Summary
-
-White Diamond represents the apex tier of the DTGC V4 staking ecosystem, combining enterprise-grade DeFi infrastructure with Imperial-themed innovation. As part of DTGC.io's vision to become "the Shopify of DeFi staking," White Diamond delivers institutional-quality returns through community-validated LP token staking.
-
-### Key Highlights
-
-- **70% APR** on URMOM/DTGC LP tokens
-- **NFT-based stake ownership** (ERC-721 transferable)
-- **90-day commitment** period with battle-tested reward mechanisms
-- **Multi-stake architecture** allowing portfolio diversification
-- Part of comprehensive **V4 tier system** (Bronze → Silver → Diamond → Diamond+ → FLEX)
-
-White Diamond differentiates itself through its unique LP token integration with community-selected pairs, NFT-based ownership mechanics enabling secondary market trading, and seamless integration into DTGC's white-label SaaS platform for institutional deployments.
+**Contract Address:** `0x326F86e7d594B55B7BA08DFE5195b10b159033fD`  
+**Network:** PulseChain (Chain ID: 369)  
+**Launch Date:** January 12, 2026  
+**Protocol Type:** ERC721 NFT Staking with Fixed-Term Lock
 
 ---
 
-## Product Overview
+## 📋 EXECUTIVE SUMMARY
 
-### Protocol Architecture
+White Diamond is a revolutionary NFT-based staking protocol on PulseChain that transforms liquidity provision into tradeable, collectable NFT assets. Each stake is represented as a unique ERC721 token featuring Darth Vader helmet iconography, combining DeFi utility with digital collectability.
 
-White Diamond operates as a specialized NFT staking protocol within the DTGC V4 ecosystem. Each stake position is represented as a unique ERC-721 token, enabling true ownership and transferability. The protocol leverages battle-tested smart contract patterns from the V3 generation while introducing enhanced capital efficiency mechanisms.
-
-#### Core Components
-
-- **LP Token Integration**: URMOM/DTGC liquidity pair on PulseChain DEX infrastructure
-- **NFT Staking Contract**: Optimized for <24KB deployment, verified on PulseScan
-- **Reward Distribution**: DTGC token emissions with fundable treasury mechanics
-- **Fee Structure**: 3.75% entry/exit fees directed to protocol development wallet
-
-### Positioning Within V4 Ecosystem
-
-| Tier | Asset Type | Lock Period | Focus |
-|------|-----------|-------------|-------|
-| Bronze | DTGC | 30 days | Entry-level |
-| Silver | DTGC | 90 days | Intermediate |
-| **💎 White Diamond** | **LP Tokens** | **90 days** | **LP Specialist** |
-| Diamond+ | DTGC | 180 days | Advanced |
-| FLEX | DTGC | Flexible | No-lock option |
+### Key Innovation
+Unlike traditional staking where your position is locked in a contract, White Diamond mints an NFT that represents your stake. This NFT can be:
+- **Traded** on secondary markets
+- **Used as collateral** (future integrations)
+- **Gifted or transferred** to other wallets
+- **Displayed in galleries** as proof of early adoption
 
 ---
 
-## Technical Specifications
+## 🎯 PROTOCOL PARAMETERS
 
-### Smart Contract Parameters
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| **Staked Asset** | URMOM/DTGC LP | PulseX V2 liquidity pool tokens |
+| **Reward Token** | DTGC | DT Gold Coin |
+| **APR** | 70% | Fixed annual percentage rate |
+| **Lock Period** | 90 days | Minimum holding period |
+| **Minimum Stake** | 1,000 LP | Entry threshold |
+| **Entry Fee** | 3.75% | One-time fee on deposit |
+| **Exit Fee** | 3.75% | One-time fee on withdrawal |
+| **Early Exit Penalty** | 20% | Additional penalty before lock expires |
 
-| Parameter | Value |
-|-----------|-------|
-| **LP Token** | `0x670c972Bb5388E087a2934a063064d97278e01F3` |
-| **Reward Token** | `0xD0676B28a457371D58d47E5247b439114e40Eb0F` |
-| **Network** | PulseChain (Chain ID: 369) |
-| **Annual Percentage Rate** | 70% |
-| **Lock Duration** | 90 days (7,776,000 seconds) |
-| **Minimum Stake** | 1,000 LP tokens |
-| **Entry Fee** | 3.75% (collected in LP tokens) |
-| **Exit Fee** | 3.75% (collected in LP tokens) |
-| **Early Exit Penalty** | 20% (forfeited rewards) |
-| **NFT Standard** | ERC-721 (transferable) |
-| **Multi-Stake** | Unlimited positions per wallet |
-| **Fee Collector** | `0xc1cd5a70815e2874d2db038f398f2d8939d8e87c` |
+---
 
-### Contract Addresses
+## 🔧 HOW IT WORKS
 
-| Token/Contract | Address |
-|----------------|---------|
-| **DTGC Token** | `0xD0676B28a457371D58d47E5247b439114e40Eb0F` |
-| **URMOM/DTGC LP** | `0x670c972Bb5388E087a2934a063064d97278e01F3` |
-| **White Diamond NFT** | *[See deployment guide]* |
-
-### Reward Calculation Formula
-
-Rewards are calculated per-second using the following formula:
+### 1. STAKING PROCESS
 
 ```
-rewards = (amount × APR × timeElapsed) / (365 days × 100)
+User Stakes LP → Fees Deducted → NFT Minted → Position Active
+     ↓               ↓                 ↓              ↓
+  2M LP          75K fees         Token #2      1.925M active
 ```
 
-Where:
-- **amount** = LP tokens staked (after entry fee)
-- **APR** = 70 (annual percentage)
-- **timeElapsed** = seconds since stake creation
+**Fee Distribution:**
+- **50% Burned** → Sent to `0x000...dead` (deflationary)
+- **50% Treasury** → Development & operations fund
+
+**Example Calculation:**
+```
+Stake: 2,000,000 LP
+Entry Fee: 2,000,000 × 3.75% = 75,000 LP
+  └─ Burned: 37,500 LP
+  └─ Treasury: 37,500 LP
+Active Position: 1,925,000 LP
+```
+
+### 2. NFT STRUCTURE
+
+Each White Diamond NFT stores:
+```solidity
+struct Stake {
+    uint256 amount;        // LP tokens staked (after fees)
+    uint256 startTime;     // Unix timestamp of stake
+    uint256 lastClaim;     // Last reward claim timestamp
+}
+```
+
+**On-Chain Metadata:**
+- Token ID (sequential counter)
+- Stake amount
+- Timestamp data
+- Active/inactive status
+
+**Visual Representation:**
+- Darth Vader helmet icon ⚔️
+- Gold gradient background
+- Stake details displayed
+- Time remaining countdown
+
+### 3. REWARDS CALCULATION
+
+```
+Annual Rewards = Staked Amount × 70%
+Daily Rewards = Annual Rewards ÷ 365
+Pending Rewards = (Current Time - Last Claim) × Daily Rate
+```
+
+**Example:**
+```
+Stake: 1,925,000 LP
+Annual: 1,925,000 × 70% = 1,347,500 DTGC
+Daily: 1,347,500 ÷ 365 = 3,691.78 DTGC/day
+After 30 days: 3,691.78 × 30 = 110,753 DTGC
+```
+
+Rewards accrue **continuously** and can be claimed **any time** without affecting the principal stake.
+
+### 4. WITHDRAWAL OPTIONS
+
+#### OPTION A: Normal Withdrawal (After Lock)
+**Conditions:** 90+ days have passed  
+**Process:**
+1. Claim all pending rewards
+2. Deduct 3.75% exit fee
+3. Return LP to user
+4. Burn NFT
+
+**Fee Distribution:**
+```
+Withdrawal: 1,925,000 LP
+Exit Fee: 1,925,000 × 3.75% = 72,187.5 LP
+  └─ Burned: 36,093.75 LP
+  └─ Treasury: 36,093.75 LP
+Received: 1,852,812.5 LP
+```
+
+#### OPTION B: Emergency Withdrawal (Before Lock)
+**Conditions:** Anytime, but with penalties  
+**Process:**
+1. **Forfeit 20% of rewards**
+2. Pay 3.75% exit fee
+3. Return remaining LP
+4. Burn NFT
+
+**Calculation:**
+```
+Pending Rewards: 110,753 DTGC
+Penalty (20%): 22,150.6 DTGC (forfeited)
+Received Rewards: 88,602.4 DTGC
+
+Principal: 1,925,000 LP
+Exit Fee (3.75%): 72,187.5 LP
+Received LP: 1,852,812.5 LP
+```
 
 ---
 
-## Economic Model
+## 🏗️ TECHNICAL ARCHITECTURE
 
-### Fee Structure & Protocol Revenue
+### Smart Contract Components
 
-White Diamond implements a dual-fee model designed to balance user incentives with protocol sustainability:
+#### ERC721 Base
+```solidity
+contract WhiteDiamondNFT is ERC721Enumerable {
+    mapping(uint256 => Stake) public stakes;
+    uint256 private _nextId = 1;
+    // Standard ERC721 functions
+    // + Enumerable extension
+}
+```
 
-- **Entry Fee (3.75%)**: Collected in LP tokens at stake creation, funds protocol development and marketing
-- **Exit Fee (3.75%)**: Collected in LP tokens at withdrawal, creates exit friction for long-term alignment
-- **Early Exit Penalty (20%)**: Applied to rewards only (not principal), redistributed to protocol treasury
+**Inheritance:**
+- `ERC721` - Base NFT functionality
+- `ERC721Enumerable` - Token enumeration (limited functionality)
+- Custom staking logic
 
-*All fees are directed to the protocol development wallet (`0xc1cd5a70815e2874d2db038f398f2d8939d8e87c`) and transparently tracked on-chain.*
+#### Core Functions
 
-### Reward Funding Mechanism
+**stake(uint256 amount)**
+```solidity
+function stake(uint256 amount) external returns (uint256) {
+    require(amount >= MIN_STAKE, "Below minimum");
+    
+    // Calculate fees
+    uint256 fee = amount * ENTRY_FEE / 10000;
+    uint256 toBurn = fee / 2;
+    uint256 stakeAmt = amount - fee;
+    
+    // Transfer tokens
+    lpToken.transferFrom(msg.sender, address(0xdead), toBurn);
+    lpToken.transferFrom(msg.sender, feeCollector, fee - toBurn);
+    lpToken.transferFrom(msg.sender, address(this), stakeAmt);
+    
+    // Mint NFT
+    uint256 tokenId = _nextId++;
+    _mint(msg.sender, tokenId);
+    
+    // Store stake
+    stakes[tokenId] = Stake({
+        amount: stakeAmt,
+        startTime: block.timestamp,
+        lastClaim: block.timestamp
+    });
+    
+    return tokenId;
+}
+```
 
-Unlike inflationary tokenomics, White Diamond operates on a pre-funded reward model:
+**getPosition(uint256 tokenId)**
+```solidity
+function getPosition(uint256 tokenId) external view returns (
+    uint256 amount,
+    uint256 startTime,
+    uint256 unlockTime,
+    uint256 lastClaimTime,
+    uint256 pending,
+    bool isActive,
+    uint256 timeRemaining
+)
+```
 
-- Protocol administrators fund the contract with DTGC tokens via `fundRewards()`
-- Rewards are distributed from this treasury pool as stakes mature
-- No minting or inflationary pressure on DTGC token supply
-- Treasury levels are publicly queryable via `rewardToken.balanceOf(contractAddress)`
-
-### Example ROI Calculation
-
-For a user staking **10,000 URMOM/DTGC LP tokens** for the full 90-day period:
-
-| Item | Amount |
-|------|--------|
-| Initial Stake | 10,000 LP tokens |
-| Entry Fee (3.75%) | - 375 LP tokens |
-| **Net Staked Amount** | **9,625 LP tokens** |
-| 90-Day Rewards (70% APR) | + 1,661 DTGC tokens |
-| Principal Returned | + 9,625 LP tokens |
-| Exit Fee (3.75%) | - 361 LP tokens |
-| **Final LP Balance** | **9,264 LP tokens** |
-| **Final DTGC Balance** | **1,661 DTGC tokens** |
-| Net LP Change | -736 LP tokens (-7.36%) |
-| **DTGC Gain** | **+1,661 DTGC tokens** |
-
-*Note: Net profitability depends on DTGC price appreciation vs LP token value. The 7.36% LP fee must be offset by DTGC reward value for positive ROI.*
+Returns all position data in one call for efficient frontend queries.
 
 ---
 
-## NFT Mechanics & Transferability
+## 🎨 USER INTERFACE
 
-White Diamond implements a unique NFT-based stake ownership model that enables secondary market trading and portfolio management flexibility.
+### Components Created
 
-### ERC-721 Implementation
+**1. WhiteDiamondStaking.jsx**
+- Main staking interface
+- NFT gallery view
+- Claim/Withdraw controls
+- Live stats dashboard
 
-Each stake position is minted as a unique ERC-721 token with the following characteristics:
+**2. WhiteDiamondIcon.jsx**
+- Navigation element
+- Live NFT count badge
+- Visual indicator
 
-- **Unique Token ID**: Auto-incrementing counter ensures each stake has a distinct NFT
-- **Metadata Storage**: On-chain mapping of token ID to stake parameters (amount, startTime, unlockTime)
-- **Transferability**: Full ERC-721 transfer support via `safeTransferFrom()` and `transferFrom()`
-- **Rewards Ownership**: Accrued rewards transfer with the NFT to the new owner
+**3. NFTCard.jsx**
+- Individual NFT display
+- Darth Vader helmet graphics
+- Stake details
+- Action buttons
 
-### Use Cases
+**4. WhiteDiamondNFTViewer.jsx**
+- PulseX Gold integration
+- Thumbnail grid
+- Quick view modal
 
-- **Secondary Market Trading**: Users can sell stake positions on NFT marketplaces (OpenSea, LooksRare, etc.)
-- **Collateralization**: Use NFTs as collateral in DeFi lending protocols
-- **Portfolio Management**: Transfer stakes between wallets for organizational structuring
-- **Estate Planning**: Transfer stake ownership as part of inheritance or trust structures
+### Features
+
+✅ **Dark/Light Mode Support**  
+✅ **Mobile Responsive**  
+✅ **Real-time Updates**  
+✅ **Price Integration**  
+✅ **Transaction Confirmations**
 
 ---
 
-## Security & Compliance
+## 🔐 SECURITY FEATURES
 
 ### Smart Contract Security
 
-White Diamond inherits battle-tested patterns from the V3 contract generation with additional optimizations:
+**Reentrancy Protection**
+```solidity
+uint256 private _lock = 1;
+modifier lock() {
+    require(_lock == 1, "Reentrancy");
+    _lock = 2;
+    _;
+    _lock = 1;
+}
+```
 
-- **OpenZeppelin Standards**: Built on audited ERC-721 and Ownable contracts
-- **Reentrancy Protection**: SafeERC20 library prevents token transfer vulnerabilities
-- **Integer Overflow Prevention**: Solidity 0.8+ compiler with built-in overflow checks
-- **Access Control**: Owner-only functions for funding and emergency operations
-- **Code Optimization**: Compiled with 200 runs for gas efficiency while maintaining <24KB contract size
+**Owner Restrictions**
+- Only owner can set fee collector
+- Cannot withdraw staked LP tokens
+- Cannot modify core parameters
 
-### Verification & Transparency
+**Access Controls**
+- Users can only interact with their own NFTs
+- Standard ERC721 permission model
+- Transfer restrictions during lock period
 
-- Contract source code verified on PulseScan for public audit
-- All transactions publicly viewable on-chain
-- Reward treasury funding events logged and traceable
-- Fee collection wallet address publicly disclosed
+### Economic Security
 
-### Risk Disclosures
+**Fee Distribution:**
+- 50% burned reduces circulating supply
+- 50% treasury ensures sustainability
+- No admin mint function
 
-Users should be aware of the following risks:
-
-- **Smart Contract Risk**: Despite best practices, no contract is 100% risk-free
-- **Impermanent Loss**: LP token value subject to price divergence between paired assets
-- **Liquidity Risk**: Secondary NFT market liquidity may vary
-- **Reward Funding**: Protocol must maintain adequate DTGC treasury for sustained operations
-- **Regulatory Uncertainty**: DeFi regulatory landscape continues to evolve
-
----
-
-## Competitive Advantages
-
-### Market Differentiation
-
-| Feature | Description |
-|---------|-------------|
-| **NFT-Based Ownership** | Unlike traditional staking where positions are wallet-bound, White Diamond stakes are freely transferable NFTs, enabling secondary markets and collateralization |
-| **SaaS White-Label Ready** | Part of DTGC.io's comprehensive white-label platform, allowing other projects to deploy branded LP staking systems with minimal technical overhead |
-| **Multi-Stake Architecture** | Users can create unlimited stake positions, each with independent maturity dates, enabling dollar-cost-averaging strategies and portfolio diversification |
-| **Ecosystem Integration** | Seamlessly connects with other V4 tiers (Bronze, Silver, Diamond+, FLEX) for unified portfolio management |
-| **Transparent Economics** | Non-inflationary reward model with publicly auditable treasury funding, eliminating hidden dilution concerns |
-
-### Target Market
-
-- **LP Providers**: Users providing liquidity to URMOM/DTGC pairs seeking additional yield
-- **DeFi Natives**: Experienced users familiar with LP mechanics and impermanent loss dynamics
-- **NFT Collectors**: Users interested in yield-bearing NFTs with secondary market potential
-- **White-Label Partners**: Projects seeking turnkey LP staking infrastructure without development overhead
+**Lock Mechanism:**
+- Enforced at contract level
+- Cannot be bypassed
+- Emergency exit always available (with penalty)
 
 ---
 
-## Roadmap & Future Development
+## 📊 PROTOCOL METRICS
 
-### Phase 1: Foundation (Q1 2026) - Current
+### Current Stats (Live)
+```javascript
+const stats = await contract.getStats();
+// Returns:
+// - Total LP Staked
+// - Total NFTs Minted  
+// - Total Rewards Paid
+// - Current APR
+// - Lock Duration
+```
 
-- White Diamond NFT contract deployment with corrected URMOM/DTGC LP integration
-- PulseScan contract verification and treasury funding
-- Frontend integration with DTGC.io platform
-- Initial marketing campaign with Imperial-themed creative assets
+### Key Metrics to Track
 
-### Phase 2: Expansion (Q2 2026)
-
-- NFT marketplace integrations (OpenSea, LooksRare) for secondary trading
-- Enhanced NFT metadata with dynamic on-chain graphics
-- API endpoints for white-label partner integrations
-- Community governance proposals for parameter adjustments
-
-### Phase 3: Advanced Features (Q3-Q4 2026)
-
-- Cross-chain LP staking bridge (Ethereum, BSC, Arbitrum)
-- NFT fractionalization protocol for increased accessibility
-- Automated compounding reinvestment options
-- DeFi lending protocol integrations for NFT collateralization
-
-### Community Engagement
-
-White Diamond development is guided by community input through:
-
-- Monthly governance calls with stakeholders
-- Discord and Telegram channels for real-time support
-- Bug bounty program for security researchers
-- Public roadmap tracking via GitHub and DTGC.io dashboard
+| Metric | Description |
+|--------|-------------|
+| **TVL** | Total Value Locked in LP |
+| **NFTs Minted** | Total supply of stake NFTs |
+| **Active Stakes** | Currently earning rewards |
+| **Total Burned** | LP burned through fees |
+| **Rewards Distributed** | DTGC paid to stakers |
 
 ---
 
-## Conclusion
+## 🛠️ TECHNICAL CHALLENGES & SOLUTIONS
 
-White Diamond represents a paradigm shift in DeFi LP staking by combining enterprise-grade yield generation with NFT-based ownership mechanics. As the flagship LP tier within the DTGC V4 ecosystem, it delivers 70% APR returns through a battle-tested, non-inflationary reward model while enabling unprecedented flexibility through transferable stake positions.
+### Challenge 1: Contract Enumeration Issue
 
-Built on the foundation of "the Shopify of DeFi staking," White Diamond extends DTGC.io's vision of democratizing institutional-grade DeFi infrastructure. The protocol's dual-fee structure ensures sustainable development funding while maintaining competitive returns, and its integration with the broader V4 tier system (Bronze → Silver → Diamond → Diamond+ → FLEX) provides users with a comprehensive staking portfolio strategy.
+**Problem:** `tokenOfOwnerByIndex()` returning incorrect token IDs  
 
-For LP providers, White Diamond offers a compelling alternative to passive liquidity provision by layering additional yield on top of trading fees. For NFT enthusiasts, it introduces a new asset class of yield-bearing tokens with secondary market potential. For white-label partners, it provides turnkey staking infrastructure without development overhead.
+**Root Cause:** ERC721Enumerable implementation conflict  
 
-As the protocol matures through 2026 and beyond, White Diamond will continue evolving based on community feedback and market demands. The roadmap's focus on cross-chain expansion, enhanced NFT features, and DeFi lending integrations positions White Diamond as a foundational component of the next-generation staking infrastructure.
+**Solution:** Direct token ID checking
+```javascript
+// Instead of enumeration:
+for (let i = 0; i < balance; i++) {
+    tokenId = tokenOfOwnerByIndex(user, i); // ❌ Broken
+}
 
-> *"The power to rule your portfolio awaits."*  
-> – DTGC V4 Manifesto
+// Use direct ownership check:
+for (let tokenId = 0; tokenId <= totalSupply; tokenId++) {
+    if (ownerOf(tokenId) === user) { // ✅ Works
+        // Process token
+    }
+}
+```
+
+### Challenge 2: ABI Compatibility
+
+**Problem:** Contract functions didn't match initial ABI expectations  
+
+**Solution:** Reverse engineered deployed contract via PulseScan transaction logs
+
+**Correct Function Signatures:**
+```solidity
+getPosition() returns (amount, startTime, unlockTime, lastClaimTime, pending, isActive, timeRemaining)
+getStats() returns (totalStaked, totalSupply, totalRewardsPaid, apr, lockTime)
+```
+
+### Challenge 3: Frontend State Management
+
+**Problem:** NFT data not persisting across page reloads  
+
+**Solution:** 
+- Local state with 30-second refresh intervals
+- Contract event listening for real-time updates
+- Optimistic UI updates on transactions
 
 ---
 
-## Additional Resources
+## 📱 NFT TRADING & MARKETPLACE STATUS
 
-- **DTGC.io**: https://dtgc.io (main platform)
-- **PulseScan**: https://scan.pulsechain.com (blockchain explorer)
-- **GitHub**: [Repository URL] (contract source code)
-- **Discord**: [Invite URL] (community support)
-- **Telegram**: [Group URL] (announcements)
+### OpenSea Integration Status
 
-### Contact Information
+**Current Status:** ⏳ Waiting on OpenSea to approve PulseChain NFTs
 
-For partnership inquiries, white-label licensing, or technical support:
+White Diamond NFTs are fully ERC721 compliant and ready for OpenSea integration. We are currently waiting for OpenSea to add official PulseChain network support. Once approved, all White Diamond NFTs will automatically appear on OpenSea with full trading functionality.
 
-**partnerships@dtgc.io**
+### How to Trade Your NFT Today (P2P)
+
+Until OpenSea support is live, White Diamond NFTs can be traded peer-to-peer using the built-in transfer functionality:
+
+1. **Find a Buyer** - Connect with potential buyers through Telegram, Discord, Twitter, or other community channels
+2. **Agree on Price** - Negotiate the sale price for your NFT (includes the staked LP position and accrued rewards)
+3. **Receive Payment** - Have the buyer send payment (PLS, DTGC, or other agreed token) to your wallet
+4. **Transfer NFT** - Use the Transfer button on your NFT card to send it to the buyer's wallet address
+5. **Verify** - Buyer verifies ownership on PulseScan
+
+### Verifying NFT Ownership on PulseScan
+
+PulseScan provides complete transparency for White Diamond NFT ownership and history:
+
+- **Contract Address:** `0x326F86e7d594B55B7BA08DFE5195b10b159033fD`
+- **PulseScan URL:** https://scan.pulsechain.com/token/0x326F86e7d594B55B7BA08DFE5195b10b159033fD
+- **Individual NFT:** Add `?a=[tokenId]` to view specific NFT (e.g., `?a=1` for NFT #1)
+
+#### What You Can Verify
+- Current owner wallet address
+- Complete ownership history and transfer records
+- Original mint timestamp
+- Token ID and contract verification
+- All transaction history related to the NFT
+
+### NFT Value Proposition
+
+When you purchase a White Diamond NFT, you're acquiring:
+
+- **Staked LP Position** - The full LP amount staked in the contract
+- **Accrued Rewards** - All DTGC rewards earned since stake began
+- **Future Rewards** - Continued 70% APR until unlock
+- **Lock Time** - Remaining lock period (or unlocked status)
+- **Collectible Value** - Early adopter status and Darth Vader-themed NFT
+
+### Smart Contract Security for Trading
+
+The White Diamond smart contract ensures secure NFT transfers:
+
+- Standard ERC721 transfer function - battle-tested and audited by thousands of implementations
+- Staked position automatically transfers with the NFT
+- Accrued rewards transfer to new owner
+- No middleman or escrow needed - direct wallet-to-wallet transfer
+- Immutable blockchain record of ownership
+
+### Future Marketplace Integrations
+
+Beyond OpenSea, White Diamond NFTs will be compatible with:
+
+- **PulseChain-Native Marketplaces** - Any ERC721-compatible marketplace launching on PulseChain
+- **Aggregators** - Multi-chain NFT aggregation platforms
+- **Custom DTGC Marketplace** - Potential future dtgc.io NFT trading interface
+- **DeFi Lending** - Use NFTs as collateral for loans
+
+**Important:** All future integrations will work automatically due to ERC721 standard compliance. No updates or migrations required.
 
 ---
 
-💎
+## 🔮 FUTURE ENHANCEMENTS
 
-*© 2026 DTGC.io - All Rights Reserved*
+### Phase 2: Secondary Markets
+- OpenSea integration
+- Custom marketplace UI
+- NFT rarity system based on stake amount
+
+### Phase 3: Collateralization
+- Use NFTs as loan collateral
+- Integration with lending protocols
+- Flash loan compatibility
+
+### Phase 4: Governance
+- Vote weight based on stake size
+- NFT holder proposals
+- Treasury management voting
+
+### Phase 5: Gamification
+- Achievement badges
+- Stake milestones
+- Leaderboards
+- Special edition NFTs
+
+---
+
+## 📞 INTEGRATION GUIDE
+
+### For Developers
+
+**Adding White Diamond to Your DApp:**
+
+```javascript
+import WhiteDiamondStaking from './components/WhiteDiamondStaking';
+
+<WhiteDiamondStaking
+  provider={provider}
+  signer={signer}
+  userAddress={account}
+  livePrices={{
+    dtgc: 0.0008154,
+    // ... other prices
+  }}
+/>
+```
+
+**Contract Integration:**
+```javascript
+const contract = new ethers.Contract(
+  '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
+  WHITE_DIAMOND_ABI,
+  signer
+);
+
+// Stake
+const tx = await contract.stake(amount);
+await tx.wait();
+
+// Get user's NFTs (workaround for broken enumeration)
+const totalSupply = await contract.totalSupply();
+const userNFTs = [];
+for (let i = 0; i <= totalSupply; i++) {
+  try {
+    const owner = await contract.ownerOf(i);
+    if (owner === userAddress) {
+      userNFTs.push(i);
+    }
+  } catch {}
+}
+```
+
+---
+
+## 📚 APPENDIX
+
+### A. Token Addresses
+
+| Token | Address | Purpose |
+|-------|---------|---------|
+| White Diamond | `0x326F86e7d594B55B7BA08DFE5195b10b159033fD` | Stake NFT Contract |
+| URMOM/DTGC LP | `0x670c972Bb5388E087a2934a063064d97278e01F3` | Staked Asset |
+| DTGC | `0xD0676B28a457371D58d47E5247b439114e40Eb0F` | Reward Token |
+
+### B. Network Details
+
+**PulseChain Mainnet**
+- Chain ID: 369
+- RPC: https://rpc.pulsechain.com
+- Explorer: https://scan.pulsechain.com
+- Symbol: PLS
+
+### C. Transaction Examples
+
+**Successful Stake:**
+- TX: `0x8b7a3ee347ffd24d1c9130592216cd44e6ec6536e202276db6e84fad4ae13633`
+- Token Minted: #2
+- Amount: 1,925,000 LP (after fees)
+- Timestamp: Jan 12 2026, 17:57:25 PM
+
+### D. UI Screenshots
+
+**Main Interface:**
+- Gold-themed gradient backgrounds
+- Darth Vader helmet NFT cards
+- Real-time countdown timers
+- Interactive claim/withdraw buttons
+
+**NFT Cards Display:**
+- Token ID prominence
+- LP amount in large font
+- APR badge (70%)
+- Lock/Unlock status indicator
+- Rewards counter
+
+---
+
+## ⚠️ DISCLAIMERS
+
+**Investment Risk:** 
+Staking cryptocurrency carries inherent risks. Understand the lock period and fees before staking.
+
+**Smart Contract Risk:**
+While audited for basic security, no contract is 100% risk-free. Use at your own discretion.
+
+**Regulatory Risk:**
+DeFi regulations vary by jurisdiction. Ensure compliance with local laws.
+
+**Market Risk:**
+Token prices fluctuate. LP value and reward value may decrease.
+
+---
+
+## 🎖️ CREDITS
+
+**Development:** DTGC Team  
+**Smart Contract:** WhiteDiamondNFT.sol  
+**Frontend:** React + ethers.js  
+**Design:** Imperial/Darth Vader Theme  
+**Network:** PulseChain  
+
+---
+
+## 📝 VERSION HISTORY
+
+**v1.0.0** - January 12, 2026
+- Initial deployment
+- Core staking functionality
+- NFT minting system
+- Basic UI components
+
+**v1.0.1** - January 12, 2026
+- Fixed enumeration workaround
+- Enhanced error handling
+- Improved console logging
+- Better mobile support
+
+**v1.1.0** - January 12, 2026
+- Added P2P NFT trading controls
+- PulseScan verification integration
+- OpenSea pending status documentation
+- NFT transfer functionality
+- Trading guide and best practices
+
+---
+
+## 📧 CONTACT & SUPPORT
+
+**Website:** https://dtgc.io  
+**Twitter:** @DTGCgold  
+**Telegram:** t.me/dtgcgold  
+**Discord:** discord.gg/dtgc  
+
+**Contract Verification:**  
+View on PulseScan: https://scan.pulsechain.com/address/0x326F86e7d594B55B7BA08DFE5195b10b159033fD
+
+---
+
+## 🏆 CONCLUSION
+
+White Diamond represents the evolution of DeFi staking from simple contract locks to tradeable, collectible NFT assets. By combining strong tokenomics (70% APR, deflationary fees) with NFT utility (P2P trading, future OpenSea listing, collateral potential), White Diamond creates a new category of DeFi primitive.
+
+The Darth Vader theme isn't just aesthetic—it represents power, rarity, and the dark side of DeFi yields. Early adopters become part of an exclusive club of White Diamond holders, with their NFTs serving as permanent proof of participation in this innovative protocol.
+
+While we await OpenSea's PulseChain integration, the built-in P2P trading functionality ensures White Diamond NFTs remain liquid and transferable today. Every NFT represents real value: staked LP, accrued rewards, and future yield potential—all verifiable on-chain via PulseScan.
+
+**Join the Dark Side. Stake for 70% APR. Collect Your Diamond. Trade Your Position.** 💎⚔️
+
+---
+
+*This document is for informational purposes only and does not constitute financial advice. Always DYOR (Do Your Own Research).*
+
+**Document Version:** 1.1.0  
+**Last Updated:** January 12, 2026  
+**Status:** ✅ LIVE ON PULSECHAIN | 📱 P2P TRADING ACTIVE
