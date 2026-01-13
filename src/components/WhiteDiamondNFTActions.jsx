@@ -63,10 +63,11 @@ const WhiteDiamondNFTActions = ({ nft, provider, signer, userAddress, onActionCo
     }
   };
 
-  // Open OpenSea for this NFT
+  // Open OpenSea for this NFT (with pending approval notice)
   const handleOpenSea = () => {
-    const url = `${OPENSEA_BASE_URL}/${WHITE_DIAMOND_ADDRESS}/${nft.tokenId}`;
-    window.open(url, '_blank');
+    alert('⏳ Waiting on OpenSea to approve PulseChain NFTs\n\nFor now, use Transfer to send directly to buyers or verify ownership on PulseScan.');
+    // const url = `${OPENSEA_BASE_URL}/${WHITE_DIAMOND_ADDRESS}/${nft.tokenId}`;
+    // window.open(url, '_blank');
   };
 
   // View on PulseScan
@@ -121,7 +122,7 @@ const WhiteDiamondNFTActions = ({ nft, provider, signer, userAddress, onActionCo
           <span>Transfer</span>
         </button>
 
-        {/* OpenSea Button */}
+        {/* OpenSea Button (Pending) */}
         <button
           onClick={handleOpenSea}
           style={{
@@ -136,12 +137,14 @@ const WhiteDiamondNFTActions = ({ nft, provider, signer, userAddress, onActionCo
             alignItems: 'center',
             justifyContent: 'center',
             gap: '6px',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            opacity: 0.7,
           }}
           onMouseOver={e => e.target.style.background = theme.buttonHover}
           onMouseOut={e => e.target.style.background = theme.buttonBg}
+          title="Waiting on OpenSea to approve PulseChain NFTs"
         >
-          <span>🌊</span>
+          <span>⏳</span>
           <span>OpenSea</span>
         </button>
 
@@ -192,6 +195,44 @@ const WhiteDiamondNFTActions = ({ nft, provider, signer, userAddress, onActionCo
           <span>🔗</span>
           <span>Copy Link</span>
         </button>
+      </div>
+
+      {/* P2P Trading Guide */}
+      <div style={{
+        marginTop: '12px',
+        padding: '12px',
+        background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.15)',
+        borderRadius: '8px',
+        border: `1px solid ${theme.border}`,
+        fontSize: '0.8rem',
+        lineHeight: '1.5',
+      }}>
+        <div style={{ fontWeight: 600, marginBottom: '6px', color: theme.gold }}>
+          💡 How to Trade Your NFT:
+        </div>
+        <div style={{ color: theme.text, marginBottom: '8px' }}>
+          1. Find a buyer (Telegram, Discord, etc.)<br/>
+          2. Use Transfer button to send directly<br/>
+          3. Buyer verifies ownership on PulseScan
+        </div>
+        <a
+          href={`https://scan.pulsechain.com/token/${WHITE_DIAMOND_ADDRESS}?a=${nft.tokenId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-block',
+            padding: '6px 12px',
+            background: theme.buttonBg,
+            border: `1px solid ${theme.border}`,
+            borderRadius: '6px',
+            color: theme.gold,
+            textDecoration: 'none',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+          }}
+        >
+          🔍 Verify on PulseScan →
+        </a>
       </div>
 
       {/* Transfer Form (shown when Transfer clicked) */}
