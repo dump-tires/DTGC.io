@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import WhiteDiamondNFTActions from './WhiteDiamondNFTActions';
 
 // ACTUAL DEPLOYED CONTRACT - matches what's on-chain
 const WHITE_DIAMOND_CONFIG = {
@@ -732,6 +733,22 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices }) => {
                       </button>
                     )}
                   </div>
+
+                  {/* NFT Trading Actions */}
+                  <WhiteDiamondNFTActions
+                    nft={{
+                      tokenId: stake.tokenId,
+                      amount: stake.amount,
+                      rewards: stake.rewards,
+                      unlockTime: stake.unlockTime,
+                      isActive: stake.isActive,
+                    }}
+                    provider={provider}
+                    signer={signer}
+                    userAddress={userAddress}
+                    isDark={isDark}
+                    onActionComplete={loadData}
+                  />
                 </div>
               );
             })}
