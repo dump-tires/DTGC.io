@@ -3045,10 +3045,9 @@ const DexScreenerWidget = () => {
 };
 
 // Floating LP Stakes Widget (top-left corner) - Shows staked LP positions
-const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, getCurrencySymbol, convertToCurrency }) => {
+const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, getCurrencySymbol, convertToCurrency, whiteDiamondNFTs = [] }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
-  const [whiteDiamondNFTs, setWhiteDiamondNFTs] = React.useState([]); // Must be before any conditional returns!
   
   // Remember last valid positions to prevent flicker during RPC delays
   const lastValidPositions = React.useRef([]);
@@ -3102,6 +3101,7 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   // Minimized view - just show icon with total value
   if (!isExpanded) {
     const totalStakes = displayPositions.length + whiteDiamondNFTs.length;
+    const hasWhiteDiamond = whiteDiamondNFTs.length > 0;
     return (
       <div
         onClick={() => setIsExpanded(true)}
@@ -3117,12 +3117,21 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
           gap: '6px',
           cursor: 'pointer',
           zIndex: 9997,
-          boxShadow: '0 4px 15px rgba(0,0,0,0.3), 0 0 20px rgba(212,175,55,0.3)',
-          border: '1px solid rgba(255,255,255,0.2)',
+          boxShadow: hasWhiteDiamond 
+            ? '0 4px 15px rgba(0,0,0,0.3), 0 0 25px rgba(255,255,255,0.4)'
+            : '0 4px 15px rgba(0,0,0,0.3), 0 0 20px rgba(212,175,55,0.3)',
+          border: hasWhiteDiamond ? '2px solid rgba(255,255,255,0.6)' : '1px solid rgba(255,255,255,0.2)',
           transition: 'all 0.3s ease',
         }}
       >
-        <span style={{ fontSize: isMobile ? '0.9rem' : '1.1rem' }}>💎</span>
+        {/* Show crossed swords for each White Diamond NFT */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {hasWhiteDiamond && whiteDiamondNFTs.slice(0, 3).map((_, i) => (
+            <span key={i} style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>⚔️</span>
+          ))}
+          {whiteDiamondNFTs.length > 3 && <span style={{ fontSize: '0.6rem', color: '#000' }}>+{whiteDiamondNFTs.length - 3}</span>}
+          <span style={{ fontSize: isMobile ? '0.9rem' : '1.1rem' }}>💎</span>
+        </div>
         <div>
           <div style={{ color: '#000', fontWeight: 700, fontSize: isMobile ? '0.65rem' : '0.75rem' }}>
             {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
@@ -3550,6 +3559,7 @@ export default function App() {
   const [showFlexCalculator, setShowFlexCalculator] = useState(false);
   const [flexStakes, setFlexStakes] = useState([]); // Track Flex stakes
   const [flexHistory, setFlexHistory] = useState([]); // Track completed Flex stakes for Treasury
+  const [whiteDiamondNFTs, setWhiteDiamondNFTs] = useState([]); // White Diamond NFT stakes
   const DAPPER_ADDRESS = "0xc7fe28708ba913d6bdf1e7eac2c75f2158d978de";
   const DAPPER_ABI = ["function zapPLS() external payable", "function zapToken(address token, uint256 amount) external"];
   
@@ -8238,6 +8248,30 @@ export default function App() {
                   <div style={{fontSize: '0.5rem', color: '#FF1493', marginTop: '2px'}}>10% APR</div>
                 </div>
                 
+                {/* White Diamond NFT Box */}
+                <div 
+                  onClick={() => handleNavClick('whitediamond')}
+                  style={{
+                    textAlign: 'center', 
+                    padding: '10px 15px', 
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(212,175,55,0.15) 100%)', 
+                    borderRadius: '8px', 
+                    border: '2px solid rgba(255,255,255,0.8)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    minWidth: '100px',
+                    boxShadow: whiteDiamondNFTs.length > 0 ? '0 0 20px rgba(255,255,255,0.4)' : 'none',
+                  }}
+                >
+                  <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#fff'}}>
+                    {whiteDiamondNFTs.length > 0 ? '⚔️' : '💎'} WHITE
+                  </div>
+                  <div style={{fontSize: '0.6rem', color: '#D4AF37', fontWeight: 600}}>
+                    {whiteDiamondNFTs.length > 0 ? `${whiteDiamondNFTs.length} NFT${whiteDiamondNFTs.length > 1 ? 'S' : ''}` : 'NFT STAKE'}
+                  </div>
+                  <div style={{fontSize: '0.5rem', color: '#4CAF50', marginTop: '2px'}}>70% APR</div>
+                </div>
+                
                 {/* Calculator Icon - Stake Forecaster */}
                 <div 
                   onClick={() => handleNavClick('analytics')}
@@ -12826,6 +12860,7 @@ export default function App() {
           formatNumber={formatNumber}
           getCurrencySymbol={getCurrencySymbol}
           convertToCurrency={convertToCurrency}
+          whiteDiamondNFTs={whiteDiamondNFTs}
         />
 
         {/* Gold Records - Stake History (Above Calculator) */}
