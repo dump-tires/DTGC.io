@@ -3048,20 +3048,15 @@ const DexScreenerWidget = () => {
 const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, getCurrencySymbol, convertToCurrency }) => {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
+  const [whiteDiamondNFTs, setWhiteDiamondNFTs] = React.useState([]); // Must be before any conditional returns!
   
   // Remember last valid positions to prevent flicker during RPC delays
   const lastValidPositions = React.useRef([]);
   
   React.useEffect(() => {
-    // Update ref when positions change - allow clearing when positions are explicitly removed
-    if (stakedPositions) {
-      // If we have positions, update the cache
-      if (stakedPositions.length > 0) {
-        lastValidPositions.current = stakedPositions;
-      } else if (lastValidPositions.current.length > 0) {
-        // Positions were explicitly cleared - respect this
-        lastValidPositions.current = [];
-      }
+    // Only update ref if we have actual positions
+    if (stakedPositions && stakedPositions.length > 0) {
+      lastValidPositions.current = stakedPositions;
     }
   }, [stakedPositions]);
 
@@ -3072,15 +3067,12 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   }, []);
 
   // Use current positions if available, otherwise use last known good positions
-  // But if positions are explicitly empty array, respect that
-  const displayPositions = stakedPositions && stakedPositions.length > 0 
+  const displayPositions = (stakedPositions && stakedPositions.length > 0) 
     ? stakedPositions 
-    : (stakedPositions && stakedPositions.length === 0) 
-      ? [] 
-      : lastValidPositions.current;
+    : lastValidPositions.current;
   
-  // Only hide if no account OR no positions at all
-  if (!account || displayPositions.length === 0) return null;
+  // Only hide if no account OR we've never had positions
+  if (!account || (displayPositions.length === 0 && lastValidPositions.current.length === 0)) return null;
 
   // Categorize stakes
   const diamondLP = displayPositions.filter(p => p.isLP && p.lpType !== 1 && p.tierName !== 'FLEX');
@@ -3089,7 +3081,6 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   const dtgcStakes = displayPositions.filter(p => !p.isLP && !p.isFlex && p.tierName !== 'FLEX');
   
   // White Diamond NFT stakes (tracked separately)
-  const [whiteDiamondNFTs, setWhiteDiamondNFTs] = useState([]);
   const totalWhiteDiamondLP = whiteDiamondNFTs.reduce((sum, nft) => sum + (parseFloat(nft.amount) || 0), 0);
   
   const totalDiamondLP = diamondLP.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -4144,9 +4135,6 @@ export default function App() {
     flexStakes.forEach(s => {
       blacklistStake(s.id);
     });
-    
-    // Also update lastKnownPositionsRef to remove flex
-    lastKnownPositionsRef.current = lastKnownPositionsRef.current.filter(p => !p.isFlex && p.tierName !== 'FLEX');
     
     setStakedPositions(prev => {
       const filtered = prev.filter(p => !p.isFlex && p.tierName !== 'FLEX');
@@ -7270,37 +7258,29 @@ export default function App() {
                 zIndex: 1500,
               }}
             >
-              {/* Regular V4 Stakes (non-flex only) - includes DTGC and LP stakes */}
+              {/* Regular V4 Stakes (non-flex only) */}
               {(TESTNET_MODE ? testnetBalances.positions.filter(p => !p.isFlex && p.tierName !== 'FLEX') : getVisibleNonFlexPositions()).map((pos, idx) => {
                 let tierColor = '#FFD700';
                 let tierEmoji = '🥇';
-                const tierNameUpper = (pos.tierName || 'GOLD').toUpperCase();
                 
-                // Check for LP stakes first (Diamond/Diamond+)
-                if (pos.isLP || tierNameUpper === 'DIAMOND' || tierNameUpper === 'DIAMOND+') {
-                  if (pos.lpType === 1 || tierNameUpper === 'DIAMOND+') {
+                if (pos.isLP) {
+                  if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
                     tierColor = '#9C27B0';
-                    tierEmoji = '💜💎';
+                    tierEmoji = '💜';
                   } else {
                     tierColor = '#00BCD4';
                     tierEmoji = '💎';
                   }
                 } else {
-                  // DTGC stakes
-                  if (tierNameUpper === 'SILVER') {
+                  const tierName = (pos.tierName || 'GOLD').toUpperCase();
+                  if (tierName === 'SILVER') {
                     tierColor = '#C0C0C0';
                     tierEmoji = '🥈';
-                  } else if (tierNameUpper === 'WHALE') {
+                  } else if (tierName === 'WHALE') {
                     tierColor = '#2196F3';
                     tierEmoji = '🐋';
-                  } else if (tierNameUpper === 'GOLD') {
-                    tierColor = '#FFD700';
-                    tierEmoji = '🥇';
                   }
                 }
-                
-                const displayAmount = pos.amount || 0;
-                const displayValue = pos.usdValue || (displayAmount * (pos.isLP ? (livePrices.dtgc || 0.0005) * 2 : (livePrices.dtgc || 0.0005)));
                 
                 return (
                   <div
@@ -7310,8 +7290,8 @@ export default function App() {
                       setStakeWidgetMinimized(false);
                     }}
                     style={{
-                      width: '48px',
-                      height: '48px',
+                      width: '44px',
+                      height: '44px',
                       background: 'rgba(15,15,15,0.95)',
                       border: `2px solid ${tierColor}`,
                       borderRadius: '10px',
@@ -7322,9 +7302,9 @@ export default function App() {
                       cursor: 'pointer',
                       boxShadow: `0 2px 10px ${tierColor}40`,
                     }}
-                    title={`${tierNameUpper} • ${formatNumber(displayAmount)} ${pos.isLP ? 'LP' : 'DTGC'} ($${formatNumber(displayValue, 2)}) @ ${pos.apr?.toFixed(1) || '?'}% APR`}
+                    title={`${pos.tierName || 'Stake'} • ${formatNumber(pos.amount)} ${pos.isLP ? 'LP' : 'DTGC'} @ ${pos.apr?.toFixed(1) || '?'}% APR`}
                   >
-                    <span style={{ fontSize: tierEmoji.length > 2 ? '0.9rem' : '1.3rem' }}>{tierEmoji}</span>
+                    <span style={{ fontSize: '1.3rem' }}>{tierEmoji}</span>
                     <span style={{ fontSize: '0.4rem', fontWeight: 700, color: pos.isV4 ? '#4CAF50' : '#FF9800' }}>{pos.isV4 ? 'V4' : 'V3'}</span>
                   </div>
                 );
@@ -7336,7 +7316,6 @@ export default function App() {
                   ? testnetBalances.positions.filter(p => p.isFlex || p.tierName === 'FLEX')
                   : [...getVisibleFlexPositions(), ...getVisibleFlexStakes()];
                 const totalFlexLP = allFlexPositions.reduce((sum, s) => sum + (s.amount || s.lpAmount || 0), 0);
-                const totalFlexValue = allFlexPositions.reduce((sum, s) => sum + (s.usdValue || s.stakeValue || (s.amount || s.lpAmount || 0) * (livePrices.dtgc || 0.0005) * 2), 0);
                 const flexCount = allFlexPositions.length;
                 
                 if (flexCount === 0) {
@@ -7349,8 +7328,8 @@ export default function App() {
                         setIsLP(false);
                       }}
                       style={{
-                        width: '48px',
-                        height: '48px',
+                        width: '44px',
+                        height: '44px',
                         background: 'rgba(255,20,147,0.1)',
                         border: '2px dashed #FF1493',
                         borderRadius: '10px',
@@ -7370,114 +7349,52 @@ export default function App() {
                   );
                 }
                 
-                // Show consolidated Flex icon + Close All button
+                // Show consolidated Flex icon
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                    {/* Flex icon */}
-                    <div
-                      onClick={() => {
-                        setIsFlexTier(true);
-                        setSelectedTier(null);
-                        setIsLP(false);
-                      }}
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        background: 'linear-gradient(135deg, rgba(255,20,147,0.3) 0%, rgba(255,105,180,0.2) 100%)',
-                        border: '2px solid #FF1493',
-                        borderRadius: '10px',
+                  <div
+                    onClick={() => {
+                      setIsFlexTier(true);
+                      setSelectedTier(null);
+                      setIsLP(false);
+                    }}
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      background: 'linear-gradient(135deg, rgba(255,20,147,0.3) 0%, rgba(255,105,180,0.2) 100%)',
+                      border: '2px solid #FF1493',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 12px rgba(255,20,147,0.5)',
+                      position: 'relative',
+                    }}
+                    title={`Flex Pool • ${formatNumber(totalFlexLP, 2)} LP total • ${flexCount} stake(s) • 10% APR`}
+                  >
+                    <span style={{ fontSize: '1.3rem' }}>💗</span>
+                    <span style={{ fontSize: '0.4rem', fontWeight: 700, color: '#FF1493' }}>FLEX</span>
+                    {/* Stake count badge */}
+                    {flexCount > 1 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-4px',
+                        right: '-4px',
+                        background: '#FF1493',
+                        color: '#fff',
+                        fontSize: '0.5rem',
+                        fontWeight: 700,
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '50%',
                         display: 'flex',
-                        flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 12px rgba(255,20,147,0.5)',
-                        position: 'relative',
-                      }}
-                      title={`Flex Pool • ${formatNumber(totalFlexLP, 2)} LP ($${formatNumber(totalFlexValue, 2)}) • ${flexCount} stake(s) • 10% APR`}
-                    >
-                      <span style={{ fontSize: '1.3rem' }}>💗</span>
-                      <span style={{ fontSize: '0.35rem', fontWeight: 700, color: '#FF1493' }}>${formatNumber(totalFlexValue, 0)}</span>
-                      {/* Stake count badge */}
-                      {flexCount > 1 && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '-4px',
-                          right: '-4px',
-                          background: '#FF1493',
-                          color: '#fff',
-                          fontSize: '0.5rem',
-                          fontWeight: 700,
-                          width: '14px',
-                          height: '14px',
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}>
-                          {flexCount}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Close All Flex Button */}
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!window.confirm(`Close ALL ${flexCount} Flex stake(s)?\n\nTotal: ${formatNumber(totalFlexLP, 2)} LP ($${formatNumber(totalFlexValue, 2)})\n\nThis will withdraw all LP + claim all rewards.`)) return;
-                        
-                        setLoading(true);
-                        try {
-                          // Get V4 Flex contract stakes
-                          if (signer) {
-                            const flexV4Contract = new ethers.Contract(CONTRACT_ADDRESSES.flexStakingV4, FLEX_STAKING_V4_ABI, signer);
-                            const activeStakes = await flexV4Contract.getActiveStakes(account);
-                            
-                            for (let i = 0; i < activeStakes.length; i++) {
-                              const stake = activeStakes[i];
-                              if (stake.amount > 0n) {
-                                try {
-                                  showToast(`💗 Withdrawing Flex #${i + 1}/${activeStakes.length}...`, 'info');
-                                  const tx = await flexV4Contract.withdraw(stake.stakeIndex);
-                                  await tx.wait();
-                                } catch (err) {
-                                  console.error(`Failed withdraw #${i}:`, err);
-                                }
-                              }
-                            }
-                          }
-                          
-                          // Clear from UI
-                          removeAllFlexFromUI();
-                          showToast(`✅ Closed ALL ${flexCount} Flex stakes!`, 'success');
-                          
-                        } catch (err) {
-                          if (err.code === 'ACTION_REJECTED') {
-                            showToast('Transaction cancelled', 'info');
-                          } else {
-                            showToast(`❌ Error: ${err.message?.slice(0, 40)}`, 'error');
-                          }
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                      disabled={loading}
-                      style={{
-                        width: '48px',
-                        height: '20px',
-                        background: loading ? 'rgba(255,20,147,0.3)' : 'linear-gradient(135deg, #FF1493, #C71585)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '0.45rem',
-                        fontWeight: 700,
-                        color: '#fff',
-                        cursor: loading ? 'wait' : 'pointer',
-                        boxShadow: '0 2px 8px rgba(255,20,147,0.4)',
-                      }}
-                      title="Close ALL Flex Stakes"
-                    >
-                      {loading ? '...' : '❌ ALL'}
-                    </button>
+                      }}>
+                        {flexCount}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -12904,7 +12821,7 @@ export default function App() {
         {/* Floating LP Stakes Widget (top-left) */}
         <FloatingLPWidget 
           account={account}
-          stakedPositions={getVisiblePositions()}
+          stakedPositions={stakedPositions}
           livePrices={livePrices}
           formatNumber={formatNumber}
           getCurrencySymbol={getCurrencySymbol}
