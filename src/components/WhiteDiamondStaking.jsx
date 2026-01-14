@@ -316,6 +316,37 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices, onStak
     }
   };
 
+  const handleTransferNFT = async (tokenId, recipient) => {
+    if (!recipient || !ethers.isAddress(recipient)) {
+      alert('Invalid recipient address');
+      return;
+    }
+    if (!window.confirm(`Transfer NFT #${tokenId} to ${recipient}?\n\n⚠️ This will transfer your staked position.`)) return;
+    
+    setLoading(true);
+    try {
+      if (!signer) {
+        alert('Please connect wallet');
+        setLoading(false);
+        return;
+      }
+      const contract = new ethers.Contract(
+        WHITE_DIAMOND_CONFIG.CONTRACT_ADDRESS,
+        ['function transferFrom(address from, address to, uint256 tokenId) external'],
+        signer
+      );
+      const tx = await contract.transferFrom(userAddress, recipient, tokenId);
+      await tx.wait();
+      alert(`✅ NFT #${tokenId} transferred successfully!`);
+      await loadData();
+    } catch (error) {
+      console.error('❌ Transfer error:', error);
+      alert('❌ Transfer failed: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatNumber = (num) => {
     const n = parseFloat(num);
     if (isNaN(n)) return '0';
@@ -909,22 +940,29 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices, onStak
         <div style={{
           background: theme.cardBg,
           borderRadius: '20px',
-          padding: '25px',
+          padding: '20px',
           border: `1px solid ${theme.border}`,
         }}>
-          <h2 style={{ color: theme.gold, marginBottom: '20px' }}>🎴 Your White Diamond NFTs</h2>
+          <h2 style={{ color: theme.gold, marginBottom: '15px', fontSize: '1.1rem' }}>🎴 Your White Diamond NFTs ({userStakes.length})</h2>
           
           {userStakes.length === 0 ? (
             <div style={{
               textAlign: 'center',
-              padding: '40px 20px',
+              padding: '30px 15px',
               color: theme.textMuted,
             }}>
-              <div style={{ fontSize: '4rem', marginBottom: '10px', opacity: 0.3 }}>💎</div>
+              <div style={{ fontSize: '3rem', marginBottom: '10px', opacity: 0.3 }}>💎</div>
               <p>No NFTs yet. Stake LP to mint your first!</p>
             </div>
           ) : (
-            userStakes.map((stake, index) => {
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '12px',
+              maxHeight: '500px',
+              overflowY: 'auto',
+            }}>
+            {userStakes.map((stake, index) => {
               const isUnlocked = Date.now() >= stake.unlockTime;
               const lpValueUsd = calculateUsdValue(stake.amount, 'LP');
               const rewardsValueUsd = calculateUsdValue(stake.rewards, 'DTGC');
@@ -932,104 +970,100 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices, onStak
               return (
                 <div key={index} style={{
                   background: theme.gradient,
-                  borderRadius: '15px',
-                  padding: '20px',
-                  marginBottom: '15px',
+                  borderRadius: '12px',
+                  padding: '12px',
                   border: `1px solid ${theme.border}`,
                 }}>
-                  {/* NFT Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '2rem' }}>⚔️</span>
+                  {/* NFT Header - Compact */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.3rem' }}>⚔️</span>
                       <div>
-                        <div style={{ color: theme.gold, fontWeight: 800, fontSize: '1.1rem' }}>NFT #{stake.tokenId}</div>
-                        <div style={{ color: theme.textMuted, fontSize: '0.75rem' }}>White Diamond</div>
+                        <div style={{ color: theme.gold, fontWeight: 800, fontSize: '0.9rem' }}>NFT #{stake.tokenId}</div>
                       </div>
                     </div>
                     <div style={{
                       background: isUnlocked ? '#4CAF50' : '#FF9800',
                       color: '#fff',
-                      padding: '6px 12px',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
+                      padding: '4px 8px',
+                      borderRadius: '12px',
+                      fontSize: '0.6rem',
                       fontWeight: 700,
                     }}>
-                      {isUnlocked ? '🔓 Unlocked' : `🔒 ${formatTimeRemaining(stake.unlockTime)}`}
+                      {isUnlocked ? '🔓' : `🔒 ${formatTimeRemaining(stake.unlockTime)}`}
                     </div>
                   </div>
                   
-                  {/* Stats */}
+                  {/* Stats - Compact */}
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr',
-                    gap: '10px',
-                    marginBottom: '15px',
+                    gap: '8px',
+                    marginBottom: '10px',
                   }}>
                     <div>
-                      <div style={{ color: theme.textMuted, fontSize: '0.75rem' }}>LP Staked</div>
-                      <div style={{ color: theme.text, fontWeight: 700 }}>{formatNumber(stake.amount)}</div>
-                      <div style={{ color: theme.textMuted, fontSize: '0.7rem' }}>{formatUsd(lpValueUsd)}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '0.6rem' }}>LP Staked</div>
+                      <div style={{ color: theme.text, fontWeight: 700, fontSize: '0.85rem' }}>{formatNumber(stake.amount)}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '0.55rem' }}>{formatUsd(lpValueUsd)}</div>
                     </div>
                     <div>
-                      <div style={{ color: theme.textMuted, fontSize: '0.75rem' }}>Rewards</div>
-                      <div style={{ color: '#4CAF50', fontWeight: 700 }}>+{formatNumber(stake.rewards)}</div>
-                      <div style={{ color: theme.textMuted, fontSize: '0.7rem' }}>{formatUsd(rewardsValueUsd)}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '0.6rem' }}>Rewards</div>
+                      <div style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.85rem' }}>+{formatNumber(stake.rewards)}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '0.55rem' }}>{formatUsd(rewardsValueUsd)}</div>
                     </div>
                   </div>
                   
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* Actions - Compact row */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
                     <button
                       onClick={() => handleClaimRewards(stake.tokenId)}
                       disabled={loading || parseFloat(stake.rewards) === 0}
                       style={{
                         flex: 1,
-                        padding: '10px',
+                        padding: '6px',
                         background: loading || parseFloat(stake.rewards) === 0 ? '#444' : '#4CAF50',
                         border: 'none',
-                        borderRadius: '8px',
+                        borderRadius: '6px',
                         color: '#fff',
                         fontWeight: 600,
-                        fontSize: '0.85rem',
+                        fontSize: '0.7rem',
                         cursor: loading || parseFloat(stake.rewards) === 0 ? 'not-allowed' : 'pointer',
                       }}
                     >
                       💰 Claim
                     </button>
                     
-                    {isUnlocked && (
+                    {isUnlocked ? (
                       <button
                         onClick={() => handleWithdraw(stake.tokenId)}
                         disabled={loading}
                         style={{
                           flex: 1,
-                          padding: '10px',
+                          padding: '6px',
                           background: loading ? '#444' : theme.gold,
                           border: 'none',
-                          borderRadius: '8px',
+                          borderRadius: '6px',
                           color: '#000',
                           fontWeight: 600,
-                          fontSize: '0.85rem',
+                          fontSize: '0.7rem',
                           cursor: loading ? 'not-allowed' : 'pointer',
                         }}
                       >
                         📤 Withdraw
                       </button>
-                    )}
-                    
-                    {!isUnlocked && (
+                    ) : (
                       <button
                         onClick={() => handleEmergencyWithdraw(stake.tokenId)}
                         disabled={loading}
                         style={{
                           flex: 1,
-                          padding: '10px',
+                          padding: '6px',
                           background: loading ? '#444' : '#ff5252',
                           border: 'none',
-                          borderRadius: '8px',
+                          borderRadius: '6px',
                           color: '#fff',
                           fontWeight: 600,
-                          fontSize: '0.85rem',
+                          fontSize: '0.7rem',
                           cursor: loading ? 'not-allowed' : 'pointer',
                         }}
                       >
@@ -1038,24 +1072,32 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices, onStak
                     )}
                   </div>
                   
-                  {/* NFT Actions Component */}
-                  <WhiteDiamondNFTActions
-                    nft={{
-                      tokenId: stake.tokenId,
-                      amount: stake.amount,
-                      rewards: stake.rewards,
-                      unlockTime: stake.unlockTime,
-                      isActive: stake.isActive,
+                  {/* Transfer Button - Compact */}
+                  <button
+                    onClick={() => {
+                      const recipient = prompt('Enter recipient address for NFT #' + stake.tokenId);
+                      if (recipient && recipient.startsWith('0x')) {
+                        handleTransferNFT(stake.tokenId, recipient);
+                      }
                     }}
-                    provider={provider}
-                    signer={signer}
-                    userAddress={userAddress}
-                    isDark={isDark}
-                    onActionComplete={loadData}
-                  />
+                    style={{
+                      width: '100%',
+                      padding: '6px',
+                      background: 'transparent',
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: '6px',
+                      color: theme.gold,
+                      fontWeight: 600,
+                      fontSize: '0.65rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📤 Transfer to Wallet
+                  </button>
                 </div>
               );
-            })
+            })}
+            </div>
           )}
         </div>
       </div>

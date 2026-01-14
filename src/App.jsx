@@ -3102,6 +3102,9 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   if (!isExpanded) {
     const totalStakes = displayPositions.length + whiteDiamondNFTs.length;
     const hasWhiteDiamond = whiteDiamondNFTs.length > 0;
+    const hasDiamondPlus = totalDiamondPlusLP > 0;
+    const hasDiamond = totalDiamondLP > 0;
+    const hasFlex = totalFlexLP > 0;
     return (
       <div
         onClick={() => setIsExpanded(true)}
@@ -3124,13 +3127,23 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
           transition: 'all 0.3s ease',
         }}
       >
-        {/* Show crossed swords for each White Diamond NFT */}
+        {/* Stake type icons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {/* White Diamond NFTs - crossed swords */}
           {hasWhiteDiamond && whiteDiamondNFTs.slice(0, 3).map((_, i) => (
-            <span key={i} style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>⚔️</span>
+            <span key={`wd-${i}`} style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>⚔️</span>
           ))}
-          {whiteDiamondNFTs.length > 3 && <span style={{ fontSize: '0.6rem', color: '#000' }}>+{whiteDiamondNFTs.length - 3}</span>}
-          <span style={{ fontSize: isMobile ? '0.9rem' : '1.1rem' }}>💎</span>
+          {whiteDiamondNFTs.length > 3 && <span style={{ fontSize: '0.5rem', color: '#000' }}>+{whiteDiamondNFTs.length - 3}</span>}
+          {/* Diamond+ - purple heart */}
+          {hasDiamondPlus && <span style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>💜</span>}
+          {/* Diamond - blue diamond */}
+          {hasDiamond && <span style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>💎</span>}
+          {/* Flex - pink heart */}
+          {hasFlex && <span style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>💗</span>}
+          {/* Fallback if none */}
+          {!hasWhiteDiamond && !hasDiamondPlus && !hasDiamond && !hasFlex && (
+            <span style={{ fontSize: isMobile ? '0.9rem' : '1.1rem' }}>💎</span>
+          )}
         </div>
         <div>
           <div style={{ color: '#000', fontWeight: 700, fontSize: isMobile ? '0.65rem' : '0.75rem' }}>
@@ -3525,6 +3538,7 @@ export default function App() {
   });
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showPricesDropdown, setShowPricesDropdown] = useState(false);
 
   // Testnet balances (stored in localStorage for persistence)
   const [testnetBalances, setTestnetBalances] = useState(() => {
@@ -7919,48 +7933,95 @@ export default function App() {
             </nav>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {/* Metal & Crypto Prices - Compact Single Row */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '4px 10px',
-                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
-                borderRadius: '16px',
-                border: '1px solid rgba(212,175,55,0.2)',
-                fontSize: '0.6rem',
-              }}>
-                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
-                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(2)}</span>
-                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
-              </div>
-              {/* Crypto Prices - Compact */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 8px',
-                background: 'rgba(33,150,243,0.08)',
-                borderRadius: '16px',
-                border: '1px solid rgba(33,150,243,0.15)',
-                fontSize: '0.55rem',
-              }}>
-                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{(cryptoPrices.btc/1000).toFixed(1)}K</span>
-                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
-              </div>
-              {/* PLS/PLSX Prices */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 8px',
-                background: 'rgba(0,212,170,0.08)',
-                borderRadius: '16px',
-                border: '1px solid rgba(0,212,170,0.15)',
-                fontSize: '0.55rem',
-              }}>
-                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
-                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
+              {/* Prices Dropdown - Clean & Compact */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowPricesDropdown(!showPricesDropdown)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    background: isDark ? 'rgba(212,175,55,0.15)' : 'rgba(212,175,55,0.1)',
+                    borderRadius: '20px',
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    fontSize: '0.7rem',
+                    color: '#D4AF37',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  💰 ${((cryptoPrices.btc/1000).toFixed(0))}K
+                  <span style={{ fontSize: '0.5rem', opacity: 0.7 }}>▼</span>
+                </button>
+                
+                {/* Prices Dropdown Panel */}
+                {showPricesDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '8px',
+                    background: isDark ? '#1a1a2e' : '#fff',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    padding: '12px',
+                    minWidth: '200px',
+                    zIndex: 10000,
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                  }}>
+                    {/* Metals */}
+                    <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
+                      <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '6px', fontWeight: 600 }}>METALS /oz</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#FFD700', fontSize: '0.7rem' }}>🥇 Gold</span>
+                          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.gold.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#C0C0C0', fontSize: '0.7rem' }}>🥈 Silver</span>
+                          <span style={{ color: '#C0C0C0', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.silver.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#CD7F32', fontSize: '0.7rem' }}>🥉 Copper</span>
+                          <span style={{ color: '#CD7F32', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.copper.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Crypto */}
+                    <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
+                      <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '6px', fontWeight: 600 }}>CRYPTO</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#F7931A', fontSize: '0.7rem' }}>₿ Bitcoin</span>
+                          <span style={{ color: '#F7931A', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.btc.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#627EEA', fontSize: '0.7rem' }}>Ξ Ethereum</span>
+                          <span style={{ color: '#627EEA', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.eth.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* PulseChain */}
+                    <div>
+                      <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '6px', fontWeight: 600 }}>PULSECHAIN</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#00D4AA', fontSize: '0.7rem' }}>💜 PLS</span>
+                          <span style={{ color: '#00D4AA', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.pls.toFixed(8)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#9B59B6', fontSize: '0.7rem' }}>💎 PLSX</span>
+                          <span style={{ color: '#9B59B6', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.plsx.toFixed(8)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#FFD700', fontSize: '0.7rem' }}>🪙 DTGC</span>
+                          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.75rem' }}>${(livePrices.dtgc || 0).toFixed(7)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {/* Security & Audit Button */}
               <button
