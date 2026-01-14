@@ -477,6 +477,8 @@ const PULSECHAIN_API = {
   // Use local API route to proxy requests (avoids CORS issues)
   holders: '/api/holders',
   tokenInfo: '/api/token-info',
+  // Direct PulseChain API (may have CORS issues in browser, but works as fallback)
+  directTokenInfo: 'https://api.scan.pulsechain.com/api/v2/tokens/0xd0676b28a457371d58d47e5247b439114e40eb0f',
   // Direct RPC for contract calls (doesn't have CORS issues)
   rpc: 'https://rpc.pulsechain.com',
 };
@@ -4459,13 +4461,44 @@ export default function App() {
   // Fetch live holder data from our Vercel API route (proxies PulseChain API)
   const fetchLiveHolders = useCallback(async () => {
     try {
-      const response = await fetch(PULSECHAIN_API.holders);
+      // Fetch both holders list AND token info (for accurate holder count)
+      const [holdersResponse, tokenInfoResponse] = await Promise.all([
+        fetch(PULSECHAIN_API.holders),
+        fetch(PULSECHAIN_API.tokenInfo).catch(() => null) // Don't fail if token info fails
+      ]);
       
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+      if (!holdersResponse.ok) {
+        throw new Error(`API returned ${holdersResponse.status}`);
       }
       
-      const data = await response.json();
+      const data = await holdersResponse.json();
+      
+      // Get token info for accurate holder count
+      let tokenHoldersCount = null;
+      if (tokenInfoResponse && tokenInfoResponse.ok) {
+        try {
+          const tokenData = await tokenInfoResponse.json();
+          // PulseChain API returns holders count in token info
+          tokenHoldersCount = tokenData.holders_count || tokenData.holders || tokenData.holder_count || null;
+          console.log('📊 Token info holders count:', tokenHoldersCount);
+        } catch (e) {
+          console.warn('⚠️ Could not parse token info:', e.message);
+        }
+      }
+      
+      // Fallback: Try direct PulseChain API if we don't have holder count yet
+      if (!tokenHoldersCount) {
+        try {
+          const directResponse = await fetch(PULSECHAIN_API.directTokenInfo);
+          if (directResponse.ok) {
+            const directData = await directResponse.json();
+            tokenHoldersCount = directData.holders_count || directData.holders || null;
+            console.log('📊 Direct API holders count:', tokenHoldersCount);
+          }
+        } catch (e) {
+          console.warn('⚠️ Direct API fallback failed:', e.message);
+        }
+      }
       
       // Handle Vercel API response format
       if (!data.success && data.error) {
@@ -4474,7 +4507,8 @@ export default function App() {
       
       // Get items from either format (direct API or Vercel proxy)
       const allItems = data.holders || data.items || [];
-      const totalHolders = data.totalHolders || (data.next_page_params ? 100 : allItems.length);
+      // Use token info holder count if available, otherwise estimate from pagination
+      const totalHolders = tokenHoldersCount || data.totalHolders || data.holders_count || (data.next_page_params ? Math.max(allItems.length * 3, 150) : allItems.length);
       
       if (allItems.length === 0) {
         throw new Error('No items in API response');
@@ -8719,6 +8753,54 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Total Holders - Live from PulseChain */}
+              <a 
+                href="https://scan.pulsechain.com/token/0xD0676B28a457371D58d47E5247b439114e40Eb0F/token-holders"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: 'none' }}
+              >
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(212,175,55,0.15) 0%, rgba(212,175,55,0.08) 100%)',
+                border: '1px solid rgba(212,175,55,0.4)',
+                borderRadius: '12px',
+                padding: '16px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(212,175,55,0.3)'; }}
+              onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>👥</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>TOTAL HOLDERS</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#D4AF37' }}>
+                  {liveHolders.loading ? '...' : (liveHolders.totalHolders || '...')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 600 }}>
+                  Unique Wallets
+                </div>
+                <div style={{ 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  marginTop: '4px'
+                }}>
+                  <span style={{ 
+                    width: '6px', 
+                    height: '6px', 
+                    borderRadius: '50%', 
+                    background: liveHolders.loading ? '#FF9800' : '#4CAF50',
+                    animation: 'pulse 2s infinite'
+                  }} />
+                  <span style={{ fontSize: '0.5rem', color: '#666' }}>
+                    {liveHolders.loading ? 'Loading...' : 'Live from PulseChain'}
+                  </span>
+                </div>
+              </div>
+              </a>
+
               {/* DAO Ecosystem (Treasury + LP Locked) */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(255,152,0,0.1) 0%, rgba(255,152,0,0.05) 100%)',
@@ -8750,6 +8832,128 @@ export default function App() {
                   }} />
                 </div>
                 <div style={{ fontSize: '0.55rem', color: '#666', marginTop: '6px' }}>Treasury + LP</div>
+              </div>
+            </div>
+
+            {/* TOTAL VALUE LOCKED (TVL) Summary Box */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(212,175,55,0.15) 0%, rgba(184,134,11,0.1) 100%)',
+              border: '2px solid rgba(212,175,55,0.5)',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '16px',
+              boxShadow: '0 4px 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: '12px',
+                marginBottom: '16px'
+              }}>
+                <span style={{ fontSize: '1.5rem' }}>🔐</span>
+                <span style={{ 
+                  fontSize: '1rem', 
+                  fontWeight: 800, 
+                  color: '#D4AF37',
+                  letterSpacing: '2px'
+                }}>TOTAL VALUE LOCKED (TVL)</span>
+                <span style={{ fontSize: '1.5rem' }}>🔐</span>
+              </div>
+              
+              {/* TVL Main Display */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '16px',
+                marginBottom: '16px',
+              }}>
+                {/* USD Value */}
+                <div style={{
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '6px' }}>
+                    💵 USD VALUE
+                  </div>
+                  <div style={{ 
+                    fontSize: '1.8rem', 
+                    fontWeight: 800, 
+                    color: '#4CAF50',
+                    textShadow: '0 2px 10px rgba(76,175,80,0.3)'
+                  }}>
+                    ${formatNumber((
+                      supplyDynamics.dao + 
+                      supplyDynamics.lpLocked + 
+                      (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) +
+                      (supplyDynamics.rewardsPool || 0)
+                    ) * livePrices.dtgc)}
+                  </div>
+                  <div style={{ fontSize: '0.65rem', color: '#666', marginTop: '4px' }}>
+                    @ ${livePrices.dtgc?.toFixed(6) || '0.000000'}/DTGC
+                  </div>
+                </div>
+                
+                {/* DTGC Amount */}
+                <div style={{
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '6px' }}>
+                    🪙 DTGC LOCKED
+                  </div>
+                  <div style={{ 
+                    fontSize: '1.8rem', 
+                    fontWeight: 800, 
+                    color: '#D4AF37',
+                    textShadow: '0 2px 10px rgba(212,175,55,0.3)'
+                  }}>
+                    {formatNumber(
+                      supplyDynamics.dao + 
+                      supplyDynamics.lpLocked + 
+                      (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) +
+                      (supplyDynamics.rewardsPool || 0)
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.65rem', color: '#666', marginTop: '4px' }}>
+                    {(((supplyDynamics.dao + supplyDynamics.lpLocked + (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) + (supplyDynamics.rewardsPool || 0)) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}% of Total Supply
+                  </div>
+                </div>
+              </div>
+              
+              {/* TVL Breakdown */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: '10px',
+                background: 'rgba(0,0,0,0.2)',
+                borderRadius: '8px',
+                padding: '12px',
+              }}>
+                <div style={{ textAlign: 'center', padding: '8px' }}>
+                  <div style={{ fontSize: '0.6rem', color: '#4CAF50', marginBottom: '4px' }}>🏛️ Treasury</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(supplyDynamics.dao)}</div>
+                  <div style={{ fontSize: '0.55rem', color: '#4CAF50' }}>${formatNumber(supplyDynamics.dao * livePrices.dtgc)}</div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '8px' }}>
+                  <div style={{ fontSize: '0.6rem', color: '#9C27B0', marginBottom: '4px' }}>🔒 LP Locked</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(supplyDynamics.lpLocked)}</div>
+                  <div style={{ fontSize: '0.55rem', color: '#9C27B0' }}>${formatNumber(supplyDynamics.lpLocked * livePrices.dtgc)}</div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '8px' }}>
+                  <div style={{ fontSize: '0.6rem', color: '#00BCD4', marginBottom: '4px' }}>💎 Staked</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(parseFloat(contractStats.totalStaked) || supplyDynamics.staked)}</div>
+                  <div style={{ fontSize: '0.55rem', color: '#00BCD4' }}>${formatNumber((parseFloat(contractStats.totalStaked) || supplyDynamics.staked) * livePrices.dtgc)}</div>
+                </div>
+                <div style={{ textAlign: 'center', padding: '8px' }}>
+                  <div style={{ fontSize: '0.6rem', color: '#FF9800', marginBottom: '4px' }}>🏦 Rewards Pool</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(supplyDynamics.rewardsPool || 0)}</div>
+                  <div style={{ fontSize: '0.55rem', color: '#FF9800' }}>${formatNumber((supplyDynamics.rewardsPool || 0) * livePrices.dtgc)}</div>
+                </div>
               </div>
             </div>
 
