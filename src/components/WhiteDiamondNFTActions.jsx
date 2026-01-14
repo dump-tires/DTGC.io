@@ -19,6 +19,7 @@ const WhiteDiamondNFTActions = ({ nft, provider, signer, userAddress, onActionCo
     text: isDark ? '#ffffff' : '#000000',
     textMuted: isDark ? '#888888' : '#666666',
     border: '#D4AF37',
+    gold: '#D4AF37',
     buttonBg: isDark ? '#3a3a3a' : '#e5e5e5',
     buttonHover: isDark ? '#4a4a4a' : '#d5d5d5',
   };

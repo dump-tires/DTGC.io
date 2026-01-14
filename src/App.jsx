@@ -547,6 +547,8 @@ const CONTRACT_ADDRESSES = {
   lpStakingV4: '0x22f0DE89Ef26AE5c03CB43543dF5Bbd8cb8d0231',
   // Flex V4 - 10% APR No Lock LP Staking
   lpStakingFlexV4: '0x5ccea11cab6a17659ce1860f5b0b6e4a8cea54d6', // Flex LP Staking - 10% APR No Lock
+  // White Diamond V5 - NFT LP Staking (70% APR, 90 day lock, tradeable NFT)
+  whiteDiamondV5: '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -3730,13 +3732,16 @@ export default function App() {
     if (!account || !provider) return;
     
     setScanningWallet(true);
-    showToast('🔍 Deep scanning wallet for ALL tokens...', 'info');
+    showToast('🔍 Fast scanning wallet...', 'info');
     
     try {
       const foundTokens = [];
-      const checkedAddresses = new Set();
+      const seenAddresses = new Set();
+      const addr = account.toLowerCase();
       
-      // 1. Add PLS balance first
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 1: Get PLS balance (instant)
+      // ═══════════════════════════════════════════════════════════════
       const plsBal = await provider.getBalance(account);
       const plsBalFormatted = ethers.formatEther(plsBal);
       if (parseFloat(plsBalFormatted) > 0) {
@@ -3750,198 +3755,265 @@ export default function App() {
           color: '#E1BEE7',
           valueUsd: parseFloat(plsBalFormatted) * (livePrices.pls || 0.00003),
           hasLiquidity: true,
+          isNative: true,
         });
+        seenAddresses.add('native');
       }
       
-      // 2. Check known tokens first
-      for (const token of KNOWN_TOKENS) {
-        if (!token.address) continue;
-        checkedAddresses.add(token.address.toLowerCase());
-        try {
-          const contract = new ethers.Contract(token.address, [
-            'function balanceOf(address) view returns (uint256)',
-          ], provider);
-          
-          const bal = await contract.balanceOf(account);
-          if (bal > 0n) {
-            const balFormatted = ethers.formatUnits(bal, token.decimals);
-            
-            let price = 0;
-            if (token.symbol === 'DTGC') price = livePrices.dtgc || 0;
-            else if (token.symbol === 'URMOM') price = livePrices.urmom || 0;
-            else if (token.symbol === 'PLSX') price = livePrices.plsx || 0;
-            else if (token.symbol === 'HEX') price = livePrices.hex || 0;
-            else if (token.symbol === 'WPLS') price = livePrices.pls || 0.00003;
-            else if (token.symbol === 'USDC' || token.symbol === 'USDT' || token.symbol === 'DAI') price = 1;
-            else if (token.symbol === 'WETH') price = 3500;
-            else if (token.symbol === 'WBTC') price = 100000;
-            else if (token.symbol === 'INC') price = livePrices.inc || 0.0001;
-            
-            foundTokens.push({
-              ...token,
-              balance: balFormatted,
-              valueUsd: parseFloat(balFormatted) * price,
-              price: price,
-              hasLiquidity: true,
-            });
-          }
-        } catch (e) {
-          // Skip failed tokens
-        }
-      }
-      
-      // 3. PulseScan API - Get ALL token balances
-      try {
-        const apiUrl = `https://api.scan.pulsechain.com/api/v2/addresses/${account}/token-balances`;
-        const response = await fetch(apiUrl);
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            for (const item of data) {
-              const tokenAddr = item.token?.address?.toLowerCase();
-              if (!tokenAddr || checkedAddresses.has(tokenAddr)) continue;
-              checkedAddresses.add(tokenAddr);
-              
-              const decimals = item.token?.decimals || 18;
-              const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
-              if (bal <= 0) continue;
-              
-              const tokenSymbol = item.token?.symbol?.toUpperCase() || '';
-              
-              // Check if this is a known liquid token
-              const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
-              
-              // Try to get price from DEX
-              let price = 0;
-              let hasLiquidity = isKnownLiquid; // Default to true for known liquid tokens
-              try {
-                price = await getTokenPriceFromDex(item.token?.address, decimals);
-                if (price > 0) hasLiquidity = true;
-              } catch (e) {}
-              
-              // Use live prices for known tokens
-              if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
-              else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
-              else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
-              else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
-              else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
-              
-              foundTokens.push({
-                symbol: item.token?.symbol || 'UNKNOWN',
-                name: item.token?.name || 'Unknown Token',
-                address: item.token?.address,
-                decimals: decimals,
-                balance: bal.toString(),
-                icon: hasLiquidity ? '💰' : '🔸',
-                color: hasLiquidity ? '#4CAF50' : '#888',
-                valueUsd: bal * price,
-                price: price,
-                isUnknown: !hasLiquidity,
-                hasLiquidity: hasLiquidity,
-              });
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 2: PARALLEL fetch from multiple sources (V4 GOLD SUITE SPEED)
+      // ═══════════════════════════════════════════════════════════════
+      const [pulseScanV2, pulseScanV1, knownTokenBalances] = await Promise.all([
+        // PulseScan API v2 (primary)
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`)
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => []),
+        // PulseScan API v1 (backup - catches tokens v2 misses)
+        fetch(`https://api.scan.pulsechain.com/api?module=account&action=tokenlist&address=${addr}`)
+          .then(r => r.ok ? r.json() : { result: [] })
+          .then(d => d.result || [])
+          .catch(() => []),
+        // Direct RPC for known tokens (fastest, most reliable)
+        Promise.all(KNOWN_TOKENS.filter(t => t.address).map(async (token) => {
+          try {
+            const contract = new ethers.Contract(token.address, ['function balanceOf(address) view returns (uint256)'], provider);
+            const bal = await contract.balanceOf(account);
+            if (bal > 0n) {
+              const balFormatted = ethers.formatUnits(bal, token.decimals);
+              return { ...token, balance: balFormatted };
             }
-          }
+          } catch {}
+          return null;
+        }))
+      ]);
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 3: Process known tokens first (highest priority)
+      // ═══════════════════════════════════════════════════════════════
+      for (const token of knownTokenBalances.filter(Boolean)) {
+        const tokenAddr = token.address?.toLowerCase();
+        if (tokenAddr && !seenAddresses.has(tokenAddr)) {
+          seenAddresses.add(tokenAddr);
+          
+          let price = 0;
+          if (token.symbol === 'DTGC') price = livePrices.dtgc || 0;
+          else if (token.symbol === 'URMOM') price = livePrices.urmom || 0;
+          else if (token.symbol === 'PLSX') price = livePrices.plsx || 0;
+          else if (token.symbol === 'HEX') price = livePrices.hex || 0;
+          else if (token.symbol === 'WPLS') price = livePrices.pls || 0.00003;
+          else if (['USDC', 'USDT', 'DAI'].includes(token.symbol)) price = 1;
+          else if (token.symbol === 'WETH') price = 3500;
+          else if (token.symbol === 'WBTC') price = 100000;
+          else if (token.symbol === 'INC') price = livePrices.inc || 0.0001;
+          
+          foundTokens.push({
+            ...token,
+            valueUsd: parseFloat(token.balance) * price,
+            price: price,
+            hasLiquidity: true,
+            icon: token.icon || '💰',
+            color: '#4CAF50',
+          });
         }
-      } catch (e) {
-        console.log('PulseScan API error:', e.message);
       }
       
-      // 4. Also try token transfers endpoint for any missed tokens
-      try {
-        const txApiUrl = `https://api.scan.pulsechain.com/api/v2/addresses/${account}/token-transfers?type=ERC-20`;
-        const txResponse = await fetch(txApiUrl);
-        if (txResponse.ok) {
-          const txData = await txResponse.json();
-          const items = txData.items || txData || [];
-          if (Array.isArray(items)) {
-            for (const tx of items.slice(0, 100)) { // Check last 100 transfers
-              const tokenAddr = tx.token?.address?.toLowerCase();
-              if (!tokenAddr || checkedAddresses.has(tokenAddr)) continue;
-              checkedAddresses.add(tokenAddr);
-              
-              // Check if we still have balance
-              try {
-                const contract = new ethers.Contract(tx.token.address, [
-                  'function balanceOf(address) view returns (uint256)',
-                  'function decimals() view returns (uint8)',
-                  'function symbol() view returns (string)',
-                  'function name() view returns (string)',
-                ], provider);
-                
-                const bal = await contract.balanceOf(account);
-                if (bal > 0n) {
-                  let decimals = tx.token?.decimals || 18;
-                  try { decimals = await contract.decimals(); } catch {}
-                  
-                  let symbol = tx.token?.symbol || 'UNKNOWN';
-                  try { symbol = await contract.symbol(); } catch {}
-                  
-                  let name = tx.token?.name || 'Unknown Token';
-                  try { name = await contract.name(); } catch {}
-                  
-                  const balFormatted = ethers.formatUnits(bal, decimals);
-                  const tokenSymbol = symbol.toUpperCase();
-                  
-                  // Check if this is a known liquid token (reuse tokenAddr from outer scope)
-                  const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
-                  
-                  // Try to get price
-                  let price = 0;
-                  let hasLiquidity = isKnownLiquid; // Default to true for known liquid tokens
-                  try {
-                    price = await getTokenPriceFromDex(tx.token.address, decimals);
-                    if (price > 0) hasLiquidity = true;
-                  } catch (e) {}
-                  
-                  // Use live prices for known tokens
-                  if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0.0000001;
-                  else if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0.0002;
-                  else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0.00008;
-                  else if (tokenSymbol === 'HEX') price = livePrices.hex || 0.005;
-                  else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
-                  
-                  foundTokens.push({
-                    symbol: symbol,
-                    name: name,
-                    address: tx.token.address,
-                    decimals: decimals,
-                    balance: balFormatted,
-                    icon: hasLiquidity ? '💰' : '🔸',
-                    color: hasLiquidity ? '#4CAF50' : '#888',
-                    valueUsd: parseFloat(balFormatted) * price,
-                    price: price,
-                    isUnknown: !hasLiquidity,
-                    hasLiquidity: hasLiquidity,
-                  });
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 4: Process PulseScan V2 results
+      // ═══════════════════════════════════════════════════════════════
+      if (Array.isArray(pulseScanV2)) {
+        for (const item of pulseScanV2) {
+          const tokenAddr = item.token?.address?.toLowerCase();
+          if (!tokenAddr || seenAddresses.has(tokenAddr)) continue;
+          seenAddresses.add(tokenAddr);
+          
+          const decimals = parseInt(item.token?.decimals) || 18;
+          const bal = parseFloat(item.value || '0') / Math.pow(10, decimals);
+          if (bal <= 0.000001) continue;
+          
+          const tokenSymbol = (item.token?.symbol || '').toUpperCase();
+          const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
+          
+          // Quick price lookup for known tokens
+          let price = 0;
+          if (tokenSymbol === 'DTGC') price = livePrices.dtgc || 0;
+          else if (tokenSymbol === 'URMOM') price = livePrices.urmom || 0;
+          else if (tokenSymbol === 'PLSX') price = livePrices.plsx || 0;
+          else if (tokenSymbol === 'HEX') price = livePrices.hex || 0;
+          else if (tokenSymbol === 'WPLS') price = livePrices.pls || 0.00003;
+          
+          foundTokens.push({
+            symbol: item.token?.symbol || 'UNKNOWN',
+            name: item.token?.name || 'Unknown Token',
+            address: item.token?.address,
+            decimals: decimals,
+            balance: bal.toString(),
+            icon: isKnownLiquid || price > 0 ? '💰' : '🔸',
+            color: isKnownLiquid || price > 0 ? '#4CAF50' : '#888',
+            valueUsd: bal * price,
+            price: price,
+            hasLiquidity: isKnownLiquid || price > 0,
+            v1PlsAvailable: 0,
+            dustCleanStatus: 'unknown',
+          });
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 5: Process PulseScan V1 results (catches missed tokens)
+      // ═══════════════════════════════════════════════════════════════
+      if (Array.isArray(pulseScanV1)) {
+        for (const item of pulseScanV1) {
+          const tokenAddr = item.contractAddress?.toLowerCase();
+          if (!tokenAddr || seenAddresses.has(tokenAddr)) continue;
+          seenAddresses.add(tokenAddr);
+          
+          const decimals = parseInt(item.decimals) || 18;
+          const bal = parseFloat(item.balance || '0') / Math.pow(10, decimals);
+          if (bal <= 0.000001) continue;
+          
+          const tokenSymbol = (item.symbol || '').toUpperCase();
+          const isKnownLiquid = LIQUID_TOKENS.has(tokenSymbol) || LIQUID_TOKENS.has(tokenAddr);
+          
+          foundTokens.push({
+            symbol: item.symbol || 'UNKNOWN',
+            name: item.name || 'Unknown Token',
+            address: item.contractAddress,
+            decimals: decimals,
+            balance: bal.toString(),
+            icon: isKnownLiquid ? '💰' : '🔸',
+            color: isKnownLiquid ? '#4CAF50' : '#888',
+            valueUsd: 0,
+            price: 0,
+            hasLiquidity: isKnownLiquid,
+            v1PlsAvailable: 0,
+            dustCleanStatus: 'unknown',
+          });
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 6: Batch price lookup via DexScreener (background, non-blocking)
+      // ═══════════════════════════════════════════════════════════════
+      const tokensNeedingPrices = foundTokens.filter(t => t.address && t.price === 0 && parseFloat(t.balance) > 0);
+      if (tokensNeedingPrices.length > 0) {
+        // Process in batches of 30 (DexScreener limit)
+        const batches = [];
+        for (let i = 0; i < tokensNeedingPrices.length; i += 30) {
+          batches.push(tokensNeedingPrices.slice(i, i + 30));
+        }
+        
+        await Promise.all(batches.map(async (batch) => {
+          try {
+            const addresses = batch.map(t => t.address).join(',');
+            const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addresses}`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data?.pairs) {
+                for (const pair of data.pairs) {
+                  const tokenAddr = pair.baseToken?.address?.toLowerCase();
+                  const token = foundTokens.find(t => t.address?.toLowerCase() === tokenAddr);
+                  if (token && pair.priceUsd) {
+                    token.price = parseFloat(pair.priceUsd);
+                    token.valueUsd = parseFloat(token.balance) * token.price;
+                    token.hasLiquidity = true;
+                    token.liquidityUsd = parseFloat(pair.liquidity?.usd || 0);
+                    token.icon = '💰';
+                    token.color = '#4CAF50';
+                    // Mark low liquidity tokens
+                    if (token.liquidityUsd < 50) {
+                      token.hasLiquidity = false;
+                      token.dustCleanStatus = 'low_liq';
+                      token.icon = '⚠️';
+                      token.color = '#FF9800';
+                    }
+                  }
                 }
-              } catch (e) {
-                // Skip failed tokens
               }
             }
+          } catch (e) {
+            console.log('DexScreener batch lookup:', e.message);
           }
-        }
-      } catch (e) {
-        console.log('Token transfers API error:', e.message);
+        }));
       }
       
-      // 5. Sort: tokens with liquidity/value first, then by USD value, then by balance
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 7: Check V1 PLS liquidity for low-liq tokens (for dust clean)
+      // ═══════════════════════════════════════════════════════════════
+      const lowLiqTokens = foundTokens.filter(t => 
+        t.address && 
+        !t.isNative && 
+        (t.hasLiquidity === false || t.dustCleanStatus === 'low_liq')
+      );
+      
+      if (lowLiqTokens.length > 0) {
+        const factoryV1Address = '0x1715a3E4A142d8b698131108995174F37aEBA10D';
+        const WPLS = '0xa1077a294dde1b09bb078844df40758a5d0f9a27';
+        
+        try {
+          const factoryV1 = new ethers.Contract(
+            factoryV1Address,
+            ['function getPair(address,address) view returns (address)'],
+            provider
+          );
+          
+          // Check V1 pairs in parallel (limit to 15 for speed)
+          await Promise.all(lowLiqTokens.slice(0, 15).map(async (token) => {
+            try {
+              const pairAddress = await factoryV1.getPair(token.address, WPLS);
+              if (pairAddress && pairAddress !== ethers.ZeroAddress) {
+                const pair = new ethers.Contract(pairAddress, [
+                  'function getReserves() view returns (uint112,uint112,uint32)',
+                  'function token0() view returns (address)',
+                ], provider);
+                
+                const [reserves, token0] = await Promise.all([
+                  pair.getReserves(),
+                  pair.token0(),
+                ]);
+                
+                const isToken0 = token0.toLowerCase() === token.address.toLowerCase();
+                const plsReserve = isToken0 ? reserves[1] : reserves[0];
+                const plsAmount = parseFloat(ethers.formatEther(plsReserve));
+                
+                if (plsAmount > 0) {
+                  token.v1PlsAvailable = plsAmount;
+                  token.liquiditySource = 'v1';
+                  token.hasLiquidity = plsAmount > 100;
+                  token.dustCleanStatus = plsAmount > 100 ? 'v1_available' : 'very_low_liq';
+                  if (plsAmount > 100) {
+                    token.icon = '🔄';
+                    token.color = '#2196F3';
+                  }
+                }
+              }
+            } catch {}
+          }));
+        } catch (e) {
+          console.log('V1 liquidity check error:', e.message);
+        }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 8: Sort by value and liquidity
+      // ═══════════════════════════════════════════════════════════════
       foundTokens.sort((a, b) => {
         // Tokens with liquidity first
         if (a.hasLiquidity && !b.hasLiquidity) return -1;
         if (!a.hasLiquidity && b.hasLiquidity) return 1;
         // Then by USD value
-        if (b.valueUsd !== a.valueUsd) return b.valueUsd - a.valueUsd;
+        if ((b.valueUsd || 0) !== (a.valueUsd || 0)) return (b.valueUsd || 0) - (a.valueUsd || 0);
         // Then by raw balance
-        return parseFloat(b.balance) - parseFloat(a.balance);
+        return parseFloat(b.balance || 0) - parseFloat(a.balance || 0);
       });
       
       setWalletTokens(foundTokens);
       setLastScanTime(Date.now());
       
       const withValue = foundTokens.filter(t => t.valueUsd > 0).length;
+      const withV1 = foundTokens.filter(t => t.v1PlsAvailable > 0).length;
       const totalValue = foundTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0);
       
-      showToast(`🎉 Found ${foundTokens.length} tokens! ${withValue} with liquidity ($${totalValue.toFixed(2)} total)`, 'success');
+      showToast(`✅ Found ${foundTokens.length} tokens ($${totalValue.toFixed(2)})${withV1 > 0 ? ` • ${withV1} with V1 liquidity` : ''}`, 'success');
       
     } catch (err) {
       console.error('Wallet scan error:', err);
@@ -8849,6 +8921,59 @@ export default function App() {
                 </div>
                 <div style={{ fontSize: '0.55rem', color: '#666', marginTop: '6px' }}>Treasury + LP</div>
               </div>
+
+              {/* 💰 TOTAL VALUE LOCKED (TVL) - NEW */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(76,175,80,0.15) 0%, rgba(212,175,55,0.1) 100%)',
+                border: '2px solid rgba(76,175,80,0.5)',
+                borderRadius: '12px',
+                padding: '16px',
+                textAlign: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+              }}>
+                {/* Glow effect */}
+                <div style={{
+                  position: 'absolute',
+                  top: '-50%',
+                  left: '-50%',
+                  width: '200%',
+                  height: '200%',
+                  background: 'radial-gradient(circle, rgba(76,175,80,0.15) 0%, transparent 60%)',
+                  pointerEvents: 'none',
+                }} />
+                <div style={{ fontSize: '1.8rem', marginBottom: '4px', position: 'relative' }}>💰</div>
+                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px', position: 'relative' }}>TOTAL VALUE LOCKED</div>
+                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#4CAF50', position: 'relative' }}>
+                  ${formatNumber(
+                    ((supplyDynamics.dao + supplyDynamics.lpLocked + (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) + (supplyDynamics.rewardsPool || 0)) * (livePrices.dtgc || 0.0006))
+                  )}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 600, position: 'relative' }}>
+                  {livePrices.dtgcMarketCap > 0 
+                    ? (((supplyDynamics.dao + supplyDynamics.lpLocked + (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) + (supplyDynamics.rewardsPool || 0)) * (livePrices.dtgc || 0.0006) / livePrices.dtgcMarketCap) * 100).toFixed(1)
+                    : '0'}% of MCap
+                </div>
+                <div style={{ 
+                  height: '4px',
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '2px',
+                  overflow: 'hidden',
+                  marginTop: '8px',
+                  position: 'relative',
+                }}>
+                  <div style={{
+                    width: `${Math.min(livePrices.dtgcMarketCap > 0 
+                      ? ((supplyDynamics.dao + supplyDynamics.lpLocked + (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) + (supplyDynamics.rewardsPool || 0)) * (livePrices.dtgc || 0.0006) / livePrices.dtgcMarketCap) * 100
+                      : 0, 100)}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #4CAF50, #D4AF37)',
+                    borderRadius: '2px',
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+                <div style={{ fontSize: '0.5rem', color: '#666', marginTop: '6px', position: 'relative' }}>Treasury + LP + Stakes + Rewards</div>
+              </div>
             </div>
 
             {/* Summary Bar */}
@@ -11532,6 +11657,7 @@ export default function App() {
                   { label: '💜💎 DTGC/URMOM LP', addr: CONTRACT_ADDRESSES.lpDtgcUrmom },
                   { label: '🚀 DTGC Staking V4', addr: CONTRACT_ADDRESSES.stakingV4 },
                   { label: '🚀 LP Staking V4', addr: CONTRACT_ADDRESSES.lpStakingV4 },
+                  { label: '✖️ White Diamond V5', addr: CONTRACT_ADDRESSES.whiteDiamondV5 },
                   { label: '🗳️ DAO Voting V3', addr: CONTRACT_ADDRESSES.daoVotingV3 },
                   { label: '🏛️ DAO Treasury', addr: CONTRACT_ADDRESSES.daoTreasury },
                   { label: '👨‍💻 Dev Wallet', addr: CONTRACT_ADDRESSES.devWallet },

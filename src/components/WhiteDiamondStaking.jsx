@@ -545,7 +545,7 @@ const WhiteDiamondStaking = ({ provider, signer, userAddress, livePrices, onStak
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ 
-                  color: theme.textMuted,
+                  color: theme.gold,
                   fontSize: '0.75rem',
                   textDecoration: 'none'
                 }}
