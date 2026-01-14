@@ -2,148 +2,151 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 
 // ═══════════════════════════════════════════════════════════════
-// FAST TOKEN VALIDATOR WITH V1/V2 DEX CHECKS (ETHERS V6 COMPATIBLE)
+// FAST TOKEN VALIDATOR - OPTIMIZED TO MATCH V4DeFiGoldSuite SPEED
+// Uses KNOWN_PAIRS cache for instant lookups
 // ═══════════════════════════════════════════════════════════════
 
 const TOKEN_VALIDATOR = {
-  // PulseX V1 Router
+  // KNOWN_PAIRS cache (pre-computed, instant lookup)
+  // Format: "TOKEN:PLS" -> pair address
+  KNOWN_PAIRS: {
+    'dtgc:pls': '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',  // DTGC/PLS V1
+    'urmom:pls': '0x...',  // Add if known
+    'hex:pls': '0x...',    // Add if known
+    'inc:pls': '0x...',    // Add if known
+  },
+
+  // Runtime cache (builds as user validates)
+  VALIDATION_CACHE: new Map(),
+  PAIR_CACHE: new Map(),
+
+  // PulseX routers
   PULSEX_V1_ROUTER: '0x98cc3735511E92F2726d7B2cCcE8e410c4bfbe20',
-  // PulseX V2 Router
   PULSEX_V2_ROUTER: '0xa758269B4fF1F387b81eb6f4e5b8Cefb5EB41484',
   
-  // SAFE token patterns (trusted tokens on PulseChain)
+  // Safe tokens (whitelisted - instant pass)
   SAFE_TOKENS: {
-    '0xA1077a294dDE1B09bB074Bec877f05b634579687': 'PLS',
-    '0x8a854288a5976036A725879ccf6B1E7933C7F5a0': 'PLSX',
-    '0x15a630532c228cba42c9e1843879786ba335e5d8': 'HEX',
-    '0x44B6e3e90EaA427B3a23b509CFf4b858506d1D5d': 'INC',
-    '0xd0676b28a457371d58d47e5247b439114e40eb0f': 'DTGC',
-    '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0': 'URMOM',
+    '0xA1077a294dDE1B09bB074Bec877f05b634579687': { name: 'PLS', risk: 'LOW' },
+    '0x8a854288a5976036A725879ccf6B1E7933C7F5a0': { name: 'PLSX', risk: 'LOW' },
+    '0x15a630532c228cba42c9e1843879786ba335e5d8': { name: 'HEX', risk: 'LOW' },
+    '0x44B6e3e90EaA427B3a23b509CFf4b858506d1D5d': { name: 'INC', risk: 'LOW' },
+    '0xd0676b28a457371d58d47e5247b439114e40eb0f': { name: 'DTGC', risk: 'LOW' },
+    '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0': { name: 'URMOM', risk: 'LOW' },
   },
 
   /**
-   * FAST VALIDATION - checks in order of speed
-   * ~400ms total for full validation
+   * ULTRA-FAST VALIDATION (~100-200ms max)
+   * Uses cache-first approach like V4DeFiGoldSuite
    */
-  async validateToken(tokenAddress, provider, signer) {
+  async validateToken(tokenAddress, provider) {
+    const addr = tokenAddress.toLowerCase();
+    
+    // 1. CHECK CACHE FIRST (instant)
+    if (this.VALIDATION_CACHE.has(addr)) {
+      console.log(`✅ Cache HIT for ${addr}`);
+      return this.VALIDATION_CACHE.get(addr);
+    }
+
     const validation = {
       address: tokenAddress,
       isValid: false,
       reason: '',
-      hasV1Liquidity: false,
-      hasV2Liquidity: false,
+      hasLiquidity: false,
       liquidityUsd: 0,
       risk: 'UNKNOWN',
       details: {},
     };
 
     try {
-      // 1. CHECK: Safe token whitelist (INSTANT)
-      if (this.SAFE_TOKENS[tokenAddress.toLowerCase()]) {
+      // 2. WHITELIST CHECK (instant)
+      if (this.SAFE_TOKENS[addr]) {
+        const token = this.SAFE_TOKENS[addr];
         validation.isValid = true;
         validation.risk = 'LOW';
+        validation.hasLiquidity = true;
+        validation.liquidityUsd = 50000; // Safe token estimate
         validation.details.whitelisted = true;
-        console.log(`✅ Token whitelisted: ${this.SAFE_TOKENS[tokenAddress.toLowerCase()]}`);
+        validation.details.name = token.name;
+        
+        console.log(`✅ Token whitelisted: ${token.name}`);
+        this.VALIDATION_CACHE.set(addr, validation);
         return validation;
       }
 
-      // 2. CHECK: Blacklist patterns (INSTANT)
-      const blacklistResult = await this.checkBlacklistPatterns(tokenAddress);
-      if (blacklistResult.isBlacklisted) {
-        validation.reason = blacklistResult.reason;
+      // 3. BLACKLIST CHECK (instant)
+      if (this.isBlacklisted(addr)) {
+        validation.reason = 'Blacklisted address';
         validation.risk = 'CRITICAL';
-        console.warn(`🚫 Token blacklisted: ${blacklistResult.reason}`);
+        this.VALIDATION_CACHE.set(addr, validation);
         return validation;
       }
 
-      // 3. CHECK: Basic token validation
-      const tokenInfo = await this.getTokenInfo(tokenAddress, provider);
+      // 4. GET TOKEN INFO (fast parallel)
+      const tokenInfo = await this.getTokenInfoFast(addr, provider);
       if (!tokenInfo.isValid) {
         validation.reason = 'Invalid token contract';
+        this.VALIDATION_CACHE.set(addr, validation);
         return validation;
       }
       validation.details.tokenInfo = tokenInfo;
 
-      // 4. CHECK: V1 Liquidity (concurrent)
-      const v1Result = await this.checkV1Liquidity(tokenAddress, provider);
-      validation.hasV1Liquidity = v1Result.hasLiquidity;
-      validation.liquidityUsd += v1Result.liquidityUsd;
-      validation.details.v1 = v1Result;
-
-      // 5. CHECK: V2 Liquidity (concurrent)
-      const v2Result = await this.checkV2Liquidity(tokenAddress, provider);
-      validation.hasV2Liquidity = v2Result.hasLiquidity;
-      validation.liquidityUsd += v2Result.liquidityUsd;
-      validation.details.v2 = v2Result;
+      // 5. CHECK LIQUIDITY (fast - uses cache)
+      const liquidity = await this.checkLiquidityFast(addr, tokenInfo.symbol, provider);
+      validation.hasLiquidity = liquidity.hasLiquidity;
+      validation.liquidityUsd = liquidity.liquidityUsd;
+      validation.details.liquidity = liquidity;
 
       // VERDICT
-      if (!validation.hasV1Liquidity && !validation.hasV2Liquidity) {
-        validation.reason = 'No liquidity found on PulseX V1 or V2';
+      if (!validation.hasLiquidity) {
+        validation.reason = 'No liquidity found';
         validation.risk = 'HIGH';
-        console.warn('⚠️ No liquidity detected');
-        return validation;
-      }
-
-      if (validation.liquidityUsd < 1000) {
+      } else if (validation.liquidityUsd < 1000) {
         validation.risk = 'HIGH';
-        validation.reason = `Very low liquidity ($${validation.liquidityUsd.toFixed(2)})`;
-        console.warn(`⚠️ Low liquidity warning: $${validation.liquidityUsd.toFixed(2)}`);
+        validation.reason = `Low liquidity ($${validation.liquidityUsd.toFixed(0)})`;
       } else if (validation.liquidityUsd < 5000) {
         validation.risk = 'MEDIUM';
       } else {
         validation.risk = 'LOW';
       }
 
-      validation.isValid = validation.liquidityUsd >= 100; // Minimum $100 liquidity
+      validation.isValid = validation.liquidityUsd >= 100;
       if (validation.isValid) {
-        console.log(`✅ Token valid: $${validation.liquidityUsd.toFixed(2)} liquidity detected`);
+        console.log(`✅ Token valid: $${validation.liquidityUsd.toFixed(0)} liquidity`);
       }
 
+      // Cache result
+      this.VALIDATION_CACHE.set(addr, validation);
       return validation;
+
     } catch (err) {
-      console.error('Token validation error:', err);
-      validation.reason = `Validation error: ${err.message}`;
+      console.error('Validation error:', err.message);
+      validation.reason = `Error: ${err.message}`;
       validation.risk = 'ERROR';
+      this.VALIDATION_CACHE.set(addr, validation);
       return validation;
     }
   },
 
   /**
-   * BLACKLIST PATTERNS - check for known scams
+   * BLACKLIST CHECK (instant)
    */
-  async checkBlacklistPatterns(tokenAddress) {
-    const result = {
-      isBlacklisted: false,
-      reason: '',
-    };
-
-    const addr = tokenAddress.toLowerCase();
-    
-    // Known scam contracts on PulseChain
-    const KNOWN_SCAMS = [
-      '0x0000000000000000000000000000000000000000', // Zero address
-      '0x000000000000000000000000000000000000dead', // Dead address
+  isBlacklisted(address) {
+    const BLACKLIST = [
+      '0x0000000000000000000000000000000000000000',
+      '0x000000000000000000000000000000000000dead',
     ];
-
-    if (KNOWN_SCAMS.includes(addr)) {
-      result.isBlacklisted = true;
-      result.reason = 'Known scam/burn address';
-      return result;
-    }
-
-    return result;
+    return BLACKLIST.includes(address.toLowerCase());
   },
 
   /**
-   * GET BASIC TOKEN INFO
+   * GET TOKEN INFO (parallel)
    */
-  async getTokenInfo(tokenAddress, provider) {
+  async getTokenInfoFast(tokenAddress, provider) {
     const result = {
       isValid: false,
       name: '',
       symbol: '',
       decimals: 18,
-      totalSupply: 0,
     };
 
     try {
@@ -151,157 +154,146 @@ const TOKEN_VALIDATOR = {
         'function name() external view returns (string)',
         'function symbol() external view returns (string)',
         'function decimals() external view returns (uint8)',
-        'function totalSupply() external view returns (uint256)',
       ];
 
       const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
       
-      // Parallel requests for speed
-      const [name, symbol, decimals, totalSupply] = await Promise.all([
+      // Parallel calls
+      const [name, symbol, decimals] = await Promise.all([
         contract.name().catch(() => ''),
         contract.symbol().catch(() => ''),
         contract.decimals().catch(() => 18),
-        contract.totalSupply().catch(() => 0n),
       ]);
 
       result.name = name || 'Unknown';
       result.symbol = symbol || 'UNKNOWN';
-      result.decimals = decimals;
-      result.totalSupply = parseFloat(
-        ethers.formatUnits(totalSupply, decimals)
-      );
+      result.decimals = decimals || 18;
       result.isValid = true;
 
       return result;
     } catch (err) {
-      console.error('Token info fetch failed:', err);
+      console.error('Token info error:', err.message);
       return result;
     }
   },
 
   /**
-   * CHECK V1 LIQUIDITY - concurrent execution
+   * CHECK LIQUIDITY (uses KNOWN_PAIRS cache for speed)
    */
-  async checkV1Liquidity(tokenAddress, provider) {
+  async checkLiquidityFast(tokenAddress, tokenSymbol, provider) {
     const result = {
       hasLiquidity: false,
       liquidityUsd: 0,
-      plsReserve: 0,
-      tokenReserve: 0,
     };
 
     try {
-      const FACTORY_V1 = '0xE1Cc890455B1d9537034da8e1ffB0d5f4E150e9e'; // PulseX V1 Factory
-      const FACTORY_ABI = ['function getPair(address,address) external view returns (address)'];
-      
-      const factory = new ethers.Contract(FACTORY_V1, FACTORY_ABI, provider);
-      const PLS = '0xA1077a294dDE1B09bB074Bec877f05b634579687';
-      
-      // Get pair address
-      const pairAddress = await factory.getPair(tokenAddress, PLS);
-      
-      if (pairAddress === ethers.ZeroAddress) {
+      const pls = '0xA1077a294dDE1B09bB074Bec877f05b634579687';
+      const cacheKey = `${tokenSymbol.toLowerCase()}:pls`;
+
+      // 1. CHECK KNOWN_PAIRS CACHE FIRST
+      if (this.KNOWN_PAIRS[cacheKey]) {
+        const pairAddress = this.KNOWN_PAIRS[cacheKey];
+        console.log(`✅ Found in KNOWN_PAIRS: ${pairAddress}`);
+        
+        const reserves = await this.getReservesFast(pairAddress, provider);
+        result.hasLiquidity = reserves.liquidityUsd > 100;
+        result.liquidityUsd = reserves.liquidityUsd;
         return result;
       }
 
-      // Get reserves
-      const PAIR_ABI = [
-        'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
-        'function token0() external view returns (address)',
-        'function token1() external view returns (address)',
-      ];
+      // 2. CHECK RUNTIME CACHE
+      if (this.PAIR_CACHE.has(tokenAddress.toLowerCase())) {
+        const cached = this.PAIR_CACHE.get(tokenAddress.toLowerCase());
+        console.log(`✅ Runtime cache hit for pair`);
+        return cached;
+      }
 
-      const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-      const [token0, token1, reserves] = await Promise.all([
-        pair.token0(),
-        pair.token1(),
-        pair.getReserves(),
-      ]);
+      // 3. QUERY FACTORIES (fallback)
+      const pairAddress = await this.findPairFast(tokenAddress, pls, provider);
+      
+      if (!pairAddress || pairAddress === ethers.ZeroAddress) {
+        return result;
+      }
 
-      const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
-      const plsReserve = parseFloat(
-        ethers.formatUnits(
-          isToken0 ? reserves[1] : reserves[0],
-          18
-        )
-      );
+      // Get reserves from pair
+      const reserves = await this.getReservesFast(pairAddress, provider);
+      result.hasLiquidity = reserves.liquidityUsd > 100;
+      result.liquidityUsd = reserves.liquidityUsd;
 
-      // Estimate liquidity value
-      const plsPrice = 0.000016; // Approximate PLS price
-      result.plsReserve = plsReserve;
-      result.liquidityUsd = plsReserve * plsPrice;
-      result.hasLiquidity = result.liquidityUsd > 100;
+      // Cache the result
+      this.PAIR_CACHE.set(tokenAddress.toLowerCase(), result);
 
       return result;
     } catch (err) {
-      console.error('V1 liquidity check failed:', err);
+      console.error('Liquidity check error:', err.message);
       return result;
     }
   },
 
   /**
-   * CHECK V2 LIQUIDITY - concurrent execution
+   * FIND PAIR (fast)
    */
-  async checkV2Liquidity(tokenAddress, provider) {
+  async findPairFast(tokenAddress, pls, provider) {
+    try {
+      const FACTORY_ABI = ['function getPair(address,address) external view returns (address)'];
+      
+      // Check both V1 and V2 in parallel
+      const v1Factory = new ethers.Contract('0xE1Cc890455B1d9537034da8e1ffB0d5f4E150e9e', FACTORY_ABI, provider);
+      const v2Factory = new ethers.Contract('0x1715Ac0f39513b6D53a0b3ba5d63c9bc575f7bEA', FACTORY_ABI, provider);
+      
+      const [v1Pair, v2Pair] = await Promise.all([
+        v1Factory.getPair(tokenAddress, pls).catch(() => ethers.ZeroAddress),
+        v2Factory.getPair(tokenAddress, pls).catch(() => ethers.ZeroAddress),
+      ]);
+
+      // Prefer V1, fallback to V2
+      return v1Pair !== ethers.ZeroAddress ? v1Pair : v2Pair;
+    } catch (err) {
+      console.error('Find pair error:', err.message);
+      return ethers.ZeroAddress;
+    }
+  },
+
+  /**
+   * GET RESERVES (ultra-fast)
+   */
+  async getReservesFast(pairAddress, provider) {
     const result = {
-      hasLiquidity: false,
       liquidityUsd: 0,
-      plsReserve: 0,
-      tokenReserve: 0,
     };
 
     try {
-      const FACTORY_V2 = '0x1715Ac0f39513b6D53a0b3ba5d63c9bc575f7bEA'; // PulseX V2 Factory
-      const FACTORY_ABI = ['function getPair(address,address) external view returns (address)'];
-      
-      const factory = new ethers.Contract(FACTORY_V2, FACTORY_ABI, provider);
-      const PLS = '0xA1077a294dDE1B09bB074Bec877f05b634579687';
-      
-      // Get pair address
-      const pairAddress = await factory.getPair(tokenAddress, PLS);
-      
-      if (pairAddress === ethers.ZeroAddress) {
-        return result;
-      }
-
-      // Get reserves
       const PAIR_ABI = [
         'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
-        'function token0() external view returns (address)',
-        'function token1() external view returns (address)',
       ];
 
       const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
-      const [token0, token1, reserves] = await Promise.all([
-        pair.token0(),
-        pair.token1(),
-        pair.getReserves(),
-      ]);
+      const reserves = await pair.getReserves();
 
-      const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
-      const plsReserve = parseFloat(
-        ethers.formatUnits(
-          isToken0 ? reserves[1] : reserves[0],
-          18
-        )
-      );
-
-      // Estimate liquidity value
-      const plsPrice = 0.000016; // Approximate PLS price
-      result.plsReserve = plsReserve;
+      // Estimate liquidity (PLS reserve * price)
+      const plsReserve = parseFloat(ethers.formatUnits(reserves[1], 18));
+      const plsPrice = 0.000016;
       result.liquidityUsd = plsReserve * plsPrice;
-      result.hasLiquidity = result.liquidityUsd > 100;
 
       return result;
     } catch (err) {
-      console.error('V2 liquidity check failed:', err);
+      console.error('Get reserves error:', err.message);
       return result;
     }
+  },
+
+  /**
+   * Clear caches if needed
+   */
+  clearCache() {
+    this.VALIDATION_CACHE.clear();
+    this.PAIR_CACHE.clear();
+    console.log('🧹 Caches cleared');
   },
 };
 
 // ═══════════════════════════════════════════════════════════════
-// DAPPER COMPONENT - NO DIAMOND+ REQUIREMENT (ETHERS V6)
+// DAPPER COMPONENT (FAST VERSION)
 // ═══════════════════════════════════════════════════════════════
 
 const DapperComponent = ({ provider, account }) => {
@@ -313,9 +305,6 @@ const DapperComponent = ({ provider, account }) => {
   const [success, setSuccess] = useState('');
   const validateTimeoutRef = useRef(null);
 
-  /**
-   * FAST TOKEN VALIDATION ON INPUT
-   */
   const handleTokenChange = useCallback(async (tokenAddress) => {
     setInputToken(tokenAddress);
     setError('');
@@ -325,7 +314,6 @@ const DapperComponent = ({ provider, account }) => {
       return;
     }
 
-    // Debounce validation
     if (validateTimeoutRef.current) {
       clearTimeout(validateTimeoutRef.current);
     }
@@ -333,12 +321,7 @@ const DapperComponent = ({ provider, account }) => {
     setLoading(true);
     validateTimeoutRef.current = setTimeout(async () => {
       try {
-        const result = await TOKEN_VALIDATOR.validateToken(
-          tokenAddress,
-          provider,
-          provider.getSigner ? await provider.getSigner() : null
-        );
-
+        const result = await TOKEN_VALIDATOR.validateToken(tokenAddress, provider);
         setValidation(result);
 
         if (!result.isValid) {
@@ -351,12 +334,9 @@ const DapperComponent = ({ provider, account }) => {
       } finally {
         setLoading(false);
       }
-    }, 300); // 300ms debounce for fast UX
+    }, 200); // Reduced from 300ms
   }, [provider]);
 
-  /**
-   * EXECUTE ZAP - no access gate
-   */
   const handleZap = async () => {
     if (!validation || !validation.isValid) {
       setError('⛔ Token validation failed');
@@ -373,7 +353,6 @@ const DapperComponent = ({ provider, account }) => {
     setSuccess('');
 
     try {
-      // Your existing zap logic here
       console.log('🚀 Executing zap:', {
         token: inputToken,
         amount: inputAmount,
@@ -393,12 +372,10 @@ const DapperComponent = ({ provider, account }) => {
       <h2>💎⚡ DAPPER FLEX</h2>
       <p>One-Click LP Zapping (No Lockup Required)</p>
 
-      {/* ACCESS GATE REMOVED - Now open to all users */}
       <div style={styles.accessNotice}>
         ✅ <strong>UNLIMITED ACCESS</strong> - No stake required!
       </div>
 
-      {/* TOKEN INPUT */}
       <div style={styles.inputGroup}>
         <label>Token Address</label>
         <input
@@ -411,7 +388,6 @@ const DapperComponent = ({ provider, account }) => {
         {loading && <span style={styles.loading}>🔍 Validating...</span>}
       </div>
 
-      {/* VALIDATION RESULT */}
       {validation && (
         <div style={{
           ...styles.validationBox,
@@ -420,13 +396,11 @@ const DapperComponent = ({ provider, account }) => {
           <h4>Token Validation</h4>
           <div>Symbol: {validation.details.tokenInfo?.symbol || 'N/A'}</div>
           <div>Risk Level: {validation.risk}</div>
-          <div>V1 Liquidity: {validation.hasV1Liquidity ? '✅' : '❌'}</div>
-          <div>V2 Liquidity: {validation.hasV2Liquidity ? '✅' : '❌'}</div>
-          <div>Total Liquidity: ${validation.liquidityUsd.toFixed(2)}</div>
+          <div>Liquidity: ${validation.liquidityUsd.toFixed(2)}</div>
+          {validation.details.whitelisted && <div>✅ Whitelisted</div>}
         </div>
       )}
 
-      {/* AMOUNT INPUT */}
       {validation?.isValid && (
         <div style={styles.inputGroup}>
           <label>Amount to Zap</label>
@@ -440,11 +414,9 @@ const DapperComponent = ({ provider, account }) => {
         </div>
       )}
 
-      {/* MESSAGES */}
       {error && <div style={styles.error}>{error}</div>}
       {success && <div style={styles.success}>{success}</div>}
 
-      {/* ZAP BUTTON */}
       <button
         onClick={handleZap}
         disabled={!validation?.isValid || !inputAmount || loading}
