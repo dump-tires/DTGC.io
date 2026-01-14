@@ -2,7 +2,6 @@ import DapperComponent from './components/DapperComponent';
 import PricingPage from './pages/PricingPage';
 import V4DeFiGoldSuite from './components/V4DeFiGoldSuite';
 import WhiteDiamondStaking from './components/WhiteDiamondStaking';
-import WhiteDiamondIcon from './components/WhiteDiamondIcon';
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
 // SaaS Config System - enables white-label customization
@@ -477,8 +476,6 @@ const PULSECHAIN_API = {
   // Use local API route to proxy requests (avoids CORS issues)
   holders: '/api/holders',
   tokenInfo: '/api/token-info',
-  // Direct PulseChain API (may have CORS issues in browser, but works as fallback)
-  directTokenInfo: 'https://api.scan.pulsechain.com/api/v2/tokens/0xd0676b28a457371d58d47e5247b439114e40eb0f',
   // Direct RPC for contract calls (doesn't have CORS issues)
   rpc: 'https://rpc.pulsechain.com',
 };
@@ -3056,9 +3053,15 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   const lastValidPositions = React.useRef([]);
   
   React.useEffect(() => {
-    // Only update ref if we have actual positions
-    if (stakedPositions && stakedPositions.length > 0) {
-      lastValidPositions.current = stakedPositions;
+    // Update ref when positions change - allow clearing when positions are explicitly removed
+    if (stakedPositions) {
+      // If we have positions, update the cache
+      if (stakedPositions.length > 0) {
+        lastValidPositions.current = stakedPositions;
+      } else if (lastValidPositions.current.length > 0) {
+        // Positions were explicitly cleared - respect this
+        lastValidPositions.current = [];
+      }
     }
   }, [stakedPositions]);
 
@@ -3069,18 +3072,25 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   }, []);
 
   // Use current positions if available, otherwise use last known good positions
-  const displayPositions = (stakedPositions && stakedPositions.length > 0) 
+  // But if positions are explicitly empty array, respect that
+  const displayPositions = stakedPositions && stakedPositions.length > 0 
     ? stakedPositions 
-    : lastValidPositions.current;
+    : (stakedPositions && stakedPositions.length === 0) 
+      ? [] 
+      : lastValidPositions.current;
   
-  // Only hide if no account OR we've never had positions
-  if (!account || (displayPositions.length === 0 && lastValidPositions.current.length === 0)) return null;
+  // Only hide if no account OR no positions at all
+  if (!account || displayPositions.length === 0) return null;
 
   // Categorize stakes
   const diamondLP = displayPositions.filter(p => p.isLP && p.lpType !== 1 && p.tierName !== 'FLEX');
   const diamondPlusLP = displayPositions.filter(p => p.isLP && p.lpType === 1 && p.tierName !== 'FLEX');
   const flexStakes = displayPositions.filter(p => p.isFlex || p.tierName === 'FLEX');
   const dtgcStakes = displayPositions.filter(p => !p.isLP && !p.isFlex && p.tierName !== 'FLEX');
+  
+  // White Diamond NFT stakes (tracked separately)
+  const [whiteDiamondNFTs, setWhiteDiamondNFTs] = useState([]);
+  const totalWhiteDiamondLP = whiteDiamondNFTs.reduce((sum, nft) => sum + (parseFloat(nft.amount) || 0), 0);
   
   const totalDiamondLP = diamondLP.reduce((sum, p) => sum + (p.amount || 0), 0);
   const totalDiamondPlusLP = diamondPlusLP.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -3093,12 +3103,14 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   const diamondLPValue = totalDiamondLP * dtgcPrice * 2;
   const diamondPlusLPValue = totalDiamondPlusLP * dtgcPrice * 2;
   const flexLPValue = totalFlexLP * dtgcPrice * 2;
+  const whiteDiamondLPValue = totalWhiteDiamondLP * dtgcPrice * 2;
   const dtgcValueUsd = totalDTGCStaked * dtgcPrice;
-  const totalValueUsd = diamondLPValue + diamondPlusLPValue + flexLPValue + dtgcValueUsd;
+  const totalValueUsd = diamondLPValue + diamondPlusLPValue + flexLPValue + whiteDiamondLPValue + dtgcValueUsd;
   const totalValuePls = plsPrice > 0 ? (totalValueUsd / plsPrice) : 0;
 
   // Minimized view - just show icon with total value
   if (!isExpanded) {
+    const totalStakes = displayPositions.length + whiteDiamondNFTs.length;
     return (
       <div
         onClick={() => setIsExpanded(true)}
@@ -3125,7 +3137,7 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
             {getCurrencySymbol()}{formatNumber(convertToCurrency(totalValueUsd).value)}
           </div>
           <div style={{ color: 'rgba(0,0,0,0.6)', fontSize: '0.45rem', fontWeight: 600 }}>
-            {displayPositions.length} STAKE{displayPositions.length !== 1 ? 'S' : ''}
+            {totalStakes} STAKE{totalStakes !== 1 ? 'S' : ''}
           </div>
         </div>
       </div>
@@ -3193,6 +3205,20 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: '#666', fontSize: '0.5rem' }}>No Lock LP</span>
             <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(flexLPValue).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* White Diamond NFTs */}
+      {totalWhiteDiamondLP > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(212,175,55,0.15)', borderRadius: '6px', border: '1px solid rgba(212,175,55,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#D4AF37', fontSize: '0.65rem', fontWeight: 600 }}>⚔️ White Diamond</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalWhiteDiamondLP)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>NFT Stakes</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(whiteDiamondLPValue).value)}</span>
           </div>
         </div>
       )}
@@ -3477,7 +3503,6 @@ export default function App() {
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState(null);
-  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
   
   // URL-based tab routing - supports /saas, /stake, /burn, /vote, /whitepaper, /links, /analytics
   const [activeTab, setActiveTab] = useState(() => {
@@ -4120,6 +4145,9 @@ export default function App() {
       blacklistStake(s.id);
     });
     
+    // Also update lastKnownPositionsRef to remove flex
+    lastKnownPositionsRef.current = lastKnownPositionsRef.current.filter(p => !p.isFlex && p.tierName !== 'FLEX');
+    
     setStakedPositions(prev => {
       const filtered = prev.filter(p => !p.isFlex && p.tierName !== 'FLEX');
       console.log('📊 stakedPositions after flex removal:', filtered.length);
@@ -4461,44 +4489,13 @@ export default function App() {
   // Fetch live holder data from our Vercel API route (proxies PulseChain API)
   const fetchLiveHolders = useCallback(async () => {
     try {
-      // Fetch both holders list AND token info (for accurate holder count)
-      const [holdersResponse, tokenInfoResponse] = await Promise.all([
-        fetch(PULSECHAIN_API.holders),
-        fetch(PULSECHAIN_API.tokenInfo).catch(() => null) // Don't fail if token info fails
-      ]);
+      const response = await fetch(PULSECHAIN_API.holders);
       
-      if (!holdersResponse.ok) {
-        throw new Error(`API returned ${holdersResponse.status}`);
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
       }
       
-      const data = await holdersResponse.json();
-      
-      // Get token info for accurate holder count
-      let tokenHoldersCount = null;
-      if (tokenInfoResponse && tokenInfoResponse.ok) {
-        try {
-          const tokenData = await tokenInfoResponse.json();
-          // PulseChain API returns holders count in token info
-          tokenHoldersCount = tokenData.holders_count || tokenData.holders || tokenData.holder_count || null;
-          console.log('📊 Token info holders count:', tokenHoldersCount);
-        } catch (e) {
-          console.warn('⚠️ Could not parse token info:', e.message);
-        }
-      }
-      
-      // Fallback: Try direct PulseChain API if we don't have holder count yet
-      if (!tokenHoldersCount) {
-        try {
-          const directResponse = await fetch(PULSECHAIN_API.directTokenInfo);
-          if (directResponse.ok) {
-            const directData = await directResponse.json();
-            tokenHoldersCount = directData.holders_count || directData.holders || null;
-            console.log('📊 Direct API holders count:', tokenHoldersCount);
-          }
-        } catch (e) {
-          console.warn('⚠️ Direct API fallback failed:', e.message);
-        }
-      }
+      const data = await response.json();
       
       // Handle Vercel API response format
       if (!data.success && data.error) {
@@ -4507,8 +4504,7 @@ export default function App() {
       
       // Get items from either format (direct API or Vercel proxy)
       const allItems = data.holders || data.items || [];
-      // Use token info holder count if available, otherwise estimate from pagination
-      const totalHolders = tokenHoldersCount || data.totalHolders || data.holders_count || (data.next_page_params ? Math.max(allItems.length * 3, 150) : allItems.length);
+      const totalHolders = data.totalHolders || (data.next_page_params ? 100 : allItems.length);
       
       if (allItems.length === 0) {
         throw new Error('No items in API response');
@@ -7274,29 +7270,37 @@ export default function App() {
                 zIndex: 1500,
               }}
             >
-              {/* Regular V4 Stakes (non-flex only) */}
+              {/* Regular V4 Stakes (non-flex only) - includes DTGC and LP stakes */}
               {(TESTNET_MODE ? testnetBalances.positions.filter(p => !p.isFlex && p.tierName !== 'FLEX') : getVisibleNonFlexPositions()).map((pos, idx) => {
                 let tierColor = '#FFD700';
                 let tierEmoji = '🥇';
+                const tierNameUpper = (pos.tierName || 'GOLD').toUpperCase();
                 
-                if (pos.isLP) {
-                  if (pos.lpType === 1 || pos.tierName === 'DIAMOND+') {
+                // Check for LP stakes first (Diamond/Diamond+)
+                if (pos.isLP || tierNameUpper === 'DIAMOND' || tierNameUpper === 'DIAMOND+') {
+                  if (pos.lpType === 1 || tierNameUpper === 'DIAMOND+') {
                     tierColor = '#9C27B0';
-                    tierEmoji = '💜';
+                    tierEmoji = '💜💎';
                   } else {
                     tierColor = '#00BCD4';
                     tierEmoji = '💎';
                   }
                 } else {
-                  const tierName = (pos.tierName || 'GOLD').toUpperCase();
-                  if (tierName === 'SILVER') {
+                  // DTGC stakes
+                  if (tierNameUpper === 'SILVER') {
                     tierColor = '#C0C0C0';
                     tierEmoji = '🥈';
-                  } else if (tierName === 'WHALE') {
+                  } else if (tierNameUpper === 'WHALE') {
                     tierColor = '#2196F3';
                     tierEmoji = '🐋';
+                  } else if (tierNameUpper === 'GOLD') {
+                    tierColor = '#FFD700';
+                    tierEmoji = '🥇';
                   }
                 }
+                
+                const displayAmount = pos.amount || 0;
+                const displayValue = pos.usdValue || (displayAmount * (pos.isLP ? (livePrices.dtgc || 0.0005) * 2 : (livePrices.dtgc || 0.0005)));
                 
                 return (
                   <div
@@ -7306,8 +7310,8 @@ export default function App() {
                       setStakeWidgetMinimized(false);
                     }}
                     style={{
-                      width: '44px',
-                      height: '44px',
+                      width: '48px',
+                      height: '48px',
                       background: 'rgba(15,15,15,0.95)',
                       border: `2px solid ${tierColor}`,
                       borderRadius: '10px',
@@ -7318,9 +7322,9 @@ export default function App() {
                       cursor: 'pointer',
                       boxShadow: `0 2px 10px ${tierColor}40`,
                     }}
-                    title={`${pos.tierName || 'Stake'} • ${formatNumber(pos.amount)} ${pos.isLP ? 'LP' : 'DTGC'} @ ${pos.apr?.toFixed(1) || '?'}% APR`}
+                    title={`${tierNameUpper} • ${formatNumber(displayAmount)} ${pos.isLP ? 'LP' : 'DTGC'} ($${formatNumber(displayValue, 2)}) @ ${pos.apr?.toFixed(1) || '?'}% APR`}
                   >
-                    <span style={{ fontSize: '1.3rem' }}>{tierEmoji}</span>
+                    <span style={{ fontSize: tierEmoji.length > 2 ? '0.9rem' : '1.3rem' }}>{tierEmoji}</span>
                     <span style={{ fontSize: '0.4rem', fontWeight: 700, color: pos.isV4 ? '#4CAF50' : '#FF9800' }}>{pos.isV4 ? 'V4' : 'V3'}</span>
                   </div>
                 );
@@ -7332,6 +7336,7 @@ export default function App() {
                   ? testnetBalances.positions.filter(p => p.isFlex || p.tierName === 'FLEX')
                   : [...getVisibleFlexPositions(), ...getVisibleFlexStakes()];
                 const totalFlexLP = allFlexPositions.reduce((sum, s) => sum + (s.amount || s.lpAmount || 0), 0);
+                const totalFlexValue = allFlexPositions.reduce((sum, s) => sum + (s.usdValue || s.stakeValue || (s.amount || s.lpAmount || 0) * (livePrices.dtgc || 0.0005) * 2), 0);
                 const flexCount = allFlexPositions.length;
                 
                 if (flexCount === 0) {
@@ -7344,8 +7349,8 @@ export default function App() {
                         setIsLP(false);
                       }}
                       style={{
-                        width: '44px',
-                        height: '44px',
+                        width: '48px',
+                        height: '48px',
                         background: 'rgba(255,20,147,0.1)',
                         border: '2px dashed #FF1493',
                         borderRadius: '10px',
@@ -7365,52 +7370,114 @@ export default function App() {
                   );
                 }
                 
-                // Show consolidated Flex icon
+                // Show consolidated Flex icon + Close All button
                 return (
-                  <div
-                    onClick={() => {
-                      setIsFlexTier(true);
-                      setSelectedTier(null);
-                      setIsLP(false);
-                    }}
-                    style={{
-                      width: '44px',
-                      height: '44px',
-                      background: 'linear-gradient(135deg, rgba(255,20,147,0.3) 0%, rgba(255,105,180,0.2) 100%)',
-                      border: '2px solid #FF1493',
-                      borderRadius: '10px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      boxShadow: '0 2px 12px rgba(255,20,147,0.5)',
-                      position: 'relative',
-                    }}
-                    title={`Flex Pool • ${formatNumber(totalFlexLP, 2)} LP total • ${flexCount} stake(s) • 10% APR`}
-                  >
-                    <span style={{ fontSize: '1.3rem' }}>💗</span>
-                    <span style={{ fontSize: '0.4rem', fontWeight: 700, color: '#FF1493' }}>FLEX</span>
-                    {/* Stake count badge */}
-                    {flexCount > 1 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '-4px',
-                        right: '-4px',
-                        background: '#FF1493',
-                        color: '#fff',
-                        fontSize: '0.5rem',
-                        fontWeight: 700,
-                        width: '14px',
-                        height: '14px',
-                        borderRadius: '50%',
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                    {/* Flex icon */}
+                    <div
+                      onClick={() => {
+                        setIsFlexTier(true);
+                        setSelectedTier(null);
+                        setIsLP(false);
+                      }}
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        background: 'linear-gradient(135deg, rgba(255,20,147,0.3) 0%, rgba(255,105,180,0.2) 100%)',
+                        border: '2px solid #FF1493',
+                        borderRadius: '10px',
                         display: 'flex',
+                        flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                      }}>
-                        {flexCount}
-                      </div>
-                    )}
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 12px rgba(255,20,147,0.5)',
+                        position: 'relative',
+                      }}
+                      title={`Flex Pool • ${formatNumber(totalFlexLP, 2)} LP ($${formatNumber(totalFlexValue, 2)}) • ${flexCount} stake(s) • 10% APR`}
+                    >
+                      <span style={{ fontSize: '1.3rem' }}>💗</span>
+                      <span style={{ fontSize: '0.35rem', fontWeight: 700, color: '#FF1493' }}>${formatNumber(totalFlexValue, 0)}</span>
+                      {/* Stake count badge */}
+                      {flexCount > 1 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          right: '-4px',
+                          background: '#FF1493',
+                          color: '#fff',
+                          fontSize: '0.5rem',
+                          fontWeight: 700,
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          {flexCount}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Close All Flex Button */}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!window.confirm(`Close ALL ${flexCount} Flex stake(s)?\n\nTotal: ${formatNumber(totalFlexLP, 2)} LP ($${formatNumber(totalFlexValue, 2)})\n\nThis will withdraw all LP + claim all rewards.`)) return;
+                        
+                        setLoading(true);
+                        try {
+                          // Get V4 Flex contract stakes
+                          if (signer) {
+                            const flexV4Contract = new ethers.Contract(CONTRACT_ADDRESSES.flexStakingV4, FLEX_STAKING_V4_ABI, signer);
+                            const activeStakes = await flexV4Contract.getActiveStakes(account);
+                            
+                            for (let i = 0; i < activeStakes.length; i++) {
+                              const stake = activeStakes[i];
+                              if (stake.amount > 0n) {
+                                try {
+                                  showToast(`💗 Withdrawing Flex #${i + 1}/${activeStakes.length}...`, 'info');
+                                  const tx = await flexV4Contract.withdraw(stake.stakeIndex);
+                                  await tx.wait();
+                                } catch (err) {
+                                  console.error(`Failed withdraw #${i}:`, err);
+                                }
+                              }
+                            }
+                          }
+                          
+                          // Clear from UI
+                          removeAllFlexFromUI();
+                          showToast(`✅ Closed ALL ${flexCount} Flex stakes!`, 'success');
+                          
+                        } catch (err) {
+                          if (err.code === 'ACTION_REJECTED') {
+                            showToast('Transaction cancelled', 'info');
+                          } else {
+                            showToast(`❌ Error: ${err.message?.slice(0, 40)}`, 'error');
+                          }
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading}
+                      style={{
+                        width: '48px',
+                        height: '20px',
+                        background: loading ? 'rgba(255,20,147,0.3)' : 'linear-gradient(135deg, #FF1493, #C71585)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.45rem',
+                        fontWeight: 700,
+                        color: '#fff',
+                        cursor: loading ? 'wait' : 'pointer',
+                        boxShadow: '0 2px 8px rgba(255,20,147,0.4)',
+                      }}
+                      title="Close ALL Flex Stakes"
+                    >
+                      {loading ? '...' : '❌ ALL'}
+                    </button>
                   </div>
                 );
               })()}
@@ -7924,198 +7991,117 @@ export default function App() {
               </button>
             </nav>
 
-            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', position: 'relative' }}>
-              
-              {/* Collapsible Prices Dropdown */}
-              {!showPriceDropdown ? (
-                <button
-                  onClick={() => setShowPriceDropdown(true)}
-                  style={{
-                    padding: '8px 14px',
-                    background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.15)',
-                    border: '1px solid rgba(212,175,55,0.3)',
-                    borderRadius: '8px',
-                    color: '#D4AF37',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                  title="View live prices"
-                >
-                  💰 Prices ▼
-                </button>
-              ) : (
-                <div style={{
-                  position: 'absolute',
-                  top: '50px',
-                  right: '0',
-                  background: isDark ? '#2a2a2a' : '#ffffff',
-                  border: '2px solid #D4AF37',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  minWidth: '300px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                  zIndex: 10000,
-                }}>
-                  {/* Close Button */}
-                  <button
-                    onClick={() => setShowPriceDropdown(false)}
-                    style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      background: 'none',
-                      border: 'none',
-                      color: isDark ? '#fff' : '#000',
-                      fontSize: '1.2rem',
-                      cursor: 'pointer',
-                      padding: '4px 8px',
-                    }}
-                  >
-                    ✕
-                  </button>
-                  
-                  <h4 style={{ color: '#D4AF37', marginBottom: '12px', fontFamily: 'Cinzel, serif' }}>Live Prices</h4>
-                  
-                  {/* Metal Prices */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '0.7rem', color: isDark ? '#888' : '#666', marginBottom: '6px', fontWeight: 600 }}>Precious Metals</div>
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <img src="/gold_bar.png" alt="Gold" style={{width: '20px', height: '12px'}} />
-                        <span style={{ color: '#FFD700', fontWeight: 600, fontSize: '0.75rem' }}>${metalPrices.gold.toLocaleString()}/oz</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <img src="/silver_bar.png" alt="Silver" style={{width: '20px', height: '12px'}} />
-                        <span style={{ color: '#C0C0C0', fontWeight: 600, fontSize: '0.75rem' }}>${metalPrices.silver.toFixed(2)}/oz</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <img src="/copper_bar.png" alt="Copper" style={{width: '20px', height: '12px'}} />
-                        <span style={{ color: '#CD7F32', fontWeight: 600, fontSize: '0.75rem' }}>${metalPrices.copper.toFixed(2)}/lb</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Crypto Prices */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <div style={{ fontSize: '0.7rem', color: isDark ? '#888' : '#666', marginBottom: '6px', fontWeight: 600 }}>Cryptocurrencies</div>
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <span style={{ color: '#F7931A', fontWeight: 600, fontSize: '0.75rem' }}>₿ ${(cryptoPrices.btc/1000).toFixed(1)}K</span>
-                      <span style={{ color: '#627EEA', fontWeight: 600, fontSize: '0.75rem' }}>Ξ ${cryptoPrices.eth.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  
-                  {/* PulseChain */}
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: isDark ? '#888' : '#666', marginBottom: '6px', fontWeight: 600 }}>PulseChain</div>
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <span style={{ color: '#00D4AA', fontWeight: 600, fontSize: '0.75rem' }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
-                      <span style={{ color: '#9B59B6', fontWeight: 600, fontSize: '0.75rem' }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
+            <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {/* Metal & Crypto Prices - Compact Single Row */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '4px 10px',
+                background: isDark ? 'rgba(212,175,55,0.1)' : 'rgba(212,175,55,0.05)',
+                borderRadius: '16px',
+                border: '1px solid rgba(212,175,55,0.2)',
+                fontSize: '0.6rem',
+              }}>
+                <span title="Gold /oz" style={{ color: '#FFD700', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/gold_bar.png" alt="Gold" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.gold.toLocaleString()}</span>
+                <span title="Silver /oz" style={{ color: '#C0C0C0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/silver_bar.png" alt="Silver" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.silver.toFixed(2)}</span>
+                <span title="Copper /lb" style={{ color: '#CD7F32', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}><img src="/copper_bar.png" alt="Copper" style={{width: '16px', height: '10px', objectFit: 'contain'}} />${metalPrices.copper.toFixed(2)}</span>
+              </div>
+              {/* Crypto Prices - Compact */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'rgba(33,150,243,0.08)',
+                borderRadius: '16px',
+                border: '1px solid rgba(33,150,243,0.15)',
+                fontSize: '0.55rem',
+              }}>
+                <span title="Bitcoin" style={{ color: '#F7931A', fontWeight: 600 }}>₿{(cryptoPrices.btc/1000).toFixed(1)}K</span>
+                <span title="Ethereum" style={{ color: '#627EEA', fontWeight: 600 }}>Ξ{cryptoPrices.eth.toLocaleString()}</span>
+              </div>
+              {/* PLS/PLSX Prices */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'rgba(0,212,170,0.08)',
+                borderRadius: '16px',
+                border: '1px solid rgba(0,212,170,0.15)',
+                fontSize: '0.55rem',
+              }}>
+                <span title="PulseChain" style={{ color: '#00D4AA', fontWeight: 600 }}>PLS ${cryptoPrices.pls.toFixed(8)}</span>
+                <span title="PulseX" style={{ color: '#9B59B6', fontWeight: 600 }}>PLSX ${cryptoPrices.plsx.toFixed(8)}</span>
+              </div>
               {/* Security & Audit Button */}
               <button
                 onClick={() => setShowSecurityModal(true)}
                 style={{
-                  padding: '8px 10px',
+                  padding: '6px 10px',
                   background: 'transparent',
                   border: '1px solid rgba(76,175,80,0.5)',
                   borderRadius: '8px',
                   color: '#4CAF50',
-                  fontSize: '0.85rem',
+                  fontSize: '0.75rem',
                   cursor: 'pointer',
+                  marginRight: '8px',
                 }}
                 title="Security & Audit Info"
               >
                 🛡️
               </button>
-              
-              {/* Theme Toggle */}
               <button className="theme-toggle" onClick={toggleTheme}>
                 {isDark ? '☀️' : '🌙'}
               </button>
-              
-              {/* Wallet Connection Area */}
-              {!account ? (
-                // NOT CONNECTED - Show only Connect button
+              {/* Change Address Button - only show when connected */}
+              {account && (
                 <button
-                  className="connect-btn"
                   onClick={() => setShowWalletModal(true)}
-                  disabled={loading}
-                  title="Connect your wallet"
                   style={{
-                    padding: '8px 16px',
-                    background: 'linear-gradient(135deg, #D4AF37, #F4E5C3)',
-                    border: 'none',
+                    padding: '6px 10px',
+                    background: 'transparent',
+                    border: '1px solid rgba(212,175,55,0.5)',
                     borderRadius: '8px',
-                    color: '#000',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: loading ? 'not-allowed' : 'pointer',
+                    color: '#D4AF37',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    marginRight: '8px',
                   }}
+                  title="Change wallet address"
                 >
-                  {loading && <span className="spinner" />}
-                  🔗 Connect
+                  🔄
                 </button>
-              ) : (
-                // CONNECTED - Show wallet management buttons
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  {/* Change Wallet Button */}
-                  <button
-                    onClick={() => setShowWalletModal(true)}
-                    style={{
-                      padding: '8px 10px',
-                      background: 'transparent',
-                      border: '1px solid rgba(212,175,55,0.5)',
-                      borderRadius: '8px',
-                      color: '#D4AF37',
-                      fontSize: '0.75rem',
-                      cursor: 'pointer',
-                    }}
-                    title="Change wallet"
-                  >
-                    🔄
-                  </button>
-                  
+              )}
+              {/* Wallet Connection Buttons */}
+              {account ? (
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                   {/* Switch Account Button */}
                   <button
                     onClick={switchWallet}
                     disabled={loading}
                     style={{
-                      padding: '8px 12px',
-                      background: 'rgba(76,175,80,0.15)',
+                      padding: '8px 10px',
+                      background: 'rgba(76,175,80,0.2)',
                       border: '1px solid rgba(76,175,80,0.5)',
-                      borderRadius: '8px',
+                      borderRadius: '8px 0 0 8px',
                       color: '#4CAF50',
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      cursor: loading ? 'not-allowed' : 'pointer',
+                      cursor: loading ? 'wait' : 'pointer',
                     }}
-                    title="Switch account"
+                    title="Switch to different wallet account"
                   >
-                    ↔️ Switch
+                    🔀
                   </button>
-                  
                   {/* Connected Address & Disconnect */}
                   <button
                     className="connect-btn connected"
                     onClick={disconnectWallet}
                     disabled={loading}
                     style={{
-                      padding: '8px 12px',
-                      background: 'rgba(212,175,55,0.15)',
-                      border: '1px solid rgba(212,175,55,0.5)',
-                      borderRadius: '8px',
-                      color: '#D4AF37',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      cursor: loading ? 'not-allowed' : 'pointer',
+                      borderRadius: '0 8px 8px 0',
                     }}
                     title="Click to disconnect"
                   >
@@ -8123,6 +8109,16 @@ export default function App() {
                     🔌 {formatAddress(account)}
                   </button>
                 </div>
+              ) : (
+                <button
+                  className="connect-btn"
+                  onClick={() => setShowWalletModal(true)}
+                  disabled={loading}
+                  title="Connect your wallet"
+                >
+                  {loading && <span className="spinner" />}
+                  🔗 Connect
+                </button>
               )}
             </div>
           </div>
@@ -8324,13 +8320,6 @@ export default function App() {
                   <div style={{fontSize: '0.6rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
                   <div style={{fontSize: '0.5rem', color: '#FF1493', marginTop: '2px'}}>10% APR</div>
                 </div>
-                
-                {/* White Diamond NFT Icon */}
-                <WhiteDiamondIcon 
-                  provider={provider}
-                  account={account}
-                  onNavigate={() => handleNavClick('whitediamond')}
-                />
                 
                 {/* Calculator Icon - Stake Forecaster */}
                 <div 
@@ -8753,54 +8742,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Total Holders - Live from PulseChain */}
-              <a 
-                href="https://scan.pulsechain.com/token/0xD0676B28a457371D58d47E5247b439114e40Eb0F/token-holders"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ textDecoration: 'none' }}
-              >
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(212,175,55,0.15) 0%, rgba(212,175,55,0.08) 100%)',
-                border: '1px solid rgba(212,175,55,0.4)',
-                borderRadius: '12px',
-                padding: '16px',
-                textAlign: 'center',
-                cursor: 'pointer',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-              }}
-              onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(212,175,55,0.3)'; }}
-              onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
-              >
-                <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>👥</div>
-                <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '4px' }}>TOTAL HOLDERS</div>
-                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#D4AF37' }}>
-                  {liveHolders.loading ? '...' : (liveHolders.totalHolders || '...')}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 600 }}>
-                  Unique Wallets
-                </div>
-                <div style={{ 
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                  marginTop: '4px'
-                }}>
-                  <span style={{ 
-                    width: '6px', 
-                    height: '6px', 
-                    borderRadius: '50%', 
-                    background: liveHolders.loading ? '#FF9800' : '#4CAF50',
-                    animation: 'pulse 2s infinite'
-                  }} />
-                  <span style={{ fontSize: '0.5rem', color: '#666' }}>
-                    {liveHolders.loading ? 'Loading...' : 'Live from PulseChain'}
-                  </span>
-                </div>
-              </div>
-              </a>
-
               {/* DAO Ecosystem (Treasury + LP Locked) */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(255,152,0,0.1) 0%, rgba(255,152,0,0.05) 100%)',
@@ -8832,128 +8773,6 @@ export default function App() {
                   }} />
                 </div>
                 <div style={{ fontSize: '0.55rem', color: '#666', marginTop: '6px' }}>Treasury + LP</div>
-              </div>
-            </div>
-
-            {/* TOTAL VALUE LOCKED (TVL) Summary Box */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(212,175,55,0.15) 0%, rgba(184,134,11,0.1) 100%)',
-              border: '2px solid rgba(212,175,55,0.5)',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '16px',
-              boxShadow: '0 4px 20px rgba(212,175,55,0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
-            }}>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                gap: '12px',
-                marginBottom: '16px'
-              }}>
-                <span style={{ fontSize: '1.5rem' }}>🔐</span>
-                <span style={{ 
-                  fontSize: '1rem', 
-                  fontWeight: 800, 
-                  color: '#D4AF37',
-                  letterSpacing: '2px'
-                }}>TOTAL VALUE LOCKED (TVL)</span>
-                <span style={{ fontSize: '1.5rem' }}>🔐</span>
-              </div>
-              
-              {/* TVL Main Display */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '16px',
-                marginBottom: '16px',
-              }}>
-                {/* USD Value */}
-                <div style={{
-                  background: 'rgba(0,0,0,0.3)',
-                  borderRadius: '10px',
-                  padding: '16px',
-                  textAlign: 'center',
-                }}>
-                  <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '6px' }}>
-                    💵 USD VALUE
-                  </div>
-                  <div style={{ 
-                    fontSize: '1.8rem', 
-                    fontWeight: 800, 
-                    color: '#4CAF50',
-                    textShadow: '0 2px 10px rgba(76,175,80,0.3)'
-                  }}>
-                    ${formatNumber((
-                      supplyDynamics.dao + 
-                      supplyDynamics.lpLocked + 
-                      (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) +
-                      (supplyDynamics.rewardsPool || 0)
-                    ) * livePrices.dtgc)}
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: '#666', marginTop: '4px' }}>
-                    @ ${livePrices.dtgc?.toFixed(6) || '0.000000'}/DTGC
-                  </div>
-                </div>
-                
-                {/* DTGC Amount */}
-                <div style={{
-                  background: 'rgba(0,0,0,0.3)',
-                  borderRadius: '10px',
-                  padding: '16px',
-                  textAlign: 'center',
-                }}>
-                  <div style={{ fontSize: '0.7rem', color: '#888', letterSpacing: '1px', marginBottom: '6px' }}>
-                    🪙 DTGC LOCKED
-                  </div>
-                  <div style={{ 
-                    fontSize: '1.8rem', 
-                    fontWeight: 800, 
-                    color: '#D4AF37',
-                    textShadow: '0 2px 10px rgba(212,175,55,0.3)'
-                  }}>
-                    {formatNumber(
-                      supplyDynamics.dao + 
-                      supplyDynamics.lpLocked + 
-                      (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) +
-                      (supplyDynamics.rewardsPool || 0)
-                    )}
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: '#666', marginTop: '4px' }}>
-                    {(((supplyDynamics.dao + supplyDynamics.lpLocked + (parseFloat(contractStats.totalStaked) || supplyDynamics.staked) + (supplyDynamics.rewardsPool || 0)) / DTGC_TOTAL_SUPPLY) * 100).toFixed(1)}% of Total Supply
-                  </div>
-                </div>
-              </div>
-              
-              {/* TVL Breakdown */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                gap: '10px',
-                background: 'rgba(0,0,0,0.2)',
-                borderRadius: '8px',
-                padding: '12px',
-              }}>
-                <div style={{ textAlign: 'center', padding: '8px' }}>
-                  <div style={{ fontSize: '0.6rem', color: '#4CAF50', marginBottom: '4px' }}>🏛️ Treasury</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(supplyDynamics.dao)}</div>
-                  <div style={{ fontSize: '0.55rem', color: '#4CAF50' }}>${formatNumber(supplyDynamics.dao * livePrices.dtgc)}</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '8px' }}>
-                  <div style={{ fontSize: '0.6rem', color: '#9C27B0', marginBottom: '4px' }}>🔒 LP Locked</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(supplyDynamics.lpLocked)}</div>
-                  <div style={{ fontSize: '0.55rem', color: '#9C27B0' }}>${formatNumber(supplyDynamics.lpLocked * livePrices.dtgc)}</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '8px' }}>
-                  <div style={{ fontSize: '0.6rem', color: '#00BCD4', marginBottom: '4px' }}>💎 Staked</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(parseFloat(contractStats.totalStaked) || supplyDynamics.staked)}</div>
-                  <div style={{ fontSize: '0.55rem', color: '#00BCD4' }}>${formatNumber((parseFloat(contractStats.totalStaked) || supplyDynamics.staked) * livePrices.dtgc)}</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '8px' }}>
-                  <div style={{ fontSize: '0.6rem', color: '#FF9800', marginBottom: '4px' }}>🏦 Rewards Pool</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{formatNumber(supplyDynamics.rewardsPool || 0)}</div>
-                  <div style={{ fontSize: '0.55rem', color: '#FF9800' }}>${formatNumber((supplyDynamics.rewardsPool || 0) * livePrices.dtgc)}</div>
-                </div>
               </div>
             </div>
 
@@ -13013,6 +12832,7 @@ export default function App() {
                 signer={signer}
                 userAddress={account}
                 livePrices={livePrices}
+                onStakesUpdate={setWhiteDiamondNFTs}
                 onClose={() => setActiveTab('stake')}
               />
             </section>
@@ -13084,7 +12904,7 @@ export default function App() {
         {/* Floating LP Stakes Widget (top-left) */}
         <FloatingLPWidget 
           account={account}
-          stakedPositions={stakedPositions}
+          stakedPositions={getVisiblePositions()}
           livePrices={livePrices}
           formatNumber={formatNumber}
           getCurrencySymbol={getCurrencySymbol}
