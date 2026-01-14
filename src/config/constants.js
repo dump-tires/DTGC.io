@@ -18,6 +18,9 @@ export const CONTRACTS = {
   LP_STAKING_V2: '0x0b07eD8929884E9bBDEAD6B42465F2A265044f18',
   DAO_VOTING: '0x91DFFcC31C68Ef0C1F2ad49554E85bB7536fA470',
   DAO_TREASURY: '0x22289ce7d7B962e804E9C8C6C57D2eD4Ffe0AbFC',
+  // ✨ White Diamond NFT
+  WHITE_DIAMOND_NFT: '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
+  WHITE_DIAMOND_LP: '0x670c972Bb5388E087a2934a063064d97278e01F3',
 };
 
 // Tokens
@@ -97,7 +100,7 @@ export const DIAMOND_TIER = {
 export const DIAMOND_PLUS_TIER = {
   id: 4,
   name: 'Diamond+',
-  icon: '💎✨',
+  icon: '💜💎', // Updated from '💎✨' to match sidebar
   minInvest: 1000,
   lockDays: 90,
   apr: 35,        // Reduced 30% from 50%
@@ -107,6 +110,25 @@ export const DIAMOND_PLUS_TIER = {
   color: '#9C27B0',
   isLP: true,
   lpPair: 'DTGC/URMOM',
+};
+
+// ✨ White Diamond NFT Tier
+export const WHITE_DIAMOND_TIER = {
+  id: 5,
+  name: 'White Diamond',
+  icon: '⚔️',
+  contract: '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
+  lpToken: '0x670c972Bb5388E087a2934a063064d97278e01F3',
+  minStake: 1000,
+  lockDays: 90,
+  apr: 70,
+  bonus: 0,
+  boost: 1,
+  color: '#D4AF37',
+  isLP: true,
+  isNFT: true,
+  lpPair: 'DTGC/URMOM',
+  description: 'Transferable NFT Position',
 };
 
 // V19 Fee Structure (7.5% total for sustainability)
@@ -174,4 +196,20 @@ export const ERC20_ABI = [
   "function decimals() external view returns (uint8)",
   "function symbol() external view returns (string)",
   "function totalSupply() external view returns (uint256)",
+];
+
+// White Diamond NFT ABI
+export const WHITE_DIAMOND_ABI = [
+  'function stake(uint256 amount) external returns (uint256)',
+  'function withdraw(uint256 tokenId) external',
+  'function claimRewards(uint256 tokenId) external',
+  'function emergencyWithdraw(uint256 tokenId) external',
+  'function getStakesByOwner(address owner) view returns (uint256[])',
+  'function getPosition(uint256 tokenId) view returns (uint256 amount, uint256 startTime, uint256 unlockTime, uint256 lastClaimTime, uint256 pending, bool isActive, uint256 timeRemaining)',
+  'function getStats() view returns (uint256 totalStaked, uint256 totalSupply, uint256 totalRewardsPaid, uint256 apr, uint256 lockTime)',
+  'function pendingRewards(uint256 tokenId) view returns (uint256)',
+  'function totalSupply() view returns (uint256)',
+  'function balanceOf(address) view returns (uint256)',
+  'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
+  'function ownerOf(uint256 tokenId) view returns (address)',
 ];
