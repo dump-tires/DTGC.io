@@ -3073,11 +3073,16 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   // Only hide if no account OR we've never had positions
   if (!account || (displayPositions.length === 0 && lastValidPositions.current.length === 0)) return null;
 
-  // Categorize stakes
+  // Categorize stakes by tier
   const diamondLP = displayPositions.filter(p => p.isLP && p.lpType !== 1 && p.tierName !== 'FLEX');
   const diamondPlusLP = displayPositions.filter(p => p.isLP && p.lpType === 1 && p.tierName !== 'FLEX');
   const flexStakes = displayPositions.filter(p => p.isFlex || p.tierName === 'FLEX');
   const dtgcStakes = displayPositions.filter(p => !p.isLP && !p.isFlex && p.tierName !== 'FLEX');
+  
+  // Further categorize DTGC stakes by tier name
+  const silverStakes = dtgcStakes.filter(p => p.tierName === 'SILVER' || p.tier === 0);
+  const goldStakes = dtgcStakes.filter(p => p.tierName === 'GOLD' || p.tier === 1);
+  const whaleStakes = dtgcStakes.filter(p => p.tierName === 'WHALE' || p.tier === 2);
   
   // White Diamond NFT stakes (tracked separately)
   const totalWhiteDiamondLP = whiteDiamondNFTs.reduce((sum, nft) => sum + (parseFloat(nft.amount) || 0), 0);
@@ -3086,6 +3091,9 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
   const totalDiamondPlusLP = diamondPlusLP.reduce((sum, p) => sum + (p.amount || 0), 0);
   const totalFlexLP = flexStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
   const totalDTGCStaked = dtgcStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalSilver = silverStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalGold = goldStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalWhale = whaleStakes.reduce((sum, p) => sum + (p.amount || 0), 0);
   
   // Calculate USD values
   const dtgcPrice = livePrices?.dtgc || 0;
@@ -3105,6 +3113,11 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
     const hasDiamondPlus = totalDiamondPlusLP > 0;
     const hasDiamond = totalDiamondLP > 0;
     const hasFlex = totalFlexLP > 0;
+    const hasSilver = totalSilver > 0;
+    const hasGold = totalGold > 0;
+    const hasWhale = totalWhale > 0;
+    const hasDTGC = totalDTGCStaked > 0;
+    
     return (
       <div
         onClick={() => setIsExpanded(true)}
@@ -3127,22 +3140,30 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
           transition: 'all 0.3s ease',
         }}
       >
-        {/* Stake type icons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+        {/* Stake type icons - show all active tiers */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1px', flexWrap: 'wrap', maxWidth: '80px' }}>
           {/* White Diamond NFTs - crossed swords */}
-          {hasWhiteDiamond && whiteDiamondNFTs.slice(0, 3).map((_, i) => (
-            <span key={`wd-${i}`} style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>⚔️</span>
+          {hasWhiteDiamond && whiteDiamondNFTs.slice(0, 2).map((_, i) => (
+            <span key={`wd-${i}`} style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }}>⚔️</span>
           ))}
-          {whiteDiamondNFTs.length > 3 && <span style={{ fontSize: '0.5rem', color: '#000' }}>+{whiteDiamondNFTs.length - 3}</span>}
+          {whiteDiamondNFTs.length > 2 && <span style={{ fontSize: '0.45rem', color: '#000' }}>+{whiteDiamondNFTs.length - 2}</span>}
           {/* Diamond+ - purple heart */}
-          {hasDiamondPlus && <span style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>💜</span>}
+          {hasDiamondPlus && <span style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }} title="Diamond+">💜</span>}
           {/* Diamond - blue diamond */}
-          {hasDiamond && <span style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>💎</span>}
+          {hasDiamond && <span style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }} title="Diamond">💎</span>}
+          {/* Whale */}
+          {hasWhale && <span style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }} title="Whale">🐋</span>}
+          {/* Gold */}
+          {hasGold && <span style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }} title="Gold">🥇</span>}
+          {/* Silver */}
+          {hasSilver && <span style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }} title="Silver">🥈</span>}
           {/* Flex - pink heart */}
-          {hasFlex && <span style={{ fontSize: isMobile ? '0.7rem' : '0.8rem' }}>💗</span>}
+          {hasFlex && <span style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }} title="Flex">💗</span>}
+          {/* DTGC (if not categorized into tiers) */}
+          {hasDTGC && !hasSilver && !hasGold && !hasWhale && <span style={{ fontSize: isMobile ? '0.6rem' : '0.7rem' }} title="DTGC">🪙</span>}
           {/* Fallback if none */}
-          {!hasWhiteDiamond && !hasDiamondPlus && !hasDiamond && !hasFlex && (
-            <span style={{ fontSize: isMobile ? '0.9rem' : '1.1rem' }}>💎</span>
+          {!hasWhiteDiamond && !hasDiamondPlus && !hasDiamond && !hasFlex && !hasDTGC && (
+            <span style={{ fontSize: isMobile ? '0.8rem' : '0.9rem' }}>💎</span>
           )}
         </div>
         <div>
@@ -3230,14 +3251,56 @@ const FloatingLPWidget = ({ account, stakedPositions, livePrices, formatNumber, 
             <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalWhiteDiamondLP)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#666', fontSize: '0.5rem' }}>NFT Stakes</span>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>{whiteDiamondNFTs.length} NFT{whiteDiamondNFTs.length !== 1 ? 's' : ''}</span>
             <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(whiteDiamondLPValue).value)}</span>
           </div>
         </div>
       )}
       
-      {/* DTGC Stakes */}
-      {totalDTGCStaked > 0 && (
+      {/* Whale Stakes */}
+      {totalWhale > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(33,150,243,0.15)', borderRadius: '6px', border: '1px solid rgba(33,150,243,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#2196F3', fontSize: '0.65rem', fontWeight: 600 }}>🐋 Whale</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalWhale)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>{whaleStakes.length} stake{whaleStakes.length !== 1 ? 's' : ''}</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(totalWhale * dtgcPrice).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Gold Stakes */}
+      {totalGold > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(255,215,0,0.15)', borderRadius: '6px', border: '1px solid rgba(255,215,0,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#FFD700', fontSize: '0.65rem', fontWeight: 600 }}>🥇 Gold</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalGold)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>{goldStakes.length} stake{goldStakes.length !== 1 ? 's' : ''}</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(totalGold * dtgcPrice).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Silver Stakes */}
+      {totalSilver > 0 && (
+        <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(192,192,192,0.15)', borderRadius: '6px', border: '1px solid rgba(192,192,192,0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#C0C0C0', fontSize: '0.65rem', fontWeight: 600 }}>🥈 Silver</span>
+            <span style={{ color: '#fff', fontSize: '0.7rem', fontWeight: 700 }}>{formatNumber(totalSilver)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#666', fontSize: '0.5rem' }}>{silverStakes.length} stake{silverStakes.length !== 1 ? 's' : ''}</span>
+            <span style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{getCurrencySymbol()}{formatNumber(convertToCurrency(totalSilver * dtgcPrice).value)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Legacy DTGC Stakes (uncategorized) */}
+      {totalDTGCStaked > 0 && totalSilver === 0 && totalGold === 0 && totalWhale === 0 && (
         <div style={{ marginBottom: '6px', padding: '6px 8px', background: 'rgba(255,215,0,0.1)', borderRadius: '6px', border: '1px solid rgba(255,215,0,0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: '#FFD700', fontSize: '0.65rem', fontWeight: 600 }}>🪙 DTGC</span>
