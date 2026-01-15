@@ -3635,6 +3635,7 @@ export default function App() {
   const [scanningWallet, setScanningWallet] = useState(false);
   const [lastScanTime, setLastScanTime] = useState(null);
   const [flexSuccess, setFlexSuccess] = useState(null); // {lpAmount, plsReturned, totalValue}
+  const [flexConversionReceipt, setFlexConversionReceipt] = useState(null); // {converted: [], failed: []}
   const [showFlexCalculator, setShowFlexCalculator] = useState(false);
   const [flexStakes, setFlexStakes] = useState([]); // Track Flex stakes
   const [flexHistory, setFlexHistory] = useState([]); // Track completed Flex stakes for Treasury
@@ -5847,51 +5848,61 @@ export default function App() {
     const fetchMainnetBalances = async () => {
       if (TESTNET_MODE || !account || !provider) return;
 
+      // Fetch each balance independently to prevent cascade failures
+      
+      // Get PLS balance
       try {
-        // Get PLS balance
         const plsBal = await provider.getBalance(account);
         setPlsBalance(ethers.formatEther(plsBal));
+      } catch (e) {
+        console.warn('Could not fetch PLS balance:', e.message);
+      }
 
-        // Get DTGC balance
-        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+      // Get DTGC balance
+      let dtgcContract;
+      try {
+        dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
         const dtgcBal = await dtgcContract.balanceOf(account);
         setDtgcBalance(ethers.formatEther(dtgcBal));
+      } catch (e) {
+        console.warn('Could not fetch DTGC balance:', e.message);
+      }
 
-        // Get URMOM balance
+      // Get URMOM balance
+      try {
         const urmomContract = new ethers.Contract(CONTRACTS.URMOM, ERC20_ABI, provider);
         const urmomBal = await urmomContract.balanceOf(account);
         setUrmomBalance(ethers.formatEther(urmomBal));
+      } catch (e) {
+        console.warn('Could not fetch URMOM balance:', e.message);
+      }
 
-        // Get DTGC/PLS LP balance (Diamond tier)
-        let lpPlsBal = 0n;
-        try {
-          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
-          lpPlsBal = await lpPlsContract.balanceOf(account);
-          setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
-        } catch (e) {
-          console.warn('Could not fetch DTGC/PLS LP balance:', e);
-          setLpDtgcPlsBalance('0');
-        }
+      // Get DTGC/PLS LP balance (Diamond tier)
+      try {
+        const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+        const lpPlsBal = await lpPlsContract.balanceOf(account);
+        setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
+      } catch (e) {
+        console.warn('Could not fetch DTGC/PLS LP balance:', e.message);
+      }
 
-        // Get DTGC/URMOM LP balance (Diamond+ tier)
-        let lpUrmomBal = 0n;
-        try {
-          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
-          lpUrmomBal = await lpUrmomContract.balanceOf(account);
-          setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
-          setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
-        } catch (e) {
-          console.warn('Could not fetch DTGC/URMOM LP balance:', e);
-          setLpDtgcUrmomBalance('0');
-        }
+      // Get DTGC/URMOM LP balance (Diamond+ tier)
+      try {
+        const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+        const lpUrmomBal = await lpUrmomContract.balanceOf(account);
+        setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
+        setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
+      } catch (e) {
+        console.warn('Could not fetch DTGC/URMOM LP balance:', e.message);
+      }
 
-        // Get Staking Contract Rewards Remaining (DTGC balance in V4 staking contract)
+      // Get Staking Contract Rewards Remaining (DTGC balance in V4 staking contract)
+      if (dtgcContract) {
         try {
           const stakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.stakingV4);
           setStakingRewardsRemaining(ethers.formatEther(stakingRewards));
         } catch (e) {
-          console.warn('Could not fetch staking rewards:', e);
-          setStakingRewardsRemaining('0');
+          console.warn('Could not fetch staking rewards:', e.message);
         }
 
         // Get LP Staking Contract Rewards Remaining (DTGC balance in V4 LP staking contract)
@@ -5899,19 +5910,8 @@ export default function App() {
           const lpStakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.lpStakingV4);
           setLpStakingRewardsRemaining(ethers.formatEther(lpStakingRewards));
         } catch (e) {
-          console.warn('Could not fetch LP staking rewards:', e);
-          setLpStakingRewardsRemaining('0');
+          console.warn('Could not fetch LP staking rewards:', e.message);
         }
-
-        console.log('📊 Mainnet balances loaded:', {
-          pls: ethers.formatEther(plsBal),
-          dtgc: ethers.formatEther(dtgcBal),
-          urmom: ethers.formatEther(urmomBal),
-          lpDtgcPls: ethers.formatEther(lpPlsBal || 0n),
-          lpDtgcUrmom: ethers.formatEther(lpUrmomBal || 0n)
-        });
-      } catch (err) {
-        console.error('Failed to fetch balances:', err);
       }
     };
 
@@ -6772,6 +6772,9 @@ export default function App() {
         // ═══════════════════════════════════════════════════════════════
         // V4 MULTI-STAKE MODE - UNLIMITED STAKES PER USER
         // ═══════════════════════════════════════════════════════════════
+        let v4Failed = false;
+        let v3Failed = false;
+        
         if (USE_V4_CONTRACTS && CONTRACT_ADDRESSES.stakingV4 !== '0x0000000000000000000000000000000000000000') {
           console.log('🚀 V4 MULTI-STAKE ACTIVE');
           console.log('📍 DTGCStakingV4:', CONTRACT_ADDRESSES.stakingV4);
@@ -6779,6 +6782,7 @@ export default function App() {
           
           try {
             // Fetch DTGC stakes from V4
+            console.log('📡 Calling V4 getActiveStakeCount...');
             const stakingV4 = new ethers.Contract(CONTRACT_ADDRESSES.stakingV4, STAKING_V4_ABI, activeProvider);
             const dtgcStakeCount = await stakingV4.getActiveStakeCount(account);
             console.log('📊 V4 DTGC active stake count:', dtgcStakeCount.toString());
@@ -6976,6 +6980,7 @@ export default function App() {
             
           } catch (v4Err) {
             console.warn('⚠️ V4 fetch failed, falling back to V3:', v4Err.message);
+            v4Failed = true;
             // Fall through to V3 logic
           }
         }
@@ -7075,6 +7080,12 @@ export default function App() {
           }
         } catch (v3Err) {
           console.warn('⚠️ V3 fetch also had issues:', v3Err.message);
+          v3Failed = true;
+        }
+
+        // If BOTH V4 and V3 failed with RPC errors and no positions, try next RPC
+        if (v4Failed && v3Failed && positions.length === 0) {
+          throw new Error('Both V4 and V3 contract calls failed - trying next RPC');
         }
 
         // Only update if we found positions - don't clear with empty array
@@ -9859,6 +9870,31 @@ export default function App() {
                                         color: '#FF9800'
                                       }}>⚠️ NO LIQ</span>
                                     )}
+                                    {/* Contract Address Copy Button */}
+                                    {token.address && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard.writeText(token.address);
+                                          showToast(`📋 ${token.symbol} address copied!`, 'success');
+                                        }}
+                                        title={token.address}
+                                        style={{
+                                          padding: '2px 4px',
+                                          background: 'rgba(255,255,255,0.1)',
+                                          border: '1px solid rgba(255,255,255,0.2)',
+                                          borderRadius: '3px',
+                                          color: 'rgba(255,255,255,0.6)',
+                                          fontSize: '0.5rem',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '2px',
+                                        }}
+                                      >
+                                        📋 {token.address.slice(0,6)}...
+                                      </button>
+                                    )}
                                   </div>
                                   <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>{token.name}</div>
                                 </div>
@@ -10077,40 +10113,107 @@ export default function App() {
                         const signer = await provider.getSigner();
                         const dapper = new ethers.Contract(DAPPER_ADDRESS, DAPPER_ABI, signer);
                         
+                        let successCount = 0;
+                        let failedTokens = [];
+                        let convertedTokens = []; // Track what actually converted
+                        
                         // Process each selected token
                         for (const [key, tokenData] of Object.entries(selectedFlexTokens)) {
                           const amount = parseFloat(tokenData?.amount) || 0;
                           if (amount <= 0) continue;
                           
-                          if (key === 'pls' || !tokenData?.address) {
-                            // Native PLS
-                            const amountWei = ethers.parseEther(amount.toString());
-                            const tx = await dapper.zapPLS({ value: amountWei });
-                            showToast(`⚡ Zapping ${amount.toFixed(2)} PLS...`, 'info');
-                            await tx.wait();
-                          } else {
-                            // ERC20 Token - need approval first
-                            const tokenContract = new ethers.Contract(tokenData.address, [
-                              'function approve(address spender, uint256 amount) returns (bool)',
-                              'function allowance(address owner, address spender) view returns (uint256)',
-                            ], signer);
-                            
-                            const decimals = parseInt(tokenData.decimals) || 18;
-                            const amountWei = ethers.parseUnits(amount.toString(), decimals);
-                            
-                            // Check allowance
-                            const allowance = await tokenContract.allowance(account, DAPPER_ADDRESS);
-                            if (allowance < amountWei) {
-                              showToast(`🔓 Approving ${tokenData.symbol}...`, 'info');
-                              const approveTx = await tokenContract.approve(DAPPER_ADDRESS, ethers.MaxUint256);
-                              await approveTx.wait();
+                          try {
+                            if (key === 'pls' || !tokenData?.address) {
+                              // Native PLS
+                              const amountWei = ethers.parseEther(amount.toString());
+                              const tx = await dapper.zapPLS({ value: amountWei });
+                              showToast(`⚡ Zapping ${amount.toFixed(2)} PLS...`, 'info');
+                              await tx.wait();
+                              successCount++;
+                              convertedTokens.push({ symbol: 'PLS', amount, valueUsd: amount * (livePrices.pls || 0.00003) });
+                            } else {
+                              // ERC20 Token - validate balance first
+                              const tokenContract = new ethers.Contract(tokenData.address, [
+                                'function approve(address spender, uint256 amount) returns (bool)',
+                                'function allowance(address owner, address spender) view returns (uint256)',
+                                'function balanceOf(address account) view returns (uint256)',
+                              ], signer);
+                              
+                              const decimals = parseInt(tokenData.decimals) || 18;
+                              const amountWei = ethers.parseUnits(amount.toString(), decimals);
+                              
+                              // ✅ Validate on-chain balance before zapping
+                              let actualBalance;
+                              try {
+                                actualBalance = await tokenContract.balanceOf(account);
+                              } catch (balErr) {
+                                console.warn(`⚠️ Cannot read balance for ${tokenData.symbol}:`, balErr.message);
+                                failedTokens.push(`${tokenData.symbol} (invalid contract)`);
+                                continue; // Skip this token
+                              }
+                              
+                              if (actualBalance < amountWei) {
+                                console.warn(`⚠️ ${tokenData.symbol}: Insufficient balance. Has ${ethers.formatUnits(actualBalance, decimals)}, needs ${amount}`);
+                                failedTokens.push(`${tokenData.symbol} (insufficient balance)`);
+                                continue; // Skip this token
+                              }
+                              
+                              // Check allowance
+                              const allowance = await tokenContract.allowance(account, DAPPER_ADDRESS);
+                              if (allowance < amountWei) {
+                                showToast(`🔓 Approving ${tokenData.symbol}...`, 'info');
+                                const approveTx = await tokenContract.approve(DAPPER_ADDRESS, ethers.MaxUint256);
+                                await approveTx.wait();
+                              }
+                              
+                              // ✅ Simulate the zap first to check liquidity
+                              try {
+                                await dapper.zapToken.staticCall(tokenData.address, amountWei);
+                              } catch (simErr) {
+                                console.warn(`⚠️ ${tokenData.symbol}: Swap simulation failed - likely no liquidity`);
+                                failedTokens.push(`${tokenData.symbol} (no liquidity)`);
+                                continue; // Skip this token
+                              }
+                              
+                              // Zap token
+                              showToast(`⚡ Zapping ${amount.toFixed(4)} ${tokenData.symbol}...`, 'info');
+                              const tx = await dapper.zapToken(tokenData.address, amountWei);
+                              await tx.wait();
+                              successCount++;
+                              convertedTokens.push({ 
+                                symbol: tokenData.symbol, 
+                                amount, 
+                                valueUsd: tokenData.valueUsd || (amount * (tokenData.price || 0)),
+                                address: tokenData.address
+                              });
                             }
-                            
-                            // Zap token
-                            showToast(`⚡ Zapping ${amount.toFixed(4)} ${tokenData.symbol}...`, 'info');
-                            const tx = await dapper.zapToken(tokenData.address, amountWei);
-                            await tx.wait();
+                          } catch (tokenErr) {
+                            console.error(`❌ Failed to zap ${tokenData?.symbol || key}:`, tokenErr.message);
+                            failedTokens.push(`${tokenData?.symbol || key} (swap failed)`);
+                            // Continue to next token instead of failing entire batch
                           }
+                        }
+                        
+                        // Show results with detailed receipt
+                        if (failedTokens.length > 0 && successCount > 0) {
+                          // Partial success - show what worked and what didn't
+                          showToast(`✅ Converted ${successCount} tokens | ⚠️ Skipped: ${failedTokens.slice(0,3).join(', ')}${failedTokens.length > 3 ? '...' : ''}`, 'warning');
+                        } else if (failedTokens.length > 0) {
+                          showToast(`⚠️ Could not convert: ${failedTokens.join(', ')}`, 'warning');
+                        }
+                        
+                        // Set conversion receipt for popup
+                        if (convertedTokens.length > 0 || failedTokens.length > 0) {
+                          setFlexConversionReceipt({
+                            converted: convertedTokens,
+                            failed: failedTokens,
+                            timestamp: Date.now()
+                          });
+                        }
+                        
+                        if (successCount === 0) {
+                          showToast('❌ No tokens could be zapped. Check PLS liquidity on PulseX.', 'error');
+                          return;
                         }
                         
                         // Calculate totals for celebration
@@ -10255,6 +10358,135 @@ export default function App() {
                         top: 0, left: 0, right: 0, bottom: 0,
                         background: 'rgba(0,0,0,0.7)',
                         zIndex: 9999,
+                      }}
+                    />
+                  )}
+
+                  {/* Conversion Receipt Popup */}
+                  {flexConversionReceipt && (
+                    <div style={{
+                      position: 'fixed',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      background: 'linear-gradient(135deg, rgba(30,30,40,0.98) 0%, rgba(20,20,30,0.98) 100%)',
+                      border: '2px solid #D4AF37',
+                      borderRadius: '16px',
+                      padding: '24px',
+                      zIndex: 10001,
+                      boxShadow: '0 0 40px rgba(212,175,55,0.3)',
+                      minWidth: '340px',
+                      maxWidth: '420px',
+                      maxHeight: '80vh',
+                      overflowY: 'auto',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#D4AF37' }}>
+                          📋 Conversion Receipt
+                        </div>
+                        <button
+                          onClick={() => setFlexConversionReceipt(null)}
+                          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '1.2rem', cursor: 'pointer' }}
+                        >×</button>
+                      </div>
+                      
+                      {/* Converted Tokens */}
+                      {flexConversionReceipt.converted.length > 0 && (
+                        <div style={{ marginBottom: '16px' }}>
+                          <div style={{ fontSize: '0.8rem', color: '#4CAF50', fontWeight: 600, marginBottom: '8px' }}>
+                            ✅ Successfully Converted ({flexConversionReceipt.converted.length})
+                          </div>
+                          {flexConversionReceipt.converted.map((token, i) => (
+                            <div key={i} style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center',
+                              padding: '8px 10px', 
+                              background: 'rgba(76,175,80,0.1)', 
+                              borderRadius: '6px',
+                              marginBottom: '4px',
+                              border: '1px solid rgba(76,175,80,0.2)'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: '#4CAF50', fontWeight: 600 }}>{token.symbol}</span>
+                                {token.address && (
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(token.address);
+                                      showToast('📋 Address copied!', 'success');
+                                    }}
+                                    style={{
+                                      padding: '2px 4px',
+                                      background: 'rgba(255,255,255,0.1)',
+                                      border: '1px solid rgba(255,255,255,0.2)',
+                                      borderRadius: '3px',
+                                      color: 'rgba(255,255,255,0.5)',
+                                      fontSize: '0.5rem',
+                                      cursor: 'pointer',
+                                    }}
+                                  >📋</button>
+                                )}
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ color: '#fff', fontSize: '0.8rem' }}>{formatNumber(token.amount, 4)}</div>
+                                {token.valueUsd > 0 && <div style={{ color: '#4CAF50', fontSize: '0.65rem' }}>${formatNumber(token.valueUsd, 2)}</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Failed Tokens */}
+                      {flexConversionReceipt.failed.length > 0 && (
+                        <div style={{ marginBottom: '16px' }}>
+                          <div style={{ fontSize: '0.8rem', color: '#FF9800', fontWeight: 600, marginBottom: '8px' }}>
+                            ⚠️ Could Not Convert ({flexConversionReceipt.failed.length})
+                          </div>
+                          {flexConversionReceipt.failed.map((reason, i) => (
+                            <div key={i} style={{ 
+                              padding: '6px 10px', 
+                              background: 'rgba(255,152,0,0.1)', 
+                              borderRadius: '6px',
+                              marginBottom: '4px',
+                              border: '1px solid rgba(255,152,0,0.2)',
+                              fontSize: '0.75rem',
+                              color: '#FF9800'
+                            }}>
+                              {reason}
+                            </div>
+                          ))}
+                          <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', marginTop: '8px' }}>
+                            💡 These tokens likely lack PLS liquidity on PulseX. They may be PRC20 copies without trading pairs.
+                          </div>
+                        </div>
+                      )}
+                      
+                      <button
+                        onClick={() => setFlexConversionReceipt(null)}
+                        style={{
+                          width: '100%',
+                          background: 'linear-gradient(135deg, #D4AF37 0%, #B8860B 100%)',
+                          border: 'none',
+                          padding: '10px',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem',
+                          fontWeight: 600,
+                          color: '#000',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ✓ Got It
+                      </button>
+                    </div>
+                  )}
+                  {flexConversionReceipt && (
+                    <div 
+                      onClick={() => setFlexConversionReceipt(null)}
+                      style={{
+                        position: 'fixed',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.7)',
+                        zIndex: 10000,
                       }}
                     />
                   )}
