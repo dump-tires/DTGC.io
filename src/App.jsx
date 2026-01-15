@@ -5848,61 +5848,51 @@ export default function App() {
     const fetchMainnetBalances = async () => {
       if (TESTNET_MODE || !account || !provider) return;
 
-      // Fetch each balance independently to prevent cascade failures
-      
-      // Get PLS balance
       try {
+        // Get PLS balance
         const plsBal = await provider.getBalance(account);
         setPlsBalance(ethers.formatEther(plsBal));
-      } catch (e) {
-        console.warn('Could not fetch PLS balance:', e.message);
-      }
 
-      // Get DTGC balance
-      let dtgcContract;
-      try {
-        dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+        // Get DTGC balance
+        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
         const dtgcBal = await dtgcContract.balanceOf(account);
         setDtgcBalance(ethers.formatEther(dtgcBal));
-      } catch (e) {
-        console.warn('Could not fetch DTGC balance:', e.message);
-      }
 
-      // Get URMOM balance
-      try {
+        // Get URMOM balance
         const urmomContract = new ethers.Contract(CONTRACTS.URMOM, ERC20_ABI, provider);
         const urmomBal = await urmomContract.balanceOf(account);
         setUrmomBalance(ethers.formatEther(urmomBal));
-      } catch (e) {
-        console.warn('Could not fetch URMOM balance:', e.message);
-      }
 
-      // Get DTGC/PLS LP balance (Diamond tier)
-      try {
-        const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
-        const lpPlsBal = await lpPlsContract.balanceOf(account);
-        setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
-      } catch (e) {
-        console.warn('Could not fetch DTGC/PLS LP balance:', e.message);
-      }
+        // Get DTGC/PLS LP balance (Diamond tier)
+        let lpPlsBal = 0n;
+        try {
+          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+          lpPlsBal = await lpPlsContract.balanceOf(account);
+          setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
+        } catch (e) {
+          console.warn('Could not fetch DTGC/PLS LP balance:', e);
+          setLpDtgcPlsBalance('0');
+        }
 
-      // Get DTGC/URMOM LP balance (Diamond+ tier)
-      try {
-        const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
-        const lpUrmomBal = await lpUrmomContract.balanceOf(account);
-        setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
-        setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
-      } catch (e) {
-        console.warn('Could not fetch DTGC/URMOM LP balance:', e.message);
-      }
+        // Get DTGC/URMOM LP balance (Diamond+ tier)
+        let lpUrmomBal = 0n;
+        try {
+          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+          lpUrmomBal = await lpUrmomContract.balanceOf(account);
+          setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
+          setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
+        } catch (e) {
+          console.warn('Could not fetch DTGC/URMOM LP balance:', e);
+          setLpDtgcUrmomBalance('0');
+        }
 
-      // Get Staking Contract Rewards Remaining (DTGC balance in V4 staking contract)
-      if (dtgcContract) {
+        // Get Staking Contract Rewards Remaining (DTGC balance in V4 staking contract)
         try {
           const stakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.stakingV4);
           setStakingRewardsRemaining(ethers.formatEther(stakingRewards));
         } catch (e) {
-          console.warn('Could not fetch staking rewards:', e.message);
+          console.warn('Could not fetch staking rewards:', e);
+          setStakingRewardsRemaining('0');
         }
 
         // Get LP Staking Contract Rewards Remaining (DTGC balance in V4 LP staking contract)
@@ -5910,8 +5900,19 @@ export default function App() {
           const lpStakingRewards = await dtgcContract.balanceOf(CONTRACT_ADDRESSES.lpStakingV4);
           setLpStakingRewardsRemaining(ethers.formatEther(lpStakingRewards));
         } catch (e) {
-          console.warn('Could not fetch LP staking rewards:', e.message);
+          console.warn('Could not fetch LP staking rewards:', e);
+          setLpStakingRewardsRemaining('0');
         }
+
+        console.log('📊 Mainnet balances loaded:', {
+          pls: ethers.formatEther(plsBal),
+          dtgc: ethers.formatEther(dtgcBal),
+          urmom: ethers.formatEther(urmomBal),
+          lpDtgcPls: ethers.formatEther(lpPlsBal || 0n),
+          lpDtgcUrmom: ethers.formatEther(lpUrmomBal || 0n)
+        });
+      } catch (err) {
+        console.error('Failed to fetch balances:', err);
       }
     };
 
@@ -6772,9 +6773,6 @@ export default function App() {
         // ═══════════════════════════════════════════════════════════════
         // V4 MULTI-STAKE MODE - UNLIMITED STAKES PER USER
         // ═══════════════════════════════════════════════════════════════
-        let v4Failed = false;
-        let v3Failed = false;
-        
         if (USE_V4_CONTRACTS && CONTRACT_ADDRESSES.stakingV4 !== '0x0000000000000000000000000000000000000000') {
           console.log('🚀 V4 MULTI-STAKE ACTIVE');
           console.log('📍 DTGCStakingV4:', CONTRACT_ADDRESSES.stakingV4);
@@ -6782,7 +6780,6 @@ export default function App() {
           
           try {
             // Fetch DTGC stakes from V4
-            console.log('📡 Calling V4 getActiveStakeCount...');
             const stakingV4 = new ethers.Contract(CONTRACT_ADDRESSES.stakingV4, STAKING_V4_ABI, activeProvider);
             const dtgcStakeCount = await stakingV4.getActiveStakeCount(account);
             console.log('📊 V4 DTGC active stake count:', dtgcStakeCount.toString());
@@ -6980,7 +6977,6 @@ export default function App() {
             
           } catch (v4Err) {
             console.warn('⚠️ V4 fetch failed, falling back to V3:', v4Err.message);
-            v4Failed = true;
             // Fall through to V3 logic
           }
         }
@@ -7080,12 +7076,6 @@ export default function App() {
           }
         } catch (v3Err) {
           console.warn('⚠️ V3 fetch also had issues:', v3Err.message);
-          v3Failed = true;
-        }
-
-        // If BOTH V4 and V3 failed with RPC errors and no positions, try next RPC
-        if (v4Failed && v3Failed && positions.length === 0) {
-          throw new Error('Both V4 and V3 contract calls failed - trying next RPC');
         }
 
         // Only update if we found positions - don't clear with empty array
@@ -10115,7 +10105,7 @@ export default function App() {
                         
                         let successCount = 0;
                         let failedTokens = [];
-                        let convertedTokens = []; // Track what actually converted
+                        let convertedTokens = [];
                         
                         // Process each selected token
                         for (const [key, tokenData] of Object.entries(selectedFlexTokens)) {
@@ -10142,20 +10132,20 @@ export default function App() {
                               const decimals = parseInt(tokenData.decimals) || 18;
                               const amountWei = ethers.parseUnits(amount.toString(), decimals);
                               
-                              // ✅ Validate on-chain balance before zapping
+                              // Validate on-chain balance before zapping
                               let actualBalance;
                               try {
                                 actualBalance = await tokenContract.balanceOf(account);
                               } catch (balErr) {
                                 console.warn(`⚠️ Cannot read balance for ${tokenData.symbol}:`, balErr.message);
                                 failedTokens.push(`${tokenData.symbol} (invalid contract)`);
-                                continue; // Skip this token
+                                continue;
                               }
                               
                               if (actualBalance < amountWei) {
-                                console.warn(`⚠️ ${tokenData.symbol}: Insufficient balance. Has ${ethers.formatUnits(actualBalance, decimals)}, needs ${amount}`);
+                                console.warn(`⚠️ ${tokenData.symbol}: Insufficient balance`);
                                 failedTokens.push(`${tokenData.symbol} (insufficient balance)`);
-                                continue; // Skip this token
+                                continue;
                               }
                               
                               // Check allowance
@@ -10166,13 +10156,13 @@ export default function App() {
                                 await approveTx.wait();
                               }
                               
-                              // ✅ Simulate the zap first to check liquidity
+                              // Simulate the zap first to check liquidity
                               try {
                                 await dapper.zapToken.staticCall(tokenData.address, amountWei);
                               } catch (simErr) {
-                                console.warn(`⚠️ ${tokenData.symbol}: Swap simulation failed - likely no liquidity`);
+                                console.warn(`⚠️ ${tokenData.symbol}: No PLS liquidity on PulseX`);
                                 failedTokens.push(`${tokenData.symbol} (no liquidity)`);
-                                continue; // Skip this token
+                                continue;
                               }
                               
                               // Zap token
@@ -10190,19 +10180,10 @@ export default function App() {
                           } catch (tokenErr) {
                             console.error(`❌ Failed to zap ${tokenData?.symbol || key}:`, tokenErr.message);
                             failedTokens.push(`${tokenData?.symbol || key} (swap failed)`);
-                            // Continue to next token instead of failing entire batch
                           }
                         }
                         
-                        // Show results with detailed receipt
-                        if (failedTokens.length > 0 && successCount > 0) {
-                          // Partial success - show what worked and what didn't
-                          showToast(`✅ Converted ${successCount} tokens | ⚠️ Skipped: ${failedTokens.slice(0,3).join(', ')}${failedTokens.length > 3 ? '...' : ''}`, 'warning');
-                        } else if (failedTokens.length > 0) {
-                          showToast(`⚠️ Could not convert: ${failedTokens.join(', ')}`, 'warning');
-                        }
-                        
-                        // Set conversion receipt for popup
+                        // Show conversion receipt
                         if (convertedTokens.length > 0 || failedTokens.length > 0) {
                           setFlexConversionReceipt({
                             converted: convertedTokens,
@@ -10217,11 +10198,7 @@ export default function App() {
                         }
                         
                         // Calculate totals for celebration
-                        const totalValueUsd = Object.entries(selectedFlexTokens).reduce((sum, [key, data]) => {
-                          const amt = parseFloat(data?.amount) || 0;
-                          const price = key === 'pls' ? (livePrices.pls || 0.00003) : (data?.price || 0);
-                          return sum + (amt * price);
-                        }, 0);
+                        const totalValueUsd = convertedTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0);
                         
                         const netValue = totalValueUsd * 0.99; // After 1% fee
                         const stakeValue = netValue * (flexStakePercent / 100);
