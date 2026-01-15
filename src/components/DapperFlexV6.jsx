@@ -415,9 +415,23 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
 
   // Build Liberty Swap URL
   const getLibertySwapUrl = (asset) => {
-    // Liberty Swap deep link format
-    const baseUrl = 'https://app.libertyswap.io';
-    return `${baseUrl}?fromChain=${asset.libertyChainId}&toChain=pulsechain`;
+    return `https://libertyswap.finance`;
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = (text, label) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert(`Copied ${label}!`);
+    }).catch(() => {
+      // Fallback
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      alert(`Copied ${label}!`);
+    });
   };
 
   // Filter assets
@@ -610,7 +624,7 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
                   style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '15px', background: 'rgba(0,0,0,0.3)', borderRadius: '10px',
-                    border: `1px solid ${asset.color}33`
+                    border: `1px solid ${asset.color}33`, flexWrap: 'wrap', gap: '10px'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -628,9 +642,27 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
                         {asset.isNative && <span style={{ marginLeft: '6px', fontSize: '0.7rem', background: asset.color, color: '#000', padding: '2px 6px', borderRadius: '4px' }}>NATIVE</span>}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: '#888' }}>{asset.chain}</div>
+                      {/* Contract Address for tokens */}
+                      {asset.address && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#666', fontFamily: 'monospace' }}>
+                            {asset.address.slice(0, 6)}...{asset.address.slice(-4)}
+                          </span>
+                          <button
+                            onClick={() => copyToClipboard(asset.address, `${asset.symbol} CA`)}
+                            style={{
+                              background: 'none', border: 'none', color: '#FFD700', 
+                              cursor: 'pointer', fontSize: '0.7rem', padding: '2px 4px'
+                            }}
+                            title="Copy Contract Address"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontWeight: 'bold', color: '#4ade80' }}>${formatNumber(asset.value)}</div>
                       <div style={{ fontSize: '0.8rem', color: '#888' }}>{formatNumber(asset.balance, 6)} {asset.symbol}</div>
@@ -712,7 +744,7 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
           Swap any token → USDC → Bridge to PulseChain
         </p>
         <a
-          href="https://app.libertyswap.io"
+          href="https://libertyswap.finance"
           target="_blank"
           rel="noopener noreferrer"
           style={{
