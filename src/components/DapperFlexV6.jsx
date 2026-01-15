@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 
 // ============================================
-// DAPPER FLEX V6 - Direct Fetch Multi-Chain Scanner
-// Uses direct JSON-RPC fetch calls (bypasses ethers provider issues)
+// DAPPER FLEX V6 - Multi-Chain Scanner + Bridge
+// Direct fetch RPC + Liberty Swap integration
 // ============================================
 
-// Chain configurations with multiple CORS-friendly RPC endpoints
+// Known test wallets for debugging (whales with confirmed balances)
+const TEST_WALLETS = {
+  vitalik: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', // Vitalik - has ETH on multiple chains
+  binance: '0xF977814e90dA44bFA03b6295A0616a897441aceC', // Binance hot wallet
+};
+
+// Chain configurations with more tokens
 const CHAIN_CONFIG = {
   ethereum: {
     name: 'Ethereum',
@@ -20,10 +26,18 @@ const CHAIN_CONFIG = {
     decimals: 18,
     coingeckoId: 'ethereum',
     color: '#627EEA',
+    libertyChainId: 'ethereum',
     tokens: [
       { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'WETH', address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18, coingeckoId: 'weth' },
+      { symbol: 'LINK', address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', decimals: 18, coingeckoId: 'chainlink' },
+      { symbol: 'UNI', address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', decimals: 18, coingeckoId: 'uniswap' },
+      { symbol: 'SHIB', address: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE', decimals: 18, coingeckoId: 'shiba-inu' },
+      { symbol: 'PEPE', address: '0x6982508145454Ce325dDbE47a25d4ec3d2311933', decimals: 18, coingeckoId: 'pepe' },
+      { symbol: 'DAI', address: '0x6B175474E89094C44Da98b954EescdeCB5BE3830', decimals: 18, coingeckoId: 'dai' },
+      { symbol: 'MATIC', address: '0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0', decimals: 18, coingeckoId: 'matic-network' },
+      { symbol: 'AAVE', address: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', decimals: 18, coingeckoId: 'aave' },
     ]
   },
   bsc: {
@@ -39,9 +53,16 @@ const CHAIN_CONFIG = {
     decimals: 18,
     coingeckoId: 'binancecoin',
     color: '#F3BA2F',
+    libertyChainId: 'bsc',
     tokens: [
       { symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18, coingeckoId: 'tether' },
       { symbol: 'BUSD', address: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', decimals: 18, coingeckoId: 'binance-usd' },
+      { symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18, coingeckoId: 'usd-coin' },
+      { symbol: 'CAKE', address: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', decimals: 18, coingeckoId: 'pancakeswap-token' },
+      { symbol: 'WBNB', address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', decimals: 18, coingeckoId: 'wbnb' },
+      { symbol: 'ETH', address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8', decimals: 18, coingeckoId: 'ethereum' },
+      { symbol: 'XRP', address: '0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE', decimals: 18, coingeckoId: 'ripple' },
+      { symbol: 'DOGE', address: '0xbA2aE424d960c26247Dd6c32edC70B295c744C43', decimals: 8, coingeckoId: 'dogecoin' },
     ]
   },
   polygon: {
@@ -57,9 +78,14 @@ const CHAIN_CONFIG = {
     decimals: 18,
     coingeckoId: 'matic-network',
     color: '#8247E5',
+    libertyChainId: 'polygon',
     tokens: [
       { symbol: 'USDT', address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'USDC.e', address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'WETH', address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619', decimals: 18, coingeckoId: 'weth' },
+      { symbol: 'WMATIC', address: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', decimals: 18, coingeckoId: 'wmatic' },
+      { symbol: 'LINK', address: '0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39', decimals: 18, coingeckoId: 'chainlink' },
     ]
   },
   arbitrum: {
@@ -75,9 +101,14 @@ const CHAIN_CONFIG = {
     decimals: 18,
     coingeckoId: 'ethereum',
     color: '#28A0F0',
+    libertyChainId: 'arbitrum',
     tokens: [
       { symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'USDC.e', address: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'USDT', address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'ARB', address: '0x912CE59144191C1204E64559FE8253a0e49E6548', decimals: 18, coingeckoId: 'arbitrum' },
+      { symbol: 'WETH', address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', decimals: 18, coingeckoId: 'weth' },
+      { symbol: 'GMX', address: '0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a', decimals: 18, coingeckoId: 'gmx' },
     ]
   },
   avalanche: {
@@ -93,8 +124,11 @@ const CHAIN_CONFIG = {
     decimals: 18,
     coingeckoId: 'avalanche-2',
     color: '#E84142',
+    libertyChainId: 'avalanche',
     tokens: [
       { symbol: 'USDC', address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'USDT', address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', decimals: 6, coingeckoId: 'tether' },
+      { symbol: 'WAVAX', address: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', decimals: 18, coingeckoId: 'wrapped-avax' },
     ]
   },
   optimism: {
@@ -110,9 +144,12 @@ const CHAIN_CONFIG = {
     decimals: 18,
     coingeckoId: 'ethereum',
     color: '#FF0420',
+    libertyChainId: 'optimism',
     tokens: [
       { symbol: 'USDC', address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'USDT', address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'OP', address: '0x4200000000000000000000000000000000000042', decimals: 18, coingeckoId: 'optimism' },
+      { symbol: 'WETH', address: '0x4200000000000000000000000000000000000006', decimals: 18, coingeckoId: 'weth' },
     ]
   },
   base: {
@@ -128,8 +165,11 @@ const CHAIN_CONFIG = {
     decimals: 18,
     coingeckoId: 'ethereum',
     color: '#0052FF',
+    libertyChainId: 'base',
     tokens: [
       { symbol: 'USDC', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6, coingeckoId: 'usd-coin' },
+      { symbol: 'WETH', address: '0x4200000000000000000000000000000000000006', decimals: 18, coingeckoId: 'weth' },
+      { symbol: 'DAI', address: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb', decimals: 18, coingeckoId: 'dai' },
     ]
   }
 };
@@ -137,35 +177,21 @@ const CHAIN_CONFIG = {
 // Direct JSON-RPC call with timeout
 const rpcCall = async (rpcUrl, method, params) => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
   
   try {
     const response = await fetch(rpcUrl, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method,
-        params
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
       signal: controller.signal
     });
     
     clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     
     const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(data.error.message || 'RPC Error');
-    }
+    if (data.error) throw new Error(data.error.message);
     
     return data.result;
   } catch (error) {
@@ -174,24 +200,18 @@ const rpcCall = async (rpcUrl, method, params) => {
   }
 };
 
-// Try multiple RPCs until one works
+// Try multiple RPCs
 const tryRpcs = async (rpcs, method, params) => {
-  let lastError;
-  
   for (const rpc of rpcs) {
     try {
-      const result = await rpcCall(rpc, method, params);
-      return result;
-    } catch (error) {
-      lastError = error;
+      return await rpcCall(rpc, method, params);
+    } catch (e) {
       continue;
     }
   }
-  
-  throw lastError || new Error('All RPCs failed');
+  throw new Error('All RPCs failed');
 };
 
-// balanceOf(address) function selector
 const BALANCE_OF_SELECTOR = '0x70a08231';
 
 const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
@@ -201,12 +221,13 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, chain: '' });
-  const [minValue, setMinValue] = useState(1);
+  const [minValue, setMinValue] = useState(0); // Default to ALL to catch dust
   const [prices, setPrices] = useState({});
   const [walletAddress, setWalletAddress] = useState(propAddress || null);
   const [scanLog, setScanLog] = useState([]);
+  const [debugMode, setDebugMode] = useState(false);
 
-  // Detect wallet on mount
+  // Detect wallet
   useEffect(() => {
     const detectWallet = async () => {
       if (propAddress) {
@@ -216,12 +237,8 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
       if (window.ethereum) {
         try {
           const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts && accounts.length > 0) {
-            setWalletAddress(accounts[0]);
-          }
-        } catch (e) {
-          console.log('Wallet detection failed:', e);
-        }
+          if (accounts?.[0]) setWalletAddress(accounts[0]);
+        } catch (e) {}
       }
     };
     detectWallet();
@@ -230,163 +247,103 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
   // Fetch prices
   const fetchPrices = async () => {
     try {
-      const ids = new Set();
-      Object.values(CHAIN_CONFIG).forEach(chain => {
-        ids.add(chain.coingeckoId);
-        chain.tokens.forEach(token => ids.add(token.coingeckoId));
-      });
+      const ids = new Set(['ethereum', 'binancecoin', 'matic-network', 'avalanche-2', 'optimism', 'arbitrum', 'tether', 'usd-coin', 'weth', 'chainlink', 'uniswap', 'shiba-inu', 'pepe', 'dai', 'aave', 'pancakeswap-token', 'wbnb', 'ripple', 'dogecoin', 'wmatic', 'gmx', 'wrapped-avax']);
       
       const response = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${Array.from(ids).join(',')}&vs_currencies=usd`,
-        { headers: { 'Accept': 'application/json' } }
+        `https://api.coingecko.com/api/v3/simple/price?ids=${Array.from(ids).join(',')}&vs_currencies=usd`
       );
       
       if (response.ok) {
         const data = await response.json();
-        console.log('💰 Prices loaded:', data);
         setPrices(data);
         return data;
       }
-    } catch (error) {
-      console.log('Price fetch error:', error);
-    }
+    } catch (e) {}
     
-    // Fallback prices if CoinGecko fails
-    const fallback = {
-      'ethereum': { usd: 3500 },
-      'binancecoin': { usd: 650 },
-      'matic-network': { usd: 0.5 },
-      'avalanche-2': { usd: 40 },
-      'optimism': { usd: 2 },
-      'arbitrum': { usd: 1.2 },
-      'tether': { usd: 1 },
-      'usd-coin': { usd: 1 },
-      'weth': { usd: 3500 },
-      'binance-usd': { usd: 1 }
+    // Fallback
+    return {
+      'ethereum': { usd: 3300 }, 'binancecoin': { usd: 650 }, 'matic-network': { usd: 0.5 },
+      'avalanche-2': { usd: 40 }, 'optimism': { usd: 2 }, 'arbitrum': { usd: 1.2 },
+      'tether': { usd: 1 }, 'usd-coin': { usd: 1 }, 'weth': { usd: 3300 },
+      'chainlink': { usd: 15 }, 'uniswap': { usd: 8 }, 'shiba-inu': { usd: 0.00001 },
+      'pepe': { usd: 0.00001 }, 'dai': { usd: 1 }, 'aave': { usd: 90 },
+      'pancakeswap-token': { usd: 2 }, 'wbnb': { usd: 650 }, 'dogecoin': { usd: 0.08 },
+      'wmatic': { usd: 0.5 }, 'gmx': { usd: 30 }, 'wrapped-avax': { usd: 40 }
     };
-    setPrices(fallback);
-    return fallback;
   };
 
   // Get native balance
   const getNativeBalance = async (chain, address) => {
     try {
       const result = await tryRpcs(chain.rpcs, 'eth_getBalance', [address, 'latest']);
-      
-      if (!result || result === '0x0' || result === '0x') {
-        return 0;
-      }
-      
-      const balanceWei = BigInt(result);
-      const balance = Number(balanceWei) / Math.pow(10, chain.decimals);
-      return balance;
-    } catch (error) {
-      console.log(`❌ ${chain.name} native failed:`, error.message);
+      if (!result || result === '0x0' || result === '0x') return 0;
+      return Number(BigInt(result)) / Math.pow(10, chain.decimals);
+    } catch (e) {
       return 0;
     }
   };
 
-  // Get ERC20 token balance
+  // Get token balance
   const getTokenBalance = async (chain, tokenAddress, walletAddr, decimals) => {
     try {
       const paddedAddress = walletAddr.slice(2).toLowerCase().padStart(64, '0');
-      const callData = BALANCE_OF_SELECTOR + paddedAddress;
-      
       const result = await tryRpcs(chain.rpcs, 'eth_call', [
-        { to: tokenAddress, data: callData },
+        { to: tokenAddress, data: BALANCE_OF_SELECTOR + paddedAddress },
         'latest'
       ]);
-      
-      if (!result || result === '0x' || result === '0x0') {
-        return 0;
-      }
-      
-      const balanceWei = BigInt(result);
-      const balance = Number(balanceWei) / Math.pow(10, decimals);
-      return balance;
-    } catch (error) {
+      if (!result || result === '0x' || result === '0x0') return 0;
+      return Number(BigInt(result)) / Math.pow(10, decimals);
+    } catch (e) {
       return 0;
     }
   };
 
-  // Scan a single chain
+  // Scan chain
   const scanChain = async (chainKey, address, currentPrices) => {
     const chain = CHAIN_CONFIG[chainKey];
     const foundAssets = [];
     
-    console.log(`🔍 Scanning ${chain.name}...`);
-    
-    // Get native balance
+    // Native balance
     const nativeBalance = await getNativeBalance(chain, address);
-    
-    if (nativeBalance > 0.0001) {
+    if (nativeBalance > 0.000001) {
       const price = currentPrices[chain.coingeckoId]?.usd || 0;
-      const value = nativeBalance * price;
-      
       foundAssets.push({
-        chain: chain.name,
-        chainKey,
-        symbol: chain.symbol,
-        name: chain.symbol,
-        balance: nativeBalance,
-        value,
-        price,
-        isNative: true,
-        color: chain.color
+        chain: chain.name, chainKey, symbol: chain.symbol, balance: nativeBalance,
+        value: nativeBalance * price, price, isNative: true, color: chain.color,
+        libertyChainId: chain.libertyChainId
       });
-      
-      console.log(`✅ ${chain.name}: ${nativeBalance.toFixed(6)} ${chain.symbol} = $${value.toFixed(2)}`);
-    } else {
-      console.log(`⚪ ${chain.name}: 0 ${chain.symbol}`);
+      console.log(`✅ ${chain.name}: ${nativeBalance.toFixed(8)} ${chain.symbol} = $${(nativeBalance * price).toFixed(2)}`);
     }
 
-    // Get token balances
+    // Token balances
     for (const token of chain.tokens) {
-      try {
-        const balance = await getTokenBalance(chain, token.address, address, token.decimals);
-        
-        if (balance > 0.01) {
-          const price = currentPrices[token.coingeckoId]?.usd || 0;
-          const value = balance * price;
-          
-          foundAssets.push({
-            chain: chain.name,
-            chainKey,
-            symbol: token.symbol,
-            name: token.symbol,
-            balance,
-            value,
-            price,
-            isNative: false,
-            color: chain.color,
-            address: token.address
-          });
-          
-          console.log(`✅ ${chain.name}: ${balance.toFixed(4)} ${token.symbol} = $${value.toFixed(2)}`);
-        }
-      } catch (e) {
-        // Skip failed tokens silently
+      const balance = await getTokenBalance(chain, token.address, address, token.decimals);
+      if (balance > 0.000001) {
+        const price = currentPrices[token.coingeckoId]?.usd || 0;
+        foundAssets.push({
+          chain: chain.name, chainKey, symbol: token.symbol, balance,
+          value: balance * price, price, isNative: false, color: chain.color,
+          address: token.address, libertyChainId: chain.libertyChainId
+        });
+        console.log(`✅ ${chain.name}: ${balance.toFixed(8)} ${token.symbol} = $${(balance * price).toFixed(2)}`);
       }
     }
     
     return foundAssets;
   };
 
-  // Main scan function
-  const scanAllChains = async () => {
-    let addressToScan = walletAddress;
+  // Main scan
+  const scanAllChains = async (testAddress = null) => {
+    let addressToScan = testAddress || walletAddress;
     
-    // Try to get wallet if not set
     if (!addressToScan && window.ethereum) {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts && accounts.length > 0) {
+        if (accounts?.[0]) {
           addressToScan = accounts[0];
           setWalletAddress(accounts[0]);
         }
-      } catch (e) {
-        console.log('Could not get wallet:', e);
-      }
+      } catch (e) {}
     }
 
     if (!addressToScan) {
@@ -394,91 +351,85 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
       return;
     }
 
-    console.log('🚀 Starting cross-chain scan for:', addressToScan);
+    const isTest = testAddress !== null;
+    console.log(`🚀 ${isTest ? 'TEST SCAN' : 'Scanning'} for: ${addressToScan}`);
+    
     setIsScanning(true);
     setScanError(null);
     setAssets([]);
     setTotalValue(0);
-    setScanLog(['Starting scan...']);
+    setScanLog([isTest ? `🧪 Testing with: ${addressToScan.slice(0,10)}...` : 'Starting scan...']);
 
     const chains = Object.keys(CHAIN_CONFIG);
     setScanProgress({ current: 0, total: chains.length, chain: 'Loading prices...' });
 
     try {
-      // Fetch prices first
       const currentPrices = await fetchPrices();
-      setScanLog(prev => [...prev, `✅ Prices loaded (${Object.keys(currentPrices).length} tokens)`]);
+      setScanLog(prev => [...prev, `💰 Prices loaded`]);
       
       const allAssets = [];
       
-      // Scan each chain sequentially
       for (let i = 0; i < chains.length; i++) {
         const chainKey = chains[i];
         const chain = CHAIN_CONFIG[chainKey];
         
-        setScanProgress({ 
-          current: i + 1, 
-          total: chains.length, 
-          chain: chain.name 
-        });
-        
-        setScanLog(prev => [...prev.slice(-4), `🔍 Scanning ${chain.name}...`]);
+        setScanProgress({ current: i + 1, total: chains.length, chain: chain.name });
+        setScanLog(prev => [...prev.slice(-5), `🔍 ${chain.name}...`]);
         
         try {
           const chainAssets = await scanChain(chainKey, addressToScan, currentPrices);
-          
           if (chainAssets.length > 0) {
             allAssets.push(...chainAssets);
-            setScanLog(prev => [...prev.slice(-4), `✅ ${chain.name}: Found ${chainAssets.length} assets`]);
+            setScanLog(prev => [...prev.slice(-5), `✅ ${chain.name}: ${chainAssets.length} found`]);
           } else {
-            setScanLog(prev => [...prev.slice(-4), `⚪ ${chain.name}: No assets`]);
+            setScanLog(prev => [...prev.slice(-5), `⚪ ${chain.name}: empty`]);
           }
         } catch (error) {
-          console.log(`${chain.name} scan error:`, error.message);
-          setScanLog(prev => [...prev.slice(-4), `⚠️ ${chain.name}: Failed`]);
+          setScanLog(prev => [...prev.slice(-5), `⚠️ ${chain.name}: error`]);
         }
         
-        // Update UI progressively
-        if (allAssets.length > 0) {
-          const filtered = allAssets.filter(a => a.value >= minValue);
-          setAssets([...filtered].sort((a, b) => b.value - a.value));
-          setTotalValue(filtered.reduce((sum, a) => sum + a.value, 0));
-        }
+        // Progressive update
+        const filtered = allAssets.filter(a => a.value >= minValue);
+        setAssets([...filtered].sort((a, b) => b.value - a.value));
+        setTotalValue(filtered.reduce((s, a) => s + a.value, 0));
       }
 
-      // Final update
-      const filtered = allAssets.filter(a => a.value >= minValue);
-      setAssets(filtered.sort((a, b) => b.value - a.value));
-      setTotalValue(filtered.reduce((sum, a) => sum + a.value, 0));
+      const total = allAssets.reduce((s, a) => s + a.value, 0);
+      console.log(`🎉 Complete! Found ${allAssets.length} assets ($${total.toFixed(2)})`);
+      setScanLog(prev => [...prev.slice(-5), `🎉 Found ${allAssets.length} assets ($${total.toFixed(2)})`]);
       
-      const finalMsg = `🎉 Complete! Found ${allAssets.length} assets ($${filtered.reduce((s,a)=>s+a.value,0).toFixed(2)})`;
-      console.log(finalMsg);
-      setScanLog(prev => [...prev.slice(-4), finalMsg]);
+      setAssets(allAssets.sort((a, b) => b.value - a.value));
+      setTotalValue(total);
       
     } catch (error) {
-      console.error('Scan error:', error);
       setScanError('Scan failed: ' + error.message);
     } finally {
       setIsScanning(false);
     }
   };
 
-  // Refilter when min value changes
-  useEffect(() => {
-    if (assets.length > 0) {
-      const filtered = assets.filter(a => a.value >= minValue);
-      setTotalValue(filtered.reduce((sum, a) => sum + a.value, 0));
-    }
-  }, [minValue, assets]);
+  // Test scan with known wallet
+  const runTestScan = () => {
+    scanAllChains(TEST_WALLETS.vitalik);
+  };
 
-  // Format numbers
+  // Build Liberty Swap URL
+  const getLibertySwapUrl = (asset) => {
+    // Liberty Swap deep link format
+    const baseUrl = 'https://app.libertyswap.io';
+    return `${baseUrl}?fromChain=${asset.libertyChainId}&toChain=pulsechain`;
+  };
+
+  // Filter assets
+  const filteredAssets = assets.filter(a => a.value >= minValue);
+  const uniqueChains = [...new Set(filteredAssets.map(a => a.chain))].length;
+
   const formatNumber = (num, decimals = 2) => {
     if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+    if (num < 0.01 && num > 0) return num.toFixed(6);
     return num.toFixed(decimals);
   };
-
-  const uniqueChains = [...new Set(assets.filter(a => a.value >= minValue).map(a => a.chain))].length;
 
   return (
     <div style={{
@@ -507,29 +458,21 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
           <span style={{ fontSize: '2.5rem' }}>⭐</span>
         </div>
         <p style={{ color: '#aaa', marginTop: '8px', fontSize: '0.95rem' }}>
-          💜⭐ True Cross-Chain Scanner • 10% APR • Referrals ⭐💜
+          💜⭐ Cross-Chain Scanner • Bridge to PulseChain • 10% APR ⭐💜
         </p>
       </div>
 
-      {/* Stats Row */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '15px',
-        marginBottom: '25px'
-      }}>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
         {[
-          { label: 'Total Staked', value: '0 LP', color: '#4ade80' },
-          { label: 'Your Staked', value: '0 LP', color: '#60a5fa' },
-          { label: 'APR', value: '10%', color: '#fbbf24' },
-          { label: 'Rewards Pool', value: '1,000,000', color: '#f87171' }
+          { label: 'Chains', value: '7', color: '#4ade80' },
+          { label: 'Your Assets', value: filteredAssets.length.toString(), color: '#60a5fa' },
+          { label: 'Total Value', value: `$${formatNumber(totalValue)}`, color: '#fbbf24' },
+          { label: 'APR', value: '10%', color: '#f87171' }
         ].map((stat, i) => (
           <div key={i} style={{
-            background: 'rgba(0,0,0,0.3)',
-            borderRadius: '12px',
-            padding: '15px',
-            textAlign: 'center',
-            border: '1px solid rgba(255,255,255,0.1)'
+            background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '15px',
+            textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)'
           }}>
             <div style={{ color: '#888', fontSize: '0.85rem', marginBottom: '5px' }}>{stat.label}</div>
             <div style={{ color: stat.color, fontSize: '1.2rem', fontWeight: 'bold' }}>{stat.value}</div>
@@ -537,13 +480,8 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
         ))}
       </div>
 
-      {/* Tab Navigation */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '10px',
-        marginBottom: '20px'
-      }}>
+      {/* Tabs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
         {[
           { id: 'crosschain', label: '🌐 Cross-Chain', color: '#4ade80' },
           { id: 'pulsechain', label: '💜 PulseChain', color: '#9333ea' },
@@ -554,14 +492,11 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             style={{
-              padding: '12px',
-              borderRadius: '10px',
+              padding: '12px', borderRadius: '10px',
               border: activeTab === tab.id ? `2px solid ${tab.color}` : '2px solid transparent',
               background: activeTab === tab.id ? `${tab.color}22` : 'rgba(0,0,0,0.3)',
               color: activeTab === tab.id ? tab.color : '#888',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              transition: 'all 0.2s'
+              cursor: 'pointer', fontWeight: 'bold'
             }}
           >
             {tab.label}
@@ -569,248 +504,179 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
         ))}
       </div>
 
-      {/* Error Display */}
+      {/* Error */}
       {scanError && (
         <div style={{
-          background: 'rgba(239,68,68,0.2)',
-          border: '1px solid rgba(239,68,68,0.5)',
-          borderRadius: '10px',
-          padding: '12px',
-          marginBottom: '20px',
-          color: '#fca5a5',
-          textAlign: 'center'
+          background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.5)',
+          borderRadius: '10px', padding: '12px', marginBottom: '20px', color: '#fca5a5', textAlign: 'center'
         }}>
           {scanError}
         </div>
       )}
 
-      {/* Cross-Chain Tab Content */}
+      {/* Cross-Chain Tab */}
       {activeTab === 'crosschain' && (
         <div style={{
-          background: 'rgba(0,0,0,0.3)',
-          borderRadius: '15px',
-          padding: '20px',
+          background: 'rgba(0,0,0,0.3)', borderRadius: '15px', padding: '20px',
           border: '1px solid rgba(255,215,0,0.2)'
         }}>
-          {/* Header with Rescan */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '20px'
-          }}>
-            <h3 style={{ color: '#FFD700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              ⭐ OFF-CHAIN ASSETS
-            </h3>
-            <button
-              onClick={scanAllChains}
-              disabled={isScanning}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '8px',
-                border: 'none',
-                background: isScanning 
-                  ? 'rgba(255,215,0,0.3)' 
-                  : 'linear-gradient(90deg, #FFD700, #FFA500)',
-                color: isScanning ? '#FFD700' : '#000',
-                cursor: isScanning ? 'wait' : 'pointer',
-                fontWeight: 'bold',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                minWidth: '140px',
-                justifyContent: 'center'
-              }}
-            >
-              {isScanning ? (
-                <>
-                  <span className="spin-emoji">🔄</span>
-                  Scanning...
-                </>
-              ) : (
-                <>🔄 Rescan All</>
-              )}
-            </button>
-          </div>
-
-          {/* Wallet & Total Value */}
-          <div style={{ marginBottom: '20px' }}>
-            {walletAddress && (
-              <div style={{ 
-                fontSize: '0.8rem', 
-                color: '#4ade80', 
-                marginBottom: '8px'
-              }}>
-                ✅ Wallet: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-              </div>
-            )}
-            <div style={{ fontSize: '0.9rem', color: '#888' }}>Total:</div>
-            <div style={{ 
-              fontSize: '2rem', 
-              fontWeight: 'bold', 
-              color: '#4ade80'
-            }}>
-              ${formatNumber(totalValue)}
-            </div>
-            <div style={{ color: '#666', fontSize: '0.85rem' }}>
-              {assets.filter(a => a.value >= minValue).length} tokens across {uniqueChains} chains
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+            <h3 style={{ color: '#FFD700', margin: 0 }}>⭐ OFF-CHAIN ASSETS</h3>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {/* Debug Test Button */}
+              <button
+                onClick={runTestScan}
+                disabled={isScanning}
+                style={{
+                  padding: '8px 12px', borderRadius: '8px', border: '1px solid #666',
+                  background: 'rgba(0,0,0,0.5)', color: '#888', cursor: 'pointer', fontSize: '0.8rem'
+                }}
+              >
+                🧪 Test (Vitalik)
+              </button>
+              {/* Scan Button */}
+              <button
+                onClick={() => scanAllChains()}
+                disabled={isScanning}
+                style={{
+                  padding: '10px 20px', borderRadius: '8px', border: 'none',
+                  background: isScanning ? 'rgba(255,215,0,0.3)' : 'linear-gradient(90deg, #FFD700, #FFA500)',
+                  color: isScanning ? '#FFD700' : '#000', cursor: isScanning ? 'wait' : 'pointer',
+                  fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px'
+                }}
+              >
+                {isScanning ? <><span className="spin-emoji">🔄</span> Scanning...</> : <>🔄 Rescan All</>}
+              </button>
             </div>
           </div>
 
-          {/* Progress Bar & Log */}
+          {/* Wallet Info */}
+          {walletAddress && (
+            <div style={{ fontSize: '0.8rem', color: '#4ade80', marginBottom: '15px' }}>
+              ✅ Wallet: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+            </div>
+          )}
+
+          {/* Progress */}
           {isScanning && (
             <div style={{ marginBottom: '20px' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                marginBottom: '5px',
-                fontSize: '0.85rem',
-                color: '#888'
-              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#888', marginBottom: '5px' }}>
                 <span>{scanProgress.chain}</span>
                 <span>{scanProgress.current}/{scanProgress.total}</span>
               </div>
-              <div style={{
-                height: '8px',
-                background: 'rgba(0,0,0,0.3)',
-                borderRadius: '4px',
-                overflow: 'hidden'
-              }}>
+              <div style={{ height: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{
-                  height: '100%',
-                  width: `${(scanProgress.current / scanProgress.total) * 100}%`,
-                  background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-                  transition: 'width 0.3s ease'
+                  height: '100%', width: `${(scanProgress.current / scanProgress.total) * 100}%`,
+                  background: 'linear-gradient(90deg, #FFD700, #FFA500)', transition: 'width 0.3s'
                 }} />
               </div>
-              {/* Live Scan Log */}
-              <div style={{ 
-                marginTop: '12px', 
-                padding: '10px',
-                background: 'rgba(0,0,0,0.3)',
-                borderRadius: '8px',
-                fontSize: '0.75rem', 
-                color: '#888',
-                maxHeight: '80px',
-                overflow: 'auto',
-                fontFamily: 'monospace'
-              }}>
-                {scanLog.map((log, i) => (
-                  <div key={i} style={{ marginBottom: '2px' }}>{log}</div>
-                ))}
+              <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', fontSize: '0.75rem', color: '#888', fontFamily: 'monospace', maxHeight: '100px', overflow: 'auto' }}>
+                {scanLog.map((log, i) => <div key={i}>{log}</div>)}
               </div>
             </div>
           )}
 
-          <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '15px 0' }} />
-
-          {/* Min Value Filter */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '10px',
-            marginBottom: '20px'
-          }}>
+          {/* Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
             <span style={{ color: '#888', fontSize: '0.9rem' }}>Min value:</span>
             <select
               value={minValue}
               onChange={(e) => setMinValue(Number(e.target.value))}
               style={{
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255,215,0,0.3)',
-                background: 'rgba(0,0,0,0.5)',
-                color: '#FFD700',
-                cursor: 'pointer'
+                padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,215,0,0.3)',
+                background: 'rgba(0,0,0,0.5)', color: '#FFD700', cursor: 'pointer'
               }}
             >
-              <option value={0}>All</option>
+              <option value={0}>All (dust)</option>
+              <option value={0.01}>$0.01+</option>
               <option value={1}>$1+</option>
               <option value={10}>$10+</option>
               <option value={100}>$100+</option>
-              <option value={1000}>$1K+</option>
             </select>
+            <span style={{ color: '#666', fontSize: '0.8rem' }}>
+              {filteredAssets.length} assets across {uniqueChains} chains
+            </span>
           </div>
 
-          {/* Assets List */}
-          {assets.filter(a => a.value >= minValue).length > 0 ? (
+          <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '15px 0' }} />
+
+          {/* Assets */}
+          {filteredAssets.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {assets.filter(a => a.value >= minValue).map((asset, i) => (
+              {filteredAssets.map((asset, i) => (
                 <div
                   key={`${asset.chainKey}-${asset.symbol}-${i}`}
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '15px',
-                    background: 'rgba(0,0,0,0.3)',
-                    borderRadius: '10px',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '15px', background: 'rgba(0,0,0,0.3)', borderRadius: '10px',
                     border: `1px solid ${asset.color}33`
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      background: `${asset.color}22`,
-                      border: `2px solid ${asset.color}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '1.2rem',
-                      fontWeight: 'bold',
-                      color: asset.color
+                      width: '40px', height: '40px', borderRadius: '50%',
+                      background: `${asset.color}22`, border: `2px solid ${asset.color}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 'bold', color: asset.color
                     }}>
                       {asset.symbol.charAt(0)}
                     </div>
                     <div>
                       <div style={{ fontWeight: 'bold', color: '#fff' }}>
                         {asset.symbol}
-                        {asset.isNative && <span style={{ 
-                          marginLeft: '6px', 
-                          fontSize: '0.7rem', 
-                          background: asset.color,
-                          color: '#000',
-                          padding: '2px 6px',
-                          borderRadius: '4px'
-                        }}>NATIVE</span>}
+                        {asset.isNative && <span style={{ marginLeft: '6px', fontSize: '0.7rem', background: asset.color, color: '#000', padding: '2px 6px', borderRadius: '4px' }}>NATIVE</span>}
                       </div>
-                      <div style={{ fontSize: '0.8rem', color: '#888' }}>
-                        {asset.chain}
-                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#888' }}>{asset.chain}</div>
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 'bold', color: '#4ade80' }}>
-                      ${formatNumber(asset.value)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 'bold', color: '#4ade80' }}>${formatNumber(asset.value)}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#888' }}>{formatNumber(asset.balance, 6)} {asset.symbol}</div>
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#888' }}>
-                      {formatNumber(asset.balance, 4)} {asset.symbol}
-                    </div>
+                    {/* Bridge Button */}
+                    <a
+                      href={getLibertySwapUrl(asset)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: '8px 12px', borderRadius: '8px', background: 'linear-gradient(90deg, #9333ea, #7c3aed)',
+                        color: '#fff', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap'
+                      }}
+                    >
+                      Bridge →
+                    </a>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ 
-              textAlign: 'center', 
-              padding: '40px',
-              color: '#666'
-            }}>
+            <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
               <div style={{ fontSize: '3rem', marginBottom: '15px', opacity: 0.5 }}>🌐</div>
               <div style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
-                {isScanning ? 'Scanning chains...' : 'No off-chain assets found'}
+                {isScanning ? 'Scanning 7 chains...' : 'No off-chain assets found'}
               </div>
-              <div style={{ fontSize: '0.9rem' }}>
-                {walletAddress ? 'Click "Rescan All" to scan 7 EVM chains' : 'Connect wallet and click "Rescan All"'}
+              <div style={{ fontSize: '0.9rem', marginBottom: '15px' }}>
+                {walletAddress ? 'Click "Rescan All" or try "Test (Vitalik)" to verify scanner works' : 'Connect wallet first'}
               </div>
+              {!isScanning && (
+                <button
+                  onClick={runTestScan}
+                  style={{
+                    padding: '10px 20px', borderRadius: '8px', border: '1px solid #FFD700',
+                    background: 'transparent', color: '#FFD700', cursor: 'pointer'
+                  }}
+                >
+                  🧪 Test with Vitalik's Wallet
+                </button>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Other tabs... */}
+      {/* Other Tabs */}
       {activeTab === 'pulsechain' && (
         <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '15px', padding: '40px', textAlign: 'center', border: '1px solid rgba(147,51,234,0.3)' }}>
           <div style={{ fontSize: '3rem', marginBottom: '15px' }}>💜</div>
@@ -822,8 +688,8 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
       {activeTab === 'stakes' && (
         <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '15px', padding: '40px', textAlign: 'center', border: '1px solid rgba(96,165,250,0.3)' }}>
           <div style={{ fontSize: '3rem', marginBottom: '15px' }}>📊</div>
-          <h3 style={{ color: '#60a5fa', marginBottom: '10px' }}>Your Flex Stakes</h3>
-          <p style={{ color: '#888' }}>No active Dapper Flex stakes yet</p>
+          <h3 style={{ color: '#60a5fa', marginBottom: '10px' }}>Flex Stakes</h3>
+          <p style={{ color: '#888' }}>Stake cross-chain LP for 10% APR</p>
         </div>
       )}
 
@@ -837,30 +703,22 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
 
       {/* Bridge Section */}
       <div style={{
-        marginTop: '25px',
-        background: 'rgba(0,0,0,0.3)',
-        borderRadius: '15px',
-        padding: '25px',
-        textAlign: 'center',
-        border: '1px solid rgba(255,215,0,0.2)'
+        marginTop: '25px', background: 'rgba(0,0,0,0.3)', borderRadius: '15px',
+        padding: '25px', textAlign: 'center', border: '1px solid rgba(255,215,0,0.2)'
       }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🌐</div>
+        <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🌉</div>
         <h3 style={{ color: '#FFD700', marginBottom: '8px' }}>Bridge via Liberty Swap</h3>
         <p style={{ color: '#888', marginBottom: '15px', fontSize: '0.9rem' }}>
-          Bridge assets from other chains to PulseChain
+          Swap any token → USDC → Bridge to PulseChain
         </p>
         <a
-          href="https://libertyswap.io"
+          href="https://app.libertyswap.io"
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            display: 'inline-block',
-            padding: '12px 30px',
+            display: 'inline-block', padding: '12px 30px',
             background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-            color: '#000',
-            borderRadius: '10px',
-            textDecoration: 'none',
-            fontWeight: 'bold'
+            color: '#000', borderRadius: '10px', textDecoration: 'none', fontWeight: 'bold'
           }}
         >
           Open Liberty Swap →
@@ -868,14 +726,8 @@ const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
       </div>
 
       <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .spin-emoji {
-          display: inline-block;
-          animation: spin 1s linear infinite;
-        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spin-emoji { display: inline-block; animation: spin 1s linear infinite; }
       `}</style>
     </div>
   );
