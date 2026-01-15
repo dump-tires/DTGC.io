@@ -1,4 +1,5 @@
 import DapperComponent from './components/DapperComponent';
+import DapperFlexV6 from './components/DapperFlexV6';
 import PricingPage from './pages/PricingPage';
 import V4DeFiGoldSuite from './components/V4DeFiGoldSuite';
 import WhiteDiamondStaking from './components/WhiteDiamondStaking';
@@ -549,6 +550,8 @@ const CONTRACT_ADDRESSES = {
   lpStakingFlexV4: '0x5ccea11cab6a17659ce1860f5b0b6e4a8cea54d6', // Flex LP Staking - 10% APR No Lock
   // White Diamond V5 - NFT LP Staking (70% APR, 90 day lock, tradeable NFT)
   whiteDiamondV5: '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
+  // DapperFlex V6 - Pink Gold Cross-Chain Zapper with Referrals
+  dapperFlexV6: '0x0b11799Ef41A01fB9399dCbA161076d7aed20b3e',
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
 };
@@ -8013,6 +8016,7 @@ export default function App() {
                 <button className={activeTab === 'gold' ? 'active' : ''} onClick={() => { handleNavClick('gold'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'gold' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'gold' ? '#000' : '#D4AF37' }}>🏆 PulseX Gold</button>
                 <button className={activeTab === 'whitediamond' ? 'active' : ''} onClick={() => { handleNavClick('whitediamond'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'whitediamond' ? 'linear-gradient(135deg, #FFFFFF, #B8B8B8)' : 'rgba(255,255,255,0.1)', color: activeTab === 'whitediamond' ? '#000' : '#FFF' }}>💎 White Diamond</button>
                 <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #4CAF50, #388E3C)' : 'rgba(76,175,80,0.15)', color: activeTab === 'saas' ? '#fff' : '#4CAF50' }}>🏭 SaaS Platform</button>
+                <button className={activeTab === 'dapperflex' ? 'active' : ''} onClick={() => { handleNavClick('dapperflex'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'dapperflex' ? 'linear-gradient(135deg, #FF69B4, #FFD700)' : 'rgba(255,105,180,0.15)', color: activeTab === 'dapperflex' ? '#000' : '#FF69B4' }}>💗⭐ Flex V6</button>
               </div>
             )}
 
@@ -8079,6 +8083,25 @@ export default function App() {
                 }}
               >
                 🏭 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>SaaS</span><span>Platform</span></span>
+              </button>
+              <button 
+                className={`nav-link ${activeTab === 'dapperflex' ? 'active' : ''}`} 
+                onClick={() => handleNavClick('dapperflex')} 
+                style={{ 
+                  background: activeTab === 'dapperflex' 
+                    ? 'linear-gradient(135deg, #FF69B4, #FFD700)' 
+                    : 'linear-gradient(135deg, rgba(255,105,180,0.15), rgba(255,215,0,0.05))',
+                  border: '1px solid rgba(255,105,180,0.4)',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  color: activeTab === 'dapperflex' ? '#000' : '#FF69B4',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                💗⭐ <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>Dapper</span><span>Flex V6</span></span>
               </button>
             </nav>
 
@@ -13265,6 +13288,16 @@ export default function App() {
           {/* SAAS TAB - White-Label Staking Platform */}
           {activeTab === 'saas' && (
             <PricingPage />
+          )}
+
+          {/* DAPPER FLEX V6 TAB - Pink Gold Cross-Chain */}
+          {activeTab === 'dapperflex' && (
+            <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
+              <DapperFlexV6 
+                provider={provider}
+                account={account}
+              />
+            </section>
           )}
         </main>
 
