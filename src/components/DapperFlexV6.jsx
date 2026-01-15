@@ -152,7 +152,7 @@ const ERC20_ABI = [
   'function symbol() view returns (string)'
 ];
 
-const DapperFlexV6 = ({ connectedAddress }) => {
+const DapperFlexV6 = ({ connectedAddress: propAddress }) => {
   const [activeTab, setActiveTab] = useState('crosschain');
   const [assets, setAssets] = useState([]);
   const [totalValue, setTotalValue] = useState(0);
@@ -161,6 +161,29 @@ const DapperFlexV6 = ({ connectedAddress }) => {
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, chain: '' });
   const [minValue, setMinValue] = useState(1);
   const [prices, setPrices] = useState({});
+  const [walletAddress, setWalletAddress] = useState(propAddress || null);
+
+  // Detect wallet on mount and when prop changes
+  useEffect(() => {
+    const detectWallet = async () => {
+      if (propAddress) {
+        setWalletAddress(propAddress);
+        return;
+      }
+      // Fallback: detect from window.ethereum
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+          }
+        } catch (e) {
+          console.log('Wallet detection failed:', e);
+        }
+      }
+    };
+    detectWallet();
+  }, [propAddress]);
 
   // Fetch prices from CoinGecko
   const fetchPrices = useCallback(async () => {
@@ -263,11 +286,27 @@ const DapperFlexV6 = ({ connectedAddress }) => {
 
   // Main scan function
   const scanAllChains = async () => {
-    if (!connectedAddress) {
-      setScanError('Connect wallet first');
+    // Try to get wallet address
+    let addressToScan = walletAddress;
+    
+    if (!addressToScan && window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+          addressToScan = accounts[0];
+          setWalletAddress(accounts[0]);
+        }
+      } catch (e) {
+        console.log('Could not get wallet:', e);
+      }
+    }
+
+    if (!addressToScan) {
+      setScanError('Please connect your wallet first');
       return;
     }
 
+    console.log('🔍 Starting cross-chain scan for:', addressToScan);
     setIsScanning(true);
     setScanError(null);
     setAssets([]);
@@ -291,7 +330,7 @@ const DapperFlexV6 = ({ connectedAddress }) => {
           chain: CHAIN_CONFIG[chainKey].name 
         });
 
-        const chainAssets = await getChainBalances(chainKey, connectedAddress, currentPrices);
+        const chainAssets = await getChainBalances(chainKey, addressToScan, currentPrices);
         allAssets.push(...chainAssets);
         
         // Update UI progressively
@@ -460,29 +499,27 @@ const DapperFlexV6 = ({ connectedAddress }) => {
             </div>
             <button
               onClick={scanAllChains}
-              disabled={isScanning || !connectedAddress}
+              disabled={isScanning}
               style={{
                 padding: '10px 20px',
                 borderRadius: '8px',
                 border: 'none',
                 background: isScanning 
-                  ? 'rgba(100,100,100,0.5)' 
+                  ? 'rgba(255,215,0,0.3)' 
                   : 'linear-gradient(90deg, #FFD700, #FFA500)',
-                color: isScanning ? '#888' : '#000',
-                cursor: isScanning || !connectedAddress ? 'not-allowed' : 'pointer',
+                color: isScanning ? '#FFD700' : '#000',
+                cursor: isScanning ? 'wait' : 'pointer',
                 fontWeight: 'bold',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '8px',
+                minWidth: '140px',
+                justifyContent: 'center'
               }}
             >
               {isScanning ? (
                 <>
-                  <span style={{ 
-                    display: 'inline-block', 
-                    animation: 'spin 1s linear infinite',
-                    fontSize: '1rem'
-                  }}>🔄</span>
+                  <span className="spin-emoji">🔄</span>
                   Scanning...
                 </>
               ) : (
@@ -493,6 +530,18 @@ const DapperFlexV6 = ({ connectedAddress }) => {
 
           {/* Total Value */}
           <div style={{ marginBottom: '20px' }}>
+            {walletAddress && (
+              <div style={{ 
+                fontSize: '0.8rem', 
+                color: '#4ade80', 
+                marginBottom: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                ✅ Scanning: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              </div>
+            )}
             <div style={{ fontSize: '0.9rem', color: '#888' }}>Total:</div>
             <div style={{ 
               fontSize: '2rem', 
@@ -632,9 +681,11 @@ const DapperFlexV6 = ({ connectedAddress }) => {
               color: '#666'
             }}>
               <div style={{ fontSize: '3rem', marginBottom: '15px', opacity: 0.5 }}>🌐</div>
-              <div style={{ fontSize: '1.1rem', marginBottom: '8px' }}>No off-chain assets found</div>
+              <div style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
+                {walletAddress ? 'No off-chain assets found yet' : 'No off-chain assets found'}
+              </div>
               <div style={{ fontSize: '0.9rem' }}>
-                Connect wallet and click "Rescan All"
+                {walletAddress ? 'Click "Rescan All" to scan 8 chains' : 'Connect wallet and click "Rescan All"'}
               </div>
             </div>
           )}
@@ -729,6 +780,10 @@ const DapperFlexV6 = ({ connectedAddress }) => {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        .spin-emoji {
+          display: inline-block;
+          animation: spin 1s linear infinite;
         }
       `}</style>
     </div>
