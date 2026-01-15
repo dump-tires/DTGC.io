@@ -4636,6 +4636,19 @@ export default function App() {
   // Fetch live holder data from our Vercel API route (proxies PulseChain API)
   const fetchLiveHolders = useCallback(async () => {
     try {
+      // FIRST: Get accurate holder count from token-counters API
+      let accurateHolderCount = 0;
+      try {
+        const countersResponse = await fetch(`https://api.scan.pulsechain.com/api/v2/tokens/${CONTRACT_ADDRESSES.dtgc}/counters`);
+        if (countersResponse.ok) {
+          const countersData = await countersResponse.json();
+          accurateHolderCount = parseInt(countersData.token_holders_count) || 0;
+          console.log('✅ Accurate holder count from counters API:', accurateHolderCount);
+        }
+      } catch (e) {
+        console.log('Counters API fallback:', e.message);
+      }
+      
       const response = await fetch(PULSECHAIN_API.holders);
       
       if (!response.ok) {
@@ -4651,7 +4664,8 @@ export default function App() {
       
       // Get items from either format (direct API or Vercel proxy)
       const allItems = data.holders || data.items || [];
-      const totalHolders = data.totalHolders || (data.next_page_params ? 100 : allItems.length);
+      // Use accurate count from counters API, fallback to response data
+      const totalHolders = accurateHolderCount || data.totalHolders || data.token_holders_count || allItems.length;
       
       if (allItems.length === 0) {
         throw new Error('No items in API response');
