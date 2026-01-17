@@ -768,17 +768,32 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
             <div style={{ fontSize: '0.8rem', color: walletAddress ? '#4ade80' : '#888' }}>
               {walletAddress ? `✅ ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Connect wallet to scan'}
             </div>
-            <button
-              onClick={() => scanAllChains()}
-              disabled={isScanning}
-              style={{
-                padding: '8px 16px', borderRadius: '8px', border: 'none',
-                background: isScanning ? 'rgba(255,215,0,0.3)' : 'linear-gradient(90deg, #FFD700, #FFA500)',
-                color: isScanning ? '#FFD700' : '#000', cursor: isScanning ? 'wait' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem'
-              }}
-            >
-              {isScanning ? '🔄 Scanning...' : '🔄 Scan All Chains'}
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => { 
+                  alert('🔬 Scanning Vitalik\'s wallet (0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)...\n\nThis is a demo to show how the scanner works!'); 
+                  scanAllChains('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'); 
+                }}
+                disabled={isScanning}
+                style={{
+                  padding: '8px 12px', borderRadius: '8px', border: '1px solid #666',
+                  background: 'rgba(0,0,0,0.5)', color: '#888', cursor: isScanning ? 'wait' : 'pointer', fontSize: '0.8rem'
+                }}
+              >
+                🧪 Test Vitalik
+              </button>
+              <button
+                onClick={() => scanAllChains()}
+                disabled={isScanning}
+                style={{
+                  padding: '8px 16px', borderRadius: '8px', border: 'none',
+                  background: isScanning ? 'rgba(255,215,0,0.3)' : 'linear-gradient(90deg, #FFD700, #FFA500)',
+                  color: isScanning ? '#FFD700' : '#000', cursor: isScanning ? 'wait' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem'
+                }}
+              >
+                {isScanning ? '🔄 Scanning...' : '🔄 Scan All Chains'}
+              </button>
+            </div>
           </div>
 
           {/* Scan Progress */}
