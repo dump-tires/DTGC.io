@@ -1,5 +1,5 @@
 import DapperComponent from './components/DapperComponent';
-import DapperFlexV6 from './components/DapperFlexV6';
+import ZapperXChain from './components/ZapperXChain';
 import PricingPage from './pages/PricingPage';
 import V4DeFiGoldSuite from './components/V4DeFiGoldSuite';
 import WhiteDiamondStaking from './components/WhiteDiamondStaking';
@@ -550,7 +550,9 @@ const CONTRACT_ADDRESSES = {
   lpStakingFlexV4: '0x5ccea11cab6a17659ce1860f5b0b6e4a8cea54d6', // Flex LP Staking - 10% APR No Lock
   // White Diamond V5 - NFT LP Staking (70% APR, 90 day lock, tradeable NFT)
   whiteDiamondV5: '0x326F86e7d594B55B7BA08DFE5195b10b159033fD',
-  // DapperFlex V6 - Pink Gold Cross-Chain Zapper with Referrals
+  // Zapper-X-Chain - Cross-Chain Dust Zapper with USDC Conversion
+  // Features: Unlimited tokens, Smart routing, Dust-to-USDC (1% fee)
+  // Fee wallet: 0x1449a7d9973e6215534d785e3e306261156eb610
   dapperFlexV6: '0x0b11799Ef41A01fB9399dCbA161076d7aed20b3e',
   burn: '0x0000000000000000000000000000000000000369',
   devWallet: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
@@ -8029,7 +8031,7 @@ export default function App() {
                 <button className={activeTab === 'gold' ? 'active' : ''} onClick={() => { handleNavClick('gold'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'gold' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'gold' ? '#000' : '#D4AF37' }}>🏆 PulseX Gold</button>
                 <button className={activeTab === 'whitediamond' ? 'active' : ''} onClick={() => { handleNavClick('whitediamond'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'whitediamond' ? 'linear-gradient(135deg, #FFFFFF, #B8B8B8)' : 'rgba(255,255,255,0.1)', color: activeTab === 'whitediamond' ? '#000' : '#FFF' }}>💎 White Diamond</button>
                 <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #4CAF50, #388E3C)' : 'rgba(76,175,80,0.15)', color: activeTab === 'saas' ? '#fff' : '#4CAF50' }}>🏭 SaaS Platform</button>
-                <button className={activeTab === 'dapperflex' ? 'active' : ''} onClick={() => { handleNavClick('dapperflex'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'dapperflex' ? 'linear-gradient(135deg, #FF69B4, #FFD700)' : 'rgba(255,105,180,0.15)', color: activeTab === 'dapperflex' ? '#000' : '#FF69B4' }}>💗⭐ Flex V6</button>
+                <button className={activeTab === 'dapperflex' ? 'active' : ''} onClick={() => { handleNavClick('dapperflex'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'dapperflex' ? 'linear-gradient(135deg, #FF69B4, #FFD700, #9370DB)' : 'rgba(255,105,180,0.15)', color: activeTab === 'dapperflex' ? '#000' : '#FF69B4' }}>⚡🌉 Zapper-X</button>
               </div>
             )}
 
@@ -8102,7 +8104,7 @@ export default function App() {
                 onClick={() => handleNavClick('dapperflex')} 
                 style={{ 
                   background: activeTab === 'dapperflex' 
-                    ? 'linear-gradient(135deg, #FF69B4, #FFD700)' 
+                    ? 'linear-gradient(135deg, #FF69B4, #FFD700, #9370DB)' 
                     : 'linear-gradient(135deg, rgba(255,105,180,0.15), rgba(255,215,0,0.05))',
                   border: '1px solid rgba(255,105,180,0.4)',
                   borderRadius: '8px',
@@ -8114,7 +8116,7 @@ export default function App() {
                   gap: '6px'
                 }}
               >
-                💗⭐ <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>Dapper</span><span>Flex V6</span></span>
+                ⚡🌉 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>Zapper</span><span>X-Chain</span></span>
               </button>
             </nav>
 
@@ -8491,7 +8493,7 @@ export default function App() {
                   }}
                 >
                   <div style={{fontSize: '1.1rem', fontWeight: 800, color: '#FF1493'}}>💗 FLEX</div>
-                  <div style={{fontSize: '0.6rem', color: '#FF69B4', fontWeight: 600}}>COIN CLEAN</div>
+                  <div style={{fontSize: '0.6rem', color: '#FF69B4', fontWeight: 600}}>ZAPPER-X</div>
                   <div style={{fontSize: '0.5rem', color: '#FF1493', marginTop: '2px'}}>10% APR</div>
                 </div>
                 
@@ -9457,7 +9459,7 @@ export default function App() {
                 >
                   <div className="tier-icon" style={{ fontSize: '2.5rem' }}>💗⚡</div>
                   <div className="tier-name" style={{ color: '#FF1493' }}>FLEX</div>
-                  <div className="tier-subtitle" style={{ color: '#FF69B4' }}>COIN CLEAN • NO LOCK!</div>
+                  <div className="tier-subtitle" style={{ color: '#FF69B4' }}>ZAPPER-X-CHAIN • DUST TO USDC!</div>
                   <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
                     Requires $300+ Diamond/Diamond+
                   </div>
@@ -9737,7 +9739,7 @@ export default function App() {
                   maxWidth: '500px',
                 }}>
                   <h3 className="panel-title" style={{ color: '#FF1493' }}>
-                    ⚡💎 FLEX COIN CLEAN
+                    ⚡🌉 ZAPPER-X-CHAIN
                   </h3>
                   <p style={{ fontSize: '0.8rem', color: '#FF69B4', marginBottom: '8px', textAlign: 'center' }}>
                     Select tokens to zap → DTGC/PLS LP • 10% APR • No Lock
@@ -10124,7 +10126,7 @@ export default function App() {
                     color: '#8BC34A',
                     textAlign: 'center',
                   }}>
-                    ✅ Smart Routing: PulseX + pump.tires fallback • Converts what's possible, skips the rest
+                    ✅ Smart Routing: PulseX V2 → V1 → pump.tires • Dust-to-USDC available (1% fee)
                   </div>
 
                   {/* Action Button */}
@@ -13415,12 +13417,13 @@ export default function App() {
             <PricingPage />
           )}
 
-          {/* DAPPER FLEX V6 TAB - Pink Gold Cross-Chain */}
+          {/* ZAPPER-X-CHAIN TAB - Cross-Chain Dust Zapper + USDC Conversion */}
           {activeTab === 'dapperflex' && (
             <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
-              <DapperFlexV6 
+              <ZapperXChain 
                 provider={provider}
                 account={account}
+                livePrices={livePrices}
               />
             </section>
           )}
