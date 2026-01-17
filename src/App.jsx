@@ -13421,9 +13421,7 @@ export default function App() {
           {activeTab === 'dapperflex' && (
             <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
               <ZapperXChain 
-                provider={provider}
-                account={account}
-                livePrices={livePrices}
+                connectedAddress={account}
               />
             </section>
           )}
