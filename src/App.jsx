@@ -3646,6 +3646,13 @@ export default function App() {
   const DAPPER_ADDRESS = "0xc7fe28708ba913d6bdf1e7eac2c75f2158d978de";
   const DAPPER_ABI = ["function zapPLS() external payable", "function zapToken(address token, uint256 amount) external"];
   
+  // Pump.tires V1 Bonding Curve Contract
+  const PUMP_TIRES_ADDRESS = "0x6538A83a81d855B965983161AF6a83e616D16fD5";
+  const PUMP_TIRES_ABI = [
+    "function sellToken(address tokenAddress, uint256 tokenAmount, uint256 minAmountOut) external",
+    "function buyTokenExactIn(address tokenAddress, uint256 minAmountOut) external payable"
+  ];
+  
   // Known tokens (always show these + any found in wallet)
   const KNOWN_TOKENS = [
     { symbol: 'PLS', name: 'PulseChain', address: null, decimals: 18, icon: '💜', color: '#E1BEE7' },
@@ -10102,7 +10109,7 @@ export default function App() {
 
                   {/* Liquidity Notice */}
                   <div style={{
-                    background: 'rgba(76,175,80,0.1)',
+                    background: 'linear-gradient(135deg, rgba(76,175,80,0.1) 0%, rgba(255,152,0,0.1) 100%)',
                     border: '1px solid rgba(76,175,80,0.3)',
                     borderRadius: '8px',
                     padding: '10px',
@@ -10111,7 +10118,7 @@ export default function App() {
                     color: '#8BC34A',
                     textAlign: 'center',
                   }}>
-                    ✅ Smart Mode: Converts tokens with liquidity, skips others. You'll see a receipt showing what worked!
+                    ✅ Smart Routing: PulseX + pump.tires fallback • Converts what's possible, skips the rest
                   </div>
 
                   {/* Action Button */}
@@ -10129,10 +10136,6 @@ export default function App() {
                         let successCount = 0;
                         let failedTokens = [];
                         let convertedTokens = [];
-                        let totalPlsReceived = 0;
-                        
-                        // Get initial PLS balance to track received PLS
-                        const initialPlsBalance = await provider.getBalance(account);
                         
                         // Process each selected token
                         for (const [key, tokenData] of Object.entries(selectedFlexTokens)) {
@@ -10141,13 +10144,13 @@ export default function App() {
                           
                           try {
                             if (key === 'pls' || !tokenData?.address) {
-                              // Native PLS - direct zap
+                              // Native PLS
                               const amountWei = ethers.parseEther(amount.toString());
                               const tx = await dapper.zapPLS({ value: amountWei });
                               showToast(`⚡ Zapping ${amount.toFixed(2)} PLS...`, 'info');
                               await tx.wait();
                               successCount++;
-                              convertedTokens.push({ symbol: 'PLS', amount, valueUsd: amount * (livePrices.pls || 0.00003), plsReceived: amount });
+                              convertedTokens.push({ symbol: 'PLS', amount, valueUsd: amount * (livePrices.pls || 0.00003) });
                             } else {
                               // ERC20 Token - validate balance first
                               const tokenContract = new ethers.Contract(tokenData.address, [
@@ -10165,85 +10168,116 @@ export default function App() {
                                 actualBalance = await tokenContract.balanceOf(account);
                               } catch (balErr) {
                                 console.warn(`⚠️ Cannot read balance for ${tokenData.symbol}:`, balErr.message);
-                                failedTokens.push({ symbol: tokenData.symbol, reason: 'invalid contract', amount });
+                                failedTokens.push(`${tokenData.symbol} (invalid contract)`);
                                 continue;
                               }
                               
                               if (actualBalance < amountWei) {
                                 console.warn(`⚠️ ${tokenData.symbol}: Insufficient balance`);
-                                failedTokens.push({ symbol: tokenData.symbol, reason: 'insufficient balance', amount });
+                                failedTokens.push(`${tokenData.symbol} (insufficient balance)`);
                                 continue;
                               }
                               
-                              // Check allowance
-                              const allowance = await tokenContract.allowance(account, DAPPER_ADDRESS);
-                              if (allowance < amountWei) {
-                                showToast(`🔓 Approving ${tokenData.symbol}...`, 'info');
-                                const approveTx = await tokenContract.approve(DAPPER_ADDRESS, ethers.MaxUint256);
-                                await approveTx.wait();
-                              }
+                              // Try PulseX first, then pump.tires V1 as fallback
+                              let swapMethod = null; // 'pulsex' or 'pumptires'
                               
-                              // Simulate the zap first to check liquidity
+                              // Simulate PulseX zap first
                               try {
                                 await dapper.zapToken.staticCall(tokenData.address, amountWei);
-                              } catch (simErr) {
-                                console.warn(`⚠️ ${tokenData.symbol}: No PLS liquidity on PulseX`);
-                                failedTokens.push({ symbol: tokenData.symbol, reason: 'no liquidity', amount, address: tokenData.address });
-                                continue;
+                                swapMethod = 'pulsex';
+                              } catch (pulseXErr) {
+                                console.log(`📊 ${tokenData.symbol}: No PulseX liquidity, trying pump.tires V1...`);
+                                
+                                // Try pump.tires V1 bonding curve as fallback
+                                try {
+                                  const pumpTires = new ethers.Contract(PUMP_TIRES_ADDRESS, PUMP_TIRES_ABI, signer);
+                                  // Simulate sell with 5% slippage (minAmountOut = 0 for simulation)
+                                  await pumpTires.sellToken.staticCall(tokenData.address, amountWei, 0);
+                                  swapMethod = 'pumptires';
+                                  console.log(`✅ ${tokenData.symbol}: Found pump.tires V1 liquidity!`);
+                                } catch (pumpErr) {
+                                  console.warn(`⚠️ ${tokenData.symbol}: No liquidity on PulseX or pump.tires`);
+                                  failedTokens.push(`${tokenData.symbol} (no liquidity)`);
+                                  continue;
+                                }
                               }
                               
-                              // Get PLS balance before this swap
-                              const plsBeforeSwap = await provider.getBalance(account);
-                              
-                              // Zap token
-                              showToast(`⚡ Zapping ${amount.toFixed(4)} ${tokenData.symbol}...`, 'info');
-                              const tx = await dapper.zapToken(tokenData.address, amountWei);
-                              const receipt = await tx.wait();
-                              
-                              // Calculate PLS received from this swap (accounting for gas)
-                              const plsAfterSwap = await provider.getBalance(account);
-                              const gasUsed = receipt.gasUsed * receipt.gasPrice;
-                              const plsFromSwap = Number(ethers.formatEther(plsAfterSwap - plsBeforeSwap + gasUsed));
-                              
-                              successCount++;
-                              totalPlsReceived += plsFromSwap;
-                              convertedTokens.push({ 
-                                symbol: tokenData.symbol, 
-                                amount, 
-                                valueUsd: tokenData.valueUsd || (amount * (tokenData.price || 0)),
-                                address: tokenData.address,
-                                plsReceived: plsFromSwap
-                              });
+                              // Execute the swap based on which method has liquidity
+                              if (swapMethod === 'pulsex') {
+                                // PulseX path - approve Dapper and zap
+                                const allowance = await tokenContract.allowance(account, DAPPER_ADDRESS);
+                                if (allowance < amountWei) {
+                                  showToast(`🔓 Approving ${tokenData.symbol} for PulseX...`, 'info');
+                                  const approveTx = await tokenContract.approve(DAPPER_ADDRESS, ethers.MaxUint256);
+                                  await approveTx.wait();
+                                }
+                                
+                                showToast(`⚡ Zapping ${amount.toFixed(4)} ${tokenData.symbol} via PulseX...`, 'info');
+                                const tx = await dapper.zapToken(tokenData.address, amountWei);
+                                await tx.wait();
+                                successCount++;
+                                convertedTokens.push({ 
+                                  symbol: tokenData.symbol, 
+                                  amount, 
+                                  valueUsd: tokenData.valueUsd || (amount * (tokenData.price || 0)),
+                                  address: tokenData.address,
+                                  source: 'PulseX'
+                                });
+                              } else if (swapMethod === 'pumptires') {
+                                // Pump.tires V1 path - approve pump.tires and sell
+                                const allowance = await tokenContract.allowance(account, PUMP_TIRES_ADDRESS);
+                                if (allowance < amountWei) {
+                                  showToast(`🔓 Approving ${tokenData.symbol} for pump.tires...`, 'info');
+                                  const approveTx = await tokenContract.approve(PUMP_TIRES_ADDRESS, ethers.MaxUint256);
+                                  await approveTx.wait();
+                                }
+                                
+                                // Get PLS balance before sell
+                                const plsBeforeSell = await provider.getBalance(account);
+                                
+                                showToast(`🛞 Selling ${amount.toFixed(4)} ${tokenData.symbol} via pump.tires...`, 'info');
+                                const pumpTires = new ethers.Contract(PUMP_TIRES_ADDRESS, PUMP_TIRES_ABI, signer);
+                                // Use 5% slippage protection (minAmountOut = 0 for now, can be improved)
+                                const tx = await pumpTires.sellToken(tokenData.address, amountWei, 0);
+                                const receipt = await tx.wait();
+                                
+                                // Calculate PLS received
+                                const plsAfterSell = await provider.getBalance(account);
+                                const gasUsed = receipt.gasUsed * receipt.gasPrice;
+                                const plsReceived = Number(ethers.formatEther(plsAfterSell - plsBeforeSell + gasUsed));
+                                
+                                successCount++;
+                                convertedTokens.push({ 
+                                  symbol: tokenData.symbol, 
+                                  amount, 
+                                  valueUsd: tokenData.valueUsd || (amount * (tokenData.price || 0)),
+                                  address: tokenData.address,
+                                  source: 'pump.tires',
+                                  plsReceived: plsReceived
+                                });
+                              }
                             }
                           } catch (tokenErr) {
                             console.error(`❌ Failed to zap ${tokenData?.symbol || key}:`, tokenErr.message);
-                            failedTokens.push({ symbol: tokenData?.symbol || key, reason: 'swap failed', amount });
+                            failedTokens.push(`${tokenData?.symbol || key} (swap failed)`);
                           }
                         }
                         
-                        // Calculate total PLS received from all successful swaps
-                        const totalPlsFromTokens = convertedTokens.reduce((sum, t) => sum + (t.plsReceived || 0), 0);
-                        
-                        // Show conversion receipt with detailed breakdown
+                        // Show conversion receipt
                         if (convertedTokens.length > 0 || failedTokens.length > 0) {
                           setFlexConversionReceipt({
                             converted: convertedTokens,
                             failed: failedTokens,
-                            totalPlsReceived: totalPlsFromTokens,
-                            totalValueUsd: convertedTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0),
                             timestamp: Date.now()
                           });
                         }
                         
-                        // Show appropriate toast based on results
                         if (successCount === 0) {
-                          showToast(`⚠️ ${failedTokens.length} token(s) couldn't be converted - see receipt for details`, 'warning');
+                          showToast('❌ No tokens could be zapped. Check PLS liquidity on PulseX.', 'error');
                           return;
-                        } else if (failedTokens.length > 0) {
-                          showToast(`✅ ${successCount} token(s) zapped! ⚠️ ${failedTokens.length} skipped (no liquidity)`, 'info');
                         }
                         
-                        // Calculate totals for celebration (only from successful conversions)
+                        // Calculate totals for celebration
                         const totalValueUsd = convertedTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0);
                         
                         const netValue = totalValueUsd * 0.99; // After 1% fee
@@ -10251,7 +10285,7 @@ export default function App() {
                         const walletValue = netValue - stakeValue;
                         const estLpTokens = stakeValue / ((livePrices.dtgc || 0.0002) * 2);
                         
-                        if (flexOutputMode === 'stake' && successCount > 0) {
+                        if (flexOutputMode === 'stake') {
                           const newFlexStake = {
                             id: Date.now(),
                             lpAmount: estLpTokens,
@@ -10261,17 +10295,14 @@ export default function App() {
                             stakePercent: flexStakePercent,
                             timestamp: Date.now(),
                             apr: 10,
-                            tokensConverted: successCount,
-                            tokensSkipped: failedTokens.length,
-                            totalPlsReceived: totalPlsFromTokens,
                           };
                           // Add to flex stakes
                           setFlexStakes(prev => [...prev, newFlexStake]);
                           // Show pink celebration popup
                           setFlexSuccess(newFlexStake);
                           showToast(`🎉 Flex LP Created! ${flexStakePercent}% staked at 10% APR!`, 'success');
-                        } else if (successCount > 0) {
-                          showToast(`✅ ~${formatNumber(totalPlsFromTokens, 2)} PLS received!`, 'success');
+                        } else {
+                          showToast('✅ Converted to PLS in wallet!', 'success');
                         }
                         setSelectedFlexTokens({});
                         scanWalletTokens(); // Refresh balances
@@ -10416,30 +10447,6 @@ export default function App() {
                         >×</button>
                       </div>
                       
-                      {/* Total PLS Received Summary */}
-                      {flexConversionReceipt.totalPlsReceived > 0 && (
-                        <div style={{
-                          background: 'linear-gradient(135deg, rgba(76,175,80,0.2) 0%, rgba(139,195,74,0.1) 100%)',
-                          border: '1px solid rgba(76,175,80,0.4)',
-                          borderRadius: '10px',
-                          padding: '12px',
-                          marginBottom: '16px',
-                          textAlign: 'center',
-                        }}>
-                          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>
-                            Total PLS Received
-                          </div>
-                          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#4CAF50' }}>
-                            ~{formatNumber(flexConversionReceipt.totalPlsReceived, 2)} PLS
-                          </div>
-                          {flexConversionReceipt.totalValueUsd > 0 && (
-                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
-                              ≈ ${formatNumber(flexConversionReceipt.totalValueUsd, 2)} value
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
                       {/* Converted Tokens */}
                       {flexConversionReceipt.converted.length > 0 && (
                         <div style={{ marginBottom: '16px' }}>
@@ -10452,13 +10459,31 @@ export default function App() {
                               justifyContent: 'space-between', 
                               alignItems: 'center',
                               padding: '8px 10px', 
-                              background: 'rgba(76,175,80,0.1)', 
+                              background: token.source === 'pump.tires' 
+                                ? 'linear-gradient(135deg, rgba(255,152,0,0.15) 0%, rgba(76,175,80,0.1) 100%)'
+                                : 'rgba(76,175,80,0.1)', 
                               borderRadius: '6px',
                               marginBottom: '4px',
-                              border: '1px solid rgba(76,175,80,0.2)'
+                              border: token.source === 'pump.tires'
+                                ? '1px solid rgba(255,152,0,0.3)'
+                                : '1px solid rgba(76,175,80,0.2)'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ color: '#4CAF50', fontWeight: 600 }}>{token.symbol}</span>
+                                {token.source && (
+                                  <span style={{
+                                    fontSize: '0.55rem',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    background: token.source === 'pump.tires' 
+                                      ? 'rgba(255,152,0,0.3)' 
+                                      : 'rgba(76,175,80,0.3)',
+                                    color: token.source === 'pump.tires' ? '#FF9800' : '#4CAF50',
+                                    fontWeight: 600
+                                  }}>
+                                    {token.source === 'pump.tires' ? '🛞 pump.tires' : '💚 PulseX'}
+                                  </span>
+                                )}
                                 {token.address && (
                                   <button
                                     onClick={() => {
@@ -10482,6 +10507,9 @@ export default function App() {
                                 {token.plsReceived > 0 && (
                                   <div style={{ color: '#4CAF50', fontSize: '0.65rem' }}>→ {formatNumber(token.plsReceived, 2)} PLS</div>
                                 )}
+                                {!token.plsReceived && token.valueUsd > 0 && (
+                                  <div style={{ color: '#4CAF50', fontSize: '0.65rem' }}>${formatNumber(token.valueUsd, 2)}</div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -10494,57 +10522,21 @@ export default function App() {
                           <div style={{ fontSize: '0.8rem', color: '#FF9800', fontWeight: 600, marginBottom: '8px' }}>
                             ⚠️ Could Not Convert ({flexConversionReceipt.failed.length})
                           </div>
-                          {flexConversionReceipt.failed.map((token, i) => (
+                          {flexConversionReceipt.failed.map((reason, i) => (
                             <div key={i} style={{ 
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
                               padding: '6px 10px', 
                               background: 'rgba(255,152,0,0.1)', 
                               borderRadius: '6px',
                               marginBottom: '4px',
                               border: '1px solid rgba(255,152,0,0.2)',
+                              fontSize: '0.75rem',
+                              color: '#FF9800'
                             }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ color: '#FF9800', fontWeight: 600, fontSize: '0.75rem' }}>{token.symbol || token}</span>
-                                {token.address && (
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(token.address);
-                                      showToast('📋 Address copied!', 'success');
-                                    }}
-                                    style={{
-                                      padding: '2px 4px',
-                                      background: 'rgba(255,255,255,0.1)',
-                                      border: '1px solid rgba(255,255,255,0.2)',
-                                      borderRadius: '3px',
-                                      color: 'rgba(255,255,255,0.5)',
-                                      fontSize: '0.5rem',
-                                      cursor: 'pointer',
-                                    }}
-                                  >📋</button>
-                                )}
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ 
-                                  fontSize: '0.65rem', 
-                                  color: token.reason === 'no liquidity' ? '#FF5722' : 
-                                         token.reason === 'insufficient balance' ? '#9E9E9E' : '#FF9800',
-                                  padding: '2px 6px',
-                                  background: 'rgba(0,0,0,0.2)',
-                                  borderRadius: '4px',
-                                }}>
-                                  {token.reason === 'no liquidity' ? '🚫 No PLS Pair' :
-                                   token.reason === 'insufficient balance' ? '💰 Low Balance' :
-                                   token.reason === 'invalid contract' ? '⛔ Invalid' :
-                                   token.reason === 'swap failed' ? '❌ Swap Error' :
-                                   token.reason || 'Unknown'}
-                                </div>
-                              </div>
+                              {reason}
                             </div>
                           ))}
                           <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', marginTop: '8px' }}>
-                            💡 "No PLS Pair" = These tokens don't have a trading pair on PulseX (likely PRC20 copies or dead tokens)
+                            💡 These tokens likely lack PLS liquidity on PulseX. They may be PRC20 copies without trading pairs.
                           </div>
                         </div>
                       )}
