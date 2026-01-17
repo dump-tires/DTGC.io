@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
 // ============================================
-// ZAPPER-X-CHAIN - 1inch API Integration
-// Scan → Quote → Zap In-App → Bridge
-// Features: Batch swaps per chain, Gasless Fusion+
+// ZAPPER-X-CHAIN - Multi-Chain Dust Zapper
+// Scan → Select → Zap via 1inch → Bridge
+// Uses 1inch deep links (no CORS issues)
 // Fee Wallet: 0x1449a7d9973e6215534d785e3e306261156eb610
 // ============================================
 
@@ -12,6 +12,9 @@ const TEST_WALLETS = {
 };
 
 const FEE_WALLET = '0x1449a7d9973e6215534d785e3e306261156eb610';
+
+// Gas reserve: leave this % of native token for future transactions
+const GAS_RESERVE_PERCENT = 15; // Leave 15% of native for gas
 
 const USDC_ADDRESSES = {
   ethereum: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -25,28 +28,11 @@ const USDC_ADDRESSES = {
 
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
-// 1inch Router V6 addresses per chain
-const ONEINCH_ROUTER = {
-  1: '0x111111125421cA6dc452d289314280a0f8842A65',      // Ethereum
-  56: '0x111111125421cA6dc452d289314280a0f8842A65',     // BSC
-  137: '0x111111125421cA6dc452d289314280a0f8842A65',    // Polygon
-  42161: '0x111111125421cA6dc452d289314280a0f8842A65',  // Arbitrum
-  43114: '0x111111125421cA6dc452d289314280a0f8842A65',  // Avalanche
-  10: '0x111111125421cA6dc452d289314280a0f8842A65',     // Optimism
-  8453: '0x111111125421cA6dc452d289314280a0f8842A65',   // Base
-};
-
-// ERC20 ABI for approvals
-const ERC20_ABI = [
-  'function approve(address spender, uint256 amount) external returns (bool)',
-  'function allowance(address owner, address spender) external view returns (uint256)',
-];
-
 const CHAIN_CONFIG = {
   ethereum: {
     name: 'Ethereum', chainId: 1, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#627EEA',
     rpcs: ['https://eth.llamarpc.com', 'https://ethereum.publicnode.com', 'https://1rpc.io/eth'],
-    oneInchSupported: true, fusionSupported: true,
+    oneInchId: 1, fusionSupported: true,
     tokens: [
       { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, coingeckoId: 'usd-coin' },
@@ -73,7 +59,7 @@ const CHAIN_CONFIG = {
   bsc: {
     name: 'BNB Chain', chainId: 56, symbol: 'BNB', decimals: 18, coingeckoId: 'binancecoin', color: '#F3BA2F',
     rpcs: ['https://bsc-dataseed.binance.org', 'https://bsc-dataseed1.binance.org'],
-    oneInchSupported: true, fusionSupported: true,
+    oneInchId: 56, fusionSupported: true,
     tokens: [
       { symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18, coingeckoId: 'usd-coin' },
@@ -91,7 +77,7 @@ const CHAIN_CONFIG = {
   polygon: {
     name: 'Polygon', chainId: 137, symbol: 'MATIC', decimals: 18, coingeckoId: 'matic-network', color: '#8247E5',
     rpcs: ['https://polygon-rpc.com', 'https://polygon.llamarpc.com'],
-    oneInchSupported: true, fusionSupported: true,
+    oneInchId: 137, fusionSupported: true,
     tokens: [
       { symbol: 'USDT', address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', decimals: 6, coingeckoId: 'usd-coin' },
@@ -107,7 +93,7 @@ const CHAIN_CONFIG = {
   arbitrum: {
     name: 'Arbitrum', chainId: 42161, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#28A0F0',
     rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com'],
-    oneInchSupported: true, fusionSupported: true,
+    oneInchId: 42161, fusionSupported: true,
     tokens: [
       { symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDC.e', address: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', decimals: 6, coingeckoId: 'usd-coin' },
@@ -123,7 +109,7 @@ const CHAIN_CONFIG = {
   optimism: {
     name: 'Optimism', chainId: 10, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#FF0420',
     rpcs: ['https://mainnet.optimism.io', 'https://optimism.llamarpc.com'],
-    oneInchSupported: true, fusionSupported: true,
+    oneInchId: 10, fusionSupported: true,
     tokens: [
       { symbol: 'USDC', address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDC.e', address: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', decimals: 6, coingeckoId: 'usd-coin' },
@@ -136,8 +122,8 @@ const CHAIN_CONFIG = {
   },
   base: {
     name: 'Base', chainId: 8453, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#0052FF',
-    rpcs: ['https://mainnet.base.org', 'https://base.llamarpc.com'],
-    oneInchSupported: true, fusionSupported: false,
+    rpcs: ['https://base.llamarpc.com', 'https://base.publicnode.com'],
+    oneInchId: 8453, fusionSupported: false,
     tokens: [
       { symbol: 'USDC', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDbC', address: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA', decimals: 6, coingeckoId: 'usd-coin' },
@@ -151,7 +137,7 @@ const CHAIN_CONFIG = {
   avalanche: {
     name: 'Avalanche', chainId: 43114, symbol: 'AVAX', decimals: 18, coingeckoId: 'avalanche-2', color: '#E84142',
     rpcs: ['https://api.avax.network/ext/bc/C/rpc', 'https://avalanche.public-rpc.com'],
-    oneInchSupported: true, fusionSupported: false,
+    oneInchId: 43114, fusionSupported: false,
     tokens: [
       { symbol: 'USDC', address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDT', address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', decimals: 6, coingeckoId: 'tether' },
@@ -209,13 +195,10 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
   const [scanLog, setScanLog] = useState([]);
   const [selectedAssets, setSelectedAssets] = useState(new Set());
   
-  // 1inch Integration State
-  const [quotes, setQuotes] = useState({}); // { 'chainKey-symbol': { toAmount, estimatedGas, quote } }
-  const [isQuoting, setIsQuoting] = useState(false);
-  const [zapMode, setZapMode] = useState('standard'); // 'standard' or 'gasless'
-  const [zapProgress, setZapProgress] = useState({ current: 0, total: 0, status: '', currentAsset: null });
-  const [isZapping, setIsZapping] = useState(false);
-  const [zapResults, setZapResults] = useState([]);
+  // Zap state
+  const [zapQueue, setZapQueue] = useState([]);
+  const [currentZapIndex, setCurrentZapIndex] = useState(0);
+  const [showZapModal, setShowZapModal] = useState(false);
   
   // Referral state
   const [referrer, setReferrer] = useState(null);
@@ -296,7 +279,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
   // Fetch prices
   const fetchPrices = async () => {
     try {
-      const ids = 'ethereum,binancecoin,matic-network,avalanche-2,optimism,arbitrum,tether,usd-coin,chainlink,uniswap,shiba-inu,pancakeswap-token,wrapped-bitcoin,dai,aave,maker,havven,curve-dao-token,lido-dao,apecoin,pepe,fantom,the-sandbox,decentraland,the-graph,1inch,ethereum-name-service,compound-governance-token,sushi,binance-usd,ripple,dogecoin,gmx,joe,velodrome-finance,coinbase-wrapped-staked-eth,aerodrome-finance,brett,degen-base,magic,floki,yearn-finance';
+      const ids = 'ethereum,binancecoin,matic-network,avalanche-2,optimism,arbitrum,tether,usd-coin,chainlink,uniswap,shiba-inu,pancakeswap-token,wrapped-bitcoin,dai,aave,maker,havven,curve-dao-token,lido-dao,apecoin,pepe,fantom,the-sandbox,decentraland,the-graph,1inch,compound-governance-token,sushi,binance-usd,ripple,dogecoin,gmx,joe,velodrome-finance,coinbase-wrapped-staked-eth,aerodrome-finance,brett,degen-base,magic,floki,yearn-finance';
       const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`);
       if (response.ok) { const data = await response.json(); setPrices(data); return data; }
     } catch (e) { console.log('Price fetch error, using fallbacks'); }
@@ -337,7 +320,8 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       foundAssets.push({
         chain: chain.name, chainKey, symbol: chain.symbol, balance: nativeBalance,
         value: nativeBalance * price, price, isNative: true, color: chain.color,
-        decimals: chain.decimals, tokenAddress: NATIVE_TOKEN, chainId: chain.chainId
+        decimals: chain.decimals, tokenAddress: NATIVE_TOKEN, chainId: chain.chainId,
+        oneInchId: chain.oneInchId
       });
     }
 
@@ -349,7 +333,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           chain: chain.name, chainKey, symbol: token.symbol, balance,
           value: balance * price, price, isNative: false, color: chain.color,
           address: token.address, decimals: token.decimals, tokenAddress: token.address,
-          chainId: chain.chainId
+          chainId: chain.chainId, oneInchId: chain.oneInchId
         });
       }
     }
@@ -374,7 +358,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     setTotalValue(0);
     setScanLog(['Starting scan...']);
     setSelectedAssets(new Set());
-    setQuotes({});
 
     const chains = Object.keys(CHAIN_CONFIG);
     setScanProgress({ current: 0, total: chains.length, chain: 'Loading prices...' });
@@ -414,239 +397,31 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
   };
 
   // ============================================
-  // 1INCH API INTEGRATION
+  // 1INCH DEEP LINK INTEGRATION (No CORS issues!)
   // ============================================
   
-  // Get 1inch quote for a token
-  const get1inchQuote = async (asset) => {
-    if (isUsdcToken(asset.symbol)) return null;
-    
-    const chainId = asset.chainId;
-    const fromToken = asset.isNative ? NATIVE_TOKEN : asset.tokenAddress;
+  // Generate 1inch swap URL
+  const get1inchUrl = (asset, useFusion = false) => {
+    const chainId = asset.oneInchId || asset.chainId;
+    const fromToken = asset.isNative ? 'ETH' : asset.tokenAddress;
     const toToken = USDC_ADDRESSES[asset.chainKey];
-    const amount = BigInt(Math.floor(asset.balance * Math.pow(10, asset.decimals))).toString();
     
-    try {
-      // Using 1inch public API (rate limited but works for quotes)
-      const url = `https://api.1inch.dev/swap/v6.0/${chainId}/quote?src=${fromToken}&dst=${toToken}&amount=${amount}`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
-      
-      if (!response.ok) {
-        // Fallback: estimate based on price
-        const estimatedUsdc = asset.value * 0.995; // 0.5% slippage estimate
-        return {
-          toAmount: (estimatedUsdc * 1e6).toString(),
-          estimatedUsdc,
-          isEstimate: true
-        };
-      }
-      
-      const data = await response.json();
-      const usdcDecimals = 6;
-      const toAmount = Number(data.toAmount) / Math.pow(10, usdcDecimals);
-      
-      return {
-        toAmount: data.toAmount,
-        estimatedUsdc: toAmount,
-        estimatedGas: data.gas,
-        isEstimate: false
-      };
-    } catch (error) {
-      console.log(`Quote error for ${asset.symbol}:`, error);
-      // Fallback estimate
-      return {
-        toAmount: (asset.value * 0.995 * 1e6).toString(),
-        estimatedUsdc: asset.value * 0.995,
-        isEstimate: true
-      };
+    if (useFusion) {
+      return `https://app.1inch.io/#/${chainId}/fusion/swap/${fromToken}/${toToken}`;
     }
+    
+    return `https://app.1inch.io/#/${chainId}/simple/swap/${fromToken}/${toToken}`;
   };
 
-  // Get quotes for selected assets
-  const fetchQuotesForSelected = async () => {
-    const selectedList = assets.filter(a => 
-      selectedAssets.has(`${a.chainKey}-${a.symbol}`) && !isUsdcToken(a.symbol)
-    );
-    
-    if (selectedList.length === 0) return;
-    
-    setIsQuoting(true);
-    const newQuotes = { ...quotes };
-    
-    for (const asset of selectedList) {
-      const key = `${asset.chainKey}-${asset.symbol}`;
-      if (!newQuotes[key]) {
-        const quote = await get1inchQuote(asset);
-        if (quote) {
-          newQuotes[key] = quote;
-          setQuotes({ ...newQuotes });
-        }
-      }
-    }
-    
-    setIsQuoting(false);
+  // Open single zap
+  const openZap = (asset, useFusion = false) => {
+    const url = get1inchUrl(asset, useFusion);
+    window.open(url, '_blank');
+    trackReferralAction(asset.value);
   };
 
-  // Switch network
-  const switchNetwork = async (chainId) => {
-    const ethProvider = getProvider();
-    if (!ethProvider) throw new Error('No wallet');
-    
-    try {
-      await ethProvider.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x' + chainId.toString(16) }]
-      });
-    } catch (switchError) {
-      if (switchError.code === 4902) {
-        const chainConfig = Object.values(CHAIN_CONFIG).find(c => c.chainId === chainId);
-        if (chainConfig) {
-          await ethProvider.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x' + chainId.toString(16),
-              chainName: chainConfig.name,
-              nativeCurrency: { name: chainConfig.symbol, symbol: chainConfig.symbol, decimals: 18 },
-              rpcUrls: chainConfig.rpcs,
-            }]
-          });
-        }
-      } else {
-        throw switchError;
-      }
-    }
-  };
-
-  // Execute single swap via 1inch
-  const executeSwap = async (asset, isGasless = false) => {
-    const ethProvider = getProvider();
-    if (!ethProvider) throw new Error('No wallet connected');
-    
-    const chainId = asset.chainId;
-    const fromToken = asset.isNative ? NATIVE_TOKEN : asset.tokenAddress;
-    const toToken = USDC_ADDRESSES[asset.chainKey];
-    const amount = BigInt(Math.floor(asset.balance * Math.pow(10, asset.decimals))).toString();
-    const router = ONEINCH_ROUTER[chainId];
-    
-    // Switch to correct chain
-    await switchNetwork(chainId);
-    
-    // For non-native tokens, check and set approval
-    if (!asset.isNative) {
-      const allowanceData = `0xdd62ed3e${walletAddress.slice(2).padStart(64, '0')}${router.slice(2).padStart(64, '0')}`;
-      const allowanceResult = await ethProvider.request({
-        method: 'eth_call',
-        params: [{ to: fromToken, data: allowanceData }, 'latest']
-      });
-      
-      const currentAllowance = BigInt(allowanceResult || '0x0');
-      const neededAmount = BigInt(amount);
-      
-      if (currentAllowance < neededAmount) {
-        // Need approval
-        const approveData = `0x095ea7b3${router.slice(2).padStart(64, '0')}${'f'.repeat(64)}`;
-        await ethProvider.request({
-          method: 'eth_sendTransaction',
-          params: [{
-            from: walletAddress,
-            to: fromToken,
-            data: approveData,
-          }]
-        });
-        
-        // Wait a bit for approval to be mined
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
-    }
-    
-    if (isGasless) {
-      // Fusion+ gasless swap
-      // For Fusion, we need to create an order and sign it
-      // The user signs, resolvers execute, no gas paid by user
-      const fusionUrl = `https://api.1inch.dev/fusion-plus/quoter/v1.0/${chainId}/quote/receive?srcChain=${chainId}&dstChain=${chainId}&srcTokenAddress=${fromToken}&dstTokenAddress=${toToken}&amount=${amount}&walletAddress=${walletAddress}&enableEstimate=true`;
-      
-      try {
-        const fusionResponse = await fetch(fusionUrl);
-        if (!fusionResponse.ok) {
-          throw new Error('Fusion quote failed - falling back to standard swap');
-        }
-        
-        const fusionQuote = await fusionResponse.json();
-        
-        // For Fusion+, user signs a typed data message
-        // This is a simplified version - production would need full EIP-712 signing
-        const orderData = {
-          srcChain: chainId,
-          dstChain: chainId,
-          srcToken: fromToken,
-          dstToken: toToken,
-          amount: amount,
-          receiver: walletAddress,
-        };
-        
-        // Sign the order (simplified - would need proper EIP-712 in production)
-        const signature = await ethProvider.request({
-          method: 'personal_sign',
-          params: [JSON.stringify(orderData), walletAddress]
-        });
-        
-        return {
-          success: true,
-          isGasless: true,
-          hash: 'fusion-' + Date.now(),
-          estimatedUsdc: fusionQuote.dstTokenAmount / 1e6
-        };
-        
-      } catch (fusionError) {
-        console.log('Fusion failed, falling back to standard:', fusionError);
-        // Fall through to standard swap
-      }
-    }
-    
-    // Standard swap - get swap data from 1inch
-    const swapUrl = `https://api.1inch.dev/swap/v6.0/${chainId}/swap?src=${fromToken}&dst=${toToken}&amount=${amount}&from=${walletAddress}&slippage=1&disableEstimate=false`;
-    
-    const swapResponse = await fetch(swapUrl);
-    
-    if (!swapResponse.ok) {
-      // Fallback: Open 1inch in new tab
-      const oneInchUrl = `https://app.1inch.io/#/${chainId}/simple/swap/${fromToken}/${toToken}`;
-      window.open(oneInchUrl, '_blank');
-      return { 
-        success: false, 
-        fallback: true, 
-        message: 'Opened 1inch - complete swap there'
-      };
-    }
-    
-    const swapData = await swapResponse.json();
-    
-    // Execute the swap transaction
-    const txHash = await ethProvider.request({
-      method: 'eth_sendTransaction',
-      params: [{
-        from: walletAddress,
-        to: swapData.tx.to,
-        data: swapData.tx.data,
-        value: swapData.tx.value,
-        gas: '0x' + Math.ceil(Number(swapData.tx.gas) * 1.2).toString(16),
-      }]
-    });
-    
-    return {
-      success: true,
-      hash: txHash,
-      estimatedUsdc: Number(swapData.toAmount) / 1e6
-    };
-  };
-
-  // Zap all selected on a specific chain
-  const zapChain = async (chainKey, isGasless = false) => {
+  // Start batch zap for a chain
+  const startChainZap = (chainKey, useFusion = false) => {
     const chainAssets = assets.filter(a => 
       a.chainKey === chainKey && 
       selectedAssets.has(`${a.chainKey}-${a.symbol}`) && 
@@ -655,40 +430,28 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     
     if (chainAssets.length === 0) return;
     
-    setIsZapping(true);
-    setZapProgress({ current: 0, total: chainAssets.length, status: 'Starting...', currentAsset: null });
-    const results = [];
-    
-    try {
-      for (let i = 0; i < chainAssets.length; i++) {
-        const asset = chainAssets[i];
-        setZapProgress({
-          current: i + 1,
-          total: chainAssets.length,
-          status: isGasless ? `🔮 Gasless: ${asset.symbol}` : `⚡ Swapping: ${asset.symbol}`,
-          currentAsset: asset
-        });
-        
-        try {
-          const result = await executeSwap(asset, isGasless);
-          results.push({ asset, ...result });
-          trackReferralAction(asset.value);
-        } catch (error) {
-          results.push({ asset, success: false, error: error.message });
-        }
-        
-        // Small delay between swaps
-        if (i < chainAssets.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
-        }
-      }
-    } finally {
-      setZapProgress({ current: 0, total: 0, status: '', currentAsset: null });
-      setIsZapping(false);
-      setZapResults(results);
+    setZapQueue(chainAssets.map(a => ({ ...a, useFusion })));
+    setCurrentZapIndex(0);
+    setShowZapModal(true);
+  };
+
+  // Open current zap in queue
+  const openCurrentZap = () => {
+    if (currentZapIndex < zapQueue.length) {
+      const asset = zapQueue[currentZapIndex];
+      openZap(asset, asset.useFusion);
     }
-    
-    return results;
+  };
+
+  // Move to next in queue
+  const nextZap = () => {
+    if (currentZapIndex < zapQueue.length - 1) {
+      setCurrentZapIndex(prev => prev + 1);
+    } else {
+      setShowZapModal(false);
+      setZapQueue([]);
+      setCurrentZapIndex(0);
+    }
   };
 
   // Toggle selection
@@ -747,6 +510,14 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
 
   const referralLink = walletAddress ? `${window.location.origin}/zapperxchain?ref=${walletAddress}` : '';
 
+  // Calculate estimated USDC (0.5% slippage estimate)
+  const getEstimatedUsdc = (asset) => {
+    if (asset.isNative) {
+      return asset.value * (1 - GAS_RESERVE_PERCENT / 100) * 0.995;
+    }
+    return asset.value * 0.995;
+  };
+
   // ============================================
   // RENDER
   // ============================================
@@ -767,41 +538,24 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           }}>ZAPPER-X-CHAIN</h2>
           <span style={{ fontSize: '2.5rem' }}>🌉</span>
         </div>
-        <p style={{ color: '#aaa', marginTop: '8px', fontSize: '0.9rem' }}>Scan → Get Quotes → Zap All to USDC → Bridge</p>
+        <p style={{ color: '#aaa', marginTop: '8px', fontSize: '0.9rem' }}>Scan → Select → Zap to USDC → Bridge</p>
       </div>
 
-      {/* Mode Toggle */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
-        <button
-          onClick={() => setZapMode('standard')}
-          style={{
-            padding: '10px 20px',
-            borderRadius: '10px',
-            border: zapMode === 'standard' ? '2px solid #FFD700' : '1px solid #444',
-            background: zapMode === 'standard' ? 'linear-gradient(135deg, #FFD700, #FFA500)' : 'rgba(0,0,0,0.3)',
-            color: zapMode === 'standard' ? '#000' : '#888',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            fontSize: '0.9rem'
-          }}
-        >
-          ⚡ Standard Zap
-        </button>
-        <button
-          onClick={() => setZapMode('gasless')}
-          style={{
-            padding: '10px 20px',
-            borderRadius: '10px',
-            border: zapMode === 'gasless' ? '2px solid #9370DB' : '1px solid #444',
-            background: zapMode === 'gasless' ? 'linear-gradient(135deg, #9370DB, #8A2BE2)' : 'rgba(0,0,0,0.3)',
-            color: zapMode === 'gasless' ? '#fff' : '#888',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            fontSize: '0.9rem'
-          }}
-        >
-          🔮 Gasless (Fusion+)
-        </button>
+      {/* Gas Reserve Notice */}
+      <div style={{
+        background: 'rgba(251,191,36,0.1)',
+        border: '1px solid rgba(251,191,36,0.3)',
+        borderRadius: '10px',
+        padding: '10px 15px',
+        marginBottom: '15px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
+      }}>
+        <span style={{ fontSize: '1.2rem' }}>⛽</span>
+        <span style={{ color: '#fbbf24', fontSize: '0.85rem' }}>
+          <strong>Gas Reserve:</strong> Keep ~{GAS_RESERVE_PERCENT}% of native tokens (ETH, BNB, MATIC, etc.) for future gas fees
+        </span>
       </div>
 
       {/* Stats */}
@@ -838,36 +592,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       {scanError && (
         <div style={{ background: 'rgba(239,68,68,0.2)', borderRadius: '10px', padding: '12px', marginBottom: '15px', color: '#fca5a5', textAlign: 'center', fontSize: '0.9rem' }}>
           {scanError}
-        </div>
-      )}
-
-      {/* Zap Progress Overlay */}
-      {isZapping && (
-        <div style={{
-          background: 'rgba(0,0,0,0.9)',
-          borderRadius: '15px',
-          padding: '25px',
-          marginBottom: '20px',
-          border: '2px solid #FFD700',
-          textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>
-            {zapMode === 'gasless' ? '🔮' : '⚡'}
-          </div>
-          <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '10px' }}>
-            {zapProgress.status}
-          </div>
-          <div style={{ color: '#888', marginBottom: '15px' }}>
-            {zapProgress.current} / {zapProgress.total} swaps
-          </div>
-          <div style={{ height: '8px', background: 'rgba(0,0,0,0.5)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: `${(zapProgress.current / zapProgress.total) * 100}%`,
-              background: zapMode === 'gasless' ? 'linear-gradient(90deg, #9370DB, #8A2BE2)' : 'linear-gradient(90deg, #FFD700, #FFA500)',
-              transition: 'width 0.3s'
-            }} />
-          </div>
         </div>
       )}
 
@@ -922,7 +646,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
             const nonUsdcAssets = chainAssets.filter(a => !isUsdcToken(a.symbol));
             const usdcAssets = chainAssets.filter(a => isUsdcToken(a.symbol));
             const selectedOnChain = nonUsdcAssets.filter(a => selectedAssets.has(`${a.chainKey}-${a.symbol}`));
-            const selectedValue = selectedOnChain.reduce((s, a) => s + a.value, 0);
 
             return (
               <div key={chainKey} style={{
@@ -933,7 +656,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                 border: `1px solid ${chainConfig.color}44`
               }}>
                 {/* Chain Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{
                       width: '32px', height: '32px', borderRadius: '50%',
@@ -952,7 +675,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                   
                   {/* Chain Action Buttons */}
                   {nonUsdcAssets.length > 0 && (
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       <button
                         onClick={() => selectAllOnChain(chainKey)}
                         style={{
@@ -965,8 +688,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                       {selectedOnChain.length > 0 && (
                         <>
                           <button
-                            onClick={() => zapChain(chainKey, false)}
-                            disabled={isZapping}
+                            onClick={() => startChainZap(chainKey, false)}
                             style={{
                               padding: '6px 12px', borderRadius: '6px', border: 'none',
                               background: 'linear-gradient(90deg, #FFD700, #FFA500)',
@@ -977,8 +699,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                           </button>
                           {chainConfig.fusionSupported && (
                             <button
-                              onClick={() => zapChain(chainKey, true)}
-                              disabled={isZapping}
+                              onClick={() => startChainZap(chainKey, true)}
                               style={{
                                 padding: '6px 12px', borderRadius: '6px', border: 'none',
                                 background: 'linear-gradient(90deg, #9370DB, #8A2BE2)',
@@ -1006,6 +727,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ color: '#4ade80' }}>✓</span>
                           <span style={{ color: '#fff', fontWeight: '500' }}>{asset.symbol}</span>
+                          <span style={{ color: '#4ade80', fontSize: '0.75rem' }}>Ready to bridge!</span>
                         </div>
                         <div style={{ color: '#4ade80', fontWeight: 'bold' }}>${formatNumber(asset.value)}</div>
                       </div>
@@ -1017,7 +739,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                 {nonUsdcAssets.map((asset, i) => {
                   const assetKey = `${asset.chainKey}-${asset.symbol}`;
                   const isSelected = selectedAssets.has(assetKey);
-                  const quote = quotes[assetKey];
+                  const estimatedUsdc = getEstimatedUsdc(asset);
 
                   return (
                     <div
@@ -1057,46 +779,23 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                           </div>
                           <div style={{ color: '#888', fontSize: '0.75rem' }}>
                             {formatNumber(asset.balance, 4)} • ${formatNumber(asset.price, 4)}
+                            {asset.isNative && (
+                              <span style={{ color: '#fbbf24', marginLeft: '5px' }}>
+                                (keep {GAS_RESERVE_PERCENT}% for gas)
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ color: '#fbbf24', fontWeight: 'bold' }}>${formatNumber(asset.value)}</div>
-                        {quote && (
-                          <div style={{ color: '#4ade80', fontSize: '0.75rem' }}>
-                            → ${formatNumber(quote.estimatedUsdc)} USDC
-                            {quote.isEstimate && ' ~'}
-                          </div>
-                        )}
+                        <div style={{ color: '#4ade80', fontSize: '0.75rem' }}>
+                          → ~${formatNumber(estimatedUsdc)} USDC
+                        </div>
                       </div>
                     </div>
                   );
                 })}
-
-                {/* Selected Summary for Chain */}
-                {selectedValue > 0 && (
-                  <div style={{
-                    marginTop: '10px', padding: '10px', borderRadius: '8px',
-                    background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.3)'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#FFD700', fontSize: '0.85rem' }}>
-                        ⚡ {selectedOnChain.length} selected: ~${formatNumber(selectedValue)} → USDC
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); fetchQuotesForSelected(); }}
-                        disabled={isQuoting}
-                        style={{
-                          padding: '5px 10px', borderRadius: '5px', border: 'none',
-                          background: 'rgba(255,255,255,0.1)', color: '#FFD700',
-                          cursor: 'pointer', fontSize: '0.75rem'
-                        }}
-                      >
-                        {isQuoting ? '...' : '🔄 Get Quotes'}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -1205,54 +904,132 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
         </div>
       )}
 
-      {/* Zap Results Modal */}
-      {zapResults.length > 0 && (
+      {/* Zap Queue Modal */}
+      {showZapModal && zapQueue.length > 0 && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: '20px'
         }}>
           <div style={{
             background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
-            borderRadius: '15px', padding: '25px', maxWidth: '500px', width: '100%',
-            border: '2px solid #FFD700', maxHeight: '80vh', overflow: 'auto'
+            borderRadius: '15px', padding: '25px', maxWidth: '450px', width: '100%',
+            border: '2px solid #FFD700'
           }}>
-            <h3 style={{ color: '#FFD700', marginBottom: '15px', textAlign: 'center' }}>⚡ Zap Results</h3>
-            
-            {zapResults.map((result, i) => (
-              <div key={i} style={{
-                padding: '10px', borderRadius: '8px', marginBottom: '8px',
-                background: result.success ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)',
-                border: `1px solid ${result.success ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#fff' }}>{result.asset.symbol}</span>
-                  <span style={{ color: result.success ? '#4ade80' : '#f87171' }}>
-                    {result.success ? '✓' : '✗'} {result.fallback ? 'Opened 1inch' : result.success ? `$${formatNumber(result.estimatedUsdc || result.asset.value)} USDC` : result.error?.slice(0, 30)}
-                  </span>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '10px' }}>
+                {zapQueue[currentZapIndex]?.useFusion ? '🔮' : '⚡'}
+              </div>
+              <h3 style={{ color: '#FFD700', margin: 0 }}>
+                {zapQueue[currentZapIndex]?.useFusion ? 'Gasless Fusion Swap' : 'Swap to USDC'}
+              </h3>
+              <div style={{ color: '#888', marginTop: '5px' }}>
+                {currentZapIndex + 1} of {zapQueue.length}
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div style={{ height: '6px', background: 'rgba(0,0,0,0.3)', borderRadius: '3px', marginBottom: '20px' }}>
+              <div style={{
+                height: '100%',
+                width: `${((currentZapIndex + 1) / zapQueue.length) * 100}%`,
+                background: zapQueue[currentZapIndex]?.useFusion 
+                  ? 'linear-gradient(90deg, #9370DB, #8A2BE2)' 
+                  : 'linear-gradient(90deg, #FFD700, #FFA500)',
+                borderRadius: '3px',
+                transition: 'width 0.3s'
+              }} />
+            </div>
+
+            {/* Current Asset */}
+            <div style={{
+              background: 'rgba(0,0,0,0.3)',
+              borderRadius: '10px',
+              padding: '15px',
+              marginBottom: '15px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                    {zapQueue[currentZapIndex]?.symbol}
+                    {zapQueue[currentZapIndex]?.isNative && (
+                      <span style={{ marginLeft: '8px', fontSize: '0.7rem', color: '#fbbf24' }}>
+                        (keep {GAS_RESERVE_PERCENT}% for gas)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ color: '#888', fontSize: '0.85rem' }}>
+                    on {zapQueue[currentZapIndex]?.chain}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: '#fbbf24', fontWeight: 'bold' }}>
+                    ${formatNumber(zapQueue[currentZapIndex]?.value || 0)}
+                  </div>
+                  <div style={{ color: '#4ade80', fontSize: '0.85rem' }}>
+                    → ~${formatNumber(getEstimatedUsdc(zapQueue[currentZapIndex] || {}))} USDC
+                  </div>
                 </div>
               </div>
-            ))}
-            
-            <button
-              onClick={() => setZapResults([])}
-              style={{
-                width: '100%', marginTop: '15px', padding: '12px',
-                borderRadius: '8px', border: 'none',
-                background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-                color: '#000', cursor: 'pointer', fontWeight: 'bold'
-              }}
-            >
-              Close
-            </button>
+            </div>
+
+            {/* Instructions */}
+            <div style={{
+              background: 'rgba(96,165,250,0.1)',
+              border: '1px solid rgba(96,165,250,0.3)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ color: '#60a5fa', fontSize: '0.85rem' }}>
+                <strong>Instructions:</strong>
+                <ol style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
+                  <li>Click "Open 1inch" to open the swap</li>
+                  <li>Adjust amount if needed (keep gas!)</li>
+                  <li>Review and confirm the swap</li>
+                  <li>Come back and click "Next" when done</li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => { setShowZapModal(false); setZapQueue([]); }}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: '8px',
+                  border: '1px solid #666', background: 'transparent',
+                  color: '#888', cursor: 'pointer', fontWeight: 'bold'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={openCurrentZap}
+                style={{
+                  flex: 2, padding: '12px', borderRadius: '8px', border: 'none',
+                  background: zapQueue[currentZapIndex]?.useFusion 
+                    ? 'linear-gradient(90deg, #9370DB, #8A2BE2)' 
+                    : 'linear-gradient(90deg, #FFD700, #FFA500)',
+                  color: zapQueue[currentZapIndex]?.useFusion ? '#fff' : '#000',
+                  cursor: 'pointer', fontWeight: 'bold'
+                }}
+              >
+                {zapQueue[currentZapIndex]?.useFusion ? '🔮 Open Fusion' : '⚡ Open 1inch'}
+              </button>
+              <button
+                onClick={nextZap}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+                  background: '#4ade80', color: '#000', cursor: 'pointer', fontWeight: 'bold'
+                }}
+              >
+                {currentZapIndex < zapQueue.length - 1 ? 'Next →' : 'Done ✓'}
+              </button>
+            </div>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .spin-emoji { display: inline-block; animation: spin 1s linear infinite; }
-      `}</style>
     </div>
   );
 };
