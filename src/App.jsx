@@ -3653,8 +3653,7 @@ export default function App() {
     "function buyTokenExactIn(address tokenAddress, uint256 minAmountOut) external payable"
   ];
   
-  // WPLS Contract (for direct unwrapping)
-  const WPLS_ADDRESS = "0xa1077a294dde1b09bb078844df40758a5d0f9a27";
+  // WPLS ABI (for direct unwrapping) - address defined below with other constants
   const WPLS_ABI = [
     "function withdraw(uint256 amount) external",
     "function deposit() external payable"
