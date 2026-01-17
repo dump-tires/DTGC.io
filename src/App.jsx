@@ -1218,7 +1218,7 @@ const getStyles = (isDark) => `
     .hero-stat-label { font-size: 0.6rem !important; }
     .nav-content { flex-direction: column; gap: 14px; }
     .nav-links { display: none; }
-    .main-content { padding: 0 10px 50px; }
+    .main-content { padding: 0 10px 140px; } /* Extra bottom padding for floating widgets on mobile */
     .mobile-menu-toggle { display: flex !important; }
     .section-title { font-size: 1.3rem !important; letter-spacing: 1px !important; }
     
@@ -3587,7 +3587,7 @@ export default function App() {
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState(null);
   
-  // URL-based tab routing - supports /saas, /stake, /burn, /vote, /whitepaper, /links, /analytics
+  // URL-based tab routing - supports /stake, /burn, /vote, /whitepaper, /links, /analytics
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
@@ -3595,13 +3595,13 @@ export default function App() {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
       
-      const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'saas'];
+      const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics'];
       
-      // Check URL param first: ?tab=saas
+      // Check URL param first: ?tab=stake
       if (tabParam && validTabs.includes(tabParam)) return tabParam;
-      // Check path: /saas
+      // Check path: /stake
       if (path && validTabs.includes(path)) return path;
-      // Check hash: #saas
+      // Check hash: #stake
       if (hash && validTabs.includes(hash)) return hash;
     }
     return 'stake';
@@ -4550,7 +4550,7 @@ export default function App() {
       } else {
         // Parse URL on popstate
         const path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
-        const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'saas'];
+        const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics'];
         if (path && validTabs.includes(path)) {
           setActiveTab(path);
         } else {
@@ -5286,13 +5286,28 @@ export default function App() {
         ethProvider = window.coinbaseWalletExtension;
       }
       
-      // For wallets like Rabby that can have multiple providers
-      if (window.ethereum.providers?.length) {
+      // For Rabby - it exposes isRabby flag directly on window.ethereum
+      if (walletType === 'rabby') {
+        // Rabby sets window.ethereum.isRabby = true
+        if (window.ethereum?.isRabby) {
+          ethProvider = window.ethereum;
+          console.log('🐰 Using Rabby wallet directly');
+        } else if (window.ethereum?.providers?.length) {
+          // Check providers array for Rabby
+          const rabbyProvider = window.ethereum.providers.find(p => p.isRabby);
+          if (rabbyProvider) {
+            ethProvider = rabbyProvider;
+            console.log('🐰 Found Rabby in providers array');
+          }
+        }
+      }
+      
+      // For wallets like MetaMask that can have multiple providers
+      if (window.ethereum.providers?.length && walletType !== 'rabby') {
         // Try to find the specific wallet provider
         const specificProvider = window.ethereum.providers.find(p => {
           if (walletType === 'metamask') return p.isMetaMask && !p.isRabby;
           if (walletType === 'coinbase') return p.isCoinbaseWallet;
-          if (walletType === 'rabby') return p.isRabby;
           return false;
         });
         if (specificProvider) {
@@ -5940,6 +5955,60 @@ export default function App() {
     const interval = setInterval(fetchMainnetBalances, 30000);
     return () => clearInterval(interval);
   }, [account, provider]);
+
+  // Wallet event listeners - for Rabby and other wallets that switch accounts/chains
+  useEffect(() => {
+    if (!window.ethereum) return;
+
+    // Handle account changes (user switches wallet in Rabby/MetaMask)
+    const handleAccountsChanged = async (accounts) => {
+      console.log('🔄 Accounts changed:', accounts);
+      if (accounts.length === 0) {
+        // User disconnected
+        disconnectWallet();
+      } else if (accounts[0] !== account) {
+        // User switched accounts
+        const newAccount = accounts[0];
+        try {
+          const newProvider = new ethers.BrowserProvider(window.ethereum);
+          const newSigner = await newProvider.getSigner();
+          setProvider(newProvider);
+          setSigner(newSigner);
+          setAccount(newAccount);
+          showToast(`Switched to ${newAccount.slice(0, 6)}...${newAccount.slice(-4)}`, 'info');
+        } catch (err) {
+          console.error('Error switching account:', err);
+        }
+      }
+    };
+
+    // Handle chain changes (user switches network in wallet)
+    const handleChainChanged = (chainIdHex) => {
+      const newChainId = parseInt(chainIdHex, 16);
+      console.log('🔄 Chain changed to:', newChainId);
+      if (newChainId !== CHAIN_ID && account) {
+        showToast('⚠️ Please switch back to PulseChain (369)', 'warning');
+      }
+      // Reload provider to ensure correct chain
+      if (account) {
+        const newProvider = new ethers.BrowserProvider(window.ethereum);
+        setProvider(newProvider);
+        newProvider.getSigner().then(setSigner).catch(console.error);
+      }
+    };
+
+    // Subscribe to wallet events
+    window.ethereum.on('accountsChanged', handleAccountsChanged);
+    window.ethereum.on('chainChanged', handleChainChanged);
+
+    // Cleanup
+    return () => {
+      if (window.ethereum?.removeListener) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum.removeListener('chainChanged', handleChainChanged);
+      }
+    };
+  }, [account]);
 
   const handleStake = async () => {
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) return;
@@ -8030,7 +8099,6 @@ export default function App() {
                 <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
                 <button className={activeTab === 'gold' ? 'active' : ''} onClick={() => { handleNavClick('gold'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'gold' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'gold' ? '#000' : '#D4AF37' }}>🏆 PulseX Gold</button>
                 <button className={activeTab === 'whitediamond' ? 'active' : ''} onClick={() => { handleNavClick('whitediamond'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'whitediamond' ? 'linear-gradient(135deg, #FFFFFF, #B8B8B8)' : 'rgba(255,255,255,0.1)', color: activeTab === 'whitediamond' ? '#000' : '#FFF' }}>💎 White Diamond</button>
-                <button className={activeTab === 'saas' ? 'active' : ''} onClick={() => { handleNavClick('saas'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'saas' ? 'linear-gradient(135deg, #4CAF50, #388E3C)' : 'rgba(76,175,80,0.15)', color: activeTab === 'saas' ? '#fff' : '#4CAF50' }}>🏭 SaaS Platform</button>
                 <button className={activeTab === 'dapperflex' ? 'active' : ''} onClick={() => { handleNavClick('dapperflex'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'dapperflex' ? 'linear-gradient(135deg, #FF69B4, #FFD700, #9370DB)' : 'rgba(255,105,180,0.15)', color: activeTab === 'dapperflex' ? '#000' : '#FF69B4' }}>⚡🌉 Zapper-X</button>
               </div>
             )}
@@ -8079,25 +8147,6 @@ export default function App() {
                 }}
               >
                 💎 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>White</span><span>Diamond</span></span>
-              </button>
-              <button 
-                className={`nav-link ${activeTab === 'saas' ? 'active' : ''}`} 
-                onClick={() => handleNavClick('saas')} 
-                style={{ 
-                  background: activeTab === 'saas' 
-                    ? 'linear-gradient(135deg, #4CAF50, #388E3C)' 
-                    : 'linear-gradient(135deg, rgba(76,175,80,0.15), rgba(76,175,80,0.05))',
-                  border: '1px solid rgba(76,175,80,0.4)',
-                  borderRadius: '8px',
-                  padding: '8px 16px',
-                  color: activeTab === 'saas' ? '#fff' : '#4CAF50',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                🏭 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>SaaS</span><span>Platform</span></span>
               </button>
               <button 
                 className={`nav-link ${activeTab === 'dapperflex' ? 'active' : ''}`} 
@@ -13412,11 +13461,6 @@ export default function App() {
             </section>
           )}
 
-          {/* SAAS TAB - White-Label Staking Platform */}
-          {activeTab === 'saas' && (
-            <PricingPage />
-          )}
-
           {/* ZAPPER-X-CHAIN TAB - Cross-Chain Dust Zapper + USDC Conversion */}
           {activeTab === 'dapperflex' && (
             <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -13474,7 +13518,6 @@ export default function App() {
             <button onClick={() => handleNavClick('vote')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>DAO Voting</button>
             <button onClick={() => handleNavClick('whitepaper')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>📄 Whitepaper</button>
             <button onClick={() => handleNavClick('gold')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#D4AF37' }}>🏆 PulseX Gold</button>
-            <button onClick={() => handleNavClick('saas')} className="footer-link" style={{ background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: '#4CAF50' }}>🏭 SaaS Platform</button>
             <a href="https://t.me/dtgoldcoin" target="_blank" rel="noopener noreferrer" className="footer-link">Telegram</a>
           </div>
           <div className="footer-divider" />

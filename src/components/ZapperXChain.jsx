@@ -366,18 +366,48 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     }
   };
 
-  // Detect wallet
+  // Detect wallet - with Rabby compatibility
   useEffect(() => {
     const detectWallet = async () => {
       if (propAddress) { setWalletAddress(propAddress); return; }
-      if (window.ethereum) {
+      
+      // Get best available provider (Rabby-aware)
+      let ethProvider = window.ethereum;
+      if (window.ethereum?.isRabby) {
+        ethProvider = window.ethereum;
+      } else if (window.ethereum?.providers?.length) {
+        const rabby = window.ethereum.providers.find(p => p.isRabby);
+        if (rabby) ethProvider = rabby;
+      }
+      
+      if (ethProvider) {
         try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          const accounts = await ethProvider.request({ method: 'eth_accounts' });
           if (accounts?.[0]) setWalletAddress(accounts[0]);
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Wallet detection error:', e);
+        }
       }
     };
     detectWallet();
+    
+    // Listen for account changes
+    const handleAccountsChanged = (accounts) => {
+      if (accounts?.[0]) {
+        setWalletAddress(accounts[0]);
+      } else {
+        setWalletAddress(null);
+      }
+    };
+    
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      return () => {
+        if (window.ethereum?.removeListener) {
+          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        }
+      };
+    }
   }, [propAddress]);
 
   // Fetch prices
@@ -501,13 +531,43 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     }
   };
 
-  // Switch network
+  // Switch network - with Rabby compatibility
   const switchNetwork = async (chainId) => {
-    if (!window.ethereum) throw new Error('No wallet');
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x' + chainId.toString(16) }]
-    });
+    // Get the best available provider (Rabby-aware)
+    let ethProvider = window.ethereum;
+    if (window.ethereum?.isRabby) {
+      ethProvider = window.ethereum;
+    } else if (window.ethereum?.providers?.length) {
+      const rabby = window.ethereum.providers.find(p => p.isRabby);
+      if (rabby) ethProvider = rabby;
+    }
+    
+    if (!ethProvider) throw new Error('No wallet');
+    
+    try {
+      await ethProvider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x' + chainId.toString(16) }]
+      });
+    } catch (switchError) {
+      // If chain not added, try to add it
+      if (switchError.code === 4902) {
+        const chainConfig = Object.values(CHAIN_CONFIG).find(c => c.chainId === chainId);
+        if (chainConfig) {
+          await ethProvider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x' + chainId.toString(16),
+              chainName: chainConfig.name,
+              nativeCurrency: { name: chainConfig.symbol, symbol: chainConfig.symbol, decimals: 18 },
+              rpcUrls: chainConfig.rpcs,
+            }]
+          });
+        }
+      } else {
+        throw switchError;
+      }
+    }
   };
 
   // Zap to USDC via 1inch
