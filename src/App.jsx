@@ -10102,16 +10102,16 @@ export default function App() {
 
                   {/* Liquidity Notice */}
                   <div style={{
-                    background: 'rgba(255,152,0,0.1)',
-                    border: '1px solid rgba(255,152,0,0.3)',
+                    background: 'rgba(76,175,80,0.1)',
+                    border: '1px solid rgba(76,175,80,0.3)',
                     borderRadius: '8px',
                     padding: '10px',
                     marginBottom: '16px',
                     fontSize: '0.7rem',
-                    color: '#FF9800',
+                    color: '#8BC34A',
                     textAlign: 'center',
                   }}>
-                    ⚠️ Liquidity Notice: If selected tokens lack liquidity, transaction may fail
+                    ✅ Smart Mode: Converts tokens with liquidity, skips others. You'll see a receipt showing what worked!
                   </div>
 
                   {/* Action Button */}
@@ -10129,6 +10129,10 @@ export default function App() {
                         let successCount = 0;
                         let failedTokens = [];
                         let convertedTokens = [];
+                        let totalPlsReceived = 0;
+                        
+                        // Get initial PLS balance to track received PLS
+                        const initialPlsBalance = await provider.getBalance(account);
                         
                         // Process each selected token
                         for (const [key, tokenData] of Object.entries(selectedFlexTokens)) {
@@ -10137,13 +10141,13 @@ export default function App() {
                           
                           try {
                             if (key === 'pls' || !tokenData?.address) {
-                              // Native PLS
+                              // Native PLS - direct zap
                               const amountWei = ethers.parseEther(amount.toString());
                               const tx = await dapper.zapPLS({ value: amountWei });
                               showToast(`⚡ Zapping ${amount.toFixed(2)} PLS...`, 'info');
                               await tx.wait();
                               successCount++;
-                              convertedTokens.push({ symbol: 'PLS', amount, valueUsd: amount * (livePrices.pls || 0.00003) });
+                              convertedTokens.push({ symbol: 'PLS', amount, valueUsd: amount * (livePrices.pls || 0.00003), plsReceived: amount });
                             } else {
                               // ERC20 Token - validate balance first
                               const tokenContract = new ethers.Contract(tokenData.address, [
@@ -10161,13 +10165,13 @@ export default function App() {
                                 actualBalance = await tokenContract.balanceOf(account);
                               } catch (balErr) {
                                 console.warn(`⚠️ Cannot read balance for ${tokenData.symbol}:`, balErr.message);
-                                failedTokens.push(`${tokenData.symbol} (invalid contract)`);
+                                failedTokens.push({ symbol: tokenData.symbol, reason: 'invalid contract', amount });
                                 continue;
                               }
                               
                               if (actualBalance < amountWei) {
                                 console.warn(`⚠️ ${tokenData.symbol}: Insufficient balance`);
-                                failedTokens.push(`${tokenData.symbol} (insufficient balance)`);
+                                failedTokens.push({ symbol: tokenData.symbol, reason: 'insufficient balance', amount });
                                 continue;
                               }
                               
@@ -10184,43 +10188,62 @@ export default function App() {
                                 await dapper.zapToken.staticCall(tokenData.address, amountWei);
                               } catch (simErr) {
                                 console.warn(`⚠️ ${tokenData.symbol}: No PLS liquidity on PulseX`);
-                                failedTokens.push(`${tokenData.symbol} (no liquidity)`);
+                                failedTokens.push({ symbol: tokenData.symbol, reason: 'no liquidity', amount, address: tokenData.address });
                                 continue;
                               }
+                              
+                              // Get PLS balance before this swap
+                              const plsBeforeSwap = await provider.getBalance(account);
                               
                               // Zap token
                               showToast(`⚡ Zapping ${amount.toFixed(4)} ${tokenData.symbol}...`, 'info');
                               const tx = await dapper.zapToken(tokenData.address, amountWei);
-                              await tx.wait();
+                              const receipt = await tx.wait();
+                              
+                              // Calculate PLS received from this swap (accounting for gas)
+                              const plsAfterSwap = await provider.getBalance(account);
+                              const gasUsed = receipt.gasUsed * receipt.gasPrice;
+                              const plsFromSwap = Number(ethers.formatEther(plsAfterSwap - plsBeforeSwap + gasUsed));
+                              
                               successCount++;
+                              totalPlsReceived += plsFromSwap;
                               convertedTokens.push({ 
                                 symbol: tokenData.symbol, 
                                 amount, 
                                 valueUsd: tokenData.valueUsd || (amount * (tokenData.price || 0)),
-                                address: tokenData.address
+                                address: tokenData.address,
+                                plsReceived: plsFromSwap
                               });
                             }
                           } catch (tokenErr) {
                             console.error(`❌ Failed to zap ${tokenData?.symbol || key}:`, tokenErr.message);
-                            failedTokens.push(`${tokenData?.symbol || key} (swap failed)`);
+                            failedTokens.push({ symbol: tokenData?.symbol || key, reason: 'swap failed', amount });
                           }
                         }
                         
-                        // Show conversion receipt
+                        // Calculate total PLS received from all successful swaps
+                        const totalPlsFromTokens = convertedTokens.reduce((sum, t) => sum + (t.plsReceived || 0), 0);
+                        
+                        // Show conversion receipt with detailed breakdown
                         if (convertedTokens.length > 0 || failedTokens.length > 0) {
                           setFlexConversionReceipt({
                             converted: convertedTokens,
                             failed: failedTokens,
+                            totalPlsReceived: totalPlsFromTokens,
+                            totalValueUsd: convertedTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0),
                             timestamp: Date.now()
                           });
                         }
                         
+                        // Show appropriate toast based on results
                         if (successCount === 0) {
-                          showToast('❌ No tokens could be zapped. Check PLS liquidity on PulseX.', 'error');
+                          showToast(`⚠️ ${failedTokens.length} token(s) couldn't be converted - see receipt for details`, 'warning');
                           return;
+                        } else if (failedTokens.length > 0) {
+                          showToast(`✅ ${successCount} token(s) zapped! ⚠️ ${failedTokens.length} skipped (no liquidity)`, 'info');
                         }
                         
-                        // Calculate totals for celebration
+                        // Calculate totals for celebration (only from successful conversions)
                         const totalValueUsd = convertedTokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0);
                         
                         const netValue = totalValueUsd * 0.99; // After 1% fee
@@ -10228,7 +10251,7 @@ export default function App() {
                         const walletValue = netValue - stakeValue;
                         const estLpTokens = stakeValue / ((livePrices.dtgc || 0.0002) * 2);
                         
-                        if (flexOutputMode === 'stake') {
+                        if (flexOutputMode === 'stake' && successCount > 0) {
                           const newFlexStake = {
                             id: Date.now(),
                             lpAmount: estLpTokens,
@@ -10238,14 +10261,17 @@ export default function App() {
                             stakePercent: flexStakePercent,
                             timestamp: Date.now(),
                             apr: 10,
+                            tokensConverted: successCount,
+                            tokensSkipped: failedTokens.length,
+                            totalPlsReceived: totalPlsFromTokens,
                           };
                           // Add to flex stakes
                           setFlexStakes(prev => [...prev, newFlexStake]);
                           // Show pink celebration popup
                           setFlexSuccess(newFlexStake);
                           showToast(`🎉 Flex LP Created! ${flexStakePercent}% staked at 10% APR!`, 'success');
-                        } else {
-                          showToast('✅ Converted to PLS in wallet!', 'success');
+                        } else if (successCount > 0) {
+                          showToast(`✅ ~${formatNumber(totalPlsFromTokens, 2)} PLS received!`, 'success');
                         }
                         setSelectedFlexTokens({});
                         scanWalletTokens(); // Refresh balances
@@ -10390,6 +10416,30 @@ export default function App() {
                         >×</button>
                       </div>
                       
+                      {/* Total PLS Received Summary */}
+                      {flexConversionReceipt.totalPlsReceived > 0 && (
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(76,175,80,0.2) 0%, rgba(139,195,74,0.1) 100%)',
+                          border: '1px solid rgba(76,175,80,0.4)',
+                          borderRadius: '10px',
+                          padding: '12px',
+                          marginBottom: '16px',
+                          textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>
+                            Total PLS Received
+                          </div>
+                          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#4CAF50' }}>
+                            ~{formatNumber(flexConversionReceipt.totalPlsReceived, 2)} PLS
+                          </div>
+                          {flexConversionReceipt.totalValueUsd > 0 && (
+                            <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
+                              ≈ ${formatNumber(flexConversionReceipt.totalValueUsd, 2)} value
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
                       {/* Converted Tokens */}
                       {flexConversionReceipt.converted.length > 0 && (
                         <div style={{ marginBottom: '16px' }}>
@@ -10429,7 +10479,9 @@ export default function App() {
                               </div>
                               <div style={{ textAlign: 'right' }}>
                                 <div style={{ color: '#fff', fontSize: '0.8rem' }}>{formatNumber(token.amount, 4)}</div>
-                                {token.valueUsd > 0 && <div style={{ color: '#4CAF50', fontSize: '0.65rem' }}>${formatNumber(token.valueUsd, 2)}</div>}
+                                {token.plsReceived > 0 && (
+                                  <div style={{ color: '#4CAF50', fontSize: '0.65rem' }}>→ {formatNumber(token.plsReceived, 2)} PLS</div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -10442,21 +10494,57 @@ export default function App() {
                           <div style={{ fontSize: '0.8rem', color: '#FF9800', fontWeight: 600, marginBottom: '8px' }}>
                             ⚠️ Could Not Convert ({flexConversionReceipt.failed.length})
                           </div>
-                          {flexConversionReceipt.failed.map((reason, i) => (
+                          {flexConversionReceipt.failed.map((token, i) => (
                             <div key={i} style={{ 
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
                               padding: '6px 10px', 
                               background: 'rgba(255,152,0,0.1)', 
                               borderRadius: '6px',
                               marginBottom: '4px',
                               border: '1px solid rgba(255,152,0,0.2)',
-                              fontSize: '0.75rem',
-                              color: '#FF9800'
                             }}>
-                              {reason}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: '#FF9800', fontWeight: 600, fontSize: '0.75rem' }}>{token.symbol || token}</span>
+                                {token.address && (
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(token.address);
+                                      showToast('📋 Address copied!', 'success');
+                                    }}
+                                    style={{
+                                      padding: '2px 4px',
+                                      background: 'rgba(255,255,255,0.1)',
+                                      border: '1px solid rgba(255,255,255,0.2)',
+                                      borderRadius: '3px',
+                                      color: 'rgba(255,255,255,0.5)',
+                                      fontSize: '0.5rem',
+                                      cursor: 'pointer',
+                                    }}
+                                  >📋</button>
+                                )}
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ 
+                                  fontSize: '0.65rem', 
+                                  color: token.reason === 'no liquidity' ? '#FF5722' : 
+                                         token.reason === 'insufficient balance' ? '#9E9E9E' : '#FF9800',
+                                  padding: '2px 6px',
+                                  background: 'rgba(0,0,0,0.2)',
+                                  borderRadius: '4px',
+                                }}>
+                                  {token.reason === 'no liquidity' ? '🚫 No PLS Pair' :
+                                   token.reason === 'insufficient balance' ? '💰 Low Balance' :
+                                   token.reason === 'invalid contract' ? '⛔ Invalid' :
+                                   token.reason === 'swap failed' ? '❌ Swap Error' :
+                                   token.reason || 'Unknown'}
+                                </div>
+                              </div>
                             </div>
                           ))}
                           <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', marginTop: '8px' }}>
-                            💡 These tokens likely lack PLS liquidity on PulseX. They may be PRC20 copies without trading pairs.
+                            💡 "No PLS Pair" = These tokens don't have a trading pair on PulseX (likely PRC20 copies or dead tokens)
                           </div>
                         </div>
                       )}
