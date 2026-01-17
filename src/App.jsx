@@ -3653,6 +3653,13 @@ export default function App() {
     "function buyTokenExactIn(address tokenAddress, uint256 minAmountOut) external payable"
   ];
   
+  // WPLS Contract (for direct unwrapping)
+  const WPLS_ADDRESS = "0xa1077a294dde1b09bb078844df40758a5d0f9a27";
+  const WPLS_ABI = [
+    "function withdraw(uint256 amount) external",
+    "function deposit() external payable"
+  ];
+  
   // Known tokens (always show these + any found in wallet)
   const KNOWN_TOKENS = [
     { symbol: 'PLS', name: 'PulseChain', address: null, decimals: 18, icon: '💜', color: '#E1BEE7' },
@@ -10151,6 +10158,34 @@ export default function App() {
                               await tx.wait();
                               successCount++;
                               convertedTokens.push({ symbol: 'PLS', amount, valueUsd: amount * (livePrices.pls || 0.00003) });
+                            } else if (tokenData.address?.toLowerCase() === WPLS_ADDRESS.toLowerCase()) {
+                              // Special handling for WPLS - just unwrap to native PLS
+                              const wplsContract = new ethers.Contract(WPLS_ADDRESS, [
+                                'function withdraw(uint256 amount) external',
+                                'function balanceOf(address account) view returns (uint256)',
+                              ], signer);
+                              
+                              const amountWei = ethers.parseUnits(amount.toString(), 18);
+                              
+                              // Validate balance
+                              const wplsBalance = await wplsContract.balanceOf(account);
+                              if (wplsBalance < amountWei) {
+                                console.warn(`⚠️ WPLS: Insufficient balance`);
+                                failedTokens.push(`WPLS (insufficient balance)`);
+                                continue;
+                              }
+                              
+                              showToast(`💜 Unwrapping ${amount.toFixed(2)} WPLS to PLS...`, 'info');
+                              const tx = await wplsContract.withdraw(amountWei);
+                              await tx.wait();
+                              successCount++;
+                              convertedTokens.push({ 
+                                symbol: 'WPLS', 
+                                amount, 
+                                valueUsd: amount * (livePrices.pls || 0.00003),
+                                source: 'Unwrap',
+                                plsReceived: amount
+                              });
                             } else {
                               // ERC20 Token - validate balance first
                               const tokenContract = new ethers.Contract(tokenData.address, [
@@ -10191,12 +10226,13 @@ export default function App() {
                                 // Try pump.tires V1 bonding curve as fallback
                                 try {
                                   const pumpTires = new ethers.Contract(PUMP_TIRES_ADDRESS, PUMP_TIRES_ABI, signer);
-                                  // Simulate sell with 5% slippage (minAmountOut = 0 for simulation)
+                                  // Simulate sell with 0 minAmountOut for simulation
                                   await pumpTires.sellToken.staticCall(tokenData.address, amountWei, 0);
                                   swapMethod = 'pumptires';
-                                  console.log(`✅ ${tokenData.symbol}: Found pump.tires V1 liquidity!`);
+                                  console.log(`✅ ${tokenData.symbol}: Found pump.tires liquidity!`);
                                 } catch (pumpErr) {
-                                  console.warn(`⚠️ ${tokenData.symbol}: No liquidity on PulseX or pump.tires`);
+                                  // Token doesn't exist on pump.tires either
+                                  console.warn(`⚠️ ${tokenData.symbol}: No liquidity anywhere (PulseX + pump.tires checked)`);
                                   failedTokens.push(`${tokenData.symbol} (no liquidity)`);
                                   continue;
                                 }
@@ -10461,11 +10497,15 @@ export default function App() {
                               padding: '8px 10px', 
                               background: token.source === 'pump.tires' 
                                 ? 'linear-gradient(135deg, rgba(255,152,0,0.15) 0%, rgba(76,175,80,0.1) 100%)'
+                                : token.source === 'Unwrap'
+                                ? 'linear-gradient(135deg, rgba(156,39,176,0.15) 0%, rgba(76,175,80,0.1) 100%)'
                                 : 'rgba(76,175,80,0.1)', 
                               borderRadius: '6px',
                               marginBottom: '4px',
                               border: token.source === 'pump.tires'
                                 ? '1px solid rgba(255,152,0,0.3)'
+                                : token.source === 'Unwrap'
+                                ? '1px solid rgba(156,39,176,0.3)'
                                 : '1px solid rgba(76,175,80,0.2)'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -10477,11 +10517,17 @@ export default function App() {
                                     borderRadius: '4px',
                                     background: token.source === 'pump.tires' 
                                       ? 'rgba(255,152,0,0.3)' 
+                                      : token.source === 'Unwrap'
+                                      ? 'rgba(156,39,176,0.3)'
                                       : 'rgba(76,175,80,0.3)',
-                                    color: token.source === 'pump.tires' ? '#FF9800' : '#4CAF50',
+                                    color: token.source === 'pump.tires' ? '#FF9800' 
+                                      : token.source === 'Unwrap' ? '#CE93D8'
+                                      : '#4CAF50',
                                     fontWeight: 600
                                   }}>
-                                    {token.source === 'pump.tires' ? '🛞 pump.tires' : '💚 PulseX'}
+                                    {token.source === 'pump.tires' ? '🛞 pump.tires' 
+                                      : token.source === 'Unwrap' ? '💜 Unwrap'
+                                      : '💚 PulseX'}
                                   </span>
                                 )}
                                 {token.address && (
