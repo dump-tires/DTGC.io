@@ -10669,10 +10669,10 @@ export default function App() {
 
                   {/* Fee Info */}
                   <div className="fee-breakdown" style={{ marginTop: '16px' }}>
-                    <div className="fee-title" style={{ color: '#FF1493' }}>
-                      FLEX FEES 
-                      <a href="/docs/DapperFlexPinkPaper.docx" download style={{ fontSize: '0.7rem', color: '#FF69B4', marginLeft: '8px' }}>
-                        📄 Pink Paper
+                    <div className="fee-title" style={{ color: '#FFD700' }}>
+                      ZAPPER FEES 
+                      <a href="/docs/ZapperXChain_Whitepaper.docx" download style={{ fontSize: '0.7rem', color: '#FFD700', marginLeft: '8px' }}>
+                        📄 Whitepaper
                       </a>
                     </div>
                     <div className="fee-row"><span>Entry Fee</span><span style={{color: '#FFD700'}}>1%</span></div>
@@ -11816,7 +11816,7 @@ export default function App() {
                 <h2 className="section-title gold-text">WHITEPAPER</h2>
                 <p style={{ fontSize: '0.75rem', color: '#4CAF50', marginBottom: '8px', fontWeight: 600 }}>📋 V4 Contract Documentation</p>
                 <div className="section-divider" />
-                <p className="section-description">DT Gold Coin • V4 Unlimited Multi-Stake Protocol on PulseChain</p>
+                <p className="section-description">Dynamic Trading Gold Coin • V4 Unlimited Multi-Stake Protocol on PulseChain</p>
               </div>
 
               {/* DOCUMENT DOWNLOADS */}
@@ -11882,17 +11882,18 @@ export default function App() {
                     <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px'}}>📥 Download .docx</div>
                   </div>
                 </a>
-                <a href="/docs/DapperFlexPinkPaper.docx" download style={{
+                <a href="/docs/ZapperXChain_Whitepaper.docx" download style={{
                   display: "flex", alignItems: "center", gap: "12px", padding: "16px",
-                  background: "var(--card-bg)", borderRadius: "12px",
+                  background: "linear-gradient(135deg, rgba(255,215,0,0.1) 0%, rgba(80,200,120,0.15) 100%)",
+                  borderRadius: "12px",
                   textDecoration: "none", color: "inherit",
-                  border: "1px solid rgba(255,20,147,0.3)",
+                  border: "2px solid rgba(255,215,0,0.4)",
                   transition: "all 0.3s ease",
                 }}>
-                  <span style={{fontSize: "2.5rem"}}>💎⚡</span>
+                  <span style={{fontSize: "2.5rem"}}>⚡🌉</span>
                   <div>
-                    <div style={{fontFamily: "Cinzel, serif", fontWeight: 700, color: "#FF1493", fontSize: "1.1rem"}}>DAPPER PINK PAPER</div>
-                    <div style={{fontSize: "0.8rem", color: "var(--text-secondary)"}}>Flex Protocol • One-Click LP Zapper</div>
+                    <div style={{fontFamily: "Cinzel, serif", fontWeight: 700, color: "#FFD700", fontSize: "1.1rem"}}>ZAPPER X-CHAIN PAPER</div>
+                    <div style={{fontSize: "0.8rem", color: "var(--text-secondary)"}}>Cross-Chain Dust Consolidation Protocol</div>
                     <div style={{fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "4px"}}>📥 Download .docx</div>
                   </div>
                 </a>
@@ -11901,7 +11902,7 @@ export default function App() {
               <div className="wp-card">
                 <h3 className="wp-card-title gold-text">📜 Introduction</h3>
                 <div className="wp-card-content">
-                  <p>DT Gold Coin (DTGC) is a premium V4 staking protocol built on PulseChain, featuring <strong>unlimited multi-stake positions</strong> — the first of its kind on PulseChain! Stack multiple stakes across all tiers simultaneously while earning rewards on each position.</p>
+                  <p>Dynamic Trading Gold Coin (DTGC) is a premium V4 staking protocol built on PulseChain, featuring <strong>unlimited multi-stake positions</strong> — the first of its kind on PulseChain! Stack multiple stakes across all tiers simultaneously while earning rewards on each position.</p>
                   <p>Paired with URMOM token, DTGC creates a dual-token ecosystem with Diamond+ LP staking offering up to 70% APR. The V4 contracts enable claim-without-unstaking, allowing rewards harvesting while positions continue growing.</p>
                 </div>
               </div>
