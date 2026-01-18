@@ -24,8 +24,8 @@ const CONFIG = {
   DTGC_CONTRACT: '0xd0676b28a457371d58d47e5247b439114e40eb0f',
   
   // API endpoints (update after deploying Lambdas)
-  GE_STATS_API: 'https://YOUR_GE_STATS_LAMBDA_URL',
-  ARB_SIGNAL_API: 'https://YOUR_ARB_LAMBDA_URL',
+  GE_STATS_API: 'https://iwnaatxjwerbpg7jtslldoxeqm0msvdt.lambda-url.us-east-2.on.aws',
+  ARB_SIGNAL_API: 'https://iwnaatxjwerbpg7jtslldoxeqm0msvdt.lambda-url.us-east-2.on.aws',
   
   // DexScreener
   DEXSCREENER: {
