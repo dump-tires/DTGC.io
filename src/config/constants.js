@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 //                    DTGC STAKING - CONSTANTS
-//                         dump.tires
+//                         DTGC.io
 // ═══════════════════════════════════════════════════════════════
 
 // Network
@@ -29,7 +29,7 @@ export const TOKENS = {
     address: '0xD0676B28a457371D58d47E5247b439114e40Eb0F',
     decimals: 18,
     symbol: 'DTGC',
-    name: 'DT Gold Coin',
+    name: 'Dynamic Trading Gold Coin',
   },
   URMOM: {
     address: '0xe43b3cEE3554e120213b8B69Caf690B6C04A7ec0',

@@ -3595,7 +3595,7 @@ export default function App() {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
       
-      const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics'];
+      const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'gold', 'whitediamond', 'zapperx'];
       
       // Check URL param first: ?tab=stake
       if (tabParam && validTabs.includes(tabParam)) return tabParam;
@@ -4550,7 +4550,7 @@ export default function App() {
       } else {
         // Parse URL on popstate
         const path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
-        const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics'];
+        const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'gold', 'whitediamond', 'zapperx'];
         if (path && validTabs.includes(path)) {
           setActiveTab(path);
         } else {
@@ -8099,7 +8099,7 @@ export default function App() {
                 <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { handleNavClick('analytics'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'analytics' ? 'linear-gradient(135deg, #2196F3, #1976D2)' : '' }}>📊 Analytics</button>
                 <button className={activeTab === 'gold' ? 'active' : ''} onClick={() => { handleNavClick('gold'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'gold' ? 'linear-gradient(135deg, #D4AF37, #B8860B)' : 'rgba(212,175,55,0.15)', color: activeTab === 'gold' ? '#000' : '#D4AF37' }}>🏆 PulseX Gold</button>
                 <button className={activeTab === 'whitediamond' ? 'active' : ''} onClick={() => { handleNavClick('whitediamond'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'whitediamond' ? 'linear-gradient(135deg, #FFFFFF, #B8B8B8)' : 'rgba(255,255,255,0.1)', color: activeTab === 'whitediamond' ? '#000' : '#FFF' }}>💎 White Diamond</button>
-                <button className={activeTab === 'dapperflex' ? 'active' : ''} onClick={() => { handleNavClick('dapperflex'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'dapperflex' ? 'linear-gradient(135deg, #FF69B4, #FFD700, #9370DB)' : 'rgba(255,105,180,0.15)', color: activeTab === 'dapperflex' ? '#000' : '#FF69B4' }}>⚡🌉 Zapper-X</button>
+                <button className={activeTab === 'zapperx' ? 'active' : ''} onClick={() => { handleNavClick('zapperx'); setMobileMenuOpen(false); }} style={{ background: activeTab === 'zapperx' ? 'linear-gradient(135deg, #FF69B4, #FFD700, #9370DB)' : 'rgba(255,105,180,0.15)', color: activeTab === 'zapperx' ? '#000' : '#FF69B4' }}>⚡🌉 Zapper-X</button>
               </div>
             )}
 
@@ -8149,16 +8149,16 @@ export default function App() {
                 💎 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, fontSize: '0.7rem' }}><span>White</span><span>Diamond</span></span>
               </button>
               <button 
-                className={`nav-link ${activeTab === 'dapperflex' ? 'active' : ''}`} 
-                onClick={() => handleNavClick('dapperflex')} 
+                className={`nav-link ${activeTab === 'zapperx' ? 'active' : ''}`} 
+                onClick={() => handleNavClick('zapperx')} 
                 style={{ 
-                  background: activeTab === 'dapperflex' 
+                  background: activeTab === 'zapperx' 
                     ? 'linear-gradient(135deg, #FF69B4, #FFD700, #9370DB)' 
                     : 'linear-gradient(135deg, rgba(255,105,180,0.15), rgba(255,215,0,0.05))',
                   border: '1px solid rgba(255,105,180,0.4)',
                   borderRadius: '8px',
                   padding: '8px 16px',
-                  color: activeTab === 'dapperflex' ? '#000' : '#FF69B4',
+                  color: activeTab === 'zapperx' ? '#000' : '#FF69B4',
                   fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
@@ -13462,7 +13462,7 @@ export default function App() {
           )}
 
           {/* ZAPPER-X-CHAIN TAB - Cross-Chain Dust Zapper + USDC Conversion */}
-          {activeTab === 'dapperflex' && (
+          {activeTab === 'zapperx' && (
             <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
               <ZapperXChain 
                 connectedAddress={account}
