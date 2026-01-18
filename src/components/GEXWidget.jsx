@@ -30,7 +30,7 @@ const CONFIG = {
   // DexScreener
   DEXSCREENER: {
     HEX_ETH: 'https://api.dexscreener.com/latest/dex/pairs/ethereum/0x69d91b94f0aaf8e8a2586909fa77a5c2c89818d5',
-    HEX_PLS: 'https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xf1f4ee610b2babb05c635f726ef8b0c568c8dc65',
+    HEX_PLS: 'https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xf0ea3efe42c11c8819948ec2d3179f4084863d3f',
     DTGC: 'https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
   },
   
