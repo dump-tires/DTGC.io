@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 
 // ============================================
-// ZAPPER-X-CHAIN V7.1 - MAXIMUM TOKEN COVERAGE
+// ZAPPER-X-CHAIN - MAXIMUM TOKEN COVERAGE
 // CoinGecko API Integration for 15,000+ tokens
 // Adjustable amounts, Direct DEX swaps, Liberty Bridge
 // Fee Wallet: 0x1449a7d9973e6215534d785e3e306261156eb610
@@ -965,7 +965,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           fontSize: '2rem',
           textShadow: '0 0 10px rgba(255, 215, 0, 0.5)'
         }}>
-          ⚡ Zapper-X-Chain V7.1 ⚡
+          ⚡ ZAPPER-X-CHAIN ⚡
         </h1>
         <p style={{ color: '#aaa', marginBottom: '15px' }}>
           Maximum Token Coverage • Scan up to 18,500 tokens across 7 chains
@@ -1027,7 +1027,27 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           </div>
         )}
         
-        <div style={{ marginTop: '15px' }}>
+        <div style={{ marginTop: '15px', display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => { 
+              alert('🔬 Scanning Vitalik\'s wallet (0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)...\n\nThis is a demo to show how the scanner works!'); 
+              scanAllChains('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'); 
+            }}
+            disabled={isScanning}
+            style={{
+              padding: '15px 25px',
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              borderRadius: '25px',
+              border: '2px solid #666',
+              background: 'rgba(0,0,0,0.5)',
+              color: '#888',
+              cursor: isScanning ? 'not-allowed' : 'pointer',
+              transition: 'transform 0.2s'
+            }}
+          >
+            🧪 Test Vitalik
+          </button>
           <button
             onClick={() => scanAllChains()}
             disabled={isScanning}
