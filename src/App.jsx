@@ -3665,7 +3665,7 @@ export default function App() {
   const KNOWN_TOKENS = [
     { symbol: 'PLS', name: 'PulseChain', address: null, decimals: 18, icon: '💜', color: '#E1BEE7' },
     { symbol: 'WPLS', name: 'Wrapped PLS', address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27', decimals: 18, icon: '💜', color: '#E1BEE7' },
-    { symbol: 'DTGC', name: 'DT Gold Coin', address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', decimals: 18, icon: '🪙', color: '#FFD700' },
+    { symbol: 'DTGC', name: 'Dynamic Trading Gold Coin', address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', decimals: 18, icon: '🪙', color: '#FFD700' },
     { symbol: 'URMOM', name: 'URMOM', address: '0x636cc7d7c76298cde00025370461c59c0b2ef896', decimals: 18, icon: '🔥', color: '#FF9800' },
     { symbol: 'PLSX', name: 'PulseX', address: '0x95b303987a60c71504d99aa1b13b4da07b0790ab', decimals: 18, icon: '🔷', color: '#00BCD4' },
     { symbol: 'HEX', name: 'HEX', address: '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39', decimals: 8, icon: '⬡', color: '#FF00FF' },
@@ -9508,7 +9508,7 @@ export default function App() {
                 >
                   <div className="tier-icon" style={{ fontSize: '2.5rem' }}>💗⚡</div>
                   <div className="tier-name" style={{ color: '#FF1493' }}>FLEX</div>
-                  <div className="tier-subtitle" style={{ color: '#FF69B4' }}>ZAPPER-X-CHAIN • DUST TO USDC!</div>
+                  <div className="tier-subtitle" style={{ color: '#FF69B4' }}>PULSECHAIN COIN CLEAN • NO LOCK!</div>
                   <div className="tier-min-invest" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
                     Requires $300+ Diamond/Diamond+
                   </div>
@@ -9788,13 +9788,13 @@ export default function App() {
                   maxWidth: '500px',
                 }}>
                   <h3 className="panel-title" style={{ color: '#FF1493' }}>
-                    ⚡🌉 ZAPPER-X-CHAIN
+                    ⚡💗 FLEX COIN ZAPPER
                   </h3>
                   <p style={{ fontSize: '0.8rem', color: '#FF69B4', marginBottom: '8px', textAlign: 'center' }}>
-                    Select tokens to zap → DTGC/PLS LP • 10% APR • No Lock
+                    PulseChain tokens → DTGC/PLS LP • 10% APR • No Lock
                   </p>
                   <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', marginBottom: '16px', textAlign: 'center' }}>
-                    🔍 Scanner finds ALL tokens including pump.tires & PulseX pairs
+                    🔍 Scanner finds ALL PulseChain tokens including pump.tires & PulseX pairs
                   </p>
 
                   {/* Search/Filter */}
