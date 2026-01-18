@@ -1,3 +1,4 @@
+import GEXWidget from "./components/GEXWidget";
 import DapperComponent from './components/DapperComponent';
 import ZapperXChain from './components/ZapperXChain';
 import PricingPage from './pages/PricingPage';
