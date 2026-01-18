@@ -2,13 +2,29 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 
 // ============================================
-// ZAPPER-X-CHAIN - Full In-App Experience
+// ZAPPER-X-CHAIN V7.1 - MAXIMUM TOKEN COVERAGE
+// CoinGecko API Integration for 15,000+ tokens
 // Adjustable amounts, Direct DEX swaps, Liberty Bridge
 // Fee Wallet: 0x1449a7d9973e6215534d785e3e306261156eb610
 // ============================================
 
 const FEE_WALLET = '0x1449a7d9973e6215534d785e3e306261156eb610';
 const DEFAULT_GAS_RESERVE_PERCENT = 15;
+
+// ============================================
+// TOKEN SCANNING CONFIG - V7 MAXIMUM COVERAGE
+// ============================================
+const TOKEN_SCAN_CONFIG = {
+  ethereum: { maxTokens: 5000, coingeckoPlatform: 'ethereum' },
+  bsc: { maxTokens: 4000, coingeckoPlatform: 'binance-smart-chain' },
+  polygon: { maxTokens: 3000, coingeckoPlatform: 'polygon-pos' },
+  arbitrum: { maxTokens: 2000, coingeckoPlatform: 'arbitrum-one' },
+  optimism: { maxTokens: 1500, coingeckoPlatform: 'optimistic-ethereum' },
+  base: { maxTokens: 1500, coingeckoPlatform: 'base' },
+  avalanche: { maxTokens: 1500, coingeckoPlatform: 'avalanche' },
+};
+
+// Total: 18,500 potential tokens scanned
 
 // USDC addresses per chain
 const USDC_ADDRESSES = {
@@ -56,7 +72,8 @@ const CHAIN_CONFIG = {
   ethereum: {
     name: 'Ethereum', chainId: 1, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#627EEA',
     rpcs: ['https://eth.llamarpc.com', 'https://ethereum.publicnode.com', 'https://1rpc.io/eth'],
-    tokens: [
+    // Fallback tokens if CoinGecko unavailable
+    fallbackTokens: [
       { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'WETH', address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18, coingeckoId: 'ethereum' },
@@ -66,12 +83,17 @@ const CHAIN_CONFIG = {
       { symbol: 'UNI', address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', decimals: 18, coingeckoId: 'uniswap' },
       { symbol: 'SHIB', address: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE', decimals: 18, coingeckoId: 'shiba-inu' },
       { symbol: 'PEPE', address: '0x6982508145454Ce325dDbE47a25d4ec3d2311933', decimals: 18, coingeckoId: 'pepe' },
+      { symbol: 'AAVE', address: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', decimals: 18, coingeckoId: 'aave' },
+      { symbol: 'MKR', address: '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', decimals: 18, coingeckoId: 'maker' },
+      { symbol: 'CRV', address: '0xD533a949740bb3306d119CC777fa900bA034cd52', decimals: 18, coingeckoId: 'curve-dao-token' },
+      { symbol: 'LDO', address: '0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32', decimals: 18, coingeckoId: 'lido-dao' },
+      { symbol: 'APE', address: '0x4d224452801ACEd8B2F0aebE155379bb5D594381', decimals: 18, coingeckoId: 'apecoin' },
     ]
   },
   bsc: {
     name: 'BNB Chain', chainId: 56, symbol: 'BNB', decimals: 18, coingeckoId: 'binancecoin', color: '#F3BA2F',
     rpcs: ['https://bsc-dataseed.binance.org', 'https://bsc-dataseed1.binance.org'],
-    tokens: [
+    fallbackTokens: [
       { symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18, coingeckoId: 'usd-coin' },
       { symbol: 'BUSD', address: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', decimals: 18, coingeckoId: 'binance-usd' },
@@ -82,7 +104,7 @@ const CHAIN_CONFIG = {
   polygon: {
     name: 'Polygon', chainId: 137, symbol: 'MATIC', decimals: 18, coingeckoId: 'matic-network', color: '#8247E5',
     rpcs: ['https://polygon-rpc.com', 'https://polygon.llamarpc.com'],
-    tokens: [
+    fallbackTokens: [
       { symbol: 'USDT', address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDC.e', address: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', decimals: 6, coingeckoId: 'usd-coin' },
@@ -93,7 +115,7 @@ const CHAIN_CONFIG = {
   arbitrum: {
     name: 'Arbitrum', chainId: 42161, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#28A0F0',
     rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com'],
-    tokens: [
+    fallbackTokens: [
       { symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDC.e', address: '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDT', address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', decimals: 6, coingeckoId: 'tether' },
@@ -104,7 +126,7 @@ const CHAIN_CONFIG = {
   optimism: {
     name: 'Optimism', chainId: 10, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#FF0420',
     rpcs: ['https://mainnet.optimism.io', 'https://optimism.llamarpc.com'],
-    tokens: [
+    fallbackTokens: [
       { symbol: 'USDC', address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDT', address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'OP', address: '0x4200000000000000000000000000000000000042', decimals: 18, coingeckoId: 'optimism' },
@@ -113,7 +135,7 @@ const CHAIN_CONFIG = {
   base: {
     name: 'Base', chainId: 8453, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#0052FF',
     rpcs: ['https://base.llamarpc.com', 'https://base.publicnode.com'],
-    tokens: [
+    fallbackTokens: [
       { symbol: 'USDC', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDbC', address: '0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'AERO', address: '0x940181a94A35A4569E4529A3CDfB74e38FD98631', decimals: 18, coingeckoId: 'aerodrome-finance' },
@@ -122,7 +144,7 @@ const CHAIN_CONFIG = {
   avalanche: {
     name: 'Avalanche', chainId: 43114, symbol: 'AVAX', decimals: 18, coingeckoId: 'avalanche-2', color: '#E84142',
     rpcs: ['https://api.avax.network/ext/bc/C/rpc', 'https://avalanche.public-rpc.com'],
-    tokens: [
+    fallbackTokens: [
       { symbol: 'USDC', address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDT', address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'JOE', address: '0x6e84a6216eA6dACC71eE8E6b0a5B7322EEbC0fDd', decimals: 18, coingeckoId: 'joe' },
@@ -136,6 +158,7 @@ const ERC20_ABI = [
   'function allowance(address owner, address spender) external view returns (uint256)',
   'function balanceOf(address account) external view returns (uint256)',
   'function decimals() external view returns (uint8)',
+  'function symbol() external view returns (string)',
 ];
 
 const SWAP_ROUTER_ABI = [
@@ -177,7 +200,164 @@ const tryRpcs = async (rpcs, method, params) => {
   throw new Error('All RPCs failed');
 };
 
+// Batch RPC call for efficiency
+const batchRpcCall = async (rpcUrl, calls) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  try {
+    const body = calls.map((call, idx) => ({
+      jsonrpc: '2.0',
+      id: idx + 1,
+      method: call.method,
+      params: call.params
+    }));
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const results = await response.json();
+    return Array.isArray(results) ? results : [results];
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+};
+
 const BALANCE_OF_SELECTOR = '0x70a08231';
+
+// ============================================
+// COINGECKO TOKEN LIST FETCHER
+// ============================================
+const tokenListCache = {};
+
+const fetchCoinGeckoTokenList = async (chainKey) => {
+  const config = TOKEN_SCAN_CONFIG[chainKey];
+  if (!config) return [];
+  
+  // Check cache
+  const cacheKey = `${chainKey}_tokens`;
+  if (tokenListCache[cacheKey] && Date.now() - tokenListCache[cacheKey].timestamp < 3600000) {
+    return tokenListCache[cacheKey].tokens;
+  }
+  
+  try {
+    // Fetch token list from CoinGecko
+    const platform = config.coingeckoPlatform;
+    const maxTokens = config.maxTokens;
+    
+    // CoinGecko's coin list with platform addresses
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&category=${platform === 'ethereum' ? '' : platform}`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!response.ok) {
+      console.log(`CoinGecko API error for ${chainKey}, using fallback`);
+      return CHAIN_CONFIG[chainKey].fallbackTokens || [];
+    }
+    
+    const coins = await response.json();
+    
+    // Now fetch addresses for these coins
+    const tokenList = [];
+    
+    // Fetch in batches of 50
+    for (let i = 0; i < Math.min(coins.length, 50); i++) {
+      const coin = coins[i];
+      if (coin.id) {
+        try {
+          const detailResponse = await fetch(
+            `https://api.coingecko.com/api/v3/coins/${coin.id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`,
+            { headers: { 'Accept': 'application/json' } }
+          );
+          
+          if (detailResponse.ok) {
+            const detail = await detailResponse.json();
+            const address = detail.platforms?.[platform];
+            
+            if (address && address.startsWith('0x')) {
+              tokenList.push({
+                symbol: detail.symbol?.toUpperCase() || coin.symbol?.toUpperCase(),
+                address: address,
+                decimals: detail.detail_platforms?.[platform]?.decimal_place || 18,
+                coingeckoId: coin.id,
+                price: coin.current_price || 0,
+                marketCap: coin.market_cap || 0,
+              });
+            }
+          }
+          
+          // Rate limit protection
+          await new Promise(r => setTimeout(r, 100));
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    
+    // Cache results
+    tokenListCache[cacheKey] = { tokens: tokenList, timestamp: Date.now() };
+    
+    return tokenList;
+  } catch (error) {
+    console.log(`Failed to fetch CoinGecko list for ${chainKey}:`, error);
+    return CHAIN_CONFIG[chainKey].fallbackTokens || [];
+  }
+};
+
+// Alternative: Fetch from token list aggregators (faster)
+const fetchTokenListFromAggregator = async (chainKey) => {
+  const chainId = CHAIN_CONFIG[chainKey]?.chainId;
+  if (!chainId) return [];
+  
+  // Token list URLs by chain
+  const tokenListUrls = {
+    1: 'https://tokens.coingecko.com/ethereum/all.json',
+    56: 'https://tokens.coingecko.com/binance-smart-chain/all.json',
+    137: 'https://tokens.coingecko.com/polygon-pos/all.json',
+    42161: 'https://tokens.coingecko.com/arbitrum-one/all.json',
+    10: 'https://tokens.coingecko.com/optimistic-ethereum/all.json',
+    8453: 'https://tokens.coingecko.com/base/all.json',
+    43114: 'https://tokens.coingecko.com/avalanche/all.json',
+  };
+  
+  const url = tokenListUrls[chainId];
+  if (!url) return CHAIN_CONFIG[chainKey].fallbackTokens || [];
+  
+  // Check cache
+  const cacheKey = `${chainKey}_list`;
+  if (tokenListCache[cacheKey] && Date.now() - tokenListCache[cacheKey].timestamp < 3600000) {
+    return tokenListCache[cacheKey].tokens;
+  }
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch');
+    
+    const data = await response.json();
+    const tokens = data.tokens || [];
+    
+    // Limit to configured max
+    const maxTokens = TOKEN_SCAN_CONFIG[chainKey]?.maxTokens || 1000;
+    const limitedTokens = tokens.slice(0, maxTokens).map(t => ({
+      symbol: t.symbol,
+      address: t.address,
+      decimals: t.decimals || 18,
+      coingeckoId: t.extensions?.coingeckoId || t.symbol?.toLowerCase(),
+      logoURI: t.logoURI,
+    }));
+    
+    tokenListCache[cacheKey] = { tokens: limitedTokens, timestamp: Date.now() };
+    return limitedTokens;
+  } catch (error) {
+    console.log(`Token list fetch failed for ${chainKey}, using fallback`);
+    return CHAIN_CONFIG[chainKey].fallbackTokens || [];
+  }
+};
 
 // ============================================
 // MAIN COMPONENT
@@ -189,9 +369,10 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
   const [totalValue, setTotalValue] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
-  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, chain: '' });
+  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0, chain: '', tokensScanned: 0, tokensFound: 0 });
   const [prices, setPrices] = useState({});
   const [walletAddress, setWalletAddress] = useState(propAddress || null);
+  const [scanMode, setScanMode] = useState('deep'); // 'quick' or 'deep'
   
   // Zap state
   const [zapAmounts, setZapAmounts] = useState({}); // { 'chainKey-symbol': dollarAmount }
@@ -292,9 +473,101 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       return Number(BigInt(result)) / Math.pow(10, decimals);
     } catch (e) { return 0; }
   };
+  
+  // Batch balance check for efficiency
+  const getTokenBalancesBatch = async (chain, tokens, walletAddr) => {
+    const rpc = chain.rpcs[0];
+    const BATCH_SIZE = 100; // RPC batch limit
+    const results = [];
+    
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const batch = tokens.slice(i, i + BATCH_SIZE);
+      const paddedAddress = walletAddr.slice(2).toLowerCase().padStart(64, '0');
+      
+      const calls = batch.map(token => ({
+        method: 'eth_call',
+        params: [{ to: token.address, data: BALANCE_OF_SELECTOR + paddedAddress }, 'latest']
+      }));
+      
+      try {
+        const batchResults = await batchRpcCall(rpc, calls);
+        
+        for (let j = 0; j < batch.length; j++) {
+          const result = batchResults[j]?.result;
+          if (result && result !== '0x' && result !== '0x0') {
+            try {
+              const balance = Number(BigInt(result)) / Math.pow(10, batch[j].decimals || 18);
+              if (balance > 0.0001) {
+                results.push({ ...batch[j], balance });
+              }
+            } catch (e) {}
+          }
+        }
+      } catch (error) {
+        // Fallback to individual calls if batch fails
+        for (const token of batch) {
+          try {
+            const balance = await getTokenBalance(chain, token.address, walletAddr, token.decimals || 18);
+            if (balance > 0.0001) {
+              results.push({ ...token, balance });
+            }
+          } catch (e) {}
+        }
+      }
+    }
+    
+    return results;
+  };
 
-  // Scan chain
-  const scanChain = async (chainKey, address, currentPrices) => {
+  // Scan chain with CoinGecko token list
+  const scanChainDeep = async (chainKey, address, currentPrices, onProgress) => {
+    const chain = CHAIN_CONFIG[chainKey];
+    const foundAssets = [];
+    
+    // Native balance
+    const nativeBalance = await getNativeBalance(chain, address);
+    if (nativeBalance > 0.0001) {
+      const price = currentPrices[chain.coingeckoId]?.usd || 0;
+      const value = nativeBalance * price;
+      foundAssets.push({
+        chain: chain.name, chainKey, symbol: chain.symbol, balance: nativeBalance,
+        value, price, isNative: true, color: chain.color,
+        decimals: chain.decimals, chainId: chain.chainId
+      });
+    }
+    
+    // Fetch token list
+    onProgress?.(`Loading ${chain.name} token list...`, 0);
+    let tokenList = await fetchTokenListFromAggregator(chainKey);
+    
+    if (tokenList.length === 0) {
+      tokenList = chain.fallbackTokens || [];
+    }
+    
+    const totalTokens = tokenList.length;
+    onProgress?.(`Scanning ${totalTokens.toLocaleString()} tokens on ${chain.name}...`, 0);
+    
+    // Batch check balances
+    const tokensWithBalances = await getTokenBalancesBatch(chain, tokenList, address);
+    
+    // Add found tokens
+    for (const token of tokensWithBalances) {
+      const price = currentPrices[token.coingeckoId]?.usd || token.price || 0;
+      foundAssets.push({
+        chain: chain.name, chainKey, symbol: token.symbol, balance: token.balance,
+        value: token.balance * price, price, isNative: false, color: chain.color,
+        address: token.address, decimals: token.decimals, chainId: chain.chainId,
+        logoURI: token.logoURI
+      });
+    }
+    
+    onProgress?.(`Found ${foundAssets.length} assets on ${chain.name}`, totalTokens);
+    
+    return { assets: foundAssets, tokensScanned: totalTokens };
+  };
+
+  // Quick scan (fallback tokens only)
+  const scanChainQuick = async (chainKey, address, currentPrices) => {
     const chain = CHAIN_CONFIG[chainKey];
     const foundAssets = [];
     
@@ -309,7 +582,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       });
     }
 
-    for (const token of chain.tokens) {
+    for (const token of chain.fallbackTokens || []) {
       const balance = await getTokenBalance(chain, token.address, address, token.decimals);
       if (balance > 0.0001) {
         const price = currentPrices[token.coingeckoId]?.usd || 0;
@@ -320,7 +593,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
         });
       }
     }
-    return foundAssets;
+    return { assets: foundAssets, tokensScanned: (chain.fallbackTokens || []).length };
   };
 
   // Main scan
@@ -344,24 +617,47 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     setBridgeReady({});
 
     const chains = Object.keys(CHAIN_CONFIG);
-    setScanProgress({ current: 0, total: chains.length, chain: 'Loading prices...' });
+    const totalExpectedTokens = scanMode === 'deep' 
+      ? Object.values(TOKEN_SCAN_CONFIG).reduce((s, c) => s + c.maxTokens, 0)
+      : chains.length * 15;
+      
+    setScanProgress({ current: 0, total: chains.length, chain: 'Loading prices...', tokensScanned: 0, tokensFound: 0 });
 
     try {
       const currentPrices = await fetchPrices();
       const allAssets = [];
       const newZapAmounts = {};
+      let totalTokensScanned = 0;
       
       for (let i = 0; i < chains.length; i++) {
         const chainKey = chains[i];
         const chain = CHAIN_CONFIG[chainKey];
-        setScanProgress({ current: i + 1, total: chains.length, chain: chain.name });
+        
+        setScanProgress(prev => ({ 
+          ...prev, 
+          current: i + 1, 
+          chain: chain.name,
+          tokensScanned: totalTokensScanned
+        }));
         
         try {
-          const chainAssets = await scanChain(chainKey, addressToScan, currentPrices);
-          for (const asset of chainAssets) {
+          const onProgress = (status, scanned) => {
+            setScanProgress(prev => ({ 
+              ...prev, 
+              chain: status,
+              tokensScanned: totalTokensScanned + scanned
+            }));
+          };
+          
+          const result = scanMode === 'deep'
+            ? await scanChainDeep(chainKey, addressToScan, currentPrices, onProgress)
+            : await scanChainQuick(chainKey, addressToScan, currentPrices);
+          
+          totalTokensScanned += result.tokensScanned;
+          
+          for (const asset of result.assets) {
             allAssets.push(asset);
             const key = `${asset.chainKey}-${asset.symbol}`;
-            // Default: swap full value for tokens, 85% for native (keep 15% gas)
             newZapAmounts[key] = asset.isNative 
               ? Math.max(0, asset.value * 0.85) 
               : asset.value;
@@ -372,11 +668,18 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
         
         setAssets([...allAssets].sort((a, b) => b.value - a.value));
         setTotalValue(allAssets.reduce((s, a) => s + a.value, 0));
+        setScanProgress(prev => ({ ...prev, tokensFound: allAssets.length }));
       }
 
       setAssets(allAssets.sort((a, b) => b.value - a.value));
       setTotalValue(allAssets.reduce((s, a) => s + a.value, 0));
       setZapAmounts(newZapAmounts);
+      setScanProgress(prev => ({ 
+        ...prev, 
+        chain: `✅ Complete! Scanned ${totalTokensScanned.toLocaleString()} tokens`,
+        tokensScanned: totalTokensScanned,
+        tokensFound: allAssets.length
+      }));
       
       // Check for existing USDC balances
       checkBridgeReady(allAssets);
@@ -426,7 +729,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
         throw switchError;
       }
     }
-    // Wait for network switch
     await new Promise(r => setTimeout(r, 1000));
   };
 
@@ -435,7 +737,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     const ethProvider = getProvider();
     if (!ethProvider) throw new Error('No wallet connected');
     
-    // Calculate token amount from dollar amount
     const tokenAmount = dollarAmount / asset.price;
     const amountWei = BigInt(Math.floor(tokenAmount * Math.pow(10, asset.decimals)));
     
@@ -452,27 +753,22 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     
     if (!routerAddress) throw new Error('No DEX router for this chain');
     
-    // For native token, wrap first then swap
     if (asset.isNative) {
       const wrappedAddress = WRAPPED_NATIVE[chainKey];
       
-      // Wrap native token
       setZapProgress(prev => ({ ...prev, status: `Wrapping ${asset.symbol}...` }));
       const wethContract = new ethers.Contract(wrappedAddress, WETH_ABI, signer);
       const wrapTx = await wethContract.deposit({ value: amountWei });
       await wrapTx.wait();
       
-      // Now swap WETH to USDC
       return await swapTokenToUsdc(signer, wrappedAddress, usdcAddress, amountWei, routerAddress, chainKey);
     } else {
-      // ERC20 token - approve then swap
       return await swapTokenToUsdc(signer, asset.address, usdcAddress, amountWei, routerAddress, chainKey);
     }
   };
 
   // Swap token to USDC via DEX
   const swapTokenToUsdc = async (signer, tokenIn, tokenOut, amountIn, routerAddress, chainKey) => {
-    // Check and set approval
     setZapProgress(prev => ({ ...prev, status: 'Checking approval...' }));
     const tokenContract = new ethers.Contract(tokenIn, ERC20_ABI, signer);
     const currentAllowance = await tokenContract.allowance(await signer.getAddress(), routerAddress);
@@ -483,21 +779,19 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       await approveTx.wait();
     }
     
-    // Execute swap
     setZapProgress(prev => ({ ...prev, status: 'Swapping to USDC...' }));
     const router = new ethers.Contract(routerAddress, SWAP_ROUTER_ABI, signer);
-    const deadline = Math.floor(Date.now() / 1000) + 1800; // 30 min
+    const deadline = Math.floor(Date.now() / 1000) + 1800;
     
     try {
-      // Try exactInputSingle (Uniswap V3 style)
       const params = {
         tokenIn,
         tokenOut,
-        fee: 3000, // 0.3% fee tier
+        fee: 3000,
         recipient: await signer.getAddress(),
         deadline,
         amountIn,
-        amountOutMinimum: 0, // Accept any amount (slippage handled by user)
+        amountOutMinimum: 0,
         sqrtPriceLimitX96: 0
       };
       
@@ -505,7 +799,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       const receipt = await tx.wait();
       return { success: true, hash: receipt.hash };
     } catch (e) {
-      // If V3 fails, try with path encoding
       console.log('V3 single failed, trying path...', e.message);
       
       try {
@@ -571,7 +864,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           results.push({ asset, success: false, error: error.message });
         }
         
-        // Small delay between swaps
         if (i < chainAssets.length - 1) {
           await new Promise(r => setTimeout(r, 2000));
         }
@@ -581,7 +873,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       setIsZapping(false);
       setZapResults(results);
       
-      // Update bridge ready status
       const successCount = results.filter(r => r.success).length;
       if (successCount > 0) {
         setBridgeReady(prev => ({
@@ -592,13 +883,11 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     }
   };
 
-  // Update zap amount for an asset
   const updateZapAmount = (assetKey, value) => {
     const numValue = parseFloat(value) || 0;
     setZapAmounts(prev => ({ ...prev, [assetKey]: numValue }));
   };
 
-  // Toggle selection
   const toggleAssetSelection = (assetKey) => {
     setSelectedAssets(prev => {
       const newSet = new Set(prev);
@@ -608,7 +897,6 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     });
   };
 
-  // Select all on a chain
   const selectAllOnChain = (chainKey) => {
     const chainAssets = assets.filter(a => a.chainKey === chainKey && !isUsdcToken(a.symbol));
     setSelectedAssets(prev => {
@@ -618,11 +906,9 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     });
   };
 
-  // Open Liberty Swap for bridging
   const openBridge = (chainKey) => {
     const usdcAmount = bridgeReady[chainKey] || 0;
-    // Liberty Swap URL with pre-filled params if possible
-    const url = `https://app.libertyswap.finance/?fromChain=${CHAIN_CONFIG[chainKey].chainId}&toChain=369&token=USDC&amount=${usdcAmount.toFixed(2)}`;
+    const url = `https://libertyswap.finance/#/bridge?fromChain=${CHAIN_CONFIG[chainKey].chainId}&toChain=369`;
     window.open(url, '_blank');
     setBridgeStatus(`🌉 Bridge ${usdcAmount.toFixed(2)} USDC from ${CHAIN_CONFIG[chainKey].name} → Opening Liberty Swap...`);
   };
@@ -635,7 +921,12 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
 
   const isUsdcToken = (symbol) => ['USDC', 'USDC.e', 'USDbC', 'USDT', 'DAI', 'BUSD'].includes(symbol);
   
-  // Group assets by chain
+  const formatNumber = (num) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+    return num.toFixed(2);
+  };
+  
   const assetsByChain = assets.reduce((acc, asset) => {
     if (!acc[asset.chainKey]) acc[asset.chainKey] = [];
     acc[asset.chainKey].push(asset);
@@ -648,520 +939,536 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     return valueB - valueA;
   });
 
-  const totalSelectedValue = assets
-    .filter(a => selectedAssets.has(`${a.chainKey}-${a.symbol}`) && !isUsdcToken(a.symbol))
-    .reduce((s, a) => s + (zapAmounts[`${a.chainKey}-${a.symbol}`] || 0), 0);
+  const referralLink = walletAddress 
+    ? `${window.location.origin}${window.location.pathname}?ref=${walletAddress}` 
+    : '';
 
-  const totalBridgeReady = Object.values(bridgeReady).reduce((s, v) => s + v, 0);
-
-  const formatNumber = (num, decimals = 2) => {
-    if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
-    if (num < 0.01 && num > 0) return num.toFixed(6);
-    return num.toFixed(decimals);
-  };
-
-  const referralLink = walletAddress ? `${window.location.origin}/zapperxchain?ref=${walletAddress}` : '';
-
-  // ============================================
-  // RENDER
-  // ============================================
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(30,20,40,0.95) 0%, rgba(20,10,30,0.98) 100%)',
-      borderRadius: '20px', padding: '20px', maxWidth: '900px', margin: '0 auto',
-      border: '2px solid rgba(255,215,0,0.3)', boxShadow: '0 0 40px rgba(255,215,0,0.1)'
+      maxWidth: '900px',
+      margin: '0 auto',
+      padding: '20px',
+      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
     }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '2rem' }}>⚡</span>
-          <h2 style={{
-            fontSize: '1.5rem', fontWeight: 'bold',
-            background: 'linear-gradient(90deg, #FF69B4, #FFD700, #9370DB)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0
-          }}>ZAPPER-X-CHAIN</h2>
-          <span style={{ fontSize: '2rem' }}>🌉</span>
+      <div style={{
+        textAlign: 'center',
+        marginBottom: '25px',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        borderRadius: '15px',
+        padding: '25px',
+        border: '2px solid #FFD700'
+      }}>
+        <h1 style={{ 
+          color: '#FFD700', 
+          marginBottom: '10px',
+          fontSize: '2rem',
+          textShadow: '0 0 10px rgba(255, 215, 0, 0.5)'
+        }}>
+          ⚡ Zapper-X-Chain V7.1 ⚡
+        </h1>
+        <p style={{ color: '#aaa', marginBottom: '15px' }}>
+          Maximum Token Coverage • Scan up to 18,500 tokens across 7 chains
+        </p>
+        
+        {/* Scan Mode Toggle */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          gap: '10px', 
+          marginBottom: '15px' 
+        }}>
+          <button
+            onClick={() => setScanMode('quick')}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '20px',
+              border: scanMode === 'quick' ? '2px solid #FFD700' : '1px solid #666',
+              background: scanMode === 'quick' ? 'rgba(255,215,0,0.2)' : 'transparent',
+              color: scanMode === 'quick' ? '#FFD700' : '#888',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            ⚡ Quick (~50 tokens)
+          </button>
+          <button
+            onClick={() => setScanMode('deep')}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '20px',
+              border: scanMode === 'deep' ? '2px solid #4ade80' : '1px solid #666',
+              background: scanMode === 'deep' ? 'rgba(74,222,128,0.2)' : 'transparent',
+              color: scanMode === 'deep' ? '#4ade80' : '#888',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            🔍 Deep (18,500+ tokens)
+          </button>
         </div>
-        <p style={{ color: '#888', marginTop: '5px', fontSize: '0.85rem' }}>Scan → Adjust → Zap to USDC → Bridge to PulseChain</p>
-      </div>
-
-      {/* Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '15px' }}>
-        {[
-          { label: 'Total Found', value: `$${formatNumber(totalValue)}`, color: '#4ade80' },
-          { label: 'To Zap', value: `$${formatNumber(totalSelectedValue)}`, color: '#fbbf24' },
-          { label: 'Bridge Ready', value: `$${formatNumber(totalBridgeReady)}`, color: totalBridgeReady > 0 ? '#4ade80' : '#888', icon: totalBridgeReady > 0 ? '✅' : '' },
-          { label: 'Chains', value: chainsWithAssets.length.toString(), color: '#f87171' }
-        ].map((stat, i) => (
-          <div key={i} style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '2px' }}>{stat.label}</div>
-            <div style={{ color: stat.color, fontSize: '1rem', fontWeight: 'bold' }}>{stat.icon} {stat.value}</div>
+        
+        {walletAddress && (
+          <div style={{ 
+            display: 'inline-block', 
+            background: 'rgba(255,255,255,0.1)', 
+            padding: '8px 15px', 
+            borderRadius: '20px',
+            color: '#4ade80',
+            fontSize: '0.9rem',
+            marginBottom: '10px'
+          }}>
+            🔗 {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+            {referrer && (
+              <span style={{ marginLeft: '10px', color: '#FF69B4' }}>
+                📍 Referred by {referrer.slice(0, 6)}...
+              </span>
+            )}
           </div>
-        ))}
+        )}
+        
+        <div style={{ marginTop: '15px' }}>
+          <button
+            onClick={() => scanAllChains()}
+            disabled={isScanning}
+            style={{
+              padding: '15px 40px',
+              fontSize: '1.1rem',
+              fontWeight: 'bold',
+              borderRadius: '25px',
+              border: 'none',
+              background: isScanning 
+                ? '#666' 
+                : 'linear-gradient(90deg, #FFD700, #FFA500)',
+              color: '#000',
+              cursor: isScanning ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 15px rgba(255, 215, 0, 0.3)',
+              transition: 'transform 0.2s'
+            }}
+          >
+            {isScanning ? (
+              <span className="zap-spinner">⚡</span>
+            ) : (
+              `🔍 Scan All Chains (${scanMode === 'deep' ? '18,500+' : '~50'} tokens)`
+            )}
+          </button>
+        </div>
+        
+        {isScanning && (
+          <div style={{ marginTop: '15px', color: '#888' }}>
+            <div style={{ marginBottom: '5px' }}>
+              Chain {scanProgress.current}/{scanProgress.total}: {scanProgress.chain}
+            </div>
+            <div style={{ 
+              fontSize: '0.85rem', 
+              color: '#4ade80' 
+            }}>
+              📊 Tokens scanned: {scanProgress.tokensScanned?.toLocaleString() || 0} | 
+              Found: {scanProgress.tokensFound || 0} with balance
+            </div>
+            <div style={{
+              width: '100%',
+              height: '4px',
+              background: '#333',
+              borderRadius: '2px',
+              overflow: 'hidden',
+              marginTop: '10px'
+            }}>
+              <div style={{
+                width: `${(scanProgress.current / scanProgress.total) * 100}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #FFD700, #4ade80)',
+                transition: 'width 0.3s'
+              }} />
+            </div>
+          </div>
+        )}
+        
+        {scanError && (
+          <div style={{ 
+            color: '#f87171', 
+            marginTop: '15px',
+            padding: '10px',
+            background: 'rgba(239,68,68,0.1)',
+            borderRadius: '8px'
+          }}>
+            ⚠️ {scanError}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '12px' }}>
+      <div style={{ 
+        display: 'flex', 
+        gap: '10px', 
+        marginBottom: '20px',
+        justifyContent: 'center'
+      }}>
         {[
-          { id: 'crosschain', label: '⚡ Zap', color: '#4ade80' },
-          { id: 'bridge', label: '🌉 Bridge', color: '#60a5fa', badge: totalBridgeReady > 0 },
-          { id: 'refer', label: '💝 Refer', color: '#f472b6' },
+          { id: 'crosschain', label: '⚡ Cross-Chain Zapper', color: '#FFD700' },
+          { id: 'bridge', label: '🌉 Bridge to PulseChain', color: '#4ade80' },
+          { id: 'referral', label: '🎁 Referral Program', color: '#FF69B4' }
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-            padding: '8px', borderRadius: '8px', position: 'relative',
-            border: activeTab === tab.id ? `2px solid ${tab.color}` : '2px solid transparent',
-            background: activeTab === tab.id ? `${tab.color}22` : 'rgba(0,0,0,0.3)',
-            color: activeTab === tab.id ? tab.color : '#888', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.85rem'
-          }}>
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: '12px 20px',
+              borderRadius: '10px',
+              border: activeTab === tab.id ? `2px solid ${tab.color}` : '1px solid #333',
+              background: activeTab === tab.id ? `rgba(${tab.color === '#FFD700' ? '255,215,0' : tab.color === '#4ade80' ? '74,222,128' : '255,105,180'},0.15)` : 'transparent',
+              color: activeTab === tab.id ? tab.color : '#888',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              transition: 'all 0.2s'
+            }}
+          >
             {tab.label}
-            {tab.badge && (
-              <span style={{
-                position: 'absolute', top: '-5px', right: '-5px',
-                width: '12px', height: '12px', borderRadius: '50%',
-                background: '#4ade80', border: '2px solid #1a1a2e'
-              }} />
-            )}
           </button>
         ))}
       </div>
 
-      {scanError && (
-        <div style={{ background: 'rgba(239,68,68,0.2)', borderRadius: '8px', padding: '10px', marginBottom: '10px', color: '#fca5a5', textAlign: 'center', fontSize: '0.85rem' }}>
-          {scanError}
-        </div>
-      )}
-
-      {/* Zap Progress Overlay */}
-      {isZapping && (
+      {/* Stats Bar */}
+      {assets.length > 0 && (
         <div style={{
-          background: 'rgba(0,0,0,0.8)',
-          borderRadius: '12px',
-          padding: '20px',
-          marginBottom: '15px',
-          border: '2px solid #FFD700',
-          textAlign: 'center'
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '15px',
+          marginBottom: '20px'
         }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>⚡</div>
-          <div style={{ color: '#FFD700', fontWeight: 'bold', marginBottom: '5px' }}>
-            {zapProgress.status}
-          </div>
-          <div style={{ color: '#888', marginBottom: '10px', fontSize: '0.85rem' }}>
-            {zapProgress.current} / {zapProgress.total} swaps
-          </div>
-          <div style={{ height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: `${(zapProgress.current / zapProgress.total) * 100}%`,
-              background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-              transition: 'width 0.3s'
-            }} />
-          </div>
+          {[
+            { label: 'Total Value', value: `$${formatNumber(totalValue)}`, color: '#FFD700' },
+            { label: 'Assets Found', value: assets.length, color: '#4ade80' },
+            { label: 'Chains', value: chainsWithAssets.length, color: '#60a5fa' },
+            { label: 'Tokens Scanned', value: scanProgress.tokensScanned?.toLocaleString() || '0', color: '#a855f7' }
+          ].map((stat, i) => (
+            <div key={i} style={{
+              background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+              borderRadius: '10px',
+              padding: '15px',
+              textAlign: 'center',
+              border: '1px solid #333'
+            }}>
+              <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '5px' }}>{stat.label}</div>
+              <div style={{ color: stat.color, fontSize: '1.3rem', fontWeight: 'bold' }}>{stat.value}</div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* ZAP TAB */}
+      {/* Cross-Chain Zapper Tab */}
       {activeTab === 'crosschain' && (
         <div>
-          {/* Scan Button */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ fontSize: '0.8rem', color: walletAddress ? '#4ade80' : '#888' }}>
-              {walletAddress ? `✅ ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Connect wallet to scan'}
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => { 
-                  alert('🔬 Scanning Vitalik\'s wallet (0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)...\n\nThis is a demo to show how the scanner works!'); 
-                  scanAllChains('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'); 
-                }}
-                disabled={isScanning}
-                style={{
-                  padding: '8px 12px', borderRadius: '8px', border: '1px solid #666',
-                  background: 'rgba(0,0,0,0.5)', color: '#888', cursor: isScanning ? 'wait' : 'pointer', fontSize: '0.8rem'
-                }}
-              >
-                🧪 Test Vitalik
-              </button>
-              <button
-                onClick={() => scanAllChains()}
-                disabled={isScanning}
-                style={{
-                  padding: '8px 16px', borderRadius: '8px', border: 'none',
-                  background: isScanning ? 'rgba(255,215,0,0.3)' : 'linear-gradient(90deg, #FFD700, #FFA500)',
-                  color: isScanning ? '#FFD700' : '#000', cursor: isScanning ? 'wait' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem'
-                }}
-              >
-                {isScanning ? '🔄 Scanning...' : '🔄 Scan All Chains'}
-              </button>
-            </div>
-          </div>
-
-          {/* Scan Progress */}
-          {isScanning && (
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#888' }}>
-                <span>{scanProgress.chain}</span>
-                <span>{scanProgress.current}/{scanProgress.total}</span>
-              </div>
-              <div style={{ height: '4px', background: 'rgba(0,0,0,0.3)', borderRadius: '2px', marginTop: '4px' }}>
-                <div style={{ height: '100%', width: `${(scanProgress.current / scanProgress.total) * 100}%`, background: 'linear-gradient(90deg, #FFD700, #FFA500)', borderRadius: '2px' }} />
-              </div>
+          {chainsWithAssets.length === 0 && !isScanning && (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              color: '#888',
+              background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+              borderRadius: '15px',
+              border: '1px solid #333'
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: '15px' }}>🔍</div>
+              <div style={{ fontSize: '1.1rem', marginBottom: '10px' }}>No assets found yet</div>
+              <div style={{ fontSize: '0.9rem' }}>Click "Scan All Chains" to find your tokens</div>
             </div>
           )}
 
-          {/* Grouped Assets by Chain */}
           {chainsWithAssets.map(chainKey => {
-            const chainConfig = CHAIN_CONFIG[chainKey];
+            const chain = CHAIN_CONFIG[chainKey];
             const chainAssets = assetsByChain[chainKey];
             const chainTotal = chainAssets.reduce((s, a) => s + a.value, 0);
-            const nonStableAssets = chainAssets.filter(a => !isUsdcToken(a.symbol));
-            const stableAssets = chainAssets.filter(a => isUsdcToken(a.symbol));
-            const selectedOnChain = nonStableAssets.filter(a => selectedAssets.has(`${a.chainKey}-${a.symbol}`));
-            const chainBridgeReady = bridgeReady[chainKey] || 0;
-
+            const zappableAssets = chainAssets.filter(a => !isUsdcToken(a.symbol));
+            const selectedOnChain = zappableAssets.filter(a => selectedAssets.has(`${a.chainKey}-${a.symbol}`));
+            
             return (
               <div key={chainKey} style={{
-                background: 'rgba(0,0,0,0.3)',
-                borderRadius: '10px',
-                padding: '12px',
-                marginBottom: '10px',
-                border: `1px solid ${chainConfig.color}44`
+                background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+                borderRadius: '15px',
+                padding: '20px',
+                marginBottom: '15px',
+                border: `2px solid ${chain.color}30`
               }}>
                 {/* Chain Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{
-                      width: '28px', height: '28px', borderRadius: '50%',
-                      background: `${chainConfig.color}33`,
-                      border: `2px solid ${chainConfig.color}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: chainConfig.color, fontWeight: 'bold', fontSize: '0.8rem'
-                    }}>
-                      {chainConfig.symbol.charAt(0)}
-                    </div>
-                    <div>
-                      <div style={{ color: chainConfig.color, fontWeight: 'bold', fontSize: '0.9rem' }}>{chainConfig.name}</div>
-                      <div style={{ color: '#888', fontSize: '0.7rem' }}>${formatNumber(chainTotal)}</div>
-                    </div>
-                    {chainBridgeReady > 0 && (
-                      <div style={{
-                        background: 'rgba(74,222,128,0.2)',
-                        border: '1px solid #4ade80',
-                        borderRadius: '12px',
-                        padding: '2px 8px',
-                        fontSize: '0.7rem',
-                        color: '#4ade80',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        ✅ ${formatNumber(chainBridgeReady)} ready
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Chain Actions */}
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {nonStableAssets.length > 0 && (
-                      <button
-                        onClick={() => selectAllOnChain(chainKey)}
-                        style={{
-                          padding: '4px 8px', borderRadius: '5px', border: '1px solid #666',
-                          background: 'rgba(0,0,0,0.5)', color: '#888', cursor: 'pointer', fontSize: '0.7rem'
-                        }}
-                      >
-                        Select All
-                      </button>
-                    )}
-                    {selectedOnChain.length > 0 && (
-                      <button
-                        onClick={() => zapChain(chainKey)}
-                        disabled={isZapping}
-                        style={{
-                          padding: '4px 10px', borderRadius: '5px', border: 'none',
-                          background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-                          color: '#000', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.7rem'
-                        }}
-                      >
-                        ⚡ Zap {selectedOnChain.length} → USDC
-                      </button>
-                    )}
-                    {chainBridgeReady > 0 && (
-                      <button
-                        onClick={() => openBridge(chainKey)}
-                        style={{
-                          padding: '4px 10px', borderRadius: '5px', border: 'none',
-                          background: 'linear-gradient(90deg, #4ade80, #22c55e)',
-                          color: '#000', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.7rem'
-                        }}
-                      >
-                        🌉 Bridge
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Stables Ready */}
-                {stableAssets.length > 0 && (
-                  <div style={{ marginBottom: '8px' }}>
-                    {stableAssets.map((asset, i) => (
-                      <div key={i} style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '6px 10px', background: 'rgba(74,222,128,0.1)', borderRadius: '6px',
-                        border: '1px solid rgba(74,222,128,0.3)', marginBottom: '4px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ color: '#4ade80', fontSize: '0.9rem' }}>✅</span>
-                          <span style={{ color: '#fff', fontWeight: '500', fontSize: '0.85rem' }}>{asset.symbol}</span>
-                          <span style={{ color: '#4ade80', fontSize: '0.7rem' }}>Ready to bridge!</span>
-                        </div>
-                        <div style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '0.9rem' }}>${formatNumber(asset.value)}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Non-Stable Tokens with Adjustable Amounts */}
-                {nonStableAssets.map((asset, i) => {
-                  const assetKey = `${asset.chainKey}-${asset.symbol}`;
-                  const isSelected = selectedAssets.has(assetKey);
-                  const zapAmount = zapAmounts[assetKey] || 0;
-                  const maxAmount = asset.value;
-                  const percentOfMax = maxAmount > 0 ? (zapAmount / maxAmount) * 100 : 0;
-
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        background: isSelected ? 'rgba(251,191,36,0.1)' : 'rgba(0,0,0,0.2)',
-                        borderRadius: '8px',
-                        border: isSelected ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)',
-                        marginBottom: '6px',
-                        padding: '10px',
-                      }}
-                    >
-                      {/* Token Row */}
-                      <div 
-                        onClick={() => toggleAssetSelection(assetKey)}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{
-                            width: '16px', height: '16px', borderRadius: '4px',
-                            border: '2px solid #fbbf24',
-                            background: isSelected ? '#fbbf24' : 'transparent',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#000', fontSize: '0.6rem'
-                          }}>
-                            {isSelected && '✓'}
-                          </div>
-                          <div>
-                            <div style={{ color: '#fff', fontWeight: '500', fontSize: '0.85rem' }}>
-                              {asset.symbol}
-                              {asset.isNative && (
-                                <span style={{
-                                  marginLeft: '5px', fontSize: '0.6rem',
-                                  background: '#fbbf24', color: '#000',
-                                  padding: '1px 4px', borderRadius: '3px'
-                                }}>GAS</span>
-                              )}
-                            </div>
-                            <div style={{ color: '#888', fontSize: '0.7rem' }}>
-                              {formatNumber(asset.balance, 4)} @ ${formatNumber(asset.price, 4)}
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ color: '#fbbf24', fontWeight: 'bold', fontSize: '0.9rem' }}>${formatNumber(maxAmount)}</div>
-                        </div>
-                      </div>
-
-                      {/* Amount Adjuster (shown when selected) */}
-                      {isSelected && (
-                        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                            <span style={{ color: '#888', fontSize: '0.75rem' }}>Amount to zap:</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ color: '#4ade80', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                                ${formatNumber(zapAmount)}
-                              </span>
-                              <span style={{ color: '#888', fontSize: '0.7rem' }}>
-                                ({percentOfMax.toFixed(0)}%)
-                              </span>
-                            </div>
-                          </div>
-                          
-                          {/* Slider */}
-                          <input
-                            type="range"
-                            min="0"
-                            max={maxAmount}
-                            step={maxAmount / 100}
-                            value={zapAmount}
-                            onChange={(e) => updateZapAmount(assetKey, e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              width: '100%',
-                              height: '6px',
-                              borderRadius: '3px',
-                              background: `linear-gradient(to right, #fbbf24 0%, #fbbf24 ${percentOfMax}%, rgba(255,255,255,0.1) ${percentOfMax}%, rgba(255,255,255,0.1) 100%)`,
-                              cursor: 'pointer',
-                              WebkitAppearance: 'none',
-                            }}
-                          />
-                          
-                          {/* Quick buttons */}
-                          <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
-                            {[25, 50, 75, 100].map(pct => (
-                              <button
-                                key={pct}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const newAmount = asset.isNative && pct === 100 
-                                    ? maxAmount * 0.85  // Keep 15% for gas
-                                    : maxAmount * (pct / 100);
-                                  updateZapAmount(assetKey, newAmount);
-                                }}
-                                style={{
-                                  flex: 1, padding: '4px', borderRadius: '4px',
-                                  border: '1px solid rgba(255,255,255,0.2)',
-                                  background: 'rgba(0,0,0,0.3)',
-                                  color: '#888', cursor: 'pointer', fontSize: '0.7rem'
-                                }}
-                              >
-                                {asset.isNative && pct === 100 ? '85%' : `${pct}%`}
-                              </button>
-                            ))}
-                          </div>
-                          
-                          {asset.isNative && (
-                            <div style={{ color: '#fbbf24', fontSize: '0.7rem', marginTop: '6px', textAlign: 'center' }}>
-                              ⛽ Keep some {asset.symbol} for gas fees
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-
-          {/* No Assets */}
-          {!isScanning && assets.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '30px', color: '#888' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '10px' }}>🔍</div>
-              <div>Scan your wallet to find tokens across 7 chains</div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* BRIDGE TAB */}
-      {activeTab === 'bridge' && (
-        <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '20px', border: '1px solid rgba(255,215,0,0.2)' }}>
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🌉</div>
-            <h3 style={{ color: '#FFD700', marginBottom: '5px' }}>Bridge to PulseChain</h3>
-            <p style={{ color: '#888', fontSize: '0.85rem' }}>Send your stablecoins to PulseChain via Liberty Swap</p>
-          </div>
-
-          {totalBridgeReady > 0 ? (
-            <>
-              <div style={{
-                background: 'rgba(74,222,128,0.1)',
-                border: '2px solid #4ade80',
-                borderRadius: '12px',
-                padding: '15px',
-                marginBottom: '20px',
-                textAlign: 'center'
-              }}>
-                <div style={{ color: '#4ade80', fontSize: '0.85rem', marginBottom: '5px' }}>Total Ready to Bridge</div>
-                <div style={{ color: '#4ade80', fontSize: '1.8rem', fontWeight: 'bold' }}>
-                  ✅ ${formatNumber(totalBridgeReady)}
-                </div>
-              </div>
-
-              {/* Per-chain bridge buttons */}
-              {Object.entries(bridgeReady).filter(([_, v]) => v > 0).map(([chainKey, amount]) => (
-                <div key={chainKey} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '12px', marginBottom: '8px',
-                  border: `1px solid ${CHAIN_CONFIG[chainKey]?.color}44`
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '15px',
+                  flexWrap: 'wrap',
+                  gap: '10px'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{
-                      width: '32px', height: '32px', borderRadius: '50%',
-                      background: `${CHAIN_CONFIG[chainKey]?.color}33`,
-                      border: `2px solid ${CHAIN_CONFIG[chainKey]?.color}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: CHAIN_CONFIG[chainKey]?.color, fontWeight: 'bold'
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: '50%',
+                      background: chain.color,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 'bold'
                     }}>
-                      {CHAIN_CONFIG[chainKey]?.symbol?.charAt(0)}
+                      {chain.symbol[0]}
                     </div>
                     <div>
-                      <div style={{ color: '#fff', fontWeight: 'bold' }}>{CHAIN_CONFIG[chainKey]?.name}</div>
-                      <div style={{ color: '#4ade80', fontSize: '0.85rem' }}>${formatNumber(amount)} USDC</div>
+                      <div style={{ color: '#fff', fontWeight: 'bold' }}>{chain.name}</div>
+                      <div style={{ color: '#888', fontSize: '0.8rem' }}>
+                        {chainAssets.length} assets • ${formatNumber(chainTotal)}
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => openBridge(chainKey)}
-                    style={{
-                      padding: '10px 20px', borderRadius: '8px', border: 'none',
-                      background: 'linear-gradient(90deg, #4ade80, #22c55e)',
-                      color: '#000', cursor: 'pointer', fontWeight: 'bold'
-                    }}
-                  >
-                    🌉 Bridge → PulseChain
-                  </button>
+                  
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    {zappableAssets.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => selectAllOnChain(chainKey)}
+                          style={{
+                            padding: '8px 15px',
+                            borderRadius: '8px',
+                            border: '1px solid #666',
+                            background: 'transparent',
+                            color: '#888',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          Select All
+                        </button>
+                        <button
+                          onClick={() => zapChain(chainKey)}
+                          disabled={isZapping || selectedOnChain.length === 0}
+                          style={{
+                            padding: '8px 20px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: selectedOnChain.length > 0 
+                              ? 'linear-gradient(90deg, #FFD700, #FFA500)' 
+                              : '#333',
+                            color: selectedOnChain.length > 0 ? '#000' : '#666',
+                            cursor: selectedOnChain.length > 0 ? 'pointer' : 'not-allowed',
+                            fontWeight: 'bold',
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          ⚡ Zap {selectedOnChain.length} to USDC
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              ))}
 
-              <div style={{ marginTop: '15px', padding: '12px', background: 'rgba(96,165,250,0.1)', borderRadius: '8px', border: '1px solid rgba(96,165,250,0.3)' }}>
-                <div style={{ color: '#60a5fa', fontSize: '0.85rem' }}>
-                  <strong>ℹ️ How it works:</strong>
-                  <ol style={{ margin: '8px 0 0 0', paddingLeft: '20px', lineHeight: '1.6' }}>
-                    <li>Click "Bridge → PulseChain" for each chain</li>
-                    <li>Liberty Swap will open with your USDC amount</li>
-                    <li>Confirm the bridge transaction</li>
-                    <li>Receive USDC on PulseChain in ~5-15 minutes</li>
-                  </ol>
+                {/* Asset List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {chainAssets.map(asset => {
+                    const assetKey = `${asset.chainKey}-${asset.symbol}`;
+                    const isUsdc = isUsdcToken(asset.symbol);
+                    const isSelected = selectedAssets.has(assetKey);
+                    
+                    return (
+                      <div key={assetKey} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px',
+                        background: isSelected ? 'rgba(255,215,0,0.1)' : 'rgba(0,0,0,0.2)',
+                        borderRadius: '10px',
+                        border: isSelected ? '1px solid rgba(255,215,0,0.3)' : '1px solid transparent',
+                        flexWrap: 'wrap'
+                      }}>
+                        {/* Selection checkbox */}
+                        {!isUsdc && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleAssetSelection(assetKey)}
+                            style={{ 
+                              width: '18px', 
+                              height: '18px', 
+                              cursor: 'pointer',
+                              accentColor: '#FFD700'
+                            }}
+                          />
+                        )}
+                        
+                        {/* Token info */}
+                        <div style={{ flex: '1', minWidth: '120px' }}>
+                          <div style={{ 
+                            color: isUsdc ? '#4ade80' : '#fff', 
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }}>
+                            {asset.symbol}
+                            {asset.isNative && <span style={{ fontSize: '0.7rem', color: '#888' }}>(native)</span>}
+                            {isUsdc && <span style={{ fontSize: '0.7rem', color: '#4ade80' }}>✓ Ready</span>}
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.8rem' }}>
+                            {asset.balance.toFixed(asset.balance < 0.01 ? 6 : 4)} • ${asset.value.toFixed(2)}
+                          </div>
+                        </div>
+                        
+                        {/* Amount slider for non-USDC */}
+                        {!isUsdc && isSelected && (
+                          <div style={{ 
+                            flex: '2', 
+                            minWidth: '200px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px'
+                          }}>
+                            <input
+                              type="range"
+                              min="0"
+                              max={asset.value}
+                              step={asset.value / 100}
+                              value={zapAmounts[assetKey] || 0}
+                              onChange={(e) => updateZapAmount(assetKey, e.target.value)}
+                              style={{ flex: 1 }}
+                            />
+                            <div style={{ 
+                              color: '#FFD700', 
+                              fontWeight: 'bold',
+                              minWidth: '70px',
+                              textAlign: 'right'
+                            }}>
+                              ${(zapAmounts[assetKey] || 0).toFixed(2)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '10px' }}>📦</div>
-              <div>No stablecoins ready to bridge yet.</div>
-              <div style={{ marginTop: '5px', fontSize: '0.85rem' }}>Zap your tokens to USDC first!</div>
-              <button
-                onClick={() => setActiveTab('crosschain')}
-                style={{
-                  marginTop: '15px', padding: '10px 20px', borderRadius: '8px', border: 'none',
-                  background: 'linear-gradient(90deg, #FFD700, #FFA500)',
-                  color: '#000', cursor: 'pointer', fontWeight: 'bold'
-                }}
-              >
-                ⚡ Go to Zap
-              </button>
-            </div>
-          )}
-
-          {bridgeStatus && (
-            <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(74,222,128,0.1)', borderRadius: '8px', textAlign: 'center', color: '#4ade80' }}>
-              {bridgeStatus}
-            </div>
-          )}
+            );
+          })}
         </div>
       )}
 
-      {/* REFER TAB */}
-      {activeTab === 'refer' && (
-        <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '20px', border: '1px solid rgba(255,215,0,0.2)' }}>
+      {/* Bridge Tab */}
+      {activeTab === 'bridge' && (
+        <div style={{
+          background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+          borderRadius: '15px',
+          padding: '25px',
+          border: '2px solid #4ade80'
+        }}>
+          <h2 style={{ color: '#4ade80', marginBottom: '20px', textAlign: 'center' }}>
+            🌉 Bridge USDC to PulseChain
+          </h2>
+          
+          {bridgeStatus && (
+            <div style={{
+              padding: '15px',
+              background: 'rgba(74,222,128,0.1)',
+              borderRadius: '10px',
+              marginBottom: '20px',
+              color: '#4ade80',
+              textAlign: 'center'
+            }}>
+              {bridgeStatus}
+            </div>
+          )}
+          
+          {Object.keys(bridgeReady).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '10px' }}>💫</div>
+              <div>No USDC ready to bridge yet.</div>
+              <div style={{ fontSize: '0.9rem', marginTop: '10px' }}>
+                Zap your tokens to USDC first, then bridge here!
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {Object.entries(bridgeReady).map(([chainKey, amount]) => {
+                const chain = CHAIN_CONFIG[chainKey];
+                return (
+                  <div key={chainKey} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '15px',
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '10px',
+                    border: `1px solid ${chain.color}50`
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        background: chain.color,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 'bold'
+                      }}>
+                        {chain.symbol[0]}
+                      </div>
+                      <div>
+                        <div style={{ color: '#fff', fontWeight: 'bold' }}>{chain.name}</div>
+                        <div style={{ color: '#4ade80', fontSize: '0.9rem' }}>
+                          ${formatNumber(amount)} USDC ready
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => openBridge(chainKey)}
+                      disabled={isBridging}
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: 'linear-gradient(90deg, #4ade80, #22c55e)',
+                        color: '#000',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      🌉 Bridge to PulseChain
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          <div style={{
+            marginTop: '20px',
+            padding: '15px',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '10px',
+            color: '#888',
+            fontSize: '0.85rem',
+            textAlign: 'center'
+          }}>
+            💡 Uses Liberty Swap for secure cross-chain bridging to PulseChain (Chain ID: 369)
+          </div>
+        </div>
+      )}
+
+      {/* Referral Tab */}
+      {activeTab === 'referral' && (
+        <div style={{
+          background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+          borderRadius: '15px',
+          padding: '25px',
+          border: '2px solid #FF69B4'
+        }}>
+          <h2 style={{ color: '#FF69B4', marginBottom: '20px', textAlign: 'center' }}>
+            🎁 Referral Program
+          </h2>
+          
           {walletAddress ? (
             <>
-              <div style={{ background: 'rgba(255,105,180,0.1)', borderRadius: '10px', padding: '15px', marginBottom: '15px', border: '1px solid rgba(255,105,180,0.3)' }}>
+              <div style={{ marginBottom: '20px' }}>
                 <div style={{ color: '#FF69B4', fontWeight: 'bold', marginBottom: '8px' }}>🔗 Your Referral Link</div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
@@ -1270,6 +1577,34 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
         </div>
       )}
 
+      {/* Zapping Progress Overlay */}
+      {isZapping && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+            borderRadius: '15px', padding: '30px', textAlign: 'center',
+            border: '2px solid #FFD700', maxWidth: '350px'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '15px' }} className="zap-spinner">⚡</div>
+            <div style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '10px' }}>
+              Zapping {zapProgress.current}/{zapProgress.total}
+            </div>
+            {zapProgress.asset && (
+              <div style={{ color: '#fff', marginBottom: '10px' }}>
+                {zapProgress.asset.symbol} on {zapProgress.asset.chain}
+              </div>
+            )}
+            <div style={{ color: '#888', fontSize: '0.9rem' }}>
+              {zapProgress.status}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         input[type="range"]::-webkit-slider-thumb {
           -webkit-appearance: none;
@@ -1287,6 +1622,21 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           background: #fbbf24;
           cursor: pointer;
           border: 2px solid #000;
+        }
+        @keyframes zapSpin {
+          0% { transform: rotate(0deg) scale(1); }
+          25% { transform: rotate(15deg) scale(1.1); }
+          50% { transform: rotate(0deg) scale(1); }
+          75% { transform: rotate(-15deg) scale(1.1); }
+          100% { transform: rotate(0deg) scale(1); }
+        }
+        @keyframes zapPulse {
+          0%, 100% { opacity: 1; text-shadow: 0 0 10px #FFD700, 0 0 20px #FFD700; }
+          50% { opacity: 0.7; text-shadow: 0 0 20px #FFD700, 0 0 40px #FFA500, 0 0 60px #FF6600; }
+        }
+        .zap-spinner {
+          display: inline-block;
+          animation: zapSpin 0.5s ease-in-out infinite, zapPulse 1s ease-in-out infinite;
         }
       `}</style>
     </div>
