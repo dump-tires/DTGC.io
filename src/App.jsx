@@ -2757,7 +2757,7 @@ const IntroVideoOverlay = ({ onComplete, isDark }) => {
           onClick={handleSkip}
           style={{
             position: 'absolute',
-            bottom: '24px',
+            bottom: '90px',
             right: '24px',
             background: 'linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 50%, var(--gold-dark) 100%)',
             border: 'none',
@@ -13919,7 +13919,7 @@ export default function App() {
           onClick={() => setShowStakeCalculator(true)}
           style={{
             position: 'fixed',
-            bottom: '24px',
+            bottom: '90px',
             right: '24px',
             zIndex: 1500,
             width: '56px',
