@@ -56,11 +56,11 @@ const getTokenLogo = (address) => {
   const addr = address?.toLowerCase();
   // DTGC - Gold coin favicon (trophy icon)
   if (addr === '0xd0676b28a457371d58d47e5247b439114e40eb0f') {
-    return '/favicon-192.png';
+    return '/Favicon.png';
   }
   // DTGC/URMOM LP - Gold bar icon
   if (addr === '0x670c972bb5388e087a2934a063064d97278e01f3') {
-    return '/gold_bar.png';
+    return '/LPfavicon.png';
   }
   // Default: gib.show
   return `${CONFIG.GIB_SHOW_BASE}/${address}`;
@@ -117,7 +117,7 @@ const TOKENS = {
     symbol: 'DTGC', 
     name: 'DT Gold Coin', 
     decimals: 18, 
-    logo: '/favicon-192.png', // Use our gold coin favicon
+    logo: '/Favicon.png', // Use our gold coin favicon
     emoji: '🏆',
     isNative: false,
   },
