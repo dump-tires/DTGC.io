@@ -6940,10 +6940,25 @@ export default function App() {
               const dtgcStakes = await stakingV4.getActiveStakes(account);
               console.log('📋 V4 DTGC stakes:', dtgcStakes);
               
+              // ═══════════════════════════════════════════════════════════════
+              // FIX: Deduplicate DTGC stakes BEFORE processing
+              // ═══════════════════════════════════════════════════════════════
+              const seenDtgcStakes = new Set();
+              const uniqueDtgcStakes = dtgcStakes.filter(stake => {
+                const key = `${stake.amount.toString()}-${stake.startTime.toString()}-${stake.tier.toString()}`;
+                if (seenDtgcStakes.has(key)) {
+                  console.log(`⚠️ Filtering duplicate DTGC stake: amount=${ethers.formatEther(stake.amount)}, tier=${stake.tier}`);
+                  return false;
+                }
+                seenDtgcStakes.add(key);
+                return true;
+              });
+              console.log(`📊 DTGC stakes after dedup: ${uniqueDtgcStakes.length}/${dtgcStakes.length}`);
+              
               // Find original indices by iterating all stakes
               const allDtgcStakes = await stakingV4.getAllStakes(account);
               
-              dtgcStakes.forEach((stake, activeIdx) => {
+              uniqueDtgcStakes.forEach((stake, activeIdx) => {
                 // Find original index in allStakes
                 let originalIndex = 0;
                 for (let i = 0; i < allDtgcStakes.length; i++) {
@@ -6991,10 +7006,26 @@ export default function App() {
               const lpStakes = await lpStakingV4.getActiveStakes(account);
               console.log('📋 V4 LP stakes:', lpStakes);
               
+              // ═══════════════════════════════════════════════════════════════
+              // FIX: Deduplicate LP stakes BEFORE processing
+              // Contract may return same stake multiple times (Diamond+ doubling bug)
+              // ═══════════════════════════════════════════════════════════════
+              const seenLpStakes = new Set();
+              const uniqueLpStakes = lpStakes.filter(stake => {
+                const key = `${stake.amount.toString()}-${stake.startTime.toString()}-${stake.lpType.toString()}`;
+                if (seenLpStakes.has(key)) {
+                  console.log(`⚠️ Filtering duplicate LP stake from contract response: amount=${ethers.formatEther(stake.amount)}, lpType=${stake.lpType}`);
+                  return false;
+                }
+                seenLpStakes.add(key);
+                return true;
+              });
+              console.log(`📊 LP stakes after dedup: ${uniqueLpStakes.length}/${lpStakes.length}`);
+              
               // Find original indices
               const allLpStakes = await lpStakingV4.getAllStakes(account);
               
-              lpStakes.forEach((stake, activeIdx) => {
+              uniqueLpStakes.forEach((stake, activeIdx) => {
                 // Find original index
                 let originalIndex = 0;
                 for (let i = 0; i < allLpStakes.length; i++) {
@@ -7046,6 +7077,23 @@ export default function App() {
                   // Regular Diamond/Diamond+ stake
                   const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
                   
+                  // ═══════════════════════════════════════════════════════════════
+                  // FIX: Check for duplicate Diamond/Diamond+ stakes
+                  // Same stake might be returned multiple times from contract
+                  // ═══════════════════════════════════════════════════════════════
+                  const lpStartTime = Number(stake.startTime) * 1000;
+                  const isDuplicateLP = positions.some(p => 
+                    p.isLP && 
+                    !p.isFlex &&
+                    Math.abs(p.amount - lpAmount) < 0.0001 && // Same amount (within tolerance)
+                    Math.abs(p.startTime - lpStartTime) < 60000 // Same start time (within 1 min)
+                  );
+                  
+                  if (isDuplicateLP) {
+                    console.log(`⚠️ Skipping duplicate ${lpTierName} stake #${originalIndex}: ${lpAmount} LP (already counted)`);
+                    return;
+                  }
+                  
                   positions.push({
                     id: `lp-stake-${originalIndex}`,
                     stakeIndex: originalIndex,
@@ -7053,7 +7101,7 @@ export default function App() {
                     isLP: true,
                     isFlex: false,
                     amount: lpAmount,
-                    startTime: Number(stake.startTime) * 1000,
+                    startTime: lpStartTime,
                     endTime: Number(stake.unlockTime) * 1000,
                     lockPeriod: Number(stake.lockPeriod),
                     apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
@@ -7064,6 +7112,7 @@ export default function App() {
                     isActive: stake.isActive,
                     timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
                     isV4: true,
+                    sourceContract: 'lpV4', // Track source for debugging
                   });
                   console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount);
                 }
@@ -7086,7 +7135,21 @@ export default function App() {
                   const flexStakes = await flexStakingV4.getActiveStakes(account);
                   console.log('📋 V4 Flex stakes:', flexStakes);
                   
-                  flexStakes.forEach((stake, idx) => {
+                  // Deduplicate Flex stakes from contract response
+                  const seenFlexStakes = new Set();
+                  const uniqueFlexStakes = flexStakes.filter(stake => {
+                    const amt = stake.amount || stake[0] || 0n;
+                    const st = stake.startTime || stake[1] || 0;
+                    const key = `${amt.toString()}-${st.toString()}`;
+                    if (seenFlexStakes.has(key)) {
+                      console.log(`⚠️ Filtering duplicate Flex stake from contract`);
+                      return false;
+                    }
+                    seenFlexStakes.add(key);
+                    return true;
+                  });
+                  
+                  uniqueFlexStakes.forEach((stake, idx) => {
                     if (!stake.isActive && stake[3] !== true) return;
                     
                     const flexAmount = parseFloat(ethers.formatEther(stake.amount || stake[0] || 0n));
@@ -7216,17 +7279,25 @@ export default function App() {
             if (lpAmount > 0) {
               const rawLpApr = Number(lpPosition[4] || 0) / 100;
               const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+              const lpStartTime = Number(lpPosition[1] || 0) * 1000;
               
-              // Check for duplicate from V4
-              const existingV4LP = positions.find(p => p.isLP && p.amount === lpAmount && p.isV4);
-              if (!existingV4LP) {
+              // Check for duplicate from V4 (use tolerance for floating point comparison)
+              const existingLP = positions.find(p => 
+                p.isLP && 
+                Math.abs(p.amount - lpAmount) < 0.0001 && // Same amount within tolerance
+                (p.isV4 || Math.abs(p.startTime - lpStartTime) < 60000) // V4 or same start time
+              );
+              
+              if (existingLP) {
+                console.log(`⚠️ Skipping V3 LP - already have this stake from ${existingLP.isV4 ? 'V4' : 'V3'}`);
+              } else {
                 positions.push({
                   id: 'v3-lp-stake-0',
                   stakeIndex: 0,
                   type: 'LP',
                   isLP: true,
                   amount: lpAmount,
-                  startTime: Number(lpPosition[1] || 0) * 1000,
+                  startTime: lpStartTime,
                   endTime: Number(lpPosition[2] || 0) * 1000,
                   lockPeriod: Number(lpPosition[3] || 0),
                   apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
@@ -7237,6 +7308,7 @@ export default function App() {
                   isActive: lpIsActive || lpAmount > 0,
                   timeRemaining: Number(lpPosition[8] || 0),
                   isV4: false, // V3 Legacy
+                  sourceContract: 'lpV3',
                 });
                 console.log('✅ Added V3 Legacy LP position');
               }
@@ -7246,11 +7318,54 @@ export default function App() {
           console.warn('⚠️ V3 fetch also had issues:', v3Err.message);
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // FINAL DEDUPLICATION - Catch any duplicates that slipped through
+        // This fixes the Diamond+ doubling bug where same stake shows 2x
+        // MORE AGGRESSIVE: Match by amount+type only (ignore time differences)
+        // ═══════════════════════════════════════════════════════════════
+        const seenStakes = new Set();
+        const deduplicatedPositions = positions.filter(pos => {
+          // Create unique key: type + lpType + amount (rounded to 2 decimals)
+          // REMOVED time from key - same amount+type = same stake regardless of timestamp
+          const amountKey = Math.round(pos.amount * 100); // 2 decimal precision (more forgiving)
+          const key = pos.isLP 
+            ? `lp-${pos.lpType || 0}-${amountKey}`
+            : `dtgc-${pos.tier || 0}-${amountKey}`;
+          
+          if (seenStakes.has(key)) {
+            console.log(`⚠️ FINAL DEDUP: Removing duplicate ${pos.tierName || pos.type}: ${pos.amount} LP (key: ${key})`);
+            return false;
+          }
+          seenStakes.add(key);
+          return true;
+        });
+        
+        // Also check for near-identical amounts (within 0.1% tolerance)
+        const finalPositions = [];
+        for (const pos of deduplicatedPositions) {
+          const isDupe = finalPositions.some(existing => 
+            existing.isLP === pos.isLP &&
+            existing.lpType === pos.lpType &&
+            Math.abs(existing.amount - pos.amount) / Math.max(existing.amount, pos.amount) < 0.001 // 0.1% tolerance
+          );
+          if (isDupe) {
+            console.log(`⚠️ NEAR-MATCH DEDUP: Removing ${pos.tierName}: ${pos.amount} LP (within 0.1% of existing)`);
+          } else {
+            finalPositions.push(pos);
+          }
+        }
+        const finalDeduped = finalPositions;
+        
+        if (finalDeduped.length !== positions.length) {
+          console.log(`🔧 DEDUP FIX: Removed ${positions.length - finalDeduped.length} duplicate(s)`);
+          console.log(`📊 Before: ${positions.length}, After: ${finalDeduped.length}`);
+        }
+
         // Only update if we found positions - don't clear with empty array
-        if (positions.length > 0) {
-          setStakedPositions(positions);
-          lastKnownPositionsRef.current = positions; // Save as last known good
-          console.log('📊 Total positions (V3+V4):', positions.length);
+        if (finalDeduped.length > 0) {
+          setStakedPositions(finalDeduped);
+          lastKnownPositionsRef.current = finalDeduped; // Save as last known good
+          console.log('📊 Total positions (V3+V4):', finalDeduped.length);
         } else if (lastKnownPositionsRef.current.length > 0) {
           // No positions found but we had them before - keep the last known good
           console.log('⚠️ No positions from RPC - preserving last known:', lastKnownPositionsRef.current.length);
@@ -13625,7 +13740,7 @@ export default function App() {
           onClick={() => setShowGoldRecords(true)}
           style={{
             position: 'fixed',
-            bottom: '234px', // Moved up from 94px to make room for 3 widgets
+            bottom: '234px', // TOP - Trophy (Treasure Vault)
             right: '24px',
             width: '56px',
             height: '56px',
@@ -14032,7 +14147,7 @@ export default function App() {
           onClick={() => setShowGex(true)}
           style={{
             position: 'fixed',
-            bottom: '164px',
+            bottom: '164px', // MIDDLE - GEX
             right: '24px',
             zIndex: 1500,
             width: '56px',
