@@ -1,3 +1,4 @@
+import GEXWidget from "./components/GEXWidget";
 import DapperComponent from './components/DapperComponent';
 import ZapperXChain from './components/ZapperXChain';
 import PricingPage from './pages/PricingPage';
@@ -14991,6 +14992,7 @@ export default function App() {
           {toast.message}
         </div>
       )}
+      <GEXWidget walletAddress={account} dtgcBalance={parseFloat(dtgcBalance) || 0} dtgcPrice={dtgcPrice || 0.0001851} position="bottom-right" />
     </ThemeContext.Provider>
   );
 }
