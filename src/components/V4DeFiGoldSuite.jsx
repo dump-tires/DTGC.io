@@ -38,6 +38,11 @@ const CONFIG = {
   },
   DEV_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
   BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
+  
+  // Growth Engine - 1% of all transactions
+  GROWTH_ENGINE_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
+  GROWTH_ENGINE_FEE_BPS: 100, // 1% = 100 basis points
+  
   PULSESCAN_API: 'https://api.scan.pulsechain.com/api/v2',
   GIB_SHOW_BASE: 'https://gib.show/image/369', // PulseChain chainId = 369
   
@@ -100,8 +105,8 @@ const TOKENS = {
     symbol: 'DTGC', 
     name: 'DT Gold Coin', 
     decimals: 18, 
-    logo: getTokenLogo('0xd0676b28a457371d58d47e5247b439114e40eb0f'),
-    emoji: '🪙',
+    logo: '/favicon-192.png', // Use our gold coin favicon
+    emoji: '🏆',
     isNative: false,
   },
   URMOM: { 
@@ -1260,20 +1265,64 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       
       const routerLabel = swapRoute?.router || 'V1';
       
+      // ═══════════════════════════════════════════════════════════════
+      // EXECUTE SWAP WITH 1% GROWTH ENGINE FEE
+      // ═══════════════════════════════════════════════════════════════
+      
       if (fromToken === 'PLS' || fromTokenData.isNative) {
+        // Calculate 1% fee from input PLS
+        const growthFee = inputAmount * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+        const swapAmount = inputAmount - growthFee;
+        
+        // Send 1% to Growth Engine first
+        showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+        const feeTx = await signer.sendTransaction({
+          to: CONFIG.GROWTH_ENGINE_WALLET,
+          value: growthFee,
+          ...txOptions
+        });
+        await feeTx.wait();
+        
         showToastMsg(`Swapping via PulseX ${routerLabel}...`, 'info');
-        const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(amountOutMin, path, userAddress, deadline, { value: inputAmount, ...txOptions });
+        const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(amountOutMin, path, userAddress, deadline, { value: swapAmount, ...txOptions });
         await tx.wait();
       } else if (toToken === 'PLS' || toTokenData.isNative) {
         await checkAndApprove(fromAddr, fromToken, inputAmount);
         showToastMsg(`Swapping via PulseX ${routerLabel}...`, 'info');
         const tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline, txOptions);
         await tx.wait();
+        
+        // After swap, send 1% of received PLS to Growth Engine
+        showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+        const plsBalance = await signer.provider.getBalance(userAddress);
+        const growthFee = amountOutMin * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+        if (plsBalance >= growthFee) {
+          const feeTx = await signer.sendTransaction({
+            to: CONFIG.GROWTH_ENGINE_WALLET,
+            value: growthFee,
+            ...txOptions
+          });
+          await feeTx.wait();
+        }
       } else {
         await checkAndApprove(fromAddr, fromToken, inputAmount);
         showToastMsg(`Swapping via PulseX ${routerLabel}...`, 'info');
         const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline, txOptions);
         await tx.wait();
+        
+        // After token-to-token swap, send 1% of received tokens to Growth Engine
+        showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+        const outTokenContract = new ethers.Contract(toAddr, ERC20_ABI, signer);
+        const outBalance = await outTokenContract.balanceOf(userAddress);
+        const growthFee = amountOutMin * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+        if (outBalance >= growthFee) {
+          try {
+            const feeTx = await outTokenContract.transfer(CONFIG.GROWTH_ENGINE_WALLET, growthFee, txOptions);
+            await feeTx.wait();
+          } catch (feeErr) {
+            console.warn('Growth fee transfer failed (token may have transfer restrictions):', feeErr.message);
+          }
+        }
       }
       
       showToastMsg(`✅ Swapped ${fromAmount} ${fromToken} for ${toToken} via ${routerLabel}!`, 'success');
