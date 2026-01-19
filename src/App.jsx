@@ -4470,6 +4470,43 @@ export default function App() {
   const [laserLinkAmount, setLaserLinkAmount] = useState('1000'); // Default $1000 worth
   const [laserLinkRoute, setLaserLinkRoute] = useState(null);
   
+  // ═══════════════════════════════════════════════════════════════
+  // GOLD STAR ALERT SYSTEM - Configurable threshold + tier gating
+  // ═══════════════════════════════════════════════════════════════
+  const [goldStarThreshold, setGoldStarThreshold] = useState(() => {
+    const saved = localStorage.getItem('gex-gold-star-threshold');
+    return saved ? parseFloat(saved) : 5; // Default 5%
+  });
+  const DTGC_TIER_REQUIREMENT_USD = 200; // $200 worth of DTGC
+  const TELEGRAM_CHANNEL_INVITE = 'https://t.me/+4WgXtoWzAYoxMjIx'; // Replace with your actual invite link
+  
+  // Check if user meets Gold Star tier requirements
+  const getUserDtgcValueUsd = useCallback(() => {
+    const dtgcBalance = parseFloat(balances['DTGC'] || 0);
+    const dtgcPrice = livePrices.dtgc || 0;
+    return dtgcBalance * dtgcPrice;
+  }, [balances, livePrices]);
+  
+  const hasActiveStakes = useCallback(() => {
+    // Check if user has any active stakes from stake history
+    return stakeHistory && stakeHistory.length > 0;
+  }, [stakeHistory]);
+  
+  const isGoldStarEligible = useCallback(() => {
+    const dtgcValueUsd = getUserDtgcValueUsd();
+    const hasStakes = hasActiveStakes();
+    return dtgcValueUsd >= DTGC_TIER_REQUIREMENT_USD || hasStakes;
+  }, [getUserDtgcValueUsd, hasActiveStakes]);
+  
+  const isGoldStarTriggered = useCallback(() => {
+    return Math.abs(hexPrices.spreadPercent) >= goldStarThreshold;
+  }, [hexPrices.spreadPercent, goldStarThreshold]);
+  
+  // Save threshold to localStorage
+  useEffect(() => {
+    localStorage.setItem('gex-gold-star-threshold', goldStarThreshold.toString());
+  }, [goldStarThreshold]);
+  
   // Calculate optimal arbitrage route
   const calculateLaserRoute = useCallback((inputAmount, direction) => {
     const amount = parseFloat(inputAmount) || 1000;
@@ -5731,7 +5768,7 @@ export default function App() {
           name: 'DTGC Premium Staking',
           description: 'Premium DeFi Staking on PulseChain',
           url: window.location.origin,
-          icons: [`${window.location.origin}/favicon1.png`],
+          icons: [`${window.location.origin}/favicon-192.png`],
         },
         rpcMap: {
           [CHAIN_ID]: 'https://rpc.pulsechain.com',
@@ -13805,7 +13842,7 @@ export default function App() {
               marginBottom: '12px'
             }}>
               <img 
-                src="/favicon1.png"
+                src="/favicon-192.png"
                 alt="DTGC"
                 style={{
                   width: '100%',
@@ -14694,36 +14731,57 @@ export default function App() {
                         </div>
                         
                         {/* Zapp Arb Laser Link for ETH→PLS direction */}
-                        {Math.abs(hexPrices.spreadPercent) >= 3 && (
-                          <button
-                            onClick={() => setShowLaserLink(true)}
-                            style={{
-                              width: '100%',
-                              marginTop: '16px',
-                              padding: '14px 18px',
-                              background: 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)',
-                              border: 'none',
-                              borderRadius: '12px',
-                              cursor: 'pointer',
-                              position: 'relative',
-                              overflow: 'hidden',
-                              boxShadow: '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)',
-                            }}
-                          >
-                            <div style={{ position: 'relative', zIndex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
-                                <span style={{ fontSize: '1.3rem' }}>⚡</span>
-                                <span style={{ color: '#000', fontWeight: 900, fontSize: '1rem', textShadow: '0 0 10px rgba(255,255,255,0.5)' }}>
-                                  ZAPP ARB LASER LINK
-                                </span>
-                                <span style={{ fontSize: '1.3rem' }}>⚡</span>
-                              </div>
-                              <div style={{ color: 'rgba(0,0,0,0.7)', fontSize: '0.7rem', fontWeight: 600 }}>
-                                Calculate route • Est. profit: ${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}
-                              </div>
+                        {(() => {
+                          const isActive = isGoldStarTriggered() && isGoldStarEligible();
+                          const tooltipText = !isGoldStarEligible() 
+                            ? `🔒 Requires $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or active stake`
+                            : !isGoldStarTriggered()
+                            ? `⏳ Waiting for ${goldStarThreshold}% spread (current: ${Math.abs(hexPrices.spreadPercent).toFixed(1)}%)`
+                            : '';
+                          return (
+                            <div style={{ position: 'relative' }} title={tooltipText}>
+                              <button
+                                onClick={() => isActive && setShowLaserLink(true)}
+                                disabled={!isActive}
+                                style={{
+                                  width: '100%',
+                                  marginTop: '16px',
+                                  padding: '14px 18px',
+                                  background: isActive 
+                                    ? 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)'
+                                    : 'linear-gradient(135deg, #444 0%, #333 50%, #444 100%)',
+                                  border: 'none',
+                                  borderRadius: '12px',
+                                  cursor: isActive ? 'pointer' : 'not-allowed',
+                                  position: 'relative',
+                                  overflow: 'hidden',
+                                  boxShadow: isActive 
+                                    ? '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)'
+                                    : 'none',
+                                  opacity: isActive ? 1 : 0.6,
+                                }}
+                              >
+                                <div style={{ position: 'relative', zIndex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
+                                    <span style={{ fontSize: '1.3rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                                    <span style={{ color: isActive ? '#000' : '#888', fontWeight: 900, fontSize: '1rem', textShadow: isActive ? '0 0 10px rgba(255,255,255,0.5)' : 'none' }}>
+                                      ZAPP ARB LASER LINK
+                                    </span>
+                                    <span style={{ fontSize: '1.3rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                                  </div>
+                                  <div style={{ color: isActive ? 'rgba(0,0,0,0.7)' : '#666', fontSize: '0.7rem', fontWeight: 600 }}>
+                                    {isActive 
+                                      ? `Calculate route • Est. profit: $${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}`
+                                      : !isGoldStarEligible()
+                                      ? `Hold $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or stake to unlock`
+                                      : `Activates at ${goldStarThreshold}% spread`
+                                    }
+                                  </div>
+                                </div>
+                              </button>
                             </div>
-                          </button>
-                        )}
+                          );
+                        })()}
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -14761,45 +14819,158 @@ export default function App() {
                     )}
                     
                     {/* ═══════════════════════════════════════════════════════════════
-                        ZAPP ARB LASER LINK - One-click arbitrage route calculator
+                        ZAPP ARB LASER LINK - Always visible, gated by tier
                     ═══════════════════════════════════════════════════════════════ */}
-                    {Math.abs(hexPrices.spreadPercent) >= 3 && (
-                      <button
-                        onClick={() => setShowLaserLink(true)}
-                        style={{
-                          width: '100%',
-                          marginTop: '20px',
-                          padding: '16px 20px',
-                          background: 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)',
-                          border: 'none',
-                          borderRadius: '12px',
-                          cursor: 'pointer',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          boxShadow: '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)',
-                        }}
-                      >
-                        <div style={{ position: 'relative', zIndex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '1.5rem' }}>⚡</span>
-                            <span style={{ color: '#000', fontWeight: 900, fontSize: '1.1rem', textShadow: '0 0 10px rgba(255,255,255,0.5)' }}>
-                              ZAPP ARB LASER LINK
+                    {(() => {
+                      const isActive = isGoldStarTriggered() && isGoldStarEligible();
+                      const tooltipText = !isGoldStarEligible() 
+                        ? `🔒 Requires $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or active stake`
+                        : !isGoldStarTriggered()
+                        ? `⏳ Waiting for ${goldStarThreshold}% spread (current: ${Math.abs(hexPrices.spreadPercent).toFixed(1)}%)`
+                        : '🚀 Click to calculate arbitrage route!';
+                      return (
+                        <div style={{ position: 'relative', marginTop: '20px' }} title={tooltipText}>
+                          <button
+                            onClick={() => isActive && setShowLaserLink(true)}
+                            disabled={!isActive}
+                            style={{
+                              width: '100%',
+                              padding: '16px 20px',
+                              background: isActive 
+                                ? 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)'
+                                : 'linear-gradient(135deg, #444 0%, #333 50%, #444 100%)',
+                              border: 'none',
+                              borderRadius: '12px',
+                              cursor: isActive ? 'pointer' : 'not-allowed',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              boxShadow: isActive 
+                                ? '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)'
+                                : 'none',
+                              opacity: isActive ? 1 : 0.6,
+                            }}
+                          >
+                            <div style={{ position: 'relative', zIndex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '1.5rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                                <span style={{ color: isActive ? '#000' : '#888', fontWeight: 900, fontSize: '1.1rem', textShadow: isActive ? '0 0 10px rgba(255,255,255,0.5)' : 'none' }}>
+                                  ZAPP ARB LASER LINK
+                                </span>
+                                <span style={{ fontSize: '1.5rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                              </div>
+                              <div style={{ color: isActive ? 'rgba(0,0,0,0.7)' : '#666', fontSize: '0.75rem', fontWeight: 600 }}>
+                                {isActive 
+                                  ? `Calculate optimal route • Est. profit: $${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}`
+                                  : !isGoldStarEligible()
+                                  ? `Hold $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or stake to unlock`
+                                  : `Activates at ${goldStarThreshold}% spread`
+                                }
+                              </div>
+                            </div>
+                            {/* Animated laser beam effect - only when active */}
+                            {isActive && (
+                              <div style={{
+                                position: 'absolute', top: 0, left: '-100%', width: '50%', height: '100%',
+                                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
+                                animation: 'laserSweep 2s infinite',
+                              }} />
+                            )}
+                            <style>{`@keyframes laserSweep { 0% { left: -100%; } 100% { left: 200%; } }`}</style>
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* ═══════════════════════════════════════════════════════════════
+                        GOLD STAR SETTINGS + TELEGRAM ACCESS
+                    ═══════════════════════════════════════════════════════════════ */}
+                    <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(255,215,0,0.1)', borderRadius: '12px', border: '1px solid rgba(255,215,0,0.3)' }}>
+                      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🌟 GOLD STAR SETTINGS
+                      </div>
+                      
+                      {/* Threshold Setting */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ color: '#888', fontSize: '0.7rem', display: 'block', marginBottom: '6px' }}>
+                          Alert Threshold (%)
+                        </label>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {[3, 5, 7, 10].map(val => (
+                            <button
+                              key={val}
+                              onClick={() => setGoldStarThreshold(val)}
+                              style={{
+                                flex: 1,
+                                padding: '8px',
+                                background: goldStarThreshold === val ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.05)',
+                                border: `1px solid ${goldStarThreshold === val ? '#FFD700' : 'rgba(255,255,255,0.1)'}`,
+                                borderRadius: '6px',
+                                color: goldStarThreshold === val ? '#FFD700' : '#888',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >{val}%</button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Eligibility Status */}
+                      <div style={{ padding: '10px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginBottom: '12px' }}>
+                        <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '6px' }}>Your Status:</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ color: '#888' }}>DTGC Value:</span>
+                            <span style={{ color: getUserDtgcValueUsd() >= DTGC_TIER_REQUIREMENT_USD ? '#4CAF50' : '#F44336', fontWeight: 600 }}>
+                              ${getUserDtgcValueUsd().toFixed(2)} {getUserDtgcValueUsd() >= DTGC_TIER_REQUIREMENT_USD ? '✅' : `(need $${DTGC_TIER_REQUIREMENT_USD})`}
                             </span>
-                            <span style={{ fontSize: '1.5rem' }}>⚡</span>
                           </div>
-                          <div style={{ color: 'rgba(0,0,0,0.7)', fontSize: '0.75rem', fontWeight: 600 }}>
-                            Calculate optimal route • Est. profit: ${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ color: '#888' }}>Active Stakes:</span>
+                            <span style={{ color: hasActiveStakes() ? '#4CAF50' : '#888', fontWeight: 600 }}>
+                              {hasActiveStakes() ? `${stakeHistory?.length || 0} stakes ✅` : 'None'}
+                            </span>
+                          </div>
+                          <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                            <span style={{ color: '#FFD700' }}>Eligibility:</span>
+                            <span style={{ color: isGoldStarEligible() ? '#4CAF50' : '#F44336', fontWeight: 700 }}>
+                              {isGoldStarEligible() ? '🌟 GOLD STAR MEMBER' : '🔒 NOT ELIGIBLE'}
+                            </span>
                           </div>
                         </div>
-                        {/* Animated laser beam effect */}
-                        <div style={{
-                          position: 'absolute', top: 0, left: '-100%', width: '50%', height: '100%',
-                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
-                          animation: 'laserSweep 2s infinite',
-                        }} />
-                        <style>{`@keyframes laserSweep { 0% { left: -100%; } 100% { left: 200%; } }`}</style>
-                      </button>
-                    )}
+                      </div>
+                      
+                      {/* Telegram Channel Access */}
+                      <div style={{ padding: '12px', background: isGoldStarEligible() ? 'rgba(76,175,80,0.15)' : 'rgba(100,100,100,0.15)', borderRadius: '8px', border: `1px solid ${isGoldStarEligible() ? 'rgba(76,175,80,0.3)' : 'rgba(100,100,100,0.3)'}` }}>
+                        <div style={{ color: isGoldStarEligible() ? '#4CAF50' : '#888', fontWeight: 700, fontSize: '0.8rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          📱 Telegram Alerts Channel
+                        </div>
+                        {isGoldStarEligible() ? (
+                          <a 
+                            href={TELEGRAM_CHANNEL_INVITE}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'block',
+                              padding: '10px 16px',
+                              background: 'linear-gradient(135deg, #0088cc, #0066aa)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              textDecoration: 'none',
+                              fontWeight: 700,
+                              fontSize: '0.85rem',
+                              textAlign: 'center',
+                            }}
+                          >
+                            📲 Join Private Alerts Channel
+                          </a>
+                        ) : (
+                          <div style={{ color: '#666', fontSize: '0.75rem', textAlign: 'center', padding: '8px' }}>
+                            🔒 Hold ${DTGC_TIER_REQUIREMENT_USD}+ DTGC or have active stake to unlock
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
 
