@@ -2,54 +2,54 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 
 // ═══════════════════════════════════════════════════════════════
-// DAPPER FLEX - ENHANCED EDITION
-// Multicall3 Parallel Scanning • gib.show Token Logos • Copy Address
-// Error-Resistant Scanning • DTGC/URMOM LP Icons
+// DAPPER FLEX - ENHANCED EDITION V2
+// Multicall3 Parallel Scanning • Token Logos • Copy Address
+// Error-Resistant Scanning • DTGC Favicon • LP Icon
 // ═══════════════════════════════════════════════════════════════
 
 // ============================================
-// TOKEN LOGO HELPERS
+// TOKEN LOGO CONFIGURATION
+// DTGC uses the gold coin favicon, LP uses combined icon
 // ============================================
+const TOKEN_LOGOS = {
+  // DTGC - Gold coin favicon (the trophy icon)
+  '0xd0676b28a457371d58d47e5247b439114e40eb0f': '/favicon-192.png',
+  
+  // DTGC/URMOM LP - Use gold bar for LP
+  '0x670c972bb5388e087a2934a063064d97278e01f3': '/gold_bar.png',
+  
+  // URMOM 
+  '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0': 'https://gib.show/image/369/0xe43b3cee3554e120213b8b69caf690b6c04a7ec0',
+  
+  // WPLS
+  '0xa1077a294dde1b09bb074bec877f05b634579687': 'https://tokens.app.pulsex.com/images/tokens/0xA1077a294dDE1B09bB074Bec877f05b634579687.png',
+  
+  // HEX (PulseChain)
+  '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39': 'https://gib.show/image/369/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
+  
+  // PLSX
+  '0x95b303987a60c71504d99aa1b13b4da07b0790ab': 'https://gib.show/image/369/0x95b303987a60c71504d99aa1b13b4da07b0790ab',
+  
+  // INC
+  '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d': 'https://gib.show/image/369/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
+  
+  // DAI
+  '0xefd766ccb38eaf1dfd701853bfce31359239f305': 'https://gib.show/image/369/0xefd766ccb38eaf1dfd701853bfce31359239f305',
+  
+  // USDC
+  '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07': 'https://gib.show/image/369/0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07',
+};
+
 const getTokenLogo = (tokenAddress) => {
   if (!tokenAddress) return null;
   const addr = tokenAddress.toLowerCase();
   
-  // DTGC - Use our gold coin favicon
-  if (addr === '0xd0676b28a457371d58d47e5247b439114e40eb0f') {
-    return '/favicon-192.png';
+  // Check predefined logos first
+  if (TOKEN_LOGOS[addr]) {
+    return TOKEN_LOGOS[addr];
   }
   
-  // URMOM
-  if (addr === '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0') {
-    return 'https://gib.show/image/369/0xe43b3cee3554e120213b8b69caf690b6c04a7ec0';
-  }
-  
-  // DTGC/URMOM LP - Use our LP icon
-  if (addr === '0x670c972bb5388e087a2934a063064d97278e01f3') {
-    return '/lp-token-icon.png';
-  }
-  
-  // PLS (WPLS)
-  if (addr === '0xa1077a294dde1b09bb074bec877f05b634579687') {
-    return 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/pulse/info/logo.png';
-  }
-  
-  // HEX
-  if (addr === '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39' || addr === '0x15a630532c228cba42c9e1843879786ba335e5d8') {
-    return 'https://gib.show/image/369/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39';
-  }
-  
-  // PLSX
-  if (addr === '0x95b303987a60c71504d99aa1b13b4da07b0790ab') {
-    return 'https://gib.show/image/369/0x95b303987a60c71504d99aa1b13b4da07b0790ab';
-  }
-  
-  // INC
-  if (addr === '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d') {
-    return 'https://gib.show/image/369/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d';
-  }
-  
-  // Default: gib.show for PulseChain
+  // Default: gib.show for PulseChain tokens
   return `https://gib.show/image/369/${addr}`;
 };
 
@@ -134,23 +134,22 @@ const CopyButton = ({ text, label = 'Copy' }) => {
 // Uses parallel calls with timeout protection
 // ═══════════════════════════════════════════════════════════════
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
-const MULTICALL3_ABI = ['function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) external payable returns (tuple(bool success, bytes returnData)[])'];
 
 const TOKEN_VALIDATOR = {
   // Pre-computed pairs cache (instant lookup)
   KNOWN_PAIRS: {
     'dtgc:pls': '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
-    'urmom:pls': '0x670c972bb5388e087a2934a063064d97278e01f3',
+    'urmom:pls': '0x0548656e272fec9534e180d3174cfc57ab6e10c0',
     'hex:pls': '0x6F1cCa5F5F36C20b5E7eD57B10b5C8a5A6e2F9d7',
     'plsx:pls': '0x1b45b9148791D3a104184Cd5DFE5CE57193a3ee9',
-    'inc:pls': '0x3b08e66F4B14d49Ce3F9f5b0B8e6e2f5C7e8D9A6',
+    'inc:pls': '0xe56043671df55de5cdf8459710433c10324de0ae',
   },
 
   // Runtime caches
   VALIDATION_CACHE: new Map(),
   PAIR_CACHE: new Map(),
 
-  // Whitelisted safe tokens with logos
+  // Whitelisted safe tokens
   SAFE_TOKENS: {
     '0xa1077a294dde1b09bb074bec877f05b634579687': { name: 'WPLS', symbol: 'WPLS', risk: 'LOW', decimals: 18 },
     '0x95b303987a60c71504d99aa1b13b4da07b0790ab': { name: 'PLSX', symbol: 'PLSX', risk: 'LOW', decimals: 18 },
@@ -159,8 +158,8 @@ const TOKEN_VALIDATOR = {
     '0xd0676b28a457371d58d47e5247b439114e40eb0f': { name: 'DTGC', symbol: 'DTGC', risk: 'LOW', decimals: 18 },
     '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0': { name: 'URMOM', symbol: 'URMOM', risk: 'LOW', decimals: 18 },
     '0x670c972bb5388e087a2934a063064d97278e01f3': { name: 'DTGC/URMOM LP', symbol: 'DTGC-URMOM-LP', risk: 'LOW', decimals: 18 },
-    '0xefD766cCb38EaF1dfd701853BFCe31359239F305': { name: 'DAI', symbol: 'DAI', risk: 'LOW', decimals: 18 },
-    '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07': { name: 'USDC', symbol: 'USDC', risk: 'LOW', decimals: 6 },
+    '0xefd766ccb38eaf1dfd701853bfce31359239f305': { name: 'DAI', symbol: 'DAI', risk: 'LOW', decimals: 18 },
+    '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07': { name: 'USDC', symbol: 'USDC', risk: 'LOW', decimals: 6 },
   },
 
   /**
@@ -536,7 +535,7 @@ const DapperComponent = ({ provider, account }) => {
     }
   };
 
-  // Quick access tokens
+  // Quick access tokens with correct icons
   const QUICK_TOKENS = [
     { address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', symbol: 'DTGC', name: 'DTGC' },
     { address: '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0', symbol: 'URMOM', name: 'URMOM' },
@@ -548,7 +547,10 @@ const DapperComponent = ({ provider, account }) => {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h2 style={styles.title}>💎⚡ DAPPER FLEX</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+          <img src="/favicon-192.png" alt="DTGC" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+          <h2 style={styles.title}>💎⚡ DAPPER FLEX</h2>
+        </div>
         <p style={styles.subtitle}>One-Click LP Zapping • Fast Validation • No Lockup</p>
       </div>
 
@@ -712,7 +714,7 @@ const DapperComponent = ({ provider, account }) => {
       {/* Info Footer */}
       <div style={styles.footer}>
         <div style={styles.footerItem}>
-          <TokenIcon address="0xd0676b28a457371d58d47e5247b439114e40eb0f" symbol="DTGC" size={16} />
+          <img src="/favicon-192.png" alt="DTGC" style={{ width: 16, height: 16, borderRadius: '50%' }} />
           <span>DTGC Ecosystem</span>
         </div>
         <div style={styles.footerItem}>
@@ -739,14 +741,14 @@ const styles = {
     marginBottom: '20px',
   },
   title: {
-    margin: '0 0 8px 0',
+    margin: '0',
     fontSize: '1.8rem',
     background: 'linear-gradient(135deg, #ff1493, #ff69b4)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
   },
   subtitle: {
-    margin: 0,
+    margin: '8px 0 0 0',
     color: '#ffb6c1',
     fontSize: '0.9rem',
   },
@@ -951,4 +953,4 @@ const styles = {
 };
 
 export default DapperComponent;
-export { TOKEN_VALIDATOR, TokenIcon, CopyButton, getTokenLogo };
+export { TOKEN_VALIDATOR, TokenIcon, CopyButton, getTokenLogo, TOKEN_LOGOS };

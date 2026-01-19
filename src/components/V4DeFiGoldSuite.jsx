@@ -51,8 +51,20 @@ const CONFIG = {
   EXPLORER: 'https://scan.pulsechain.com',
 };
 
-// Helper to get token logo from gib.show
-const getTokenLogo = (address) => `${CONFIG.GIB_SHOW_BASE}/${address}`;
+// Helper to get token logo - DTGC uses favicon, LP uses gold bar
+const getTokenLogo = (address) => {
+  const addr = address?.toLowerCase();
+  // DTGC - Gold coin favicon (trophy icon)
+  if (addr === '0xd0676b28a457371d58d47e5247b439114e40eb0f') {
+    return '/favicon-192.png';
+  }
+  // DTGC/URMOM LP - Gold bar icon
+  if (addr === '0x670c972bb5388e087a2934a063064d97278e01f3') {
+    return '/gold_bar.png';
+  }
+  // Default: gib.show
+  return `${CONFIG.GIB_SHOW_BASE}/${address}`;
+};
 
 // Token Icon component - renders image or emoji fallback
 const TokenIcon = ({ icon, emoji, size = 24, style = {} }) => {
@@ -2109,6 +2121,20 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               <span style={{ color: '#888' }}>Status</span>
               <span style={{ color: pairAddress ? '#4CAF50' : '#FF9800' }}>{pairAddress ? '✓ Pool Exists' : '⚠️ New Pool'}</span>
             </div>
+            {pairAddress && pairReserves && (
+              <div style={{ background: 'rgba(255,215,0,0.1)', border: '2px solid #FFD700', borderRadius: '8px', padding: '10px', marginTop: '8px', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '1.2rem' }}>🔒</span>
+                  <span style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '0.85rem' }}>RATIO LOCKED TO EXISTING POOL</span>
+                </div>
+                <div style={{ color: '#aaa', fontSize: '0.75rem' }}>
+                  Current ratio: 1 {lpToken0} = {pairReserves.reserve0 > 0n ? (Number(pairReserves.reserve1) / Number(pairReserves.reserve0)).toFixed(6) : '?'} {lpToken1}
+                </div>
+                <div style={{ color: '#888', fontSize: '0.7rem', marginTop: '4px' }}>
+                  Token 2 amount auto-calculated to match pool parity
+                </div>
+              </div>
+            )}
             {pairAddress && (
               <div style={styles.infoRow}>
                 <span style={{ color: '#888' }}>LP Address</span>
