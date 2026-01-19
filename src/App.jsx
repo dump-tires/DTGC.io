@@ -4462,6 +4462,86 @@ export default function App() {
     lastUpdated: null,
   });
   
+  // ═══════════════════════════════════════════════════════════════
+  // ZAPP ARB LASER LINK - Seamless Arbitrage Route Calculator
+  // Integrates GEX spread detection with Zapper X for one-click arb
+  // ═══════════════════════════════════════════════════════════════
+  const [showLaserLink, setShowLaserLink] = useState(false);
+  const [laserLinkAmount, setLaserLinkAmount] = useState('1000'); // Default $1000 worth
+  const [laserLinkRoute, setLaserLinkRoute] = useState(null);
+  
+  // Calculate optimal arbitrage route
+  const calculateLaserRoute = useCallback((inputAmount, direction) => {
+    const amount = parseFloat(inputAmount) || 1000;
+    
+    // Fee estimates (based on real data)
+    const ETH_GAS_USD = 5.00;       // Ethereum swap gas ~$5
+    const BRIDGE_FEE_PCT = 0.1;     // Liberty Swap ~0.1%
+    const BRIDGE_FLAT_FEE = 2.00;   // Bridge processing ~$2
+    const PLS_GAS_USD = 0.01;       // PulseChain gas negligible
+    const DEX_SLIPPAGE_PCT = 0.5;   // ~0.5% slippage on swaps
+    
+    if (direction === 'ETH_TO_PLS') {
+      // eHEX(E) is cheaper → Buy on ETH, Bridge to PLS, Sell
+      const buyAmountHex = amount / hexPrices.eHEX;
+      const afterSlippage1 = buyAmountHex * (1 - DEX_SLIPPAGE_PCT / 100);
+      const bridgedAmount = afterSlippage1 * (1 - BRIDGE_FEE_PCT / 100);
+      const sellValueUsd = bridgedAmount * hexPrices.pHEX * (1 - DEX_SLIPPAGE_PCT / 100);
+      const totalFees = ETH_GAS_USD + BRIDGE_FLAT_FEE + PLS_GAS_USD;
+      const netProfit = sellValueUsd - amount - totalFees;
+      const profitPercent = (netProfit / amount) * 100;
+      
+      return {
+        direction: 'ETH_TO_PLS',
+        inputAmount: amount,
+        inputToken: 'USDC',
+        steps: [
+          { chain: 'ETH', action: 'Swap USDC → eHEX', dex: 'Uniswap', gasUsd: ETH_GAS_USD, output: afterSlippage1.toFixed(2) + ' eHEX' },
+          { chain: 'BRIDGE', action: 'Bridge eHEX via Liberty', dex: 'Liberty Swap', gasUsd: BRIDGE_FLAT_FEE, output: bridgedAmount.toFixed(2) + ' eHEX' },
+          { chain: 'PLS', action: 'Swap eHEX → USDC', dex: 'PulseX', gasUsd: PLS_GAS_USD, output: '$' + sellValueUsd.toFixed(2) },
+        ],
+        outputAmount: sellValueUsd,
+        totalFees,
+        netProfit,
+        profitPercent,
+        isProfit: netProfit > 0,
+      };
+    } else {
+      // eHEX(P) is cheaper → Buy on PLS, Bridge to ETH, Sell
+      const buyAmountHex = amount / hexPrices.pHEX;
+      const afterSlippage1 = buyAmountHex * (1 - DEX_SLIPPAGE_PCT / 100);
+      const bridgedAmount = afterSlippage1 * (1 - BRIDGE_FEE_PCT / 100);
+      const sellValueUsd = bridgedAmount * hexPrices.eHEX * (1 - DEX_SLIPPAGE_PCT / 100);
+      const totalFees = PLS_GAS_USD + BRIDGE_FLAT_FEE + ETH_GAS_USD;
+      const netProfit = sellValueUsd - amount - totalFees;
+      const profitPercent = (netProfit / amount) * 100;
+      
+      return {
+        direction: 'PLS_TO_ETH',
+        inputAmount: amount,
+        inputToken: 'USDC',
+        steps: [
+          { chain: 'PLS', action: 'Swap USDC → eHEX', dex: 'PulseX', gasUsd: PLS_GAS_USD, output: afterSlippage1.toFixed(2) + ' eHEX' },
+          { chain: 'BRIDGE', action: 'Bridge eHEX via Liberty', dex: 'Liberty Swap', gasUsd: BRIDGE_FLAT_FEE, output: bridgedAmount.toFixed(2) + ' eHEX' },
+          { chain: 'ETH', action: 'Swap eHEX → USDC', dex: 'Uniswap', gasUsd: ETH_GAS_USD, output: '$' + sellValueUsd.toFixed(2) },
+        ],
+        outputAmount: sellValueUsd,
+        totalFees,
+        netProfit,
+        profitPercent,
+        isProfit: netProfit > 0,
+      };
+    }
+  }, [hexPrices]);
+  
+  // Update route when modal opens or amount changes
+  useEffect(() => {
+    if (showLaserLink && hexPrices.spreadPercent !== 0) {
+      const direction = hexPrices.spreadPercent > 0 ? 'PLS_TO_ETH' : 'ETH_TO_PLS';
+      setLaserLinkRoute(calculateLaserRoute(laserLinkAmount, direction));
+    }
+  }, [showLaserLink, laserLinkAmount, hexPrices, calculateLaserRoute]);
+  
   // Fetch eHEX(E) (Ethereum) and eHEX(P) (PulseChain) prices for GEX
   const fetchHexPrices = useCallback(async () => {
     try {
@@ -5943,27 +6023,30 @@ export default function App() {
   // Fetch mainnet balances when account connects
   useEffect(() => {
     const fetchMainnetBalances = async () => {
-      if (TESTNET_MODE || !account || !provider) return;
+      if (TESTNET_MODE || !account) return;
 
       try {
+        // Use dedicated RPC to avoid MetaMask rate limits
+        const rpcProvider = new ethers.JsonRpcProvider('https://pulsechain.publicnode.com');
+        
         // Get PLS balance
-        const plsBal = await provider.getBalance(account);
+        const plsBal = await rpcProvider.getBalance(account);
         setPlsBalance(ethers.formatEther(plsBal));
 
         // Get DTGC balance
-        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, rpcProvider);
         const dtgcBal = await dtgcContract.balanceOf(account);
         setDtgcBalance(ethers.formatEther(dtgcBal));
 
         // Get URMOM balance
-        const urmomContract = new ethers.Contract(CONTRACTS.URMOM, ERC20_ABI, provider);
+        const urmomContract = new ethers.Contract(CONTRACTS.URMOM, ERC20_ABI, rpcProvider);
         const urmomBal = await urmomContract.balanceOf(account);
         setUrmomBalance(ethers.formatEther(urmomBal));
 
         // Get DTGC/PLS LP balance (Diamond tier)
         let lpPlsBal = 0n;
         try {
-          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, rpcProvider);
           lpPlsBal = await lpPlsContract.balanceOf(account);
           setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
         } catch (e) {
@@ -5974,7 +6057,7 @@ export default function App() {
         // Get DTGC/URMOM LP balance (Diamond+ tier)
         let lpUrmomBal = 0n;
         try {
-          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, rpcProvider);
           lpUrmomBal = await lpUrmomContract.balanceOf(account);
           setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
           setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
@@ -6902,12 +6985,12 @@ export default function App() {
   const fetchStakedPosition = useCallback(async () => {
     if (TESTNET_MODE || !account || !provider) return;
 
-    // RPC endpoints to try (primary + backups)
+    // RPC endpoints to try - use dedicated RPCs first to avoid MetaMask rate limits
     const RPC_ENDPOINTS = [
-      null, // null = use connected wallet provider first
+      'https://pulsechain.publicnode.com',
       'https://rpc.pulsechain.com',
-      'https://pulsechain-rpc.publicnode.com',
       'https://rpc-pulsechain.g4mm4.io',
+      null, // null = wallet provider as last resort
     ];
 
     let lastError = null;
@@ -6916,7 +6999,7 @@ export default function App() {
       try {
         console.log('🔍 Fetching staked positions for:', account, rpcUrl ? `(using ${rpcUrl})` : '(using wallet provider)');
         
-        // Use either wallet provider or fallback RPC
+        // Use dedicated RPC provider (or wallet as fallback)
         const activeProvider = rpcUrl ? new ethers.JsonRpcProvider(rpcUrl) : provider;
         
         const positions = [];
@@ -6976,6 +7059,19 @@ export default function App() {
                 const tierName = tierNames[tierNum] || 'GOLD';
                 const rawApr = Number(stake.aprBps) / 100;
                 
+                // Calculate pending rewards from contract or estimate
+                let pendingRewards = 0;
+                if (stake.pendingRewards) {
+                  pendingRewards = parseFloat(ethers.formatEther(stake.pendingRewards));
+                } else {
+                  // Estimate rewards based on time staked
+                  const startTime = Number(stake.startTime);
+                  const now = Math.floor(Date.now() / 1000);
+                  const daysStaked = Math.max(0, (now - startTime) / 86400);
+                  const correctedApr = getV19CorrectedAPR(rawApr, tierName, false);
+                  pendingRewards = (amount * (correctedApr / 100) / 365) * daysStaked;
+                }
+                
                 positions.push({
                   id: `dtgc-stake-${originalIndex}`,
                   stakeIndex: originalIndex, // V4: needed for withdraw
@@ -6991,9 +7087,10 @@ export default function App() {
                   tierName: tierName,
                   isActive: stake.isActive,
                   timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
+                  pendingRewards: pendingRewards,
                   isV4: true,
                 });
-                console.log(`✅ Added V4 DTGC stake #${originalIndex}:`, tierName, amount);
+                console.log(`✅ Added V4 DTGC stake #${originalIndex}:`, tierName, amount, `rewards: ${pendingRewards.toFixed(2)}`);
               });
             }
             
@@ -7042,6 +7139,17 @@ export default function App() {
                 const rawLpApr = Number(stake.aprBps) / 100;
                 const lockPeriodDays = Number(stake.lockPeriod) / 86400; // Convert seconds to days
                 
+                // Calculate pending rewards
+                let lpPendingRewards = 0;
+                if (stake.pendingRewards) {
+                  lpPendingRewards = parseFloat(ethers.formatEther(stake.pendingRewards));
+                } else {
+                  const lpStartTime = Number(stake.startTime);
+                  const now = Math.floor(Date.now() / 1000);
+                  const daysStaked = Math.max(0, (now - lpStartTime) / 86400);
+                  lpPendingRewards = (lpAmount * (rawLpApr / 100) / 365) * daysStaked;
+                }
+                
                 // Check if this is a Flex stake:
                 // - APR is around 10% (9-12%)
                 // - OR lock period is 0 or very short (< 1 day)
@@ -7069,10 +7177,11 @@ export default function App() {
                     lpType: 2,
                     isActive: stake.isActive,
                     timeRemaining: 0,
+                    pendingRewards: lpPendingRewards,
                     isV4: true,
                     sourceContract: 'lpV4', // Track source for deduplication
                   });
-                  console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR (detected from LPV4)`);
+                  console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR, rewards: ${lpPendingRewards.toFixed(2)}`);
                 } else {
                   // Regular Diamond/Diamond+ stake
                   const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
@@ -7111,10 +7220,11 @@ export default function App() {
                     tierName: lpTierName,
                     isActive: stake.isActive,
                     timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
+                    pendingRewards: lpPendingRewards,
                     isV4: true,
                     sourceContract: 'lpV4', // Track source for debugging
                   });
-                  console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount);
+                  console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount, `rewards: ${lpPendingRewards.toFixed(2)}`);
                 }
               });
             }
@@ -7157,6 +7267,17 @@ export default function App() {
                     
                     const flexStartTime = Number(stake.startTime || stake[1] || 0) * 1000;
                     
+                    // Calculate pending rewards for Flex stake
+                    let flexPendingRewards = 0;
+                    if (stake.pendingRewards || stake[2]) {
+                      flexPendingRewards = parseFloat(ethers.formatEther(stake.pendingRewards || stake[2] || 0n));
+                    } else {
+                      const startSec = flexStartTime / 1000;
+                      const now = Math.floor(Date.now() / 1000);
+                      const daysStaked = Math.max(0, (now - startSec) / 86400);
+                      flexPendingRewards = (flexAmount * (10 / 100) / 365) * daysStaked;
+                    }
+                    
                     // ═══════════════════════════════════════════════════════════════
                     // FIX: Check for duplicate Flex stakes (may already be added from
                     // V4 LP Staking when detected as Flex by APR/lock criteria)
@@ -7189,10 +7310,11 @@ export default function App() {
                       lpType: 2, // Flex type
                       isActive: true,
                       timeRemaining: 0,
+                      pendingRewards: flexPendingRewards,
                       isV4: true,
                       sourceContract: 'flexV4', // Track source for debugging
                     });
-                    console.log(`✅ Added V4 Flex stake #${idx}: ${flexAmount} LP @ 10% APR (from FlexV4 contract)`);
+                    console.log(`✅ Added V4 Flex stake #${idx}: ${flexAmount} LP @ 10% APR, rewards: ${flexPendingRewards.toFixed(4)}`);
                   });
                 }
               } catch (flexErr) {
@@ -14570,6 +14692,38 @@ export default function App() {
                           <div style={{ color: '#fff', fontSize: '0.85rem' }}>Sell eHEX on PulseX for more $!</div>
                           <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 700, marginTop: '4px' }}>Profit: ~{Math.abs(hexPrices.spreadPercent).toFixed(1)}% 🎯</div>
                         </div>
+                        
+                        {/* Zapp Arb Laser Link for ETH→PLS direction */}
+                        {Math.abs(hexPrices.spreadPercent) >= 3 && (
+                          <button
+                            onClick={() => setShowLaserLink(true)}
+                            style={{
+                              width: '100%',
+                              marginTop: '16px',
+                              padding: '14px 18px',
+                              background: 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)',
+                              border: 'none',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              boxShadow: '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)',
+                            }}
+                          >
+                            <div style={{ position: 'relative', zIndex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '1.3rem' }}>⚡</span>
+                                <span style={{ color: '#000', fontWeight: 900, fontSize: '1rem', textShadow: '0 0 10px rgba(255,255,255,0.5)' }}>
+                                  ZAPP ARB LASER LINK
+                                </span>
+                                <span style={{ fontSize: '1.3rem' }}>⚡</span>
+                              </div>
+                              <div style={{ color: 'rgba(0,0,0,0.7)', fontSize: '0.7rem', fontWeight: 600 }}>
+                                Calculate route • Est. profit: ${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}
+                              </div>
+                            </div>
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -14604,6 +14758,47 @@ export default function App() {
                           <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 700, marginTop: '4px' }}>Profit: ~{Math.abs(hexPrices.spreadPercent).toFixed(1)}% 🎯</div>
                         </div>
                       </div>
+                    )}
+                    
+                    {/* ═══════════════════════════════════════════════════════════════
+                        ZAPP ARB LASER LINK - One-click arbitrage route calculator
+                    ═══════════════════════════════════════════════════════════════ */}
+                    {Math.abs(hexPrices.spreadPercent) >= 3 && (
+                      <button
+                        onClick={() => setShowLaserLink(true)}
+                        style={{
+                          width: '100%',
+                          marginTop: '20px',
+                          padding: '16px 20px',
+                          background: 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)',
+                          border: 'none',
+                          borderRadius: '12px',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          boxShadow: '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)',
+                        }}
+                      >
+                        <div style={{ position: 'relative', zIndex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '1.5rem' }}>⚡</span>
+                            <span style={{ color: '#000', fontWeight: 900, fontSize: '1.1rem', textShadow: '0 0 10px rgba(255,255,255,0.5)' }}>
+                              ZAPP ARB LASER LINK
+                            </span>
+                            <span style={{ fontSize: '1.5rem' }}>⚡</span>
+                          </div>
+                          <div style={{ color: 'rgba(0,0,0,0.7)', fontSize: '0.75rem', fontWeight: 600 }}>
+                            Calculate optimal route • Est. profit: ${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}
+                          </div>
+                        </div>
+                        {/* Animated laser beam effect */}
+                        <div style={{
+                          position: 'absolute', top: 0, left: '-100%', width: '50%', height: '100%',
+                          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
+                          animation: 'laserSweep 2s infinite',
+                        }} />
+                        <style>{`@keyframes laserSweep { 0% { left: -100%; } 100% { left: 200%; } }`}</style>
+                      </button>
                     )}
                   </div>
                 )}
@@ -14728,6 +14923,345 @@ export default function App() {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ZAPP ARB LASER LINK MODAL - One-click arbitrage route calculator */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {showLaserLink && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.95)',
+          zIndex: 10002,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            background: 'linear-gradient(135deg, #0a0a15 0%, #1a1a2e 100%)',
+            borderRadius: '24px',
+            border: '2px solid',
+            borderImage: 'linear-gradient(135deg, #FF00FF, #00FFFF, #FFD700) 1',
+            boxShadow: '0 0 60px rgba(255,0,255,0.3), 0 0 100px rgba(0,255,255,0.2)',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px',
+              background: 'linear-gradient(135deg, rgba(255,0,255,0.2), rgba(0,255,255,0.1))',
+              borderBottom: '1px solid rgba(255,255,255,0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <div>
+                <h2 style={{ 
+                  margin: 0, 
+                  fontSize: '1.3rem', 
+                  fontWeight: 900,
+                  background: 'linear-gradient(135deg, #FF00FF, #00FFFF, #FFD700)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}>
+                  ⚡ ZAPP ARB LASER LINK ⚡
+                </h2>
+                <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>
+                  Optimal arbitrage route calculator
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLaserLink(false)}
+                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}
+              >×</button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '20px 24px' }}>
+              {/* Amount Input */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ color: '#888', fontSize: '0.75rem', display: 'block', marginBottom: '8px' }}>
+                  💰 Investment Amount (USD)
+                </label>
+                <input
+                  type="number"
+                  value={laserLinkAmount}
+                  onChange={(e) => setLaserLinkAmount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '1px solid rgba(255,0,255,0.3)',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    fontSize: '1.2rem',
+                    fontWeight: 700,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  placeholder="1000"
+                />
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                  {[100, 500, 1000, 5000].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => setLaserLinkAmount(amt.toString())}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        background: laserLinkAmount === amt.toString() ? 'rgba(255,0,255,0.3)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${laserLinkAmount === amt.toString() ? '#FF00FF' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                      }}
+                    >${amt}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Current Spread Display */}
+              <div style={{
+                padding: '16px',
+                background: `linear-gradient(135deg, ${hexPrices.spreadPercent > 0 ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)'}, transparent)`,
+                borderRadius: '12px',
+                border: `1px solid ${hexPrices.spreadPercent > 0 ? 'rgba(76,175,80,0.3)' : 'rgba(244,67,54,0.3)'}`,
+                marginBottom: '20px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#888', fontSize: '0.8rem' }}>Current Spread:</span>
+                  <span style={{ 
+                    color: hexPrices.spreadPercent > 0 ? '#4CAF50' : '#F44336', 
+                    fontSize: '1.3rem', 
+                    fontWeight: 900 
+                  }}>
+                    {hexPrices.spreadPercent >= 0 ? '+' : ''}{hexPrices.spreadPercent.toFixed(2)}%
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+                  <span style={{ color: '#627EEA', fontSize: '0.75rem' }}>eHEX(E): ${hexPrices.eHEX.toFixed(6)}</span>
+                  <span style={{ color: '#00D4AA', fontSize: '0.75rem' }}>eHEX(P): ${hexPrices.pHEX.toFixed(6)}</span>
+                </div>
+              </div>
+
+              {/* Route Steps */}
+              {laserLinkRoute && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px' }}>
+                    🛤️ OPTIMAL ROUTE
+                  </div>
+                  
+                  {laserLinkRoute.steps.map((step, idx) => (
+                    <div key={idx}>
+                      <div style={{
+                        padding: '14px 16px',
+                        background: step.chain === 'ETH' ? 'rgba(98,126,234,0.15)' : 
+                                   step.chain === 'PLS' ? 'rgba(0,212,170,0.15)' : 
+                                   'rgba(255,215,0,0.15)',
+                        borderRadius: '10px',
+                        border: `1px solid ${step.chain === 'ETH' ? 'rgba(98,126,234,0.3)' : 
+                                            step.chain === 'PLS' ? 'rgba(0,212,170,0.3)' : 
+                                            'rgba(255,215,0,0.3)'}`,
+                        marginBottom: idx < laserLinkRoute.steps.length - 1 ? '0' : '0',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                          <span style={{
+                            width: '24px', height: '24px', borderRadius: '50%',
+                            background: step.chain === 'ETH' ? '#627EEA' : 
+                                        step.chain === 'PLS' ? '#00D4AA' : '#FFD700',
+                            color: step.chain === 'BRIDGE' ? '#000' : '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.75rem', fontWeight: 700,
+                          }}>{idx + 1}</span>
+                          <div>
+                            <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>{step.action}</div>
+                            <div style={{ color: '#888', fontSize: '0.7rem' }}>via {step.dex}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#888', fontSize: '0.75rem' }}>
+                          <span>Gas: ~${step.gasUsd.toFixed(2)}</span>
+                          <span style={{ color: '#4CAF50' }}>→ {step.output}</span>
+                        </div>
+                      </div>
+                      {idx < laserLinkRoute.steps.length - 1 && (
+                        <div style={{ textAlign: 'center', padding: '6px 0', color: '#FFD700', fontSize: '1.2rem' }}>⬇️</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Profit Summary */}
+              {laserLinkRoute && (
+                <div style={{
+                  padding: '20px',
+                  background: laserLinkRoute.isProfit 
+                    ? 'linear-gradient(135deg, rgba(76,175,80,0.3), rgba(76,175,80,0.1))'
+                    : 'linear-gradient(135deg, rgba(244,67,54,0.3), rgba(244,67,54,0.1))',
+                  borderRadius: '16px',
+                  border: `2px solid ${laserLinkRoute.isProfit ? '#4CAF50' : '#F44336'}`,
+                  marginBottom: '20px',
+                }}>
+                  <div style={{ color: '#888', fontSize: '0.75rem', marginBottom: '8px' }}>📊 PROFIT SUMMARY</div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Input</div>
+                      <div style={{ color: '#fff', fontSize: '1rem', fontWeight: 700 }}>${laserLinkRoute.inputAmount.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Output</div>
+                      <div style={{ color: '#4CAF50', fontSize: '1rem', fontWeight: 700 }}>${laserLinkRoute.outputAmount.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Total Fees</div>
+                      <div style={{ color: '#F44336', fontSize: '0.9rem' }}>-${laserLinkRoute.totalFees.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Net Profit</div>
+                      <div style={{ 
+                        color: laserLinkRoute.isProfit ? '#4CAF50' : '#F44336', 
+                        fontSize: '1.2rem', 
+                        fontWeight: 900 
+                      }}>
+                        {laserLinkRoute.isProfit ? '+' : ''}${laserLinkRoute.netProfit.toFixed(2)}
+                        <span style={{ fontSize: '0.75rem', marginLeft: '4px' }}>
+                          ({laserLinkRoute.profitPercent.toFixed(2)}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {!laserLinkRoute.isProfit && (
+                    <div style={{ color: '#F44336', fontSize: '0.75rem', marginTop: '12px', padding: '8px', background: 'rgba(244,67,54,0.2)', borderRadius: '8px' }}>
+                      ⚠️ Spread too small - fees exceed profit. Wait for larger spread.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {laserLinkRoute?.direction === 'ETH_TO_PLS' ? (
+                  <>
+                    <a href={`https://app.uniswap.org/swap?chain=mainnet&outputCurrency=0x2b591e99afe9f32eaa6214f7b7629768c40eeb39&exactAmount=${laserLinkAmount}`}
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #627EEA, #4a5bc7)',
+                         borderRadius: '12px',
+                         color: '#fff',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🦄 Step 1: Buy eHEX on Uniswap
+                    </a>
+                    <a href="https://app.libertyswap.io/bridge"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #FFD700, #DAA520)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🌉 Step 2: Bridge via Liberty Swap
+                    </a>
+                    <a href="https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x57fde0a71132198bbec939b98976993d8d89d225"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #00D4AA, #00a88a)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      💜 Step 3: Sell on PulseX
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <a href="https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x57fde0a71132198bbec939b98976993d8d89d225"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #00D4AA, #00a88a)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      💜 Step 1: Buy eHEX on PulseX
+                    </a>
+                    <a href="https://app.libertyswap.io/bridge"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #FFD700, #DAA520)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🌉 Step 2: Bridge via Liberty Swap
+                    </a>
+                    <a href={`https://app.uniswap.org/swap?chain=mainnet&inputCurrency=0x2b591e99afe9f32eaa6214f7b7629768c40eeb39`}
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #627EEA, #4a5bc7)',
+                         borderRadius: '12px',
+                         color: '#fff',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🦄 Step 3: Sell on Uniswap
+                    </a>
+                  </>
+                )}
+              </div>
+
+              {/* Footer Note */}
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '12px', 
+                background: 'rgba(255,215,0,0.1)', 
+                borderRadius: '10px',
+                border: '1px solid rgba(255,215,0,0.2)',
+              }}>
+                <div style={{ color: '#FFD700', fontSize: '0.7rem', fontWeight: 600, marginBottom: '4px' }}>
+                  ⚡ ZAPPER X-CHAIN INTEGRATION
+                </div>
+                <div style={{ color: '#888', fontSize: '0.65rem', lineHeight: 1.5 }}>
+                  Route calculated using live DexScreener prices. Estimates include gas + bridge fees.
+                  Always DYOR and test with small amounts first.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
