@@ -317,7 +317,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   
   // Live prices
   const [livePrices, setLivePrices] = useState({
-    PLS: 0.000018, DTGC: 0.0002, URMOM: 0.0000001, PLSX: 0.00005, HEX: 0.003, INC: 0.0001, DAI: 1, USDC: 1, USDT: 1, WETH: 3300, WBTC: 100000,
+    PLS: 0.0000159, WPLS: 0.0000159, DTGC: 0.0007, URMOM: 0.0002, PLSX: 0.000042, HEX: 0.0026, INC: 0.60, DAI: 1, USDC: 1, USDT: 1, WETH: 3300, WBTC: 100000, eHEX: 0.00083,
   });
 
   const showToastMsg = useCallback((message, type = 'info') => {
@@ -338,23 +338,51 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
   const formatUSD = (num) => {
     if (!num || isNaN(num) || num === 0) return '$0.00';
-    if (num < 0.01) return '<$0.01';
+    if (num < 0.0001) return '$' + num.toFixed(6);
+    if (num < 0.01) return '$' + num.toFixed(4);
+    if (num < 1) return '$' + num.toFixed(3);
     return '$' + formatNumber(num, 2);
   };
 
   const getDeadline = () => Math.floor(Date.now() / 1000) + CONFIG.DEADLINE_MINUTES * 60;
 
-  // Fetch live prices
+  // Fetch live prices - Multi-source with sanity checks
   const fetchLivePrices = useCallback(async () => {
     try {
+      const newPrices = { ...livePrices };
+      
+      // ═══════════════════════════════════════════════════════════════
+      // SOURCE 1: CoinGecko (Primary - Most reliable for PLS, HEX, ETH, BTC)
+      // ═══════════════════════════════════════════════════════════════
+      try {
+        const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=pulsechain,hex,ethereum,bitcoin&vs_currencies=usd');
+        if (cgRes.ok) {
+          const cgData = await cgRes.json();
+          if (cgData.pulsechain?.usd) {
+            newPrices.PLS = cgData.pulsechain.usd;
+            newPrices.WPLS = cgData.pulsechain.usd;
+            console.log('📊 CoinGecko PLS: $' + cgData.pulsechain.usd.toFixed(8));
+          }
+          if (cgData.hex?.usd) {
+            newPrices.HEX = cgData.hex.usd;
+            console.log('📊 CoinGecko HEX: $' + cgData.hex.usd.toFixed(6));
+          }
+          if (cgData.ethereum?.usd) newPrices.WETH = cgData.ethereum.usd;
+          if (cgData.bitcoin?.usd) newPrices.WBTC = cgData.bitcoin.usd;
+        }
+      } catch (cgErr) {
+        console.warn('CoinGecko fetch failed:', cgErr.message);
+      }
+      
+      // ═══════════════════════════════════════════════════════════════
+      // SOURCE 2: DexScreener (For PulseChain-native tokens: DTGC, URMOM, PLSX, INC)
+      // ═══════════════════════════════════════════════════════════════
       const pairs = [
         { symbol: 'URMOM', pair: '0x0548656e272fec9534e180d3174cfc57ab6e10c0' },
         { symbol: 'DTGC', pair: '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7' },
         { symbol: 'PLSX', pair: '0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9' },
-        { symbol: 'HEX', pair: '0xf1f4ee610b2babb05c635f726ef8b0c568c8dc65' },
+        { symbol: 'INC', pair: '0xe56043671df55de5cdf8459710433c10324de0ae' }, // INC/WPLS
       ];
-      
-      const newPrices = { ...livePrices };
       
       await Promise.all(pairs.map(async ({ symbol, pair }) => {
         try {
@@ -363,13 +391,22 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             const data = await res.json();
             if (data?.pair?.priceUsd) {
               newPrices[symbol] = parseFloat(data.pair.priceUsd);
-              if (data.pair.priceNative && parseFloat(data.pair.priceNative) > 0) {
-                newPrices.PLS = parseFloat(data.pair.priceUsd) / parseFloat(data.pair.priceNative);
-              }
+              console.log(`📊 DexScreener ${symbol}: $${data.pair.priceUsd}`);
             }
           }
         } catch {}
       }));
+      
+      // ═══════════════════════════════════════════════════════════════
+      // SANITY CHECKS - Ensure PLS is in expected range
+      // ═══════════════════════════════════════════════════════════════
+      if (!newPrices.PLS || newPrices.PLS < 0.000005 || newPrices.PLS > 0.0001) {
+        console.warn('⚠️ PLS price out of range, using fallback: $0.0000159');
+        newPrices.PLS = 0.0000159;
+        newPrices.WPLS = 0.0000159;
+      }
+      
+      console.log(`📊 Final: PLS=$${newPrices.PLS?.toFixed(8)} | DTGC=$${newPrices.DTGC?.toFixed(8)} | HEX=$${newPrices.HEX?.toFixed(6)}`);
       
       setLivePrices(newPrices);
     } catch (err) {
