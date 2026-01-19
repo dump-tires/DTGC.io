@@ -221,7 +221,7 @@ const SpreadMonitor = () => {
   return (
     <div className="spread-monitor">
       <div className="spread-main">
-        <div className="spread-label">eHEX / pHEX SPREAD</div>
+        <div className="spread-label">eHEX ETH / eHEX PLS SPREAD</div>
         <div className="spread-value" style={{ color: prices.spread >= 0 ? '#00FF88' : '#FF6B6B' }}>
           {prices.spread !== null ? `${prices.spread >= 0 ? '+' : ''}${prices.spread.toFixed(2)}%` : '--'}
         </div>
@@ -239,7 +239,7 @@ const SpreadMonitor = () => {
         </div>
         <div className="price-card pls">
           <div className="chain">💜 PULSECHAIN</div>
-          <div className="token">pHEX</div>
+          <div className="token">eHEX (PLS)</div>
           <div className="price">${prices.plsHex?.toFixed(4) || '--'}</div>
         </div>
       </div>
@@ -249,8 +249,8 @@ const SpreadMonitor = () => {
           <div className="direction-label">SUGGESTED DIRECTION</div>
           <div className="direction-value">
             {prices.spread > 0 
-              ? <><span className="buy">Buy pHEX</span> → Bridge → <span className="sell">Sell eHEX</span></>
-              : <><span className="buy-eth">Buy eHEX</span> → Bridge → <span className="sell">Sell pHEX</span></>
+              ? <><span className="buy">Buy eHEX (PLS)</span> → Bridge → <span className="sell">Sell eHEX</span></>
+              : <><span className="buy-eth">Buy eHEX</span> → Bridge → <span className="sell">Sell eHEX (PLS)</span></>
             }
           </div>
         </div>
