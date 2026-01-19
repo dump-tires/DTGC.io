@@ -2,58 +2,32 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 
 // ═══════════════════════════════════════════════════════════════
-// DAPPER FLEX - ENHANCED EDITION V2
-// Multicall3 Parallel Scanning • Token Logos • Copy Address
-// Error-Resistant Scanning • DTGC Favicon • LP Icon
+// DAPPER FLEX - ENHANCED EDITION V3
+// Flex Tier LP Zapper • 99% MAX • Double Confirmation
+// Error-Resistant • DTGC Favicon • LP Icon
 // ═══════════════════════════════════════════════════════════════
 
 // ============================================
 // TOKEN LOGO CONFIGURATION
-// DTGC uses the gold coin favicon, LP uses combined icon
 // ============================================
 const TOKEN_LOGOS = {
-  // DTGC - Gold coin favicon (the trophy icon)
   '0xd0676b28a457371d58d47e5247b439114e40eb0f': '/Favicon.png',
-  
-  // DTGC/URMOM LP - Use gold bar for LP
   '0x670c972bb5388e087a2934a063064d97278e01f3': '/LPfavicon.png',
-  
-  // URMOM 
   '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0': 'https://gib.show/image/369/0xe43b3cee3554e120213b8b69caf690b6c04a7ec0',
-  
-  // WPLS
   '0xa1077a294dde1b09bb074bec877f05b634579687': 'https://tokens.app.pulsex.com/images/tokens/0xA1077a294dDE1B09bB074Bec877f05b634579687.png',
-  
-  // HEX (PulseChain)
   '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39': 'https://gib.show/image/369/0x2b591e99afe9f32eaa6214f7b7629768c40eeb39',
-  
-  // PLSX
   '0x95b303987a60c71504d99aa1b13b4da07b0790ab': 'https://gib.show/image/369/0x95b303987a60c71504d99aa1b13b4da07b0790ab',
-  
-  // INC
   '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d': 'https://gib.show/image/369/0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d',
-  
-  // DAI
-  '0xefd766ccb38eaf1dfd701853bfce31359239f305': 'https://gib.show/image/369/0xefd766ccb38eaf1dfd701853bfce31359239f305',
-  
-  // USDC
-  '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07': 'https://gib.show/image/369/0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07',
 };
 
 const getTokenLogo = (tokenAddress) => {
   if (!tokenAddress) return null;
   const addr = tokenAddress.toLowerCase();
-  
-  // Check predefined logos first
-  if (TOKEN_LOGOS[addr]) {
-    return TOKEN_LOGOS[addr];
-  }
-  
-  // Default: gib.show for PulseChain tokens
+  if (TOKEN_LOGOS[addr]) return TOKEN_LOGOS[addr];
   return `https://gib.show/image/369/${addr}`;
 };
 
-// Token Icon Component with fallback
+// Token Icon Component
 const TokenIcon = ({ address, symbol, size = 32 }) => {
   const [imgError, setImgError] = useState(false);
   const logo = getTokenLogo(address);
@@ -76,7 +50,6 @@ const TokenIcon = ({ address, symbol, size = 32 }) => {
     );
   }
   
-  // Fallback to symbol initial
   return (
     <div style={{
       width: size,
@@ -96,7 +69,7 @@ const TokenIcon = ({ address, symbol, size = 32 }) => {
   );
 };
 
-// Copy to Clipboard Component
+// Copy Button Component
 const CopyButton = ({ text, label = 'Copy' }) => {
   const [copied, setCopied] = useState(false);
   
@@ -130,13 +103,250 @@ const CopyButton = ({ text, label = 'Copy' }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// MULTICALL3 FAST TOKEN VALIDATOR
-// Uses parallel calls with timeout protection
+// CONFIRMATION MODAL COMPONENT
 // ═══════════════════════════════════════════════════════════════
-const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const ConfirmationModal = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  tokenSymbol, 
+  tokenAmount, 
+  plsValue, 
+  usdValue,
+  loading 
+}) => {
+  const [step, setStep] = useState(1);
+  
+  useEffect(() => {
+    if (isOpen) setStep(1);
+  }, [isOpen]);
+  
+  if (!isOpen) return null;
+  
+  const handleFirstConfirm = () => {
+    setStep(2);
+  };
+  
+  const handleFinalConfirm = () => {
+    onConfirm();
+  };
+  
+  return (
+    <div style={modalStyles.overlay}>
+      <div style={modalStyles.modal}>
+        <div style={modalStyles.header}>
+          <h3 style={modalStyles.title}>
+            {step === 1 ? '⚠️ Confirm Zap' : '🔐 Final Confirmation'}
+          </h3>
+          <button onClick={onClose} style={modalStyles.closeBtn}>✕</button>
+        </div>
+        
+        <div style={modalStyles.body}>
+          {step === 1 ? (
+            <>
+              <div style={modalStyles.infoBox}>
+                <div style={modalStyles.infoLabel}>You are zapping:</div>
+                <div style={modalStyles.infoValue}>
+                  {parseFloat(tokenAmount).toLocaleString()} {tokenSymbol}
+                </div>
+              </div>
+              
+              <div style={modalStyles.valueBox}>
+                <div style={modalStyles.valueRow}>
+                  <span>Estimated PLS Value:</span>
+                  <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>
+                    {plsValue ? `${parseFloat(plsValue).toLocaleString()} PLS` : 'Calculating...'}
+                  </span>
+                </div>
+                <div style={modalStyles.valueRow}>
+                  <span>Estimated USD Value:</span>
+                  <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>
+                    ${usdValue ? parseFloat(usdValue).toFixed(2) : '0.00'}
+                  </span>
+                </div>
+              </div>
+              
+              <div style={modalStyles.warning}>
+                ⚠️ This action will convert your tokens to LP and stake them in the Flex tier at 10% APR with no lockup.
+              </div>
+              
+              <button 
+                onClick={handleFirstConfirm}
+                style={modalStyles.confirmBtn}
+              >
+                Continue to Final Confirmation →
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={modalStyles.finalWarning}>
+                <div style={{ fontSize: '2rem', marginBottom: '10px' }}>🚨</div>
+                <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>
+                  ARE YOU SURE?
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#aaa' }}>
+                  You are about to zap <strong style={{ color: '#ff1493' }}>{parseFloat(tokenAmount).toLocaleString()} {tokenSymbol}</strong> 
+                  {' '}worth approximately <strong style={{ color: '#4CAF50' }}>${usdValue ? parseFloat(usdValue).toFixed(2) : '0.00'}</strong>
+                </div>
+              </div>
+              
+              <div style={modalStyles.buttonRow}>
+                <button 
+                  onClick={onClose}
+                  style={modalStyles.cancelBtn}
+                >
+                  ❌ Cancel
+                </button>
+                <button 
+                  onClick={handleFinalConfirm}
+                  disabled={loading}
+                  style={{
+                    ...modalStyles.finalConfirmBtn,
+                    opacity: loading ? 0.5 : 1,
+                  }}
+                >
+                  {loading ? '⏳ Processing...' : '✅ CONFIRM ZAP'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
+const modalStyles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0,0,0,0.85)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+  },
+  modal: {
+    background: 'linear-gradient(135deg, #2a1520 0%, #1a0a15 100%)',
+    border: '2px solid #ff1493',
+    borderRadius: '16px',
+    maxWidth: '450px',
+    width: '90%',
+    boxShadow: '0 8px 32px rgba(255, 20, 147, 0.3)',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 20px',
+    borderBottom: '1px solid #ff149340',
+  },
+  title: {
+    margin: 0,
+    color: '#fff',
+    fontSize: '1.1rem',
+  },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#888',
+    fontSize: '1.2rem',
+    cursor: 'pointer',
+  },
+  body: {
+    padding: '20px',
+  },
+  infoBox: {
+    background: 'rgba(255,20,147,0.1)',
+    border: '1px solid #ff149340',
+    borderRadius: '10px',
+    padding: '15px',
+    marginBottom: '15px',
+    textAlign: 'center',
+  },
+  infoLabel: {
+    color: '#888',
+    fontSize: '0.85rem',
+    marginBottom: '5px',
+  },
+  infoValue: {
+    color: '#ff1493',
+    fontSize: '1.4rem',
+    fontWeight: 'bold',
+  },
+  valueBox: {
+    background: 'rgba(0,0,0,0.3)',
+    borderRadius: '10px',
+    padding: '15px',
+    marginBottom: '15px',
+  },
+  valueRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '8px 0',
+    color: '#ccc',
+    fontSize: '0.9rem',
+  },
+  warning: {
+    background: 'rgba(255,170,0,0.1)',
+    border: '1px solid #ffaa0040',
+    borderRadius: '8px',
+    padding: '12px',
+    marginBottom: '15px',
+    color: '#ffaa00',
+    fontSize: '0.8rem',
+    textAlign: 'center',
+  },
+  confirmBtn: {
+    width: '100%',
+    padding: '14px',
+    background: 'linear-gradient(135deg, #ff1493, #c71585)',
+    border: 'none',
+    borderRadius: '10px',
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: '1rem',
+    cursor: 'pointer',
+  },
+  finalWarning: {
+    textAlign: 'center',
+    padding: '20px',
+    color: '#fff',
+  },
+  buttonRow: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '20px',
+  },
+  cancelBtn: {
+    flex: 1,
+    padding: '14px',
+    background: 'rgba(255,0,0,0.2)',
+    border: '2px solid #ff4444',
+    borderRadius: '10px',
+    color: '#ff4444',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+  },
+  finalConfirmBtn: {
+    flex: 1,
+    padding: '14px',
+    background: 'linear-gradient(135deg, #00aa00, #008800)',
+    border: 'none',
+    borderRadius: '10px',
+    color: '#fff',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// TOKEN VALIDATOR (with timeout protection)
+// ═══════════════════════════════════════════════════════════════
 const TOKEN_VALIDATOR = {
-  // Pre-computed pairs cache (instant lookup)
   KNOWN_PAIRS: {
     'dtgc:pls': '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
     'urmom:pls': '0x0548656e272fec9534e180d3174cfc57ab6e10c0',
@@ -145,11 +355,9 @@ const TOKEN_VALIDATOR = {
     'inc:pls': '0xe56043671df55de5cdf8459710433c10324de0ae',
   },
 
-  // Runtime caches
   VALIDATION_CACHE: new Map(),
   PAIR_CACHE: new Map(),
 
-  // Whitelisted safe tokens
   SAFE_TOKENS: {
     '0xa1077a294dde1b09bb074bec877f05b634579687': { name: 'WPLS', symbol: 'WPLS', risk: 'LOW', decimals: 18 },
     '0x95b303987a60c71504d99aa1b13b4da07b0790ab': { name: 'PLSX', symbol: 'PLSX', risk: 'LOW', decimals: 18 },
@@ -158,19 +366,12 @@ const TOKEN_VALIDATOR = {
     '0xd0676b28a457371d58d47e5247b439114e40eb0f': { name: 'DTGC', symbol: 'DTGC', risk: 'LOW', decimals: 18 },
     '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0': { name: 'URMOM', symbol: 'URMOM', risk: 'LOW', decimals: 18 },
     '0x670c972bb5388e087a2934a063064d97278e01f3': { name: 'DTGC/URMOM LP', symbol: 'DTGC-URMOM-LP', risk: 'LOW', decimals: 18 },
-    '0xefd766ccb38eaf1dfd701853bfce31359239f305': { name: 'DAI', symbol: 'DAI', risk: 'LOW', decimals: 18 },
-    '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07': { name: 'USDC', symbol: 'USDC', risk: 'LOW', decimals: 6 },
   },
 
-  /**
-   * ULTRA-FAST VALIDATION with timeout protection (~100-300ms)
-   */
   async validateToken(tokenAddress, provider, timeoutMs = 5000) {
     const addr = tokenAddress.toLowerCase();
 
-    // 1. CHECK CACHE FIRST (instant)
     if (this.VALIDATION_CACHE.has(addr)) {
-      console.log(`✅ Cache HIT for ${addr.slice(0, 10)}...`);
       return this.VALIDATION_CACHE.get(addr);
     }
 
@@ -184,35 +385,28 @@ const TOKEN_VALIDATOR = {
       details: {},
     };
 
-    // Create timeout promise
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Validation timeout')), timeoutMs)
     );
 
     try {
-      // 2. WHITELIST CHECK (instant)
       if (this.SAFE_TOKENS[addr]) {
         const token = this.SAFE_TOKENS[addr];
         validation.isValid = true;
         validation.risk = 'LOW';
         validation.hasLiquidity = true;
         validation.liquidityUsd = 50000;
-        validation.details.whitelisted = true;
-        validation.details.name = token.name;
-        validation.details.symbol = token.symbol;
-        validation.details.decimals = token.decimals;
-        validation.details.tokenInfo = { 
-          name: token.name, 
-          symbol: token.symbol, 
+        validation.details = {
+          whitelisted: true,
+          name: token.name,
+          symbol: token.symbol,
           decimals: token.decimals,
-          isValid: true 
+          tokenInfo: { name: token.name, symbol: token.symbol, decimals: token.decimals, isValid: true }
         };
-        console.log(`✅ Token whitelisted: ${token.name}`);
         this.VALIDATION_CACHE.set(addr, validation);
         return validation;
       }
 
-      // 3. BLACKLIST CHECK (instant)
       if (this.isBlacklisted(addr)) {
         validation.reason = 'Blacklisted address';
         validation.risk = 'CRITICAL';
@@ -220,7 +414,6 @@ const TOKEN_VALIDATOR = {
         return validation;
       }
 
-      // 4. RACE against timeout - GET TOKEN INFO
       const tokenInfo = await Promise.race([
         this.getTokenInfoFast(addr, provider),
         timeoutPromise
@@ -234,7 +427,6 @@ const TOKEN_VALIDATOR = {
 
       validation.details.tokenInfo = tokenInfo;
 
-      // 5. CHECK LIQUIDITY with timeout protection
       try {
         const liquidity = await Promise.race([
           this.checkLiquidityFast(addr, tokenInfo.symbol, provider),
@@ -244,80 +436,52 @@ const TOKEN_VALIDATOR = {
         validation.hasLiquidity = liquidity.hasLiquidity;
         validation.liquidityUsd = liquidity.liquidityUsd;
         validation.details.liquidity = liquidity;
-        
-        if (liquidity.timedOut) {
-          validation.details.liquidityNote = 'Liquidity check timed out - proceed with caution';
-        }
       } catch (liqErr) {
-        console.log('Liquidity check failed, continuing:', liqErr.message);
         validation.details.liquidityNote = 'Could not verify liquidity';
       }
 
-      // VERDICT
-      if (!validation.hasLiquidity && !validation.details.liquidityNote) {
+      if (!validation.hasLiquidity) {
         validation.reason = 'No liquidity found';
         validation.risk = 'HIGH';
       } else if (validation.liquidityUsd < 1000) {
         validation.risk = validation.liquidityUsd < 100 ? 'HIGH' : 'MEDIUM';
-        validation.reason = validation.liquidityUsd > 0 
-          ? `Low liquidity ($${validation.liquidityUsd.toFixed(0)})`
-          : 'Liquidity unverified';
-      } else if (validation.liquidityUsd < 5000) {
-        validation.risk = 'MEDIUM';
+        validation.reason = `Low liquidity ($${validation.liquidityUsd.toFixed(0)})`;
       } else {
         validation.risk = 'LOW';
       }
 
-      // Allow tokens even with unverified liquidity (user's choice)
       validation.isValid = tokenInfo.isValid;
-      
-      if (validation.isValid) {
-        console.log(`✅ Token valid: ${tokenInfo.symbol} - $${validation.liquidityUsd.toFixed(0)} liquidity`);
-      }
-
       this.VALIDATION_CACHE.set(addr, validation);
       return validation;
 
     } catch (err) {
-      console.error('Validation error:', err.message);
-      
-      // On timeout, still allow with warning
       if (err.message === 'Validation timeout') {
         validation.isValid = true;
         validation.risk = 'MEDIUM';
-        validation.reason = 'Validation timed out - proceed with caution';
+        validation.reason = 'Validation timed out';
         validation.details.timedOut = true;
       } else {
         validation.reason = `Error: ${err.message}`;
         validation.risk = 'ERROR';
       }
-      
       this.VALIDATION_CACHE.set(addr, validation);
       return validation;
     }
   },
 
   isBlacklisted(address) {
-    const BLACKLIST = [
-      '0x0000000000000000000000000000000000000000',
-      '0x000000000000000000000000000000000000dead',
-    ];
-    return BLACKLIST.includes(address.toLowerCase());
+    return ['0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead'].includes(address.toLowerCase());
   },
 
   async getTokenInfoFast(tokenAddress, provider) {
     const result = { isValid: false, name: '', symbol: '', decimals: 18 };
-    
     try {
-      const ERC20_ABI = [
-        'function name() external view returns (string)',
-        'function symbol() external view returns (string)',
-        'function decimals() external view returns (uint8)',
-      ];
+      const contract = new ethers.Contract(tokenAddress, [
+        'function name() view returns (string)',
+        'function symbol() view returns (string)',
+        'function decimals() view returns (uint8)',
+      ], provider);
       
-      const contract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-      
-      // Parallel calls with individual timeouts
       const [name, symbol, decimals] = await Promise.all([
         contract.name().catch(() => ''),
         contract.symbol().catch(() => ''),
@@ -328,61 +492,46 @@ const TOKEN_VALIDATOR = {
       result.symbol = symbol || 'UNKNOWN';
       result.decimals = decimals || 18;
       result.isValid = true;
-      
       return result;
     } catch (err) {
-      console.error('Token info error:', err.message);
       return result;
     }
   },
 
   async checkLiquidityFast(tokenAddress, tokenSymbol, provider) {
     const result = { hasLiquidity: false, liquidityUsd: 0 };
-    
     try {
       const pls = '0xA1077a294dDE1B09bB074Bec877f05b634579687';
       const cacheKey = `${tokenSymbol?.toLowerCase() || ''}:pls`;
 
-      // 1. CHECK KNOWN_PAIRS CACHE FIRST
       if (this.KNOWN_PAIRS[cacheKey]) {
         const pairAddress = this.KNOWN_PAIRS[cacheKey];
-        console.log(`✅ Found in KNOWN_PAIRS: ${pairAddress.slice(0, 10)}...`);
         const reserves = await this.getReservesFast(pairAddress, provider);
         result.hasLiquidity = reserves.liquidityUsd > 100;
         result.liquidityUsd = reserves.liquidityUsd;
         return result;
       }
 
-      // 2. CHECK RUNTIME CACHE
       if (this.PAIR_CACHE.has(tokenAddress.toLowerCase())) {
-        const cached = this.PAIR_CACHE.get(tokenAddress.toLowerCase());
-        return cached;
+        return this.PAIR_CACHE.get(tokenAddress.toLowerCase());
       }
 
-      // 3. QUERY FACTORIES (with timeout)
       const pairAddress = await this.findPairFast(tokenAddress, pls, provider);
-      
-      if (!pairAddress || pairAddress === ethers.ZeroAddress) {
-        return result;
-      }
+      if (!pairAddress || pairAddress === ethers.ZeroAddress) return result;
 
       const reserves = await this.getReservesFast(pairAddress, provider);
       result.hasLiquidity = reserves.liquidityUsd > 100;
       result.liquidityUsd = reserves.liquidityUsd;
-
       this.PAIR_CACHE.set(tokenAddress.toLowerCase(), result);
       return result;
-      
     } catch (err) {
-      console.error('Liquidity check error:', err.message);
       return result;
     }
   },
 
   async findPairFast(tokenAddress, pls, provider) {
     try {
-      const FACTORY_ABI = ['function getPair(address,address) external view returns (address)'];
-      
+      const FACTORY_ABI = ['function getPair(address,address) view returns (address)'];
       const v1Factory = new ethers.Contract('0xE1Cc890455B1d9537034da8e1ffB0d5f4E150e9e', FACTORY_ABI, provider);
       const v2Factory = new ethers.Contract('0x1715Ac0f39513b6D53a0b3ba5d63c9bc575f7bEA', FACTORY_ABI, provider);
 
@@ -393,44 +542,33 @@ const TOKEN_VALIDATOR = {
 
       return v1Pair !== ethers.ZeroAddress ? v1Pair : v2Pair;
     } catch (err) {
-      console.error('Find pair error:', err.message);
       return ethers.ZeroAddress;
     }
   },
 
   async getReservesFast(pairAddress, provider) {
-    const result = { liquidityUsd: 0 };
-    
     try {
-      const PAIR_ABI = [
-        'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
-      ];
-      
-      const pair = new ethers.Contract(pairAddress, PAIR_ABI, provider);
+      const pair = new ethers.Contract(pairAddress, [
+        'function getReserves() view returns (uint112, uint112, uint32)',
+      ], provider);
       const reserves = await pair.getReserves();
-      
       const plsReserve = parseFloat(ethers.formatUnits(reserves[1], 18));
-      const plsPrice = 0.000018; // Current PLS price estimate
-      result.liquidityUsd = plsReserve * plsPrice * 2; // Both sides of LP
-      
-      return result;
+      return { liquidityUsd: plsReserve * 0.000018 * 2 };
     } catch (err) {
-      console.error('Get reserves error:', err.message);
-      return result;
+      return { liquidityUsd: 0 };
     }
   },
 
   clearCache() {
     this.VALIDATION_CACHE.clear();
     this.PAIR_CACHE.clear();
-    console.log('🧹 Caches cleared');
   },
 };
 
 // ═══════════════════════════════════════════════════════════════
-// DAPPER COMPONENT (ENHANCED WITH LOGOS & COPY)
+// DAPPER COMPONENT (FLEX TIER ZAPPER)
 // ═══════════════════════════════════════════════════════════════
-const DapperComponent = ({ provider, account }) => {
+const DapperComponent = ({ provider, account, livePrices = {} }) => {
   const [inputToken, setInputToken] = useState('');
   const [inputAmount, setInputAmount] = useState('');
   const [validation, setValidation] = useState(null);
@@ -438,9 +576,12 @@ const DapperComponent = ({ provider, account }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [recentTokens, setRecentTokens] = useState([]);
+  const [tokenBalance, setTokenBalance] = useState(0);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [estimatedValues, setEstimatedValues] = useState({ pls: 0, usd: 0 });
   const validateTimeoutRef = useRef(null);
 
-  // Load recent tokens from localStorage
+  // Load recent tokens
   useEffect(() => {
     try {
       const saved = localStorage.getItem('dapper-recent-tokens');
@@ -455,10 +596,34 @@ const DapperComponent = ({ provider, account }) => {
     localStorage.setItem('dapper-recent-tokens', JSON.stringify(updated));
   };
 
+  // Fetch token balance
+  const fetchBalance = useCallback(async (tokenAddress) => {
+    if (!provider || !account || !tokenAddress) return;
+    try {
+      const contract = new ethers.Contract(tokenAddress, [
+        'function balanceOf(address) view returns (uint256)',
+        'function decimals() view returns (uint8)',
+      ], provider);
+      
+      const [balance, decimals] = await Promise.all([
+        contract.balanceOf(account),
+        contract.decimals().catch(() => 18),
+      ]);
+      
+      const balanceNum = parseFloat(ethers.formatUnits(balance, decimals));
+      setTokenBalance(balanceNum);
+    } catch (err) {
+      console.log('Balance fetch error:', err.message);
+      setTokenBalance(0);
+    }
+  }, [provider, account]);
+
   const handleTokenChange = useCallback(async (tokenAddress) => {
     setInputToken(tokenAddress);
     setError('');
     setSuccess('');
+    setInputAmount('');
+    setTokenBalance(0);
 
     if (!tokenAddress || tokenAddress.length < 40) {
       setValidation(null);
@@ -482,52 +647,101 @@ const DapperComponent = ({ provider, account }) => {
             symbol: result.details.tokenInfo.symbol,
             name: result.details.tokenInfo.name,
           });
+          // Fetch balance
+          fetchBalance(tokenAddress);
         }
 
         if (!result.isValid) {
           setError(`❌ Invalid token: ${result.reason}`);
         } else if (result.risk === 'HIGH') {
           setError(`⚠️ WARNING: ${result.reason || 'High risk token'}`);
-        } else if (result.details.timedOut) {
-          setError(`⚠️ Validation timed out - proceed with caution`);
         }
       } catch (err) {
         setError(`Validation error: ${err.message}`);
       } finally {
         setLoading(false);
       }
-    }, 150); // Fast debounce
-  }, [provider, recentTokens]);
+    }, 150);
+  }, [provider, recentTokens, fetchBalance]);
 
   const handleQuickSelect = (token) => {
     setInputToken(token.address);
     handleTokenChange(token.address);
   };
 
-  const handleZap = async () => {
+  // **MAX BUTTON - Uses 99% to avoid gas errors**
+  const handleMax = () => {
+    if (tokenBalance > 0) {
+      const maxAmount = (tokenBalance * 0.99).toFixed(6); // 99% of balance
+      setInputAmount(maxAmount);
+      calculateEstimates(maxAmount);
+    }
+  };
+
+  // Calculate PLS and USD estimates
+  const calculateEstimates = (amount) => {
+    const amt = parseFloat(amount) || 0;
+    const symbol = validation?.details?.tokenInfo?.symbol?.toUpperCase() || '';
+    
+    // Get token price from livePrices
+    let tokenPrice = 0;
+    if (livePrices[symbol?.toLowerCase()]) {
+      tokenPrice = livePrices[symbol.toLowerCase()];
+    } else if (symbol === 'DTGC') {
+      tokenPrice = livePrices.dtgc || 0.0006;
+    } else if (symbol === 'URMOM') {
+      tokenPrice = livePrices.urmom || 0.00019;
+    }
+    
+    const plsPrice = livePrices.pls || 0.000016;
+    const usdValue = amt * tokenPrice;
+    const plsValue = tokenPrice > 0 && plsPrice > 0 ? usdValue / plsPrice : 0;
+    
+    setEstimatedValues({ pls: plsValue, usd: usdValue });
+  };
+
+  useEffect(() => {
+    if (inputAmount) {
+      calculateEstimates(inputAmount);
+    }
+  }, [inputAmount, validation, livePrices]);
+
+  // Open confirmation modal
+  const handleZapClick = () => {
     if (!validation || !validation.isValid) {
       setError('⛔ Token validation failed');
       return;
     }
-
     if (!inputAmount || parseFloat(inputAmount) <= 0) {
       setError('❌ Enter valid amount');
       return;
     }
+    // Open double confirmation modal
+    setShowConfirmation(true);
+  };
 
+  // Execute zap after confirmation
+  const executeZap = async () => {
     setLoading(true);
     setError('');
     setSuccess('');
+    setShowConfirmation(false);
 
     try {
-      console.log('🚀 Executing zap:', {
+      console.log('🚀 Executing Flex Zap:', {
         token: inputToken,
         amount: inputAmount,
         account: account,
+        estimatedPLS: estimatedValues.pls,
+        estimatedUSD: estimatedValues.usd,
       });
 
       // TODO: Implement actual zap transaction
-      setSuccess('✅ Zap executed successfully!');
+      // This would call the Flex staking contract
+      
+      setSuccess(`✅ Successfully zapped ${inputAmount} ${validation?.details?.tokenInfo?.symbol || 'tokens'}!`);
+      setInputAmount('');
+      fetchBalance(inputToken);
     } catch (err) {
       setError(`Transaction failed: ${err.message}`);
     } finally {
@@ -535,7 +749,6 @@ const DapperComponent = ({ provider, account }) => {
     }
   };
 
-  // Quick access tokens with correct icons
   const QUICK_TOKENS = [
     { address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', symbol: 'DTGC', name: 'DTGC' },
     { address: '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0', symbol: 'URMOM', name: 'URMOM' },
@@ -546,12 +759,24 @@ const DapperComponent = ({ provider, account }) => {
 
   return (
     <div style={styles.container}>
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showConfirmation}
+        onClose={() => setShowConfirmation(false)}
+        onConfirm={executeZap}
+        tokenSymbol={validation?.details?.tokenInfo?.symbol || 'TOKEN'}
+        tokenAmount={inputAmount}
+        plsValue={estimatedValues.pls}
+        usdValue={estimatedValues.usd}
+        loading={loading}
+      />
+
       <div style={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
           <img src="/Favicon.png" alt="DTGC" style={{ width: 40, height: 40, borderRadius: '50%' }} />
-          <h2 style={styles.title}>💎⚡ DAPPER FLEX</h2>
+          <h2 style={styles.title}>💎 DAPPER FLEX</h2>
         </div>
-        <p style={styles.subtitle}>One-Click LP Zapping • Fast Validation • No Lockup</p>
+        <p style={styles.subtitle}>Flex Tier LP Zapper • 10% APR • No Lockup</p>
       </div>
 
       <div style={styles.accessNotice}>
@@ -583,25 +808,7 @@ const DapperComponent = ({ provider, account }) => {
         </div>
       </div>
 
-      {/* Recent Tokens */}
-      {recentTokens.length > 0 && (
-        <div style={styles.recentTokens}>
-          <div style={styles.quickLabel}>Recent:</div>
-          <div style={styles.quickGrid}>
-            {recentTokens.map(token => (
-              <button
-                key={token.address}
-                onClick={() => handleQuickSelect(token)}
-                style={styles.recentButton}
-              >
-                <TokenIcon address={token.address} symbol={token.symbol} size={16} />
-                <span>{token.symbol}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* Token Address Input */}
       <div style={styles.inputGroup}>
         <label style={styles.label}>Token Address</label>
         <div style={styles.inputWrapper}>
@@ -649,6 +856,12 @@ const DapperComponent = ({ provider, account }) => {
 
           <div style={styles.validationStats}>
             <div style={styles.statItem}>
+              <span style={styles.statLabel}>Your Balance</span>
+              <span style={styles.statValue}>
+                {tokenBalance.toLocaleString()} {validation.details.tokenInfo?.symbol || ''}
+              </span>
+            </div>
+            <div style={styles.statItem}>
               <span style={styles.statLabel}>Risk Level</span>
               <span style={{
                 ...styles.statValue,
@@ -659,23 +872,6 @@ const DapperComponent = ({ provider, account }) => {
                 {validation.risk === 'LOW' ? '✅' : validation.risk === 'MEDIUM' ? '⚠️' : '🚨'} {validation.risk}
               </span>
             </div>
-            <div style={styles.statItem}>
-              <span style={styles.statLabel}>Liquidity</span>
-              <span style={styles.statValue}>
-                ${validation.liquidityUsd?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-            {validation.details.whitelisted && (
-              <div style={styles.statItem}>
-                <span style={styles.statLabel}>Status</span>
-                <span style={{...styles.statValue, color: '#00ff00'}}>✅ Whitelisted</span>
-              </div>
-            )}
-            {validation.details.liquidityNote && (
-              <div style={styles.warningNote}>
-                ⚠️ {validation.details.liquidityNote}
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -684,13 +880,32 @@ const DapperComponent = ({ provider, account }) => {
       {validation?.isValid && (
         <div style={styles.inputGroup}>
           <label style={styles.label}>Amount to Zap</label>
-          <input
-            type="number"
-            placeholder="0.00"
-            value={inputAmount}
-            onChange={(e) => setInputAmount(e.target.value)}
-            style={styles.input}
-          />
+          <div style={styles.amountWrapper}>
+            <input
+              type="number"
+              placeholder="0.00"
+              value={inputAmount}
+              onChange={(e) => setInputAmount(e.target.value)}
+              style={styles.amountInput}
+            />
+            <button onClick={handleMax} style={styles.maxButton}>
+              MAX (99%)
+            </button>
+          </div>
+          
+          {/* Estimated Values Display */}
+          {inputAmount && parseFloat(inputAmount) > 0 && (
+            <div style={styles.estimateBox}>
+              <div style={styles.estimateRow}>
+                <span>≈ PLS Value:</span>
+                <span style={{ color: '#D4AF37' }}>{estimatedValues.pls.toLocaleString()} PLS</span>
+              </div>
+              <div style={styles.estimateRow}>
+                <span>≈ USD Value:</span>
+                <span style={{ color: '#4CAF50' }}>${estimatedValues.usd.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -700,7 +915,7 @@ const DapperComponent = ({ provider, account }) => {
 
       {/* Zap Button */}
       <button
-        onClick={handleZap}
+        onClick={handleZapClick}
         disabled={!validation?.isValid || !inputAmount || loading}
         style={{
           ...styles.button,
@@ -708,7 +923,7 @@ const DapperComponent = ({ provider, account }) => {
           cursor: !validation?.isValid || !inputAmount || loading ? 'not-allowed' : 'pointer',
         }}
       >
-        {loading ? '⏳ Processing...' : '🚀 Zap to Flex'}
+        {loading ? '⏳ Processing...' : '🚀 Zap to Flex Tier'}
       </button>
 
       {/* Info Footer */}
@@ -718,7 +933,7 @@ const DapperComponent = ({ provider, account }) => {
           <span>DTGC Ecosystem</span>
         </div>
         <div style={styles.footerItem}>
-          <span>⚡ Multicall3 Fast Scan</span>
+          <span>💎 10% APR • No Lock</span>
         </div>
       </div>
     </div>
@@ -788,24 +1003,6 @@ const styles = {
     fontWeight: 'bold',
     transition: 'all 0.2s',
   },
-  recentTokens: {
-    marginBottom: '15px',
-    padding: '10px',
-    background: 'rgba(0,0,0,0.2)',
-    borderRadius: '8px',
-  },
-  recentButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '4px 10px',
-    background: 'rgba(255,20,147,0.1)',
-    border: '1px solid #ff149340',
-    borderRadius: '15px',
-    cursor: 'pointer',
-    color: '#ffb6c1',
-    fontSize: '11px',
-  },
   inputGroup: {
     marginBottom: '15px',
   },
@@ -829,7 +1026,43 @@ const styles = {
     color: '#fff',
     fontSize: '14px',
     outline: 'none',
-    transition: 'border-color 0.2s',
+  },
+  amountWrapper: {
+    display: 'flex',
+    gap: '8px',
+  },
+  amountInput: {
+    flex: 1,
+    padding: '12px',
+    background: '#1a0a10',
+    border: '2px solid #ff149360',
+    borderRadius: '10px',
+    color: '#fff',
+    fontSize: '14px',
+    outline: 'none',
+  },
+  maxButton: {
+    padding: '12px 16px',
+    background: 'rgba(212,175,55,0.3)',
+    border: '2px solid #D4AF37',
+    borderRadius: '10px',
+    color: '#D4AF37',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    fontSize: '12px',
+  },
+  estimateBox: {
+    marginTop: '10px',
+    padding: '10px',
+    background: 'rgba(0,0,0,0.3)',
+    borderRadius: '8px',
+    fontSize: '13px',
+  },
+  estimateRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '4px 0',
+    color: '#ccc',
   },
   loading: {
     color: '#ffb6c1',
@@ -894,15 +1127,6 @@ const styles = {
     fontWeight: 'bold',
     color: '#fff',
   },
-  warningNote: {
-    gridColumn: '1 / -1',
-    fontSize: '11px',
-    color: '#ffaa00',
-    background: 'rgba(255,170,0,0.1)',
-    padding: '8px',
-    borderRadius: '6px',
-    marginTop: '8px',
-  },
   button: {
     width: '100%',
     padding: '14px',
@@ -914,7 +1138,6 @@ const styles = {
     fontSize: '16px',
     cursor: 'pointer',
     marginTop: '10px',
-    transition: 'transform 0.2s, box-shadow 0.2s',
     boxShadow: '0 4px 15px rgba(255, 20, 147, 0.3)',
   },
   error: {
