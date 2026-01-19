@@ -1,4 +1,3 @@
-import GEXWidget from "./components/GEXWidget";
 import DapperComponent from './components/DapperComponent';
 import ZapperXChain from './components/ZapperXChain';
 import PricingPage from './pages/PricingPage';
@@ -2757,7 +2756,7 @@ const IntroVideoOverlay = ({ onComplete, isDark }) => {
           onClick={handleSkip}
           style={{
             position: 'absolute',
-            bottom: '90px',
+            bottom: '24px',
             right: '24px',
             background: 'linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 50%, var(--gold-dark) 100%)',
             border: 'none',
@@ -4447,6 +4446,70 @@ export default function App() {
   const [showStakeCalculator, setShowStakeCalculator] = useState(false);
   const [calcFuturePrice, setCalcFuturePrice] = useState('');
   const [calcFutureMonths, setCalcFutureMonths] = useState('6');
+  
+  // ═══════════════════════════════════════════════════════════════
+  // GEX - Growth Engine Monitor (eHEX Spread Tracker)
+  // eHEX(E) = HEX on Ethereum | eHEX(P) = HEX on PulseChain
+  // ═══════════════════════════════════════════════════════════════
+  const [showGex, setShowGex] = useState(false);
+  const [gexTab, setGexTab] = useState('spread'); // spread, live, signals
+  const [hexPrices, setHexPrices] = useState({
+    eHEX: 0.00080000,  // eHEX(E) - HEX on Ethereum
+    pHEX: 0.00080000,  // eHEX(P) - HEX on PulseChain
+    spread: 0,
+    spreadPercent: 0,
+    zone: 'NORMAL', // NORMAL, AGGRESSIVE_BUY_ETH, AGGRESSIVE_SELL_PLS
+    lastUpdated: null,
+  });
+  
+  // Fetch eHEX(E) (Ethereum) and eHEX(P) (PulseChain) prices for GEX
+  const fetchHexPrices = useCallback(async () => {
+    try {
+      // eHEX(E) - HEX on Ethereum mainnet
+      // Contract: 0x2b591e99afe9f32eaa6214f7b7629768c40eeb39
+      const eHexRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/ethereum/0x69d91b94f0aaf8e8a2586909fa77a5c2c89818d5');
+      const eHexData = await eHexRes.json();
+      
+      // eHEX(P) - HEX on PulseChain (bridged)
+      // Same contract address on PulseChain
+      const pHexRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x6f1dcbf5f82be56c3b3a48e9b90a0e0e08e1e30f');
+      const pHexData = await pHexRes.json();
+      
+      const eHexPair = eHexData?.pair || eHexData?.pairs?.[0];
+      const pHexPair = pHexData?.pair || pHexData?.pairs?.[0];
+      
+      const eHexPrice = parseFloat(eHexPair?.priceUsd || 0) || 0.00080000;
+      const pHexPrice = parseFloat(pHexPair?.priceUsd || 0) || 0.00080000;
+      
+      const spread = eHexPrice - pHexPrice;
+      const spreadPercent = eHexPrice > 0 ? ((spread / eHexPrice) * 100) : 0;
+      
+      // Determine zone - aggressive if spread > 5%
+      let zone = 'NORMAL';
+      if (spreadPercent > 5) zone = 'AGGRESSIVE_BUY_ETH';
+      else if (spreadPercent < -5) zone = 'AGGRESSIVE_SELL_PLS';
+      
+      setHexPrices({
+        eHEX: eHexPrice,
+        pHEX: pHexPrice,
+        spread,
+        spreadPercent,
+        zone,
+        lastUpdated: new Date(),
+      });
+      
+      console.log('📊 GEX prices updated:', { 'eHEX(E)': eHexPrice, 'eHEX(P)': pHexPrice, spreadPercent: spreadPercent.toFixed(2) + '%', zone });
+    } catch (err) {
+      console.warn('GEX price fetch failed:', err.message);
+    }
+  }, []);
+  
+  // Auto-fetch GEX prices every 30 seconds
+  useEffect(() => {
+    fetchHexPrices();
+    const interval = setInterval(fetchHexPrices, 30000);
+    return () => clearInterval(interval);
+  }, [fetchHexPrices]);
   
   // Load stake history from localStorage on mount
   useEffect(() => {
@@ -6976,8 +7039,9 @@ export default function App() {
                     isActive: stake.isActive,
                     timeRemaining: 0,
                     isV4: true,
+                    sourceContract: 'lpV4', // Track source for deduplication
                   });
-                  console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR`);
+                  console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR (detected from LPV4)`);
                 } else {
                   // Regular Diamond/Diamond+ stake
                   const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
@@ -7030,8 +7094,23 @@ export default function App() {
                     
                     const flexStartTime = Number(stake.startTime || stake[1] || 0) * 1000;
                     
+                    // ═══════════════════════════════════════════════════════════════
+                    // FIX: Check for duplicate Flex stakes (may already be added from
+                    // V4 LP Staking when detected as Flex by APR/lock criteria)
+                    // ═══════════════════════════════════════════════════════════════
+                    const isDuplicate = positions.some(p => 
+                      p.isFlex && 
+                      Math.abs(p.amount - flexAmount) < 0.0001 && // Same amount (within tolerance)
+                      Math.abs(p.startTime - flexStartTime) < 60000 // Same start time (within 1 min)
+                    );
+                    
+                    if (isDuplicate) {
+                      console.log(`⚠️ Skipping duplicate Flex stake #${idx}: ${flexAmount} LP (already counted)`);
+                      return;
+                    }
+                    
                     positions.push({
-                      id: `v4-flex-stake-${idx}`,
+                      id: `v4-flex-contract-${idx}`, // Changed ID prefix to distinguish source
                       stakeIndex: idx,
                       type: 'FLEX LP',
                       isLP: true,
@@ -7048,8 +7127,9 @@ export default function App() {
                       isActive: true,
                       timeRemaining: 0,
                       isV4: true,
+                      sourceContract: 'flexV4', // Track source for debugging
                     });
-                    console.log(`✅ Added V4 Flex stake #${idx}: ${flexAmount} LP @ 10% APR`);
+                    console.log(`✅ Added V4 Flex stake #${idx}: ${flexAmount} LP @ 10% APR (from FlexV4 contract)`);
                   });
                 }
               } catch (flexErr) {
@@ -13540,12 +13620,12 @@ export default function App() {
           whiteDiamondNFTs={whiteDiamondNFTs}
         />
 
-        {/* Gold Records - Stake History (Above Calculator) */}
+        {/* Gold Records - Stake History (Above Calculator - TOP widget) */}
         <div
           onClick={() => setShowGoldRecords(true)}
           style={{
             position: 'fixed',
-            bottom: '94px',
+            bottom: '234px', // Moved up from 94px to make room for 3 widgets
             right: '24px',
             width: '56px',
             height: '56px',
@@ -13912,14 +13992,14 @@ export default function App() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* CALCULATOR FAB - BOTTOM RIGHT (Below Treasure Vault) */}
+      {/* CALCULATOR FAB - MIDDLE widget (moved up from bottom) */}
       {/* ═══════════════════════════════════════════════════════════════ */}
       {!TESTNET_MODE && account && (stakedPositions.length > 0 || lastKnownPositionsRef.current.length > 0) && (
         <button
           onClick={() => setShowStakeCalculator(true)}
           style={{
             position: 'fixed',
-            bottom: '90px',
+            bottom: '94px', // Moved up from 24px to middle position
             right: '24px',
             zIndex: 1500,
             width: '56px',
@@ -13942,6 +14022,304 @@ export default function App() {
         >
           🧮
         </button>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* GEX FAB - BOTTOM widget (Growth Engine Monitor) */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {account && (
+        <button
+          onClick={() => setShowGex(true)}
+          style={{
+            position: 'fixed',
+            bottom: '164px',
+            right: '24px',
+            zIndex: 1500,
+            width: '56px',
+            height: '56px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
+            border: `3px solid ${hexPrices.zone !== 'NORMAL' ? '#FFD700' : '#D4AF37'}`,
+            color: '#FFD700',
+            fontSize: '0.9rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+            boxShadow: hexPrices.zone !== 'NORMAL' 
+              ? '0 4px 20px rgba(255,215,0,0.6), 0 0 40px rgba(255,215,0,0.4)'
+              : '0 4px 20px rgba(212,175,55,0.4), 0 0 20px rgba(212,175,55,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s ease',
+            animation: hexPrices.zone !== 'NORMAL' ? 'pulse 1.5s infinite' : 'none',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          title="GEX - Growth Engine Monitor (eHEX Spread)"
+        >
+          {hexPrices.zone !== 'NORMAL' && (
+            <span style={{ position: 'absolute', top: '-8px', right: '-8px', fontSize: '1rem' }}>⭐</span>
+          )}
+          GEX
+        </button>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* GEX MODAL - Growth Engine Monitor */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {showGex && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.95)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10001,
+          backdropFilter: 'blur(10px)',
+        }} onClick={() => setShowGex(false)}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1a1505 0%, #0d0d1a 100%)',
+            border: '3px solid #D4AF37',
+            borderRadius: '24px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '95%',
+            maxHeight: '85vh',
+            overflow: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 80px rgba(212,175,55,0.3)',
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.5rem', color: '#FFD700' }}>⚡</span>
+                <div>
+                  <h2 style={{ color: '#FFD700', fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>GEX</h2>
+                  <span style={{ color: '#888', fontSize: '0.7rem' }}>Growth Engine Monitor</span>
+                </div>
+                <button
+                  onClick={fetchHexPrices}
+                  style={{
+                    background: 'rgba(212,175,55,0.2)',
+                    border: '1px solid #D4AF37',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#D4AF37',
+                    fontSize: '0.9rem',
+                  }}
+                  title="Refresh Prices"
+                >
+                  ?
+                </button>
+              </div>
+              <button
+                onClick={() => setShowGex(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#888',
+                  fontSize: '1.8rem',
+                  cursor: 'pointer',
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '4px' }}>
+              {[
+                { id: 'spread', icon: '📊', label: 'SPREAD' },
+                { id: 'live', icon: '⚡', label: 'GE LIVE' },
+                { id: 'signals', icon: '🎯', label: 'SIGNALS' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setGexTab(tab.id)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 8px',
+                    background: gexTab === tab.id ? 'rgba(212,175,55,0.3)' : 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: gexTab === tab.id ? '#FFD700' : '#666',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <span>{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* SPREAD Tab Content */}
+            {gexTab === 'spread' && (
+              <div>
+                {/* Main Spread Display */}
+                <div style={{
+                  background: 'rgba(0,0,0,0.4)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  textAlign: 'center',
+                  marginBottom: '20px',
+                }}>
+                  <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '8px', letterSpacing: '2px' }}>
+                    eHEX(E) / eHEX(P) SPREAD
+                  </div>
+                  <div style={{
+                    fontSize: '3rem',
+                    fontWeight: 800,
+                    color: hexPrices.spreadPercent > 0 ? '#4CAF50' : hexPrices.spreadPercent < 0 ? '#F44336' : '#FFD700',
+                    textShadow: '0 0 30px currentColor',
+                  }}>
+                    {hexPrices.spreadPercent >= 0 ? '+' : ''}{hexPrices.spreadPercent.toFixed(2)}%
+                  </div>
+                  
+                  {/* Zone Indicator with Star */}
+                  <div style={{
+                    marginTop: '12px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 20px',
+                    background: hexPrices.zone !== 'NORMAL' 
+                      ? 'linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,215,0,0.1))'
+                      : 'rgba(128,128,128,0.2)',
+                    borderRadius: '20px',
+                    border: hexPrices.zone !== 'NORMAL' ? '2px solid #FFD700' : '1px solid #444',
+                  }}>
+                    {hexPrices.zone !== 'NORMAL' && <span style={{ fontSize: '1.2rem' }}>⭐</span>}
+                    <span style={{
+                      color: hexPrices.zone !== 'NORMAL' ? '#FFD700' : '#888',
+                      fontWeight: 700,
+                      fontSize: '0.9rem',
+                      letterSpacing: '1px',
+                    }}>
+                      {hexPrices.zone === 'NORMAL' ? 'NORMAL' :
+                       hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? 'BUY eHEX(E)' :
+                       'SELL eHEX(P)'}
+                    </span>
+                  </div>
+                  
+                  {/* Aggressive Zone Direction Hint */}
+                  {hexPrices.zone !== 'NORMAL' && (
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.05))',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255,215,0,0.3)',
+                    }}>
+                      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        ⭐ {hexPrices.zone === 'AGGRESSIVE_BUY_ETH' 
+                          ? 'Buy eHEX(E) on Ethereum → Bridge to Pulse' 
+                          : 'Sell eHEX(P) on Pulse → Buy eHEX(E) on Ethereum'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Price Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* eHEX(E) Card - Ethereum */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(98,126,234,0.2) 0%, rgba(98,126,234,0.05) 100%)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    border: '1px solid rgba(98,126,234,0.3)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <span style={{ color: '#627EEA' }}>◆</span>
+                      <span style={{ color: '#627EEA', fontSize: '0.75rem', fontWeight: 600 }}>ETHEREUM</span>
+                    </div>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>eHEX(E)</div>
+                    <div style={{ color: '#fff', fontSize: '1.4rem', fontWeight: 700 }}>
+                      ${hexPrices.eHEX.toFixed(6)}
+                    </div>
+                  </div>
+                  
+                  {/* eHEX(P) Card - PulseChain */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(0,212,170,0.2) 0%, rgba(0,212,170,0.05) 100%)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    border: '1px solid rgba(0,212,170,0.3)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <span style={{ color: '#E91E8C' }}>💜</span>
+                      <span style={{ color: '#00D4AA', fontSize: '0.75rem', fontWeight: 600 }}>PULSECHAIN</span>
+                    </div>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>eHEX(P)</div>
+                    <div style={{ color: '#fff', fontSize: '1.4rem', fontWeight: 700 }}>
+                      ${hexPrices.pHEX.toFixed(6)}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Last Updated */}
+                {hexPrices.lastUpdated && (
+                  <div style={{ textAlign: 'center', marginTop: '16px', color: '#666', fontSize: '0.65rem' }}>
+                    Last updated: {hexPrices.lastUpdated.toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* GE LIVE Tab */}
+            {gexTab === 'live' && (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#888' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚡</div>
+                <div>Growth Engine Live Feed</div>
+                <div style={{ fontSize: '0.8rem', marginTop: '8px' }}>Coming Soon</div>
+              </div>
+            )}
+
+            {/* SIGNALS Tab */}
+            {gexTab === 'signals' && (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#888' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🎯</div>
+                <div>Trading Signals</div>
+                <div style={{ fontSize: '0.8rem', marginTop: '8px' }}>Coming Soon</div>
+              </div>
+            )}
+
+            {/* DTGC Balance Footer */}
+            {account && (
+              <div style={{
+                marginTop: '20px',
+                padding: '12px',
+                background: 'rgba(0,0,0,0.3)',
+                borderRadius: '10px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <span style={{ color: '#666', fontSize: '0.7rem' }}>{account.slice(0, 6)}...{account.slice(-4)}</span>
+                <span style={{ color: '#4CAF50', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  ${formatNumber(parseFloat(dtgcBalance || 0) * (livePrices.dtgc || 0), 0)} DTGC
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -14992,7 +15370,6 @@ export default function App() {
           {toast.message}
         </div>
       )}
-      <GEXWidget walletAddress={account} dtgcBalance={parseFloat(dtgcBalance) || 0} dtgcPrice={0.0006861} position="bottom-right" />
     </ThemeContext.Provider>
   );
 }
