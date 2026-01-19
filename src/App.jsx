@@ -4482,10 +4482,10 @@ export default function App() {
   
   // Check if user meets Gold Star tier requirements
   const getUserDtgcValueUsd = useCallback(() => {
-    const dtgcBalance = parseFloat(balances['DTGC'] || 0);
+    const balance = parseFloat(dtgcBalance || 0);
     const dtgcPrice = livePrices.dtgc || 0;
-    return dtgcBalance * dtgcPrice;
-  }, [balances, livePrices]);
+    return balance * dtgcPrice;
+  }, [dtgcBalance, livePrices]);
   
   const hasActiveStakes = useCallback(() => {
     // Check if user has any active stakes from stake history
