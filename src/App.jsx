@@ -14255,8 +14255,9 @@ export default function App() {
             <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '4px' }}>
               {[
                 { id: 'spread', icon: '📊', label: 'SPREAD' },
-                { id: 'live', icon: '⚡', label: 'GE LIVE' },
                 { id: 'signals', icon: '🎯', label: 'SIGNALS' },
+                { id: 'live', icon: '⚡', label: 'LIVE' },
+                { id: 'learn', icon: '📚', label: 'LEARN' },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -14397,21 +14398,315 @@ export default function App() {
               </div>
             )}
 
-            {/* GE LIVE Tab */}
+            {/* GE LIVE Tab - Real-time Market Conditions */}
             {gexTab === 'live' && (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#888' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚡</div>
-                <div>Growth Engine Live Feed</div>
-                <div style={{ fontSize: '0.8rem', marginTop: '8px' }}>Coming Soon</div>
+              <div style={{ padding: '0' }}>
+                {/* Live Status Header */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.05))',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  marginBottom: '16px',
+                  border: '1px solid rgba(76,175,80,0.3)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        background: '#4CAF50',
+                        boxShadow: '0 0 10px #4CAF50',
+                        animation: 'pulse 2s infinite',
+                      }} />
+                      <span style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.9rem' }}>LIVE MONITORING</span>
+                    </div>
+                    <span style={{ color: '#666', fontSize: '0.7rem' }}>Updates every 30s</span>
+                  </div>
+                  
+                  {/* Current Market Condition */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.65rem', marginBottom: '4px' }}>SPREAD</div>
+                      <div style={{ color: hexPrices.spreadPercent > 3 ? '#4CAF50' : hexPrices.spreadPercent < -3 ? '#F44336' : '#FFD700', fontSize: '1.2rem', fontWeight: 700 }}>
+                        {hexPrices.spreadPercent >= 0 ? '+' : ''}{hexPrices.spreadPercent.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.65rem', marginBottom: '4px' }}>ZONE</div>
+                      <div style={{ color: hexPrices.zone !== 'NORMAL' ? '#FFD700' : '#888', fontSize: '0.9rem', fontWeight: 700 }}>
+                        {hexPrices.zone === 'NORMAL' ? '⚖️ NORMAL' : hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? '🟢 OPPORTUNITY' : '🔴 OPPORTUNITY'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.65rem', marginBottom: '4px' }}>SIGNAL</div>
+                      <div style={{ color: hexPrices.zone !== 'NORMAL' ? '#4CAF50' : '#888', fontSize: '0.9rem', fontWeight: 700 }}>
+                        {hexPrices.zone === 'NORMAL' ? '⏳ WAIT' : '⚡ ACT NOW'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* How It Works - Education */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginBottom: '16px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    📚 HOW eHEX ARBITRAGE WORKS
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #627EEA, #4A5BC7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>1</div>
+                      <div>
+                        <div style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>eHEX exists on TWO chains</div>
+                        <div style={{ color: '#888', fontSize: '0.75rem' }}>Ethereum (eHEX) & PulseChain (bridged eHEX)</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #FFD700, #FFA500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#000' }}>2</div>
+                      <div>
+                        <div style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Prices differ between chains</div>
+                        <div style={{ color: '#888', fontSize: '0.75rem' }}>Supply/demand creates a price spread</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #4CAF50, #2E7D32)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>3</div>
+                      <div>
+                        <div style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Buy low, sell high</div>
+                        <div style={{ color: '#888', fontSize: '0.75rem' }}>Bridge to capture the spread as profit</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Profit Calculator */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))', borderRadius: '16px', padding: '20px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    💰 PROFIT CALCULATOR
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>IF YOU TRADE</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff' }}>$1,000</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>POTENTIAL PROFIT</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: Math.abs(hexPrices.spreadPercent) > 2 ? '#4CAF50' : '#888' }}>
+                        ${(1000 * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', fontSize: '0.7rem', color: '#888' }}>
+                    ⚠️ Minus gas fees (~$5-15 ETH, ~$0.01 PLS) & bridge fees (~0.1%)
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* SIGNALS Tab */}
+            {/* SIGNALS Tab - Clear Actionable Trading Signals */}
             {gexTab === 'signals' && (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#888' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🎯</div>
-                <div>Trading Signals</div>
-                <div style={{ fontSize: '0.8rem', marginTop: '8px' }}>Coming Soon</div>
+              <div style={{ padding: '0' }}>
+                {/* Current Signal */}
+                <div style={{
+                  background: hexPrices.zone !== 'NORMAL' 
+                    ? 'linear-gradient(135deg, rgba(76,175,80,0.3), rgba(76,175,80,0.1))'
+                    : 'linear-gradient(135deg, rgba(128,128,128,0.2), rgba(128,128,128,0.05))',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  marginBottom: '16px',
+                  border: hexPrices.zone !== 'NORMAL' ? '2px solid #4CAF50' : '1px solid #444',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '12px', filter: hexPrices.zone !== 'NORMAL' ? 'none' : 'grayscale(1)' }}>
+                    {hexPrices.zone === 'NORMAL' ? '⏳' : hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? '🟢' : '🔴'}
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: hexPrices.zone !== 'NORMAL' ? '#4CAF50' : '#888', marginBottom: '8px' }}>
+                    {hexPrices.zone === 'NORMAL' ? 'NO SIGNAL' : hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? 'BUY SIGNAL' : 'SELL SIGNAL'}
+                  </div>
+                  <div style={{ color: '#888', fontSize: '0.85rem' }}>
+                    {hexPrices.zone === 'NORMAL' ? 'Spread is too small for profitable arbitrage. Wait for >5%.' : 'Spread is large enough for profitable arbitrage!'}
+                  </div>
+                </div>
+
+                {/* Step by Step Instructions - Only show when signal is active */}
+                {hexPrices.zone !== 'NORMAL' && (
+                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginBottom: '16px' }}>
+                    <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      📋 STEP-BY-STEP INSTRUCTIONS
+                    </div>
+                    
+                    {hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(98,126,234,0.2), rgba(98,126,234,0.05))', borderRadius: '12px', border: '1px solid rgba(98,126,234,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#627EEA', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>1</span>
+                            <span style={{ color: '#627EEA', fontWeight: 700 }}>BUY on Ethereum</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Buy eHEX on Uniswap (Ethereum)</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Current price: ${hexPrices.eHEX.toFixed(6)}</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#FFD700', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.05))', borderRadius: '12px', border: '1px solid rgba(255,215,0,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#FFD700', color: '#000', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>2</span>
+                            <span style={{ color: '#FFD700', fontWeight: 700 }}>BRIDGE to PulseChain</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Use PulseRamp or PortalBridge</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Bridge fee: ~0.1%</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#4CAF50', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.05))', borderRadius: '12px', border: '1px solid rgba(76,175,80,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#4CAF50', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>3</span>
+                            <span style={{ color: '#4CAF50', fontWeight: 700 }}>SELL on PulseChain</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Sell eHEX on PulseX for more $!</div>
+                          <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 700, marginTop: '4px' }}>Profit: ~{Math.abs(hexPrices.spreadPercent).toFixed(1)}% 🎯</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(0,212,170,0.2), rgba(0,212,170,0.05))', borderRadius: '12px', border: '1px solid rgba(0,212,170,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#00D4AA', color: '#000', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>1</span>
+                            <span style={{ color: '#00D4AA', fontWeight: 700 }}>BUY on PulseChain</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Buy eHEX on PulseX (cheaper!)</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Current price: ${hexPrices.pHEX.toFixed(6)}</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#FFD700', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.05))', borderRadius: '12px', border: '1px solid rgba(255,215,0,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#FFD700', color: '#000', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>2</span>
+                            <span style={{ color: '#FFD700', fontWeight: 700 }}>BRIDGE to Ethereum</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Use PulseRamp or PortalBridge</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Bridge fee: ~0.1%</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#4CAF50', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.05))', borderRadius: '12px', border: '1px solid rgba(76,175,80,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#4CAF50', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>3</span>
+                            <span style={{ color: '#4CAF50', fontWeight: 700 }}>SELL on Ethereum</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Sell eHEX on Uniswap for more $!</div>
+                          <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 700, marginTop: '4px' }}>Profit: ~{Math.abs(hexPrices.spreadPercent).toFixed(1)}% 🎯</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Quick Links */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🔗 QUICK LINKS
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <a href="https://app.uniswap.org/swap?chain=mainnet&outputCurrency=0x2b591e99afe9f32eaa6214f7b7629768c40eeb39" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(98,126,234,0.2), rgba(98,126,234,0.05))', borderRadius: '8px', border: '1px solid rgba(98,126,234,0.3)', textDecoration: 'none', color: '#627EEA', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      🦄 Uniswap (ETH)
+                    </a>
+                    <a href="https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x57fde0a71132198bbec939b98976993d8d89d225" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(0,212,170,0.2), rgba(0,212,170,0.05))', borderRadius: '8px', border: '1px solid rgba(0,212,170,0.3)', textDecoration: 'none', color: '#00D4AA', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      💜 PulseX (PLS)
+                    </a>
+                    <a href="https://pulseramp.com" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.05))', borderRadius: '8px', border: '1px solid rgba(255,215,0,0.3)', textDecoration: 'none', color: '#FFD700', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      🌉 PulseRamp
+                    </a>
+                    <a href="https://portalbridge.com" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(147,51,234,0.2), rgba(147,51,234,0.05))', borderRadius: '8px', border: '1px solid rgba(147,51,234,0.3)', textDecoration: 'none', color: '#9333EA', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      🌀 PortalBridge
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* LEARN Tab - Educational Content */}
+            {gexTab === 'learn' && (
+              <div style={{ padding: '0' }}>
+                {/* What is GEX */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.05))', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '1.1rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    ⚡ What is GEX?
+                  </div>
+                  <div style={{ color: '#ddd', fontSize: '0.85rem', lineHeight: 1.6 }}>
+                    <strong>GEX (Growth Engine X-Chain)</strong> monitors the price difference of eHEX between Ethereum and PulseChain. When the spread exceeds 5%, there's an arbitrage opportunity to profit from buying on the cheaper chain and selling on the expensive one.
+                  </div>
+                </div>
+
+                {/* Key Terms */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginBottom: '16px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px' }}>📖 KEY TERMS</div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ padding: '12px', background: 'rgba(98,126,234,0.1)', borderRadius: '8px', borderLeft: '3px solid #627EEA' }}>
+                      <div style={{ color: '#627EEA', fontWeight: 700, fontSize: '0.85rem' }}>eHEX(E) - Ethereum HEX</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>The original HEX token on Ethereum mainnet</div>
+                    </div>
+                    
+                    <div style={{ padding: '12px', background: 'rgba(0,212,170,0.1)', borderRadius: '8px', borderLeft: '3px solid #00D4AA' }}>
+                      <div style={{ color: '#00D4AA', fontWeight: 700, fontSize: '0.85rem' }}>eHEX(P) - PulseChain HEX</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>HEX bridged from Ethereum to PulseChain</div>
+                    </div>
+                    
+                    <div style={{ padding: '12px', background: 'rgba(255,215,0,0.1)', borderRadius: '8px', borderLeft: '3px solid #FFD700' }}>
+                      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.85rem' }}>Spread</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>The % price difference between chains. Higher = more profit potential</div>
+                    </div>
+                    
+                    <div style={{ padding: '12px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px', borderLeft: '3px solid #4CAF50' }}>
+                      <div style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.85rem' }}>Arbitrage</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>Profiting from price differences by buying low, selling high</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Risk Warning */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(244,67,54,0.15), rgba(244,67,54,0.05))', borderRadius: '16px', padding: '20px', border: '1px solid rgba(244,67,54,0.3)' }}>
+                  <div style={{ color: '#F44336', fontWeight: 700, fontSize: '0.9rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    ⚠️ RISKS TO CONSIDER
+                  </div>
+                  
+                  <ul style={{ margin: 0, paddingLeft: '20px', color: '#ddd', fontSize: '0.8rem', lineHeight: 1.8 }}>
+                    <li><strong>Gas fees:</strong> ETH gas can be $5-$50+ during congestion</li>
+                    <li><strong>Bridge fees:</strong> ~0.1% + wait time (10-30 min)</li>
+                    <li><strong>Price slippage:</strong> Large trades move the price</li>
+                    <li><strong>Spread can close:</strong> Others may arbitrage before you</li>
+                    <li><strong>DYOR:</strong> This is not financial advice</li>
+                  </ul>
+                </div>
+
+                {/* Pro Tips */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginTop: '16px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '12px' }}>💡 PRO TIPS</div>
+                  
+                  <div style={{ color: '#ddd', fontSize: '0.8rem', lineHeight: 1.8 }}>
+                    <div style={{ marginBottom: '8px' }}>✓ Wait for spreads &gt;5% to cover fees</div>
+                    <div style={{ marginBottom: '8px' }}>✓ Check ETH gas before trading (low = better)</div>
+                    <div style={{ marginBottom: '8px' }}>✓ Start with small amounts to test</div>
+                    <div style={{ marginBottom: '8px' }}>✓ Use limit orders to avoid slippage</div>
+                    <div>✓ Monitor both prices during bridge wait</div>
+                  </div>
+                </div>
               </div>
             )}
 
