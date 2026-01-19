@@ -64,6 +64,7 @@ export const GEXWidget = ({
 }) => {
   // Widget state
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const [activeTab, setActiveTab] = useState('spread');
   
   // Calculate USD value for token gating
@@ -102,8 +103,27 @@ export const GEXWidget = ({
                 <span className="gex-logo">⚡ GEX</span>
                 <span className="gex-subtitle">Growth Engine Monitor</span>
               </div>
+              <button onClick={() => setShowInfo(!showInfo)} className="gex-info-btn" title="What is GEX?">?</button>
               <button onClick={() => setIsExpanded(false)} className="gex-close">✕</button>
             </div>
+
+            {/* Info Panel */}
+            {showInfo && (
+              <div className="gex-info-panel">
+                <h3>⚡ What is GEX?</h3>
+                <p><strong>Growth Engine X-Chain Monitor</strong> tracks cross-chain arbitrage opportunities between eHEX on Ethereum and bridged eHEX on PulseChain.</p>
+                <h4>📊 SPREAD Tab</h4>
+                <p>Shows real-time price difference between eHEX on both chains. When spread exceeds 2.5%, arbitrage becomes profitable after bridge fees.</p>
+                <h4>⚡ GE LIVE Tab</h4>
+                <p>Live feed of Growth Engine activity - automated buys, sells, and PLS generation from the DTGC ecosystem flywheel.</p>
+                <h4>🎯 SIGNALS Tab</h4>
+                <p>Token-gated alerts for optimal entry points. Requires $200+ DTGC to unlock. Signals auto-execute via Growth Engine when conditions are met.</p>
+                <h4>🔄 How Arbitrage Works</h4>
+                <p>1. Buy eHEX on cheaper chain<br/>2. Bridge to other chain<br/>3. Sell at higher price<br/>4. Profit feeds Growth Engine → More URMOM/DTGC buys → Higher prices</p>
+                <button onClick={() => setShowInfo(false)} className="gex-info-close">Got it!</button>
+              </div>
+            )}
+
 
             {/* Tabs */}
             <div className="gex-tabs">
@@ -572,6 +592,13 @@ const GEX_STYLES = `
 .gex-title { display: flex; align-items: center; gap: 10px; }
 .gex-logo { font-family: 'Orbitron'; font-size: 18px; font-weight: bold; color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
 .gex-subtitle { font-size: 10px; color: #888; letter-spacing: 1px; }
+.gex-info-btn { background: rgba(255,215,0,0.2); border: 1px solid #FFD700; color: #FFD700; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-weight: bold; margin-right: 8px; }
+.gex-info-btn:hover { background: rgba(255,215,0,0.4); }
+.gex-info-panel { background: rgba(0,0,0,0.95); border: 1px solid #FFD700; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.gex-info-panel h3 { color: #FFD700; margin: 0 0 12px 0; font-size: 16px; }
+.gex-info-panel h4 { color: #FFD700; margin: 12px 0 6px 0; font-size: 13px; }
+.gex-info-panel p { color: #ccc; font-size: 12px; line-height: 1.5; margin: 0 0 8px 0; }
+.gex-info-close { width: 100%; padding: 10px; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; border-radius: 8px; color: #000; font-weight: bold; cursor: pointer; margin-top: 12px; }
 .gex-close { background: transparent; border: none; color: #FFD700; font-size: 20px; cursor: pointer; padding: 4px 8px; }
 
 .gex-tabs { display: flex; border-bottom: 1px solid rgba(255,215,0,0.2); }
@@ -733,3 +760,5 @@ export default GEXWidget;
 // GEX Widget trigger Sun Jan 18 18:26:07 EST 2026
 // Deploy 1768779528
 // Deploy 1768779933
+
+// Info panel content injected at end
