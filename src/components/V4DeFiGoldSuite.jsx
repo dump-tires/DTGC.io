@@ -39,28 +39,43 @@ const CONFIG = {
   DEV_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
   BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
   PULSESCAN_API: 'https://api.scan.pulsechain.com/api/v2',
+  GIB_SHOW_BASE: 'https://gib.show/image/369', // PulseChain chainId = 369
   
   SLIPPAGE_BPS: 300,
   DEADLINE_MINUTES: 20,
   EXPLORER: 'https://scan.pulsechain.com',
 };
 
-// All major PulseX tokens - VERIFIED ADDRESSES (lowercase to avoid checksum issues)
+// Helper to get token logo from gib.show
+const getTokenLogo = (address) => `${CONFIG.GIB_SHOW_BASE}/${address}`;
+
+// All major PulseX/PulseChain tokens - VERIFIED ADDRESSES
 const TOKENS = {
   PLS: { 
     address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
     symbol: 'PLS', 
     name: 'PulseChain', 
     decimals: 18, 
-    logo: '💜', 
+    logo: getTokenLogo('0xa1077a294dde1b09bb078844df40758a5d0f9a27'),
+    emoji: '💜',
     isNative: true,
+  },
+  WPLS: {
+    address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
+    symbol: 'WPLS',
+    name: 'Wrapped PLS',
+    decimals: 18,
+    logo: getTokenLogo('0xa1077a294dde1b09bb078844df40758a5d0f9a27'),
+    emoji: '💜',
+    isNative: false,
   },
   DTGC: { 
     address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', 
     symbol: 'DTGC', 
     name: 'DT Gold Coin', 
     decimals: 18, 
-    logo: '🪙',
+    logo: getTokenLogo('0xd0676b28a457371d58d47e5247b439114e40eb0f'),
+    emoji: '🪙',
     isNative: false,
   },
   URMOM: { 
@@ -68,7 +83,8 @@ const TOKENS = {
     symbol: 'URMOM', 
     name: 'URMOM', 
     decimals: 18, 
-    logo: '🔥',
+    logo: getTokenLogo('0xe43b3cee3554e120213b8b69caf690b6c04a7ec0'),
+    emoji: '🔥',
     isNative: false,
   },
   PLSX: { 
@@ -76,7 +92,8 @@ const TOKENS = {
     symbol: 'PLSX', 
     name: 'PulseX', 
     decimals: 18, 
-    logo: '🔷',
+    logo: getTokenLogo('0x95b303987a60c71504d99aa1b13b4da07b0790ab'),
+    emoji: '🔷',
     isNative: false,
   },
   HEX: { 
@@ -84,7 +101,8 @@ const TOKENS = {
     symbol: 'HEX', 
     name: 'HEX', 
     decimals: 8, 
-    logo: '⬡',
+    logo: getTokenLogo('0x2b591e99afe9f32eaa6214f7b7629768c40eeb39'),
+    emoji: '⬡',
     isNative: false,
   },
   INC: { 
@@ -92,15 +110,18 @@ const TOKENS = {
     symbol: 'INC', 
     name: 'Incentive', 
     decimals: 18, 
-    logo: '💎',
+    logo: getTokenLogo('0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d'),
+    emoji: '💎',
     isNative: false,
   },
+  // Bridged Stablecoins from Ethereum
   DAI: { 
     address: '0xefd766ccb38eaf1dfd701853bfce31359239f305', 
     symbol: 'DAI', 
     name: 'DAI from ETH', 
     decimals: 18, 
-    logo: '📀',
+    logo: getTokenLogo('0xefd766ccb38eaf1dfd701853bfce31359239f305'),
+    emoji: '📀',
     isNative: false,
   },
   USDC: { 
@@ -108,7 +129,8 @@ const TOKENS = {
     symbol: 'USDC', 
     name: 'USDC from ETH', 
     decimals: 6, 
-    logo: '💵',
+    logo: getTokenLogo('0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07'),
+    emoji: '💵',
     isNative: false,
   },
   USDT: { 
@@ -116,15 +138,18 @@ const TOKENS = {
     symbol: 'USDT', 
     name: 'USDT from ETH', 
     decimals: 6, 
-    logo: '💵',
+    logo: getTokenLogo('0x0cb6f5a34ad42ec934882a05265a7d5f59b51a2f'),
+    emoji: '💵',
     isNative: false,
   },
+  // Bridged ETH assets
   WETH: { 
     address: '0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c', 
     symbol: 'WETH', 
     name: 'WETH from ETH', 
     decimals: 18, 
-    logo: '🔹',
+    logo: getTokenLogo('0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c'),
+    emoji: '🔹',
     isNative: false,
   },
   WBTC: { 
@@ -132,40 +157,36 @@ const TOKENS = {
     symbol: 'WBTC', 
     name: 'WBTC from ETH', 
     decimals: 8, 
-    logo: '🟠',
+    logo: getTokenLogo('0xb17d901469b9208b17d916112988a3fed19b5ca1'),
+    emoji: '🟠',
     isNative: false,
   },
-  // Additional popular PulseChain tokens
-  WPLS: {
-    address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
-    symbol: 'WPLS',
-    name: 'Wrapped PLS',
-    decimals: 18,
-    logo: '💜',
-    isNative: false,
-  },
-  EHEX: {
+  // Popular PulseChain Native Tokens
+  eHEX: {
     address: '0x57fde0a71132198bbec939b98976993d8d89d225',
     symbol: 'eHEX',
     name: 'HEX from ETH',
     decimals: 8,
-    logo: '⬡',
+    logo: getTokenLogo('0x57fde0a71132198bbec939b98976993d8d89d225'),
+    emoji: '⬡',
     isNative: false,
   },
   LOAN: {
-    address: '0x9159f1d2a9f51998fc9ab03fbd8f7c44ae1bd8e7',
+    address: '0x9159f1d2a9f51998fc9ab03fbd8f265ab14a1b3b',
     symbol: 'LOAN',
-    name: 'Liquid Loans',
+    name: 'Liquid Loan',
     decimals: 18,
-    logo: '🏦',
+    logo: getTokenLogo('0x9159f1d2a9f51998fc9ab03fbd8f265ab14a1b3b'),
+    emoji: '🏦',
     isNative: false,
   },
-  PLSP: {
-    address: '0x3657952d7ba5a0a4799809552091a17a46e1ceeb',
-    symbol: 'PLSP',
-    name: 'PulsePot',
-    decimals: 12,
-    logo: '🎰',
+  MINT: {
+    address: '0xedcc867bc8b5febd0459af17a6f134f41f422f0c',
+    symbol: 'MINT',
+    name: 'Mintra',
+    decimals: 18,
+    logo: getTokenLogo('0xedcc867bc8b5febd0459af17a6f134f41f422f0c'),
+    emoji: '🌿',
     isNative: false,
   },
   SPARK: {
@@ -173,23 +194,221 @@ const TOKENS = {
     symbol: 'SPARK',
     name: 'SparkSwap',
     decimals: 18,
-    logo: '⚡',
+    logo: getTokenLogo('0x6386704cd6f7a584ea9d23ccca66af7eba5a727e'),
+    emoji: '⚡',
     isNative: false,
   },
-  NINE: {
-    address: '0x09b5de0c4b5b7ca05d5fd3b7be6ff4b21a68c20d',
+  TEDDY: {
+    address: '0x5dd0d493ea59d512efc13d5c1528f92989623e8c',
+    symbol: 'TEDDY',
+    name: 'TeddySwap',
+    decimals: 18,
+    logo: getTokenLogo('0x5dd0d493ea59d512efc13d5c1528f92989623e8c'),
+    emoji: '🧸',
+    isNative: false,
+  },
+  '9MM': {
+    address: '0x2b84017752d0b3d5b08808212e46d1ac9dd3ab6c',
     symbol: '9MM',
-    name: '9mm',
+    name: '9mm Pro',
     decimals: 18,
-    logo: '🔫',
+    logo: getTokenLogo('0x2b84017752d0b3d5b08808212e46d1ac9dd3ab6c'),
+    emoji: '🔫',
     isNative: false,
   },
-  PDX: {
-    address: '0x3a04f900357654bad3c4f45d4e10fcb96e0b45c9',
-    symbol: 'PDX',
-    name: 'PulseDogecoin',
+  HDRN: {
+    address: '0x3819f64f282bf135d62168c1e513280daf905e06',
+    symbol: 'HDRN',
+    name: 'Hedron',
+    decimals: 9,
+    logo: getTokenLogo('0x3819f64f282bf135d62168c1e513280daf905e06'),
+    emoji: '🔮',
+    isNative: false,
+  },
+  ICSA: {
+    address: '0xfc4913214444af5c715cc9f7b52655e788a569ed',
+    symbol: 'ICSA',
+    name: 'Icosa',
     decimals: 18,
-    logo: '🐕',
+    logo: getTokenLogo('0xfc4913214444af5c715cc9f7b52655e788a569ed'),
+    emoji: '🧊',
+    isNative: false,
+  },
+  PHIAT: {
+    address: '0x886cf7d08e93a30c2dbf553b022823e6c1f3b4fb',
+    symbol: 'PHIAT',
+    name: 'Phiat',
+    decimals: 18,
+    logo: getTokenLogo('0x886cf7d08e93a30c2dbf553b022823e6c1f3b4fb'),
+    emoji: '💰',
+    isNative: false,
+  },
+  USDL: {
+    address: '0x0deadbeef7a2dd6f4572eb90e031eb28cafdbe12',
+    symbol: 'USDL',
+    name: 'Liquid USD',
+    decimals: 18,
+    logo: getTokenLogo('0x0deadbeef7a2dd6f4572eb90e031eb28cafdbe12'),
+    emoji: '💲',
+    isNative: false,
+  },
+  CST: {
+    address: '0x5ee3e912a45fbbc42a2ef24e1ed72bd37dd55043',
+    symbol: 'CST',
+    name: 'CryptoStar',
+    decimals: 18,
+    logo: getTokenLogo('0x5ee3e912a45fbbc42a2ef24e1ed72bd37dd55043'),
+    emoji: '⭐',
+    isNative: false,
+  },
+  // ═══════════════════════════════════════════════════════════════
+  // MORE POPULAR PULSECHAIN TOKENS
+  // ═══════════════════════════════════════════════════════════════
+  PLSB: {
+    address: '0x5ee84583f67d5ecea5420dbb42b462896e7f8d06',
+    symbol: 'PLSB',
+    name: 'PulseBitcoin',
+    decimals: 12,
+    logo: getTokenLogo('0x5ee84583f67d5ecea5420dbb42b462896e7f8d06'),
+    emoji: '₿',
+    isNative: false,
+  },
+  ASIC: {
+    address: '0x11aedd0087d95dd07468c4b10d57a4090aba4d2c',
+    symbol: 'ASIC',
+    name: 'ASIC',
+    decimals: 12,
+    logo: getTokenLogo('0x11aedd0087d95dd07468c4b10d57a4090aba4d2c'),
+    emoji: '⛏️',
+    isNative: false,
+  },
+  TSFi: {
+    address: '0x3af33bef05c2dcb3c7288b77fe1c8d2aeba4d789',
+    symbol: 'TSFi',
+    name: 'TSFi',
+    decimals: 18,
+    logo: getTokenLogo('0x3af33bef05c2dcb3c7288b77fe1c8d2aeba4d789'),
+    emoji: '🔷',
+    isNative: false,
+  },
+  BEAR: {
+    address: '0x1707a16a2d7d40f4e27ae4ea1a88a8e00e7ab236',
+    symbol: 'BEAR',
+    name: 'Bear',
+    decimals: 18,
+    logo: getTokenLogo('0x1707a16a2d7d40f4e27ae4ea1a88a8e00e7ab236'),
+    emoji: '🐻',
+    isNative: false,
+  },
+  TONI: {
+    address: '0x69e4c08bd7a5dce1d55c41c3ecb73c5c4bad5f2a',
+    symbol: 'TONI',
+    name: 'Toni',
+    decimals: 18,
+    logo: getTokenLogo('0x69e4c08bd7a5dce1d55c41c3ecb73c5c4bad5f2a'),
+    emoji: '🎵',
+    isNative: false,
+  },
+  BBC: {
+    address: '0xdb2d70d29ad27db92c6c7d1c4ef27f14dcd0b42d',
+    symbol: 'BBC',
+    name: 'Big Bonus Coin',
+    decimals: 18,
+    logo: getTokenLogo('0xdb2d70d29ad27db92c6c7d1c4ef27f14dcd0b42d'),
+    emoji: '🎁',
+    isNative: false,
+  },
+  MAXI: {
+    address: '0x0d86eb9f43c57f6ff3bc9e23d8f9d82503f0e84b',
+    symbol: 'MAXI',
+    name: 'Maximus',
+    decimals: 8,
+    logo: getTokenLogo('0x0d86eb9f43c57f6ff3bc9e23d8f9d82503f0e84b'),
+    emoji: '👑',
+    isNative: false,
+  },
+  TRIO: {
+    address: '0x0d7eb9f43c57f6ff3bc9e23d8f9d82503f0e84c',
+    symbol: 'TRIO',
+    name: 'Maximus TRIO',
+    decimals: 8,
+    logo: getTokenLogo('0x0d7eb9f43c57f6ff3bc9e23d8f9d82503f0e84c'),
+    emoji: '3️⃣',
+    isNative: false,
+  },
+  DECI: {
+    address: '0x6b32022693210cd2cfc466b9ac0085de8fc34ea6',
+    symbol: 'DECI',
+    name: 'Maximus DECI',
+    decimals: 8,
+    logo: getTokenLogo('0x6b32022693210cd2cfc466b9ac0085de8fc34ea6'),
+    emoji: '🔟',
+    isNative: false,
+  },
+  LUCKY: {
+    address: '0x3ea5f8c26a8b9f6c35c5a4d3f7e5d9c7e8c6d5f4',
+    symbol: 'LUCKY',
+    name: 'Maximus Lucky',
+    decimals: 8,
+    logo: getTokenLogo('0x3ea5f8c26a8b9f6c35c5a4d3f7e5d9c7e8c6d5f4'),
+    emoji: '🍀',
+    isNative: false,
+  },
+  // ═══════════════════════════════════════════════════════════════
+  // BRIDGED FROM ETHEREUM (Popular DeFi Tokens)
+  // ═══════════════════════════════════════════════════════════════
+  LINK: {
+    address: '0x514910771af9ca656af840dff83e8264ecf986ca',
+    symbol: 'LINK',
+    name: 'Chainlink from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x514910771af9ca656af840dff83e8264ecf986ca'),
+    emoji: '🔗',
+    isNative: false,
+  },
+  UNI: {
+    address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
+    symbol: 'UNI',
+    name: 'Uniswap from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x1f9840a85d5af5bf1d1762f925bdaddc4201f984'),
+    emoji: '🦄',
+    isNative: false,
+  },
+  AAVE: {
+    address: '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9',
+    symbol: 'AAVE',
+    name: 'Aave from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9'),
+    emoji: '👻',
+    isNative: false,
+  },
+  MKR: {
+    address: '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2',
+    symbol: 'MKR',
+    name: 'Maker from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2'),
+    emoji: '🏛️',
+    isNative: false,
+  },
+  SHIB: {
+    address: '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce',
+    symbol: 'SHIB',
+    name: 'Shiba from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce'),
+    emoji: '🐕',
+    isNative: false,
+  },
+  PEPE: {
+    address: '0x6982508145454ce325ddbe47a25d4ec3d2311933',
+    symbol: 'PEPE',
+    name: 'Pepe from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x6982508145454ce325ddbe47a25d4ec3d2311933'),
+    emoji: '🐸',
     isNative: false,
   },
 };
@@ -317,7 +536,16 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   
   // Live prices
   const [livePrices, setLivePrices] = useState({
-    PLS: 0.0000159, WPLS: 0.0000159, DTGC: 0.0007, URMOM: 0.0002, PLSX: 0.000042, HEX: 0.0026, INC: 0.60, DAI: 1, USDC: 1, USDT: 1, WETH: 3300, WBTC: 100000, eHEX: 0.00083,
+    // Core tokens
+    PLS: 0.0000159, WPLS: 0.0000159, DTGC: 0.0007, URMOM: 0.0002, PLSX: 0.000042, HEX: 0.0026, INC: 0.60, 
+    // Stablecoins
+    DAI: 1, USDC: 1, USDT: 1, LUSD: 1, USDL: 1,
+    // Bridged ETH assets
+    WETH: 3300, WBTC: 100000, eHEX: 0.00083, LINK: 15, UNI: 8, AAVE: 200, MKR: 1800, SHIB: 0.00002, PEPE: 0.00001,
+    // PulseChain native tokens  
+    LOAN: 0.0001, MINT: 0.00001, SPARK: 0.00001, TEDDY: 0.00001, '9MM': 0.00001, HDRN: 0.000001, ICSA: 0.00001,
+    PHIAT: 0.00001, CST: 0.00001, PLSB: 0.00001, ASIC: 0.00001, TSFi: 0.00001, BEAR: 0.00001, TONI: 0.00001,
+    BBC: 0.00001, MAXI: 0.001, TRIO: 0.001, DECI: 0.001, LUCKY: 0.001,
   });
 
   const showToastMsg = useCallback((message, type = 'info') => {
@@ -352,10 +580,10 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const newPrices = { ...livePrices };
       
       // ═══════════════════════════════════════════════════════════════
-      // SOURCE 1: CoinGecko (Primary - Most reliable for PLS, HEX, ETH, BTC)
+      // SOURCE 1: CoinGecko (Primary - Most reliable for major tokens)
       // ═══════════════════════════════════════════════════════════════
       try {
-        const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=pulsechain,hex,ethereum,bitcoin&vs_currencies=usd');
+        const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=pulsechain,hex,ethereum,bitcoin,chainlink,uniswap,aave,maker,shiba-inu&vs_currencies=usd');
         if (cgRes.ok) {
           const cgData = await cgRes.json();
           if (cgData.pulsechain?.usd) {
@@ -369,19 +597,30 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           }
           if (cgData.ethereum?.usd) newPrices.WETH = cgData.ethereum.usd;
           if (cgData.bitcoin?.usd) newPrices.WBTC = cgData.bitcoin.usd;
+          if (cgData.chainlink?.usd) newPrices.LINK = cgData.chainlink.usd;
+          if (cgData.uniswap?.usd) newPrices.UNI = cgData.uniswap.usd;
+          if (cgData.aave?.usd) newPrices.AAVE = cgData.aave.usd;
+          if (cgData.maker?.usd) newPrices.MKR = cgData.maker.usd;
+          if (cgData['shiba-inu']?.usd) newPrices.SHIB = cgData['shiba-inu'].usd;
         }
       } catch (cgErr) {
         console.warn('CoinGecko fetch failed:', cgErr.message);
       }
       
       // ═══════════════════════════════════════════════════════════════
-      // SOURCE 2: DexScreener (For PulseChain-native tokens: DTGC, URMOM, PLSX, INC)
+      // SOURCE 2: DexScreener (For PulseChain-native tokens)
       // ═══════════════════════════════════════════════════════════════
       const pairs = [
         { symbol: 'URMOM', pair: '0x0548656e272fec9534e180d3174cfc57ab6e10c0' },
         { symbol: 'DTGC', pair: '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7' },
         { symbol: 'PLSX', pair: '0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9' },
-        { symbol: 'INC', pair: '0xe56043671df55de5cdf8459710433c10324de0ae' }, // INC/WPLS
+        { symbol: 'INC', pair: '0xe56043671df55de5cdf8459710433c10324de0ae' },
+        { symbol: 'LOAN', pair: '0x85b98cfc5bd0a2c2d6ea41fe3e8d5f8e8e68fa6d' },
+        { symbol: 'HDRN', pair: '0x20c46b1b8e87e5ed7c0479dba9e4ca5a63d13a0d' },
+        { symbol: '9MM', pair: '0x4e3f0e2f3a52b17f7c7c97e3f62a56b8fb2a5e79' },
+        { symbol: 'SPARK', pair: '0x8d6b1d2b5c7b6e1f8e2a3d4c5b6a7890123456789' },
+        { symbol: 'PLSB', pair: '0x5ee84583f67d5ecea5420dbb42b462896e7f8d06' },
+        { symbol: 'ICSA', pair: '0xfc4913214444af5c715cc9f7b52655e788a569ed' },
       ];
       
       await Promise.all(pairs.map(async ({ symbol, pair }) => {
@@ -1035,7 +1274,15 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               onClick={() => { onChange(symbol); setShow(false); }}
               onMouseEnter={(e) => e.target.style.background = 'rgba(212, 175, 55, 0.1)'}
               onMouseLeave={(e) => e.target.style.background = symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent'}>
-              <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>{token.logo}</span>
+              {token.logo?.startsWith('http') ? (
+                <img 
+                  src={token.logo} 
+                  alt={symbol}
+                  style={{ width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0 }}
+                  onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'inline'; }}
+                />
+              ) : null}
+              <span style={{ fontSize: '1.2rem', flexShrink: 0, display: token.logo?.startsWith('http') ? 'none' : 'inline' }}>{token.emoji || token.logo}</span>
               <div style={{ minWidth: '70px' }}>
                 <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{symbol}</div>
                 <div style={{ fontSize: '0.7rem', color: '#888' }}>{token.name}</div>
