@@ -49,6 +49,32 @@ const CONFIG = {
 // Helper to get token logo from gib.show
 const getTokenLogo = (address) => `${CONFIG.GIB_SHOW_BASE}/${address}`;
 
+// Token Icon component - renders image or emoji fallback
+const TokenIcon = ({ icon, emoji, size = 24, style = {} }) => {
+  const [imgError, setImgError] = React.useState(false);
+  
+  // If icon is a URL and hasn't errored, show image
+  if (icon && typeof icon === 'string' && icon.startsWith('http') && !imgError) {
+    return (
+      <img 
+        src={icon} 
+        alt="" 
+        style={{ 
+          width: size, 
+          height: size, 
+          borderRadius: '50%',
+          objectFit: 'cover',
+          ...style 
+        }}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  
+  // Fallback to emoji
+  return <span style={{ fontSize: size * 0.7, ...style }}>{emoji || icon || '🔸'}</span>;
+};
+
 // All major PulseX/PulseChain tokens - VERIFIED ADDRESSES
 const TOKENS = {
   PLS: { 
@@ -580,50 +606,41 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const newPrices = { ...livePrices };
       
       // ═══════════════════════════════════════════════════════════════
-      // SOURCE 1: CoinGecko (Primary - Most reliable for major tokens)
+      // SOURCE 1: GoPulse API (Primary for PulseChain - No CORS issues)
       // ═══════════════════════════════════════════════════════════════
       try {
-        const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=pulsechain,hex,ethereum,bitcoin,chainlink,uniswap,aave,maker,shiba-inu&vs_currencies=usd');
-        if (cgRes.ok) {
-          const cgData = await cgRes.json();
-          if (cgData.pulsechain?.usd) {
-            newPrices.PLS = cgData.pulsechain.usd;
-            newPrices.WPLS = cgData.pulsechain.usd;
-            console.log('📊 CoinGecko PLS: $' + cgData.pulsechain.usd.toFixed(8));
+        const goPulseRes = await fetch('https://api.gopulse.com/v2/prices/tokens?ids=pls,wpls,hex,plsx,ehex,inc');
+        if (goPulseRes.ok) {
+          const gpData = await goPulseRes.json();
+          if (gpData?.pls?.price) {
+            newPrices.PLS = gpData.pls.price;
+            newPrices.WPLS = gpData.pls.price;
+            console.log('📊 GoPulse PLS: $' + gpData.pls.price.toFixed(8));
           }
-          if (cgData.hex?.usd) {
-            newPrices.HEX = cgData.hex.usd;
-            console.log('📊 CoinGecko HEX: $' + cgData.hex.usd.toFixed(6));
+          if (gpData?.hex?.price) {
+            newPrices.HEX = gpData.hex.price;
+            console.log('📊 GoPulse HEX: $' + gpData.hex.price.toFixed(6));
           }
-          if (cgData.ethereum?.usd) newPrices.WETH = cgData.ethereum.usd;
-          if (cgData.bitcoin?.usd) newPrices.WBTC = cgData.bitcoin.usd;
-          if (cgData.chainlink?.usd) newPrices.LINK = cgData.chainlink.usd;
-          if (cgData.uniswap?.usd) newPrices.UNI = cgData.uniswap.usd;
-          if (cgData.aave?.usd) newPrices.AAVE = cgData.aave.usd;
-          if (cgData.maker?.usd) newPrices.MKR = cgData.maker.usd;
-          if (cgData['shiba-inu']?.usd) newPrices.SHIB = cgData['shiba-inu'].usd;
+          if (gpData?.plsx?.price) newPrices.PLSX = gpData.plsx.price;
+          if (gpData?.ehex?.price) newPrices.eHEX = gpData.ehex.price;
+          if (gpData?.inc?.price) newPrices.INC = gpData.inc.price;
         }
-      } catch (cgErr) {
-        console.warn('CoinGecko fetch failed:', cgErr.message);
+      } catch (gpErr) {
+        console.warn('GoPulse fetch failed:', gpErr.message);
       }
-      
+
       // ═══════════════════════════════════════════════════════════════
-      // SOURCE 2: DexScreener (For PulseChain-native tokens)
+      // SOURCE 2: DexScreener (Primary for PulseChain-native tokens)
+      // Fetch in parallel for speed
       // ═══════════════════════════════════════════════════════════════
-      const pairs = [
+      const dexPairs = [
         { symbol: 'URMOM', pair: '0x0548656e272fec9534e180d3174cfc57ab6e10c0' },
         { symbol: 'DTGC', pair: '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7' },
         { symbol: 'PLSX', pair: '0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9' },
         { symbol: 'INC', pair: '0xe56043671df55de5cdf8459710433c10324de0ae' },
-        { symbol: 'LOAN', pair: '0x85b98cfc5bd0a2c2d6ea41fe3e8d5f8e8e68fa6d' },
-        { symbol: 'HDRN', pair: '0x20c46b1b8e87e5ed7c0479dba9e4ca5a63d13a0d' },
-        { symbol: '9MM', pair: '0x4e3f0e2f3a52b17f7c7c97e3f62a56b8fb2a5e79' },
-        { symbol: 'SPARK', pair: '0x8d6b1d2b5c7b6e1f8e2a3d4c5b6a7890123456789' },
-        { symbol: 'PLSB', pair: '0x5ee84583f67d5ecea5420dbb42b462896e7f8d06' },
-        { symbol: 'ICSA', pair: '0xfc4913214444af5c715cc9f7b52655e788a569ed' },
       ];
       
-      await Promise.all(pairs.map(async ({ symbol, pair }) => {
+      await Promise.all(dexPairs.map(async ({ symbol, pair }) => {
         try {
           const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${pair}`);
           if (res.ok) {
@@ -635,6 +652,12 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           }
         } catch {}
       }));
+
+      // ═══════════════════════════════════════════════════════════════
+      // SOURCE 3: Fallback defaults for major tokens (if APIs fail)
+      // ═══════════════════════════════════════════════════════════════
+      if (!newPrices.WETH || newPrices.WETH < 1000) newPrices.WETH = 3300;
+      if (!newPrices.WBTC || newPrices.WBTC < 50000) newPrices.WBTC = 100000;
       
       // ═══════════════════════════════════════════════════════════════
       // SANITY CHECKS - Ensure PLS is in expected range
@@ -690,9 +713,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     if (userAddress && provider) fetchAllBalances();
   }, [userAddress, provider, fetchAllBalances]);
 
-  // Wallet scanner - FAST multi-source approach
+  // Wallet scanner - FAST approach like Zapper X (prioritize PulseScan API)
   const scanWalletTokens = useCallback(async () => {
-    if (!provider || !userAddress) return;
+    if (!userAddress) return;
     setLoadingBalances(true);
     showToastMsg('🔍 Scanning wallet...', 'info');
     
@@ -701,8 +724,25 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const seenAddresses = new Set();
       const addr = userAddress.toLowerCase();
       
-      // 1. Get PLS balance first (instant)
-      const plsBal = await provider.getBalance(userAddress);
+      // Use dedicated RPC to avoid MetaMask rate limits
+      const scanProvider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 1: PulseScan APIs (fastest, no rate limits, most complete)
+      // Fetch PLS balance + all tokens from APIs in parallel
+      // ═══════════════════════════════════════════════════════════════
+      const [plsBal, pulseScanTokens, pulseScanV1Tokens] = await Promise.all([
+        scanProvider.getBalance(userAddress),
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`)
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => []),
+        fetch(`https://api.scan.pulsechain.com/api?module=account&action=tokenlist&address=${addr}`)
+          .then(r => r.ok ? r.json() : { result: [] })
+          .then(d => d.result || [])
+          .catch(() => []),
+      ]);
+      
+      // Add PLS immediately
       const plsBalNum = parseFloat(ethers.formatEther(plsBal));
       if (plsBalNum > 0) {
         foundTokens.push({ 
@@ -711,60 +751,20 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           address: null, 
           decimals: 18, 
           balance: plsBalNum, 
-          icon: '💜', 
+          icon: TOKENS.PLS.logo,
+          emoji: '💜',
           usdValue: plsBalNum * (livePrices.PLS || 0.000018), 
           price: livePrices.PLS || 0.000018 
         });
         seenAddresses.add('native');
-      }
-      setBalances(prev => ({ ...prev, PLS: plsBalNum }));
-      
-      // 2. Parallel fetch from multiple sources
-      const [pulseScanTokens, pulseScanV1Tokens, knownTokenBalances] = await Promise.all([
-        // PulseScan API v2
-        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`)
-          .then(r => r.ok ? r.json() : [])
-          .catch(() => []),
-        // PulseScan API v1 (backup)
-        fetch(`https://api.scan.pulsechain.com/api?module=account&action=tokenlist&address=${addr}`)
-          .then(r => r.ok ? r.json() : { result: [] })
-          .then(d => d.result || [])
-          .catch(() => []),
-        // Direct RPC for known tokens (fastest, most reliable)
-        Promise.all(Object.entries(TOKENS).filter(([sym]) => sym !== 'PLS').map(async ([sym, token]) => {
-          try {
-            const contract = new ethers.Contract(token.address, ['function balanceOf(address) view returns (uint256)'], provider);
-            const bal = await contract.balanceOf(userAddress);
-            const balNum = parseFloat(ethers.formatUnits(bal, token.decimals));
-            if (balNum > 0.000001) {
-              return { symbol: sym, ...token, balance: balNum };
-            }
-          } catch {}
-          return null;
-        }))
-      ]);
-      
-      // Process known token balances first (highest priority)
-      for (const token of knownTokenBalances.filter(Boolean)) {
-        const tokenAddr = token.address?.toLowerCase();
-        if (tokenAddr && !seenAddresses.has(tokenAddr)) {
-          seenAddresses.add(tokenAddr);
-          const price = livePrices[token.symbol] || 0;
-          foundTokens.push({
-            symbol: token.symbol,
-            name: token.name,
-            address: token.address,
-            decimals: token.decimals,
-            balance: token.balance,
-            icon: token.logo || '🔸',
-            usdValue: token.balance * price,
-            price
-          });
-          setBalances(prev => ({ ...prev, [token.symbol]: token.balance }));
-        }
+        setBalances(prev => ({ ...prev, PLS: plsBalNum }));
       }
       
-      // Process PulseScan v2 API response
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 2: Process PulseScan API responses (FAST - no RPC needed)
+      // ═══════════════════════════════════════════════════════════════
+      
+      // Process v2 API first (better data)
       if (Array.isArray(pulseScanTokens)) {
         for (const item of pulseScanTokens) {
           const tokenAddr = item.token?.address?.toLowerCase();
@@ -777,10 +777,15 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           
           const sym = (item.token?.symbol || '').toUpperCase();
           const price = livePrices[sym] || 0;
-          let icon = '🔸';
-          Object.values(TOKENS).forEach(t => {
-            if (t.address?.toLowerCase() === tokenAddr) icon = t.logo;
-          });
+          
+          // Check if known token
+          let icon = getTokenLogo(tokenAddr);
+          let emoji = '🔸';
+          const knownToken = Object.values(TOKENS).find(t => t.address?.toLowerCase() === tokenAddr);
+          if (knownToken) {
+            icon = knownToken.logo;
+            emoji = knownToken.emoji || '🔸';
+          }
           
           foundTokens.push({ 
             symbol: item.token?.symbol || 'UNKNOWN', 
@@ -789,6 +794,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             decimals, 
             balance: bal, 
             icon, 
+            emoji,
             usdValue: bal * price, 
             price 
           });
@@ -796,7 +802,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         }
       }
       
-      // Process PulseScan v1 API response (backup)
+      // Process v1 API (backup)
       if (Array.isArray(pulseScanV1Tokens)) {
         for (const item of pulseScanV1Tokens) {
           const tokenAddr = item.contractAddress?.toLowerCase();
@@ -809,10 +815,14 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           
           const sym = (item.symbol || '').toUpperCase();
           const price = livePrices[sym] || 0;
-          let icon = '🔸';
-          Object.values(TOKENS).forEach(t => {
-            if (t.address?.toLowerCase() === tokenAddr) icon = t.logo;
-          });
+          
+          let icon = getTokenLogo(tokenAddr);
+          let emoji = '🔸';
+          const knownToken = Object.values(TOKENS).find(t => t.address?.toLowerCase() === tokenAddr);
+          if (knownToken) {
+            icon = knownToken.logo;
+            emoji = knownToken.emoji || '🔸';
+          }
           
           foundTokens.push({ 
             symbol: item.symbol || 'UNKNOWN', 
@@ -821,11 +831,51 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             decimals, 
             balance: bal, 
             icon, 
+            emoji,
             usdValue: bal * price, 
             price 
           });
           if (TOKENS[sym]) setBalances(prev => ({ ...prev, [sym]: bal }));
         }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 3: Quick check for critical tokens not in PulseScan (single batch)
+      // Only check: DTGC, URMOM, PLSX, HEX (most important)
+      // ═══════════════════════════════════════════════════════════════
+      const criticalTokens = ['DTGC', 'URMOM', 'PLSX', 'HEX', 'INC'];
+      const missingCritical = criticalTokens.filter(sym => {
+        const token = TOKENS[sym];
+        if (!token) return false;
+        return !seenAddresses.has(token.address?.toLowerCase());
+      });
+      
+      if (missingCritical.length > 0) {
+        await Promise.all(missingCritical.map(async (sym) => {
+          const token = TOKENS[sym];
+          if (!token?.address) return;
+          try {
+            const contract = new ethers.Contract(token.address, ['function balanceOf(address) view returns (uint256)'], scanProvider);
+            const bal = await contract.balanceOf(userAddress);
+            const balNum = parseFloat(ethers.formatUnits(bal, token.decimals));
+            if (balNum > 0.000001 && !seenAddresses.has(token.address.toLowerCase())) {
+              seenAddresses.add(token.address.toLowerCase());
+              const price = livePrices[sym] || 0;
+              foundTokens.push({
+                symbol: sym,
+                name: token.name,
+                address: token.address,
+                decimals: token.decimals,
+                balance: balNum,
+                icon: token.logo || '🔸',
+                emoji: token.emoji,
+                usdValue: balNum * price,
+                price
+              });
+              setBalances(prev => ({ ...prev, [sym]: balNum }));
+            }
+          } catch {}
+        }));
       }
       
       // Fetch prices for tokens without prices from DexScreener (batch lookup)
@@ -1263,7 +1313,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const TokenSelector = ({ value, onChange, show, setShow, excludeToken }) => (
     <div style={{ position: 'relative' }}>
       <button style={styles.tokenSelect} onClick={(e) => { e.stopPropagation(); setShow(!show); }}>
-        <span style={{ fontSize: '1.1rem' }}>{TOKENS[value]?.logo || '🔸'}</span>
+        <TokenIcon icon={TOKENS[value]?.logo} emoji={TOKENS[value]?.emoji} size={24} />
         <span>{value}</span>
         <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>▼</span>
       </button>
@@ -1274,15 +1324,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               onClick={() => { onChange(symbol); setShow(false); }}
               onMouseEnter={(e) => e.target.style.background = 'rgba(212, 175, 55, 0.1)'}
               onMouseLeave={(e) => e.target.style.background = symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent'}>
-              {token.logo?.startsWith('http') ? (
-                <img 
-                  src={token.logo} 
-                  alt={symbol}
-                  style={{ width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0 }}
-                  onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'inline'; }}
-                />
-              ) : null}
-              <span style={{ fontSize: '1.2rem', flexShrink: 0, display: token.logo?.startsWith('http') ? 'none' : 'inline' }}>{token.emoji || token.logo}</span>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <TokenIcon icon={token.logo} emoji={token.emoji} size={28} />
+              </div>
               <div style={{ minWidth: '70px' }}>
                 <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{symbol}</div>
                 <div style={{ fontSize: '0.7rem', color: '#888' }}>{token.name}</div>
@@ -1381,7 +1425,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                       {walletTokens.map((token, idx) => (
                         <div key={idx} style={styles.balanceRow}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(212,175,55,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>{token.icon}</div>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(212,175,55,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                              <TokenIcon icon={token.icon} emoji={token.emoji} size={32} />
+                            </div>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{token.symbol}</span>
