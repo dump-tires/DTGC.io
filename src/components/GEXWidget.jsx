@@ -1,13 +1,14 @@
 /**
  * GEXWidget.jsx - Growth Engine X-Chain Monitor (Complete)
- * 
+ *
  * INTEGRATED FEATURES:
  * ✅ Spread Monitor (eHEX/pHEX cross-chain)
  * ✅ GE Activity Feed (live Growth Engine stats)
  * ✅ Signal System (token-gated alerts)
  * ✅ Auto-Trade (optional, feeds 30% to GE)
  * ✅ Token Gate ($200 DTGC required)
- * 
+ * ✅ Lambda Signal Queue Integration (NEW!)
+ *
  * DROP INTO: src/components/GEXWidget.jsx
  * IMPORT IN: App.jsx
  */
@@ -22,26 +23,34 @@ const CONFIG = {
   // Token gating
   DTGC_GATE_USD: 200,
   DTGC_CONTRACT: '0xd0676b28a457371d58d47e5247b439114e40eb0f',
-  
+
   // API endpoints (update after deploying Lambdas)
   GE_STATS_API: 'https://iwnaatxjwerbpg7jtslldoxeqm0msvdt.lambda-url.us-east-2.on.aws',
   ARB_SIGNAL_API: 'https://iwnaatxjwerbpg7jtslldoxeqm0msvdt.lambda-url.us-east-2.on.aws',
   
+  // 🔥 NEW: Signal Queue Lambda URL
+  SIGNAL_QUEUE_URL: 'https://iwnaatxjwerbpg7jtslldoxeqm0msvdt.lambda-url.us-east-2.on.aws/',
+
   // DexScreener
   DEXSCREENER: {
     HEX_ETH: 'https://api.dexscreener.com/latest/dex/pairs/ethereum/0x69d91b94f0aaf8e8a2586909fa77a5c2c89818d5',
     HEX_PLS: 'https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xf0ea3efe42c11c8819948ec2d3179f4084863d3f',
     DTGC: 'https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
   },
-  
+
   // Auto-trade settings
   GE_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
   GE_PROFIT_SHARE: 30,
   MIN_PROFIT_USD: 25,
-  
+
   // Refresh intervals
   PRICE_REFRESH_MS: 15000,
   STATS_REFRESH_MS: 30000,
+  
+  // 🔥 NEW: Signal thresholds
+  MIN_SPREAD_SIGNAL: 3,      // Push to Lambda at 3%
+  MIN_SPREAD_OPPORTUNITY: 5, // Show as opportunity at 5%
+  SIGNAL_COOLDOWN_MS: 120000, // 2 minutes between same signal type
 };
 
 // Signal types
@@ -52,10 +61,69 @@ const SIGNAL_TYPES = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// 🔥 NEW: SIGNAL QUEUE SERVICE
+// ═══════════════════════════════════════════════════════════════
+
+class SignalQueueService {
+  static lastPushTime = {};
+  
+  static async pushSignal(signal) {
+    const now = Date.now();
+    const key = `${signal.type}-${signal.direction || 'none'}`;
+    
+    // Cooldown check
+    if (this.lastPushTime[key] && (now - this.lastPushTime[key]) < CONFIG.SIGNAL_COOLDOWN_MS) {
+      console.log('[GEX] Signal cooldown active, skipping push');
+      return { success: false, reason: 'cooldown' };
+    }
+    
+    try {
+      const response = await fetch(CONFIG.SIGNAL_QUEUE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADD_SIGNAL',
+          signal: {
+            ...signal,
+            source: 'GEX_WIDGET',
+            timestamp: now,
+          }
+        })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        this.lastPushTime[key] = now;
+        console.log('[GEX] ✅ Signal pushed to Lambda:', result.signalId);
+        return { success: true, signalId: result.signalId };
+      } else {
+        console.error('[GEX] Signal push failed:', response.status);
+        return { success: false, reason: 'api_error' };
+      }
+    } catch (err) {
+      console.error('[GEX] Signal push error:', err);
+      return { success: false, reason: err.message };
+    }
+  }
+  
+  static async getQueueStatus() {
+    try {
+      const response = await fetch(`${CONFIG.SIGNAL_QUEUE_URL}?action=STATUS`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('[GEX] Queue status error:', err);
+    }
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN WIDGET COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-export const GEXWidget = ({ 
+export const GEXWidget = ({
   walletAddress,
   dtgcBalance = 0,
   dtgcPrice = 0,
@@ -66,7 +134,7 @@ export const GEXWidget = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [activeTab, setActiveTab] = useState('spread');
-  
+
   // Calculate USD value for token gating
   const dtgcUSDValue = dtgcBalance * dtgcPrice;
   const isUnlocked = dtgcUSDValue >= CONFIG.DTGC_GATE_USD;
@@ -81,7 +149,6 @@ export const GEXWidget = ({
   return (
     <>
       <style>{GEX_STYLES}</style>
-      
       <div className="gex-widget" style={{ ...positionStyles[position] }}>
         {/* Collapsed - Floating Button */}
         {!isExpanded && (
@@ -117,13 +184,12 @@ export const GEXWidget = ({
                 <h4>⚡ GE LIVE Tab</h4>
                 <p>Live feed of Growth Engine activity - automated buys, sells, and PLS generation from the DTGC ecosystem flywheel.</p>
                 <h4>🎯 SIGNALS Tab</h4>
-                <p>Token-gated alerts for optimal entry points. Requires $200+ DTGC to unlock. Signals auto-execute via Growth Engine when conditions are met.</p>
+                <p>Token-gated alerts for optimal entry points. Requires $200+ DTGC to unlock. Signals auto-push to Growth Engine Lambda when spread ≥3%.</p>
                 <h4>🔄 How Arbitrage Works</h4>
                 <p>1. Buy eHEX on cheaper chain<br/>2. Bridge to other chain<br/>3. Sell at higher price<br/>4. Profit feeds Growth Engine → More URMOM/DTGC buys → Higher prices</p>
                 <button onClick={() => setShowInfo(false)} className="gex-info-close">Got it!</button>
               </div>
             )}
-
 
             {/* Tabs */}
             <div className="gex-tabs">
@@ -147,7 +213,7 @@ export const GEXWidget = ({
               {activeTab === 'spread' && <SpreadMonitor />}
               {activeTab === 'ge' && <GEActivityFeed />}
               {activeTab === 'signals' && (
-                <SignalPanel 
+                <SignalPanel
                   isUnlocked={isUnlocked}
                   dtgcUSDValue={dtgcUSDValue}
                   requiredUSD={CONFIG.DTGC_GATE_USD}
@@ -173,13 +239,14 @@ export const GEXWidget = ({
 };
 
 // ═══════════════════════════════════════════════════════════════
-// SPREAD MONITOR
+// SPREAD MONITOR (with Lambda push)
 // ═══════════════════════════════════════════════════════════════
 
 const SpreadMonitor = () => {
   const [prices, setPrices] = useState({ ethHex: null, plsHex: null, spread: null });
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastPush, setLastPush] = useState(null); // 🔥 NEW: Track last push
 
   const fetchPrices = useCallback(async () => {
     try {
@@ -187,7 +254,7 @@ const SpreadMonitor = () => {
         fetch(CONFIG.DEXSCREENER.HEX_ETH).then(r => r.json()),
         fetch(CONFIG.DEXSCREENER.HEX_PLS).then(r => r.json()),
       ]);
-      
+
       const ethHex = parseFloat(ethRes?.pair?.priceUsd || 0);
       const plsHex = parseFloat(plsRes?.pair?.priceUsd || 0);
       const spread = ethHex && plsHex ? ((ethHex - plsHex) / plsHex) * 100 : null;
@@ -195,6 +262,23 @@ const SpreadMonitor = () => {
       setPrices({ ethHex, plsHex, spread });
       setHistory(prev => [...prev.slice(-19), { spread, time: Date.now() }]);
       setLoading(false);
+      
+      // 🔥 NEW: Auto-push signal to Lambda when spread >= 3%
+      const absSpread = Math.abs(spread || 0);
+      if (absSpread >= CONFIG.MIN_SPREAD_SIGNAL) {
+        const direction = spread > 0 ? 'BUY_PHEX' : 'BUY_EHEX';
+        const result = await SignalQueueService.pushSignal({
+          type: 'EHEX_ARB',
+          spread: absSpread,
+          ethPrice: ethHex,
+          plsPrice: plsHex,
+          direction: direction,
+          confidence: absSpread >= CONFIG.MIN_SPREAD_OPPORTUNITY ? 'HIGH' : 'MEDIUM',
+        });
+        if (result.success) {
+          setLastPush({ time: Date.now(), signalId: result.signalId, spread: absSpread });
+        }
+      }
     } catch (err) {
       console.error('Price fetch error:', err);
       setLoading(false);
@@ -210,7 +294,8 @@ const SpreadMonitor = () => {
   const getStatus = (spread) => {
     const abs = Math.abs(spread || 0);
     if (abs < 2) return { color: '#888', label: 'NORMAL' };
-    if (abs < 5) return { color: '#FFD700', label: 'WATCHING' };
+    if (abs < 3) return { color: '#FFD700', label: 'WATCHING' };
+    if (abs < 5) return { color: '#FFA500', label: 'SIGNAL SENT' }; // 🔥 NEW status
     return { color: '#00FF88', label: 'OPPORTUNITY' };
   };
 
@@ -229,6 +314,7 @@ const SpreadMonitor = () => {
       const y = h - ((v - min) / range) * h;
       return `${x},${y}`;
     }).join(' ');
+
     return (
       <svg width={w} height={h} style={{ margin: '8px auto', display: 'block' }}>
         <polyline points={points} fill="none" stroke="#FFD700" strokeWidth="2" />
@@ -251,6 +337,15 @@ const SpreadMonitor = () => {
         {renderSparkline()}
       </div>
 
+      {/* 🔥 NEW: Lambda push confirmation */}
+      {lastPush && (Date.now() - lastPush.time) < 60000 && (
+        <div className="lambda-push-confirm">
+          <span className="lambda-icon">📡</span>
+          <span>Signal pushed to Growth Engine</span>
+          <span className="lambda-spread">+{lastPush.spread.toFixed(1)}%</span>
+        </div>
+      )}
+
       <div className="price-cards">
         <div className="price-card eth">
           <div className="chain">◆ ETHEREUM</div>
@@ -268,7 +363,7 @@ const SpreadMonitor = () => {
         <div className="direction-box">
           <div className="direction-label">SUGGESTED DIRECTION</div>
           <div className="direction-value">
-            {prices.spread > 0 
+            {prices.spread > 0
               ? <><span className="buy">Buy eHEX (PLS)</span> → Bridge → <span className="sell">Sell eHEX</span></>
               : <><span className="buy-eth">Buy eHEX</span> → Bridge → <span className="sell">Sell eHEX (PLS)</span></>
             }
@@ -370,14 +465,29 @@ const GEActivityFeed = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// SIGNAL PANEL (with auto-trade)
+// SIGNAL PANEL (with auto-trade and Lambda push)
 // ═══════════════════════════════════════════════════════════════
 
 const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
   const [signals, setSignals] = useState([]);
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
   const [settings, setSettings] = useState({ arb: true, ge: true, spread: true });
+  const [queueStatus, setQueueStatus] = useState(null); // 🔥 NEW: Queue status
   const signalIdRef = useRef(0);
+
+  // 🔥 NEW: Fetch queue status periodically
+  useEffect(() => {
+    if (!isUnlocked) return;
+    
+    const fetchQueueStatus = async () => {
+      const status = await SignalQueueService.getQueueStatus();
+      if (status) setQueueStatus(status);
+    };
+    
+    fetchQueueStatus();
+    const interval = setInterval(fetchQueueStatus, 30000);
+    return () => clearInterval(interval);
+  }, [isUnlocked]);
 
   // Fetch spread and generate signals
   useEffect(() => {
@@ -389,17 +499,14 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
           fetch(CONFIG.DEXSCREENER.HEX_ETH).then(r => r.json()),
           fetch(CONFIG.DEXSCREENER.HEX_PLS).then(r => r.json()),
         ]);
-        
+
         const ethHex = parseFloat(ethRes?.pair?.priceUsd || 0);
         const plsHex = parseFloat(plsRes?.pair?.priceUsd || 0);
         const spread = ethHex && plsHex ? ((ethHex - plsHex) / plsHex) * 100 : 0;
         const absSpread = Math.abs(spread);
 
         if (absSpread >= 4) {
-          const direction = spread > 0 
-            ? { buy: 'pHEX', sell: 'eHEX' }
-            : { buy: 'eHEX', sell: 'pHEX' };
-          
+          const direction = spread > 0 ? { buy: 'pHEX', sell: 'eHEX' } : { buy: 'eHEX', sell: 'pHEX' };
           const profit = 500 * (absSpread / 100) - 20; // $500 trade minus ~$20 fees
           const geShare = profit * 0.3;
 
@@ -412,7 +519,25 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
             confidence: absSpread >= 6 ? 'HIGH' : 'MEDIUM',
             timestamp: Date.now(),
             canAutoTrade: absSpread >= 6 && profit >= CONFIG.MIN_PROFIT_USD,
+            pushedToLambda: false, // 🔥 NEW: Track if pushed
           };
+
+          // 🔥 NEW: Push to Lambda for HIGH confidence signals
+          if (newSignal.confidence === 'HIGH') {
+            const pushResult = await SignalQueueService.pushSignal({
+              type: 'EHEX_ARB',
+              spread: absSpread,
+              ethPrice: ethHex,
+              plsPrice: plsHex,
+              direction: spread > 0 ? 'BUY_PHEX' : 'BUY_EHEX',
+              confidence: 'HIGH',
+              title: newSignal.title,
+            });
+            newSignal.pushedToLambda = pushResult.success;
+            if (pushResult.success) {
+              newSignal.lambdaSignalId = pushResult.signalId;
+            }
+          }
 
           setSignals(prev => {
             // Avoid duplicates within 2 minutes
@@ -449,7 +574,7 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
           <div>🔄 Real-time arbitrage signals</div>
           <div>🤖 Auto-trade execution</div>
           <div>💰 30% profits to GE</div>
-          <div>📱 Telegram alerts</div>
+          <div>📡 Lambda signal queue</div>
         </div>
         <div className="progress">
           <div className="progress-info">
@@ -473,18 +598,27 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
         <span className="bal">${dtgcUSDValue.toFixed(0)} DTGC</span>
       </div>
 
+      {/* 🔥 NEW: Lambda queue status */}
+      {queueStatus && (
+        <div className="lambda-status">
+          <span className="lambda-dot"></span>
+          <span>Lambda Queue: {queueStatus.pending} pending | {queueStatus.executed} executed</span>
+        </div>
+      )}
+
       <div className="auto-trade">
         <div className="auto-info">
           <span className="auto-icon">🤖</span>
           <span>Auto-Trade</span>
         </div>
-        <button 
+        <button
           className={`toggle ${autoTradeEnabled ? 'on' : ''}`}
           onClick={() => setAutoTradeEnabled(!autoTradeEnabled)}
         >
           {autoTradeEnabled ? 'ON' : 'OFF'}
         </button>
       </div>
+
       {autoTradeEnabled && (
         <div className="auto-status">
           <span className="dot"></span>
@@ -519,6 +653,7 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
                 {sig.profit && <span className="sig-profit">{sig.profit}</span>}
                 <span className={`sig-conf ${sig.confidence.toLowerCase()}`}>{sig.confidence}</span>
                 {sig.canAutoTrade && autoTradeEnabled && <span className="auto-badge">🤖</span>}
+                {sig.pushedToLambda && <span className="lambda-badge">📡 GE</span>}
               </div>
             </div>
           ))
@@ -534,99 +669,44 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// STYLES
+// STYLES (with new Lambda-related styles)
 // ═══════════════════════════════════════════════════════════════
 
 const GEX_STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
 
-.gex-widget {
-  position: fixed;
-  z-index: 99999;
-  font-family: 'Rajdhani', sans-serif;
-}
+.gex-widget { position: fixed; z-index: 99999; font-family: 'Rajdhani', sans-serif; }
 
-.gex-trigger {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #1a1a1a, #0d0d0d);
-  border: 2px solid #FFD700;
-  box-shadow: 0 0 20px rgba(255,215,0,0.3);
-  cursor: pointer;
-  animation: gexPulse 2s ease-in-out infinite;
-  transition: transform 0.2s;
-}
+.gex-trigger { width: 60px; height: 60px; border-radius: 12px; background: linear-gradient(135deg, #1a1a1a, #0d0d0d); border: 2px solid #FFD700; box-shadow: 0 0 20px rgba(255,215,0,0.3); cursor: pointer; animation: gexPulse 2s ease-in-out infinite; transition: transform 0.2s; }
 .gex-trigger:hover { transform: scale(1.05); }
-.gex-icon {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 18px;
-  font-weight: bold;
-  color: #FFD700;
-  text-shadow: 0 0 10px rgba(255,215,0,0.5);
-}
+.gex-icon { font-family: 'Orbitron', sans-serif; font-size: 18px; font-weight: bold; color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
+@keyframes gexPulse { 0%, 100% { box-shadow: 0 0 20px rgba(255,215,0,0.3); } 50% { box-shadow: 0 0 35px rgba(255,215,0,0.5); } }
 
-@keyframes gexPulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(255,215,0,0.3); }
-  50% { box-shadow: 0 0 35px rgba(255,215,0,0.5); }
-}
+.gex-panel { width: 360px; max-height: 540px; background: linear-gradient(180deg, #0d0d0d, #1a1a1a, #0d0d0d); border: 2px solid #FFD700; border-radius: 16px; box-shadow: 0 0 40px rgba(255,215,0,0.2), 0 20px 60px rgba(0,0,0,0.8); overflow: hidden; }
 
-.gex-panel {
-  width: 360px;
-  max-height: 540px;
-  background: linear-gradient(180deg, #0d0d0d, #1a1a1a, #0d0d0d);
-  border: 2px solid #FFD700;
-  border-radius: 16px;
-  box-shadow: 0 0 40px rgba(255,215,0,0.2), 0 20px 60px rgba(0,0,0,0.8);
-  overflow: hidden;
-}
-
-.gex-header {
-  padding: 12px 16px;
-  background: linear-gradient(90deg, rgba(255,215,0,0.1), transparent, rgba(255,215,0,0.1));
-  border-bottom: 1px solid rgba(255,215,0,0.3);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+.gex-header { padding: 12px 16px; background: linear-gradient(90deg, rgba(255,215,0,0.1), transparent, rgba(255,215,0,0.1)); border-bottom: 1px solid rgba(255,215,0,0.3); display: flex; justify-content: space-between; align-items: center; }
 .gex-title { display: flex; align-items: center; gap: 10px; }
 .gex-logo { font-family: 'Orbitron'; font-size: 18px; font-weight: bold; color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
 .gex-subtitle { font-size: 10px; color: #888; letter-spacing: 1px; }
+
 .gex-info-btn { background: rgba(255,215,0,0.2); border: 1px solid #FFD700; color: #FFD700; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-weight: bold; margin-right: 8px; }
 .gex-info-btn:hover { background: rgba(255,215,0,0.4); }
+
 .gex-info-panel { background: rgba(0,0,0,0.95); border: 1px solid #FFD700; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
 .gex-info-panel h3 { color: #FFD700; margin: 0 0 12px 0; font-size: 16px; }
 .gex-info-panel h4 { color: #FFD700; margin: 12px 0 6px 0; font-size: 13px; }
 .gex-info-panel p { color: #ccc; font-size: 12px; line-height: 1.5; margin: 0 0 8px 0; }
 .gex-info-close { width: 100%; padding: 10px; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; border-radius: 8px; color: #000; font-weight: bold; cursor: pointer; margin-top: 12px; }
+
 .gex-close { background: transparent; border: none; color: #FFD700; font-size: 20px; cursor: pointer; padding: 4px 8px; }
 
 .gex-tabs { display: flex; border-bottom: 1px solid rgba(255,215,0,0.2); }
-.gex-tab {
-  flex: 1;
-  padding: 10px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: #666;
-  font-size: 11px;
-  font-weight: bold;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
+.gex-tab { flex: 1; padding: 10px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #666; font-size: 11px; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: all 0.2s; }
 .gex-tab.active { background: rgba(255,215,0,0.1); border-bottom-color: #FFD700; color: #FFD700; }
 
 .gex-content { padding: 16px; max-height: 380px; overflow-y: auto; }
 
-.gex-footer {
-  padding: 10px 16px;
-  border-top: 1px solid rgba(255,215,0,0.2);
-  background: rgba(0,0,0,0.3);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+.gex-footer { padding: 10px 16px; border-top: 1px solid rgba(255,215,0,0.2); background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; }
 .gex-wallet { font-size: 10px; color: #666; }
 .gex-balance { font-size: 11px; font-weight: bold; }
 .gex-balance.unlocked { color: #00FF88; }
@@ -639,6 +719,11 @@ const GEX_STYLES = `
 .spread-label { font-size: 10px; color: #666; letter-spacing: 2px; margin-bottom: 4px; }
 .spread-value { font-size: 32px; font-weight: bold; text-shadow: 0 0 20px currentColor; }
 .spread-status { display: inline-block; padding: 4px 12px; border-radius: 20px; border: 1px solid; font-size: 10px; font-weight: bold; margin-top: 8px; }
+
+/* 🔥 NEW: Lambda push confirmation */
+.lambda-push-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); border-radius: 8px; margin-bottom: 12px; font-size: 11px; color: #00FF88; }
+.lambda-icon { font-size: 14px; }
+.lambda-spread { margin-left: auto; font-weight: bold; }
 
 .price-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 .price-card { padding: 12px; border-radius: 10px; }
@@ -663,7 +748,6 @@ const GEX_STYLES = `
 .status-dot.live { background: #00FF88; box-shadow: 0 0 10px #00FF88; }
 .status-text { font-size: 11px; color: #00FF88; font-weight: bold; }
 .ge-wallet { font-size: 9px; color: #444; margin-left: auto; }
-
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 .ge-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
@@ -711,6 +795,10 @@ const GEX_STYLES = `
 .badge { padding: 6px 12px; background: rgba(0,255,136,0.1); border: 1px solid #00FF88; border-radius: 8px; color: #00FF88; font-size: 11px; font-weight: bold; }
 .bal { font-size: 10px; color: #888; }
 
+/* 🔥 NEW: Lambda status */
+.lambda-status { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(0,255,136,0.05); border-radius: 6px; margin-bottom: 10px; font-size: 10px; color: #888; }
+.lambda-dot { width: 6px; height: 6px; border-radius: 50%; background: #00FF88; box-shadow: 0 0 6px #00FF88; }
+
 .auto-trade { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(255,215,0,0.05); border: 1px solid rgba(255,215,0,0.2); border-radius: 10px; margin-bottom: 8px; }
 .auto-info { display: flex; align-items: center; gap: 8px; }
 .auto-icon { font-size: 18px; }
@@ -740,12 +828,16 @@ const GEX_STYLES = `
 .sig-time { font-size: 9px; color: #666; }
 .sig-title { font-size: 12px; font-weight: bold; color: #fff; margin-bottom: 4px; }
 .sig-desc { font-size: 10px; color: #888; margin-bottom: 8px; }
+
 .sig-bottom { display: flex; align-items: center; gap: 8px; }
 .sig-profit { padding: 3px 8px; background: rgba(0,255,136,0.2); border-radius: 4px; font-size: 10px; font-weight: bold; color: #00FF88; }
 .sig-conf { padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; }
 .sig-conf.high { background: rgba(0,255,136,0.2); color: #00FF88; }
 .sig-conf.medium { background: rgba(255,215,0,0.2); color: #FFD700; }
 .auto-badge { padding: 3px 8px; background: rgba(0,255,136,0.3); border-radius: 4px; font-size: 8px; }
+
+/* 🔥 NEW: Lambda badge */
+.lambda-badge { padding: 3px 8px; background: rgba(98,126,234,0.3); border-radius: 4px; font-size: 8px; color: #627eea; }
 
 .action-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,215,0,0.1); }
 .action-btns button { padding: 10px; border: none; border-radius: 8px; font-size: 10px; font-weight: bold; cursor: pointer; }
@@ -754,11 +846,6 @@ const GEX_STYLES = `
 `;
 
 export default GEXWidget;
-// GEX Widget trigger Sun Jan 18 18:12:41 EST 2026
-// GEX Widget trigger Sun Jan 18 18:13:12 EST 2026
-// GEX Widget trigger Sun Jan 18 18:15:58 EST 2026
-// GEX Widget trigger Sun Jan 18 18:26:07 EST 2026
-// Deploy 1768779528
-// Deploy 1768779933
 
-// Info panel content injected at end
+// GEX Widget V2 with Lambda Integration
+// Deploy: ${Date.now()}
