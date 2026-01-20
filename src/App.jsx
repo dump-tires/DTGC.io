@@ -1,4 +1,3 @@
-import GEXWidget from "./components/GEXWidget";
 import DapperComponent from './components/DapperComponent';
 import ZapperXChain from './components/ZapperXChain';
 import PricingPage from './pages/PricingPage';
@@ -2757,7 +2756,7 @@ const IntroVideoOverlay = ({ onComplete, isDark }) => {
           onClick={handleSkip}
           style={{
             position: 'absolute',
-            bottom: '90px',
+            bottom: '24px',
             right: '24px',
             background: 'linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 50%, var(--gold-dark) 100%)',
             border: 'none',
@@ -4448,6 +4447,187 @@ export default function App() {
   const [calcFuturePrice, setCalcFuturePrice] = useState('');
   const [calcFutureMonths, setCalcFutureMonths] = useState('6');
   
+  // ═══════════════════════════════════════════════════════════════
+  // GEX - Growth Engine Monitor (eHEX Spread Tracker)
+  // eHEX(E) = HEX on Ethereum | eHEX(P) = HEX on PulseChain
+  // ═══════════════════════════════════════════════════════════════
+  const [showGex, setShowGex] = useState(false);
+  const [gexTab, setGexTab] = useState('spread'); // spread, live, signals
+  const [hexPrices, setHexPrices] = useState({
+    eHEX: 0.00080000,  // eHEX(E) - HEX on Ethereum
+    pHEX: 0.00080000,  // eHEX(P) - HEX on PulseChain
+    spread: 0,
+    spreadPercent: 0,
+    zone: 'NORMAL', // NORMAL, AGGRESSIVE_BUY_ETH, AGGRESSIVE_SELL_PLS
+    lastUpdated: null,
+  });
+  
+  // ═══════════════════════════════════════════════════════════════
+  // ZAPP ARB LASER LINK - Seamless Arbitrage Route Calculator
+  // Integrates GEX spread detection with Zapper X for one-click arb
+  // ═══════════════════════════════════════════════════════════════
+  const [showLaserLink, setShowLaserLink] = useState(false);
+  const [laserLinkAmount, setLaserLinkAmount] = useState('1000'); // Default $1000 worth
+  const [laserLinkRoute, setLaserLinkRoute] = useState(null);
+  
+  // ═══════════════════════════════════════════════════════════════
+  // GOLD STAR ALERT SYSTEM - Configurable threshold + tier gating
+  // ═══════════════════════════════════════════════════════════════
+  const [goldStarThreshold, setGoldStarThreshold] = useState(() => {
+    const saved = localStorage.getItem('gex-gold-star-threshold');
+    return saved ? parseFloat(saved) : 5; // Default 5%
+  });
+  const DTGC_TIER_REQUIREMENT_USD = 200; // $200 worth of DTGC
+  const TELEGRAM_CHANNEL_INVITE = 'https://t.me/+4WgXtoWzAYoxMjIx'; // Replace with your actual invite link
+  
+  // Check if user meets Gold Star tier requirements
+  const getUserDtgcValueUsd = useCallback(() => {
+    const balance = parseFloat(dtgcBalance || 0);
+    const dtgcPrice = livePrices.dtgc || 0;
+    return balance * dtgcPrice;
+  }, [dtgcBalance, livePrices]);
+  
+  const hasActiveStakes = useCallback(() => {
+    // Check if user has any active stakes from stake history
+    return stakeHistory && stakeHistory.length > 0;
+  }, [stakeHistory]);
+  
+  const isGoldStarEligible = useCallback(() => {
+    const dtgcValueUsd = getUserDtgcValueUsd();
+    const hasStakes = hasActiveStakes();
+    return dtgcValueUsd >= DTGC_TIER_REQUIREMENT_USD || hasStakes;
+  }, [getUserDtgcValueUsd, hasActiveStakes]);
+  
+  const isGoldStarTriggered = useCallback(() => {
+    return Math.abs(hexPrices.spreadPercent) >= goldStarThreshold;
+  }, [hexPrices.spreadPercent, goldStarThreshold]);
+  
+  // Save threshold to localStorage
+  useEffect(() => {
+    localStorage.setItem('gex-gold-star-threshold', goldStarThreshold.toString());
+  }, [goldStarThreshold]);
+  
+  // Calculate optimal arbitrage route
+  const calculateLaserRoute = useCallback((inputAmount, direction) => {
+    const amount = parseFloat(inputAmount) || 1000;
+    
+    // Fee estimates (based on real data)
+    const ETH_GAS_USD = 5.00;       // Ethereum swap gas ~$5
+    const BRIDGE_FEE_PCT = 0.1;     // Liberty Swap ~0.1%
+    const BRIDGE_FLAT_FEE = 2.00;   // Bridge processing ~$2
+    const PLS_GAS_USD = 0.01;       // PulseChain gas negligible
+    const DEX_SLIPPAGE_PCT = 0.5;   // ~0.5% slippage on swaps
+    
+    if (direction === 'ETH_TO_PLS') {
+      // eHEX(E) is cheaper → Buy on ETH, Bridge to PLS, Sell
+      const buyAmountHex = amount / hexPrices.eHEX;
+      const afterSlippage1 = buyAmountHex * (1 - DEX_SLIPPAGE_PCT / 100);
+      const bridgedAmount = afterSlippage1 * (1 - BRIDGE_FEE_PCT / 100);
+      const sellValueUsd = bridgedAmount * hexPrices.pHEX * (1 - DEX_SLIPPAGE_PCT / 100);
+      const totalFees = ETH_GAS_USD + BRIDGE_FLAT_FEE + PLS_GAS_USD;
+      const netProfit = sellValueUsd - amount - totalFees;
+      const profitPercent = (netProfit / amount) * 100;
+      
+      return {
+        direction: 'ETH_TO_PLS',
+        inputAmount: amount,
+        inputToken: 'USDC',
+        steps: [
+          { chain: 'ETH', action: 'Swap USDC → eHEX', dex: 'Uniswap', gasUsd: ETH_GAS_USD, output: afterSlippage1.toFixed(2) + ' eHEX' },
+          { chain: 'BRIDGE', action: 'Bridge eHEX via Liberty', dex: 'Liberty Swap', gasUsd: BRIDGE_FLAT_FEE, output: bridgedAmount.toFixed(2) + ' eHEX' },
+          { chain: 'PLS', action: 'Swap eHEX → USDC', dex: 'PulseX', gasUsd: PLS_GAS_USD, output: '$' + sellValueUsd.toFixed(2) },
+        ],
+        outputAmount: sellValueUsd,
+        totalFees,
+        netProfit,
+        profitPercent,
+        isProfit: netProfit > 0,
+      };
+    } else {
+      // eHEX(P) is cheaper → Buy on PLS, Bridge to ETH, Sell
+      const buyAmountHex = amount / hexPrices.pHEX;
+      const afterSlippage1 = buyAmountHex * (1 - DEX_SLIPPAGE_PCT / 100);
+      const bridgedAmount = afterSlippage1 * (1 - BRIDGE_FEE_PCT / 100);
+      const sellValueUsd = bridgedAmount * hexPrices.eHEX * (1 - DEX_SLIPPAGE_PCT / 100);
+      const totalFees = PLS_GAS_USD + BRIDGE_FLAT_FEE + ETH_GAS_USD;
+      const netProfit = sellValueUsd - amount - totalFees;
+      const profitPercent = (netProfit / amount) * 100;
+      
+      return {
+        direction: 'PLS_TO_ETH',
+        inputAmount: amount,
+        inputToken: 'USDC',
+        steps: [
+          { chain: 'PLS', action: 'Swap USDC → eHEX', dex: 'PulseX', gasUsd: PLS_GAS_USD, output: afterSlippage1.toFixed(2) + ' eHEX' },
+          { chain: 'BRIDGE', action: 'Bridge eHEX via Liberty', dex: 'Liberty Swap', gasUsd: BRIDGE_FLAT_FEE, output: bridgedAmount.toFixed(2) + ' eHEX' },
+          { chain: 'ETH', action: 'Swap eHEX → USDC', dex: 'Uniswap', gasUsd: ETH_GAS_USD, output: '$' + sellValueUsd.toFixed(2) },
+        ],
+        outputAmount: sellValueUsd,
+        totalFees,
+        netProfit,
+        profitPercent,
+        isProfit: netProfit > 0,
+      };
+    }
+  }, [hexPrices]);
+  
+  // Update route when modal opens or amount changes
+  useEffect(() => {
+    if (showLaserLink && hexPrices.spreadPercent !== 0) {
+      const direction = hexPrices.spreadPercent > 0 ? 'PLS_TO_ETH' : 'ETH_TO_PLS';
+      setLaserLinkRoute(calculateLaserRoute(laserLinkAmount, direction));
+    }
+  }, [showLaserLink, laserLinkAmount, hexPrices, calculateLaserRoute]);
+  
+  // Fetch eHEX(E) (Ethereum) and eHEX(P) (PulseChain) prices for GEX
+  const fetchHexPrices = useCallback(async () => {
+    try {
+      // eHEX(E) - HEX on Ethereum mainnet
+      // Contract: 0x2b591e99afe9f32eaa6214f7b7629768c40eeb39
+      const eHexRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/ethereum/0x69d91b94f0aaf8e8a2586909fa77a5c2c89818d5');
+      const eHexData = await eHexRes.json();
+      
+      // eHEX(P) - HEX on PulseChain (bridged)
+      // Same contract address on PulseChain
+      const pHexRes = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x6f1dcbf5f82be56c3b3a48e9b90a0e0e08e1e30f');
+      const pHexData = await pHexRes.json();
+      
+      const eHexPair = eHexData?.pair || eHexData?.pairs?.[0];
+      const pHexPair = pHexData?.pair || pHexData?.pairs?.[0];
+      
+      const eHexPrice = parseFloat(eHexPair?.priceUsd || 0) || 0.00080000;
+      const pHexPrice = parseFloat(pHexPair?.priceUsd || 0) || 0.00080000;
+      
+      const spread = eHexPrice - pHexPrice;
+      const spreadPercent = eHexPrice > 0 ? ((spread / eHexPrice) * 100) : 0;
+      
+      // Determine zone - aggressive if spread > 5%
+      let zone = 'NORMAL';
+      if (spreadPercent > 5) zone = 'AGGRESSIVE_BUY_ETH';
+      else if (spreadPercent < -5) zone = 'AGGRESSIVE_SELL_PLS';
+      
+      setHexPrices({
+        eHEX: eHexPrice,
+        pHEX: pHexPrice,
+        spread,
+        spreadPercent,
+        zone,
+        lastUpdated: new Date(),
+      });
+      
+      console.log('📊 GEX prices updated:', { 'eHEX(E)': eHexPrice, 'eHEX(P)': pHexPrice, spreadPercent: spreadPercent.toFixed(2) + '%', zone });
+    } catch (err) {
+      console.warn('GEX price fetch failed:', err.message);
+    }
+  }, []);
+  
+  // Auto-fetch GEX prices every 30 seconds
+  useEffect(() => {
+    fetchHexPrices();
+    const interval = setInterval(fetchHexPrices, 30000);
+    return () => clearInterval(interval);
+  }, [fetchHexPrices]);
+  
   // Load stake history from localStorage on mount
   useEffect(() => {
     const savedHistory = localStorage.getItem('dtgc-stake-history');
@@ -5588,7 +5768,7 @@ export default function App() {
           name: 'DTGC Premium Staking',
           description: 'Premium DeFi Staking on PulseChain',
           url: window.location.origin,
-          icons: [`${window.location.origin}/favicon1.png`],
+          icons: [`${window.location.origin}/favicon-192.png`],
         },
         rpcMap: {
           [CHAIN_ID]: 'https://rpc.pulsechain.com',
@@ -5880,27 +6060,30 @@ export default function App() {
   // Fetch mainnet balances when account connects
   useEffect(() => {
     const fetchMainnetBalances = async () => {
-      if (TESTNET_MODE || !account || !provider) return;
+      if (TESTNET_MODE || !account) return;
 
       try {
+        // Use dedicated RPC to avoid MetaMask rate limits
+        const rpcProvider = new ethers.JsonRpcProvider('https://pulsechain.publicnode.com');
+        
         // Get PLS balance
-        const plsBal = await provider.getBalance(account);
+        const plsBal = await rpcProvider.getBalance(account);
         setPlsBalance(ethers.formatEther(plsBal));
 
         // Get DTGC balance
-        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, provider);
+        const dtgcContract = new ethers.Contract(CONTRACTS.DTGC, ERC20_ABI, rpcProvider);
         const dtgcBal = await dtgcContract.balanceOf(account);
         setDtgcBalance(ethers.formatEther(dtgcBal));
 
         // Get URMOM balance
-        const urmomContract = new ethers.Contract(CONTRACTS.URMOM, ERC20_ABI, provider);
+        const urmomContract = new ethers.Contract(CONTRACTS.URMOM, ERC20_ABI, rpcProvider);
         const urmomBal = await urmomContract.balanceOf(account);
         setUrmomBalance(ethers.formatEther(urmomBal));
 
         // Get DTGC/PLS LP balance (Diamond tier)
         let lpPlsBal = 0n;
         try {
-          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, provider);
+          const lpPlsContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcPls, ERC20_ABI, rpcProvider);
           lpPlsBal = await lpPlsContract.balanceOf(account);
           setLpDtgcPlsBalance(ethers.formatEther(lpPlsBal));
         } catch (e) {
@@ -5911,7 +6094,7 @@ export default function App() {
         // Get DTGC/URMOM LP balance (Diamond+ tier)
         let lpUrmomBal = 0n;
         try {
-          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, provider);
+          const lpUrmomContract = new ethers.Contract(CONTRACT_ADDRESSES.lpDtgcUrmom, ERC20_ABI, rpcProvider);
           lpUrmomBal = await lpUrmomContract.balanceOf(account);
           setLpDtgcUrmomBalance(ethers.formatEther(lpUrmomBal));
           setLpBalance(ethers.formatEther(lpUrmomBal)); // Keep legacy for compatibility
@@ -6839,12 +7022,12 @@ export default function App() {
   const fetchStakedPosition = useCallback(async () => {
     if (TESTNET_MODE || !account || !provider) return;
 
-    // RPC endpoints to try (primary + backups)
+    // RPC endpoints to try - use dedicated RPCs first to avoid MetaMask rate limits
     const RPC_ENDPOINTS = [
-      null, // null = use connected wallet provider first
+      'https://pulsechain.publicnode.com',
       'https://rpc.pulsechain.com',
-      'https://pulsechain-rpc.publicnode.com',
       'https://rpc-pulsechain.g4mm4.io',
+      null, // null = wallet provider as last resort
     ];
 
     let lastError = null;
@@ -6853,7 +7036,7 @@ export default function App() {
       try {
         console.log('🔍 Fetching staked positions for:', account, rpcUrl ? `(using ${rpcUrl})` : '(using wallet provider)');
         
-        // Use either wallet provider or fallback RPC
+        // Use dedicated RPC provider (or wallet as fallback)
         const activeProvider = rpcUrl ? new ethers.JsonRpcProvider(rpcUrl) : provider;
         
         const positions = [];
@@ -6877,10 +7060,25 @@ export default function App() {
               const dtgcStakes = await stakingV4.getActiveStakes(account);
               console.log('📋 V4 DTGC stakes:', dtgcStakes);
               
+              // ═══════════════════════════════════════════════════════════════
+              // FIX: Deduplicate DTGC stakes BEFORE processing
+              // ═══════════════════════════════════════════════════════════════
+              const seenDtgcStakes = new Set();
+              const uniqueDtgcStakes = dtgcStakes.filter(stake => {
+                const key = `${stake.amount.toString()}-${stake.startTime.toString()}-${stake.tier.toString()}`;
+                if (seenDtgcStakes.has(key)) {
+                  console.log(`⚠️ Filtering duplicate DTGC stake: amount=${ethers.formatEther(stake.amount)}, tier=${stake.tier}`);
+                  return false;
+                }
+                seenDtgcStakes.add(key);
+                return true;
+              });
+              console.log(`📊 DTGC stakes after dedup: ${uniqueDtgcStakes.length}/${dtgcStakes.length}`);
+              
               // Find original indices by iterating all stakes
               const allDtgcStakes = await stakingV4.getAllStakes(account);
               
-              dtgcStakes.forEach((stake, activeIdx) => {
+              uniqueDtgcStakes.forEach((stake, activeIdx) => {
                 // Find original index in allStakes
                 let originalIndex = 0;
                 for (let i = 0; i < allDtgcStakes.length; i++) {
@@ -6898,6 +7096,19 @@ export default function App() {
                 const tierName = tierNames[tierNum] || 'GOLD';
                 const rawApr = Number(stake.aprBps) / 100;
                 
+                // Calculate pending rewards from contract or estimate
+                let pendingRewards = 0;
+                if (stake.pendingRewards) {
+                  pendingRewards = parseFloat(ethers.formatEther(stake.pendingRewards));
+                } else {
+                  // Estimate rewards based on time staked
+                  const startTime = Number(stake.startTime);
+                  const now = Math.floor(Date.now() / 1000);
+                  const daysStaked = Math.max(0, (now - startTime) / 86400);
+                  const correctedApr = getV19CorrectedAPR(rawApr, tierName, false);
+                  pendingRewards = (amount * (correctedApr / 100) / 365) * daysStaked;
+                }
+                
                 positions.push({
                   id: `dtgc-stake-${originalIndex}`,
                   stakeIndex: originalIndex, // V4: needed for withdraw
@@ -6913,9 +7124,10 @@ export default function App() {
                   tierName: tierName,
                   isActive: stake.isActive,
                   timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
+                  pendingRewards: pendingRewards,
                   isV4: true,
                 });
-                console.log(`✅ Added V4 DTGC stake #${originalIndex}:`, tierName, amount);
+                console.log(`✅ Added V4 DTGC stake #${originalIndex}:`, tierName, amount, `rewards: ${pendingRewards.toFixed(2)}`);
               });
             }
             
@@ -6928,10 +7140,26 @@ export default function App() {
               const lpStakes = await lpStakingV4.getActiveStakes(account);
               console.log('📋 V4 LP stakes:', lpStakes);
               
+              // ═══════════════════════════════════════════════════════════════
+              // FIX: Deduplicate LP stakes BEFORE processing
+              // Contract may return same stake multiple times (Diamond+ doubling bug)
+              // ═══════════════════════════════════════════════════════════════
+              const seenLpStakes = new Set();
+              const uniqueLpStakes = lpStakes.filter(stake => {
+                const key = `${stake.amount.toString()}-${stake.startTime.toString()}-${stake.lpType.toString()}`;
+                if (seenLpStakes.has(key)) {
+                  console.log(`⚠️ Filtering duplicate LP stake from contract response: amount=${ethers.formatEther(stake.amount)}, lpType=${stake.lpType}`);
+                  return false;
+                }
+                seenLpStakes.add(key);
+                return true;
+              });
+              console.log(`📊 LP stakes after dedup: ${uniqueLpStakes.length}/${lpStakes.length}`);
+              
               // Find original indices
               const allLpStakes = await lpStakingV4.getAllStakes(account);
               
-              lpStakes.forEach((stake, activeIdx) => {
+              uniqueLpStakes.forEach((stake, activeIdx) => {
                 // Find original index
                 let originalIndex = 0;
                 for (let i = 0; i < allLpStakes.length; i++) {
@@ -6947,6 +7175,17 @@ export default function App() {
                 const lpTypeNum = Number(stake.lpType);
                 const rawLpApr = Number(stake.aprBps) / 100;
                 const lockPeriodDays = Number(stake.lockPeriod) / 86400; // Convert seconds to days
+                
+                // Calculate pending rewards
+                let lpPendingRewards = 0;
+                if (stake.pendingRewards) {
+                  lpPendingRewards = parseFloat(ethers.formatEther(stake.pendingRewards));
+                } else {
+                  const lpStartTime = Number(stake.startTime);
+                  const now = Math.floor(Date.now() / 1000);
+                  const daysStaked = Math.max(0, (now - lpStartTime) / 86400);
+                  lpPendingRewards = (lpAmount * (rawLpApr / 100) / 365) * daysStaked;
+                }
                 
                 // Check if this is a Flex stake:
                 // - APR is around 10% (9-12%)
@@ -6975,12 +7214,31 @@ export default function App() {
                     lpType: 2,
                     isActive: stake.isActive,
                     timeRemaining: 0,
+                    pendingRewards: lpPendingRewards,
                     isV4: true,
+                    sourceContract: 'lpV4', // Track source for deduplication
                   });
-                  console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR`);
+                  console.log(`✅ Added V4 FLEX stake #${originalIndex}: ${lpAmount} LP @ 10% APR, rewards: ${lpPendingRewards.toFixed(2)}`);
                 } else {
                   // Regular Diamond/Diamond+ stake
                   const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+                  
+                  // ═══════════════════════════════════════════════════════════════
+                  // FIX: Check for duplicate Diamond/Diamond+ stakes
+                  // Same stake might be returned multiple times from contract
+                  // ═══════════════════════════════════════════════════════════════
+                  const lpStartTime = Number(stake.startTime) * 1000;
+                  const isDuplicateLP = positions.some(p => 
+                    p.isLP && 
+                    !p.isFlex &&
+                    Math.abs(p.amount - lpAmount) < 0.0001 && // Same amount (within tolerance)
+                    Math.abs(p.startTime - lpStartTime) < 60000 // Same start time (within 1 min)
+                  );
+                  
+                  if (isDuplicateLP) {
+                    console.log(`⚠️ Skipping duplicate ${lpTierName} stake #${originalIndex}: ${lpAmount} LP (already counted)`);
+                    return;
+                  }
                   
                   positions.push({
                     id: `lp-stake-${originalIndex}`,
@@ -6989,7 +7247,7 @@ export default function App() {
                     isLP: true,
                     isFlex: false,
                     amount: lpAmount,
-                    startTime: Number(stake.startTime) * 1000,
+                    startTime: lpStartTime,
                     endTime: Number(stake.unlockTime) * 1000,
                     lockPeriod: Number(stake.lockPeriod),
                     apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
@@ -6999,9 +7257,11 @@ export default function App() {
                     tierName: lpTierName,
                     isActive: stake.isActive,
                     timeRemaining: Math.max(0, Number(stake.unlockTime) - Math.floor(Date.now() / 1000)),
+                    pendingRewards: lpPendingRewards,
                     isV4: true,
+                    sourceContract: 'lpV4', // Track source for debugging
                   });
-                  console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount);
+                  console.log(`✅ Added V4 LP stake #${originalIndex}:`, lpTierName, lpAmount, `rewards: ${lpPendingRewards.toFixed(2)}`);
                 }
               });
             }
@@ -7022,7 +7282,21 @@ export default function App() {
                   const flexStakes = await flexStakingV4.getActiveStakes(account);
                   console.log('📋 V4 Flex stakes:', flexStakes);
                   
-                  flexStakes.forEach((stake, idx) => {
+                  // Deduplicate Flex stakes from contract response
+                  const seenFlexStakes = new Set();
+                  const uniqueFlexStakes = flexStakes.filter(stake => {
+                    const amt = stake.amount || stake[0] || 0n;
+                    const st = stake.startTime || stake[1] || 0;
+                    const key = `${amt.toString()}-${st.toString()}`;
+                    if (seenFlexStakes.has(key)) {
+                      console.log(`⚠️ Filtering duplicate Flex stake from contract`);
+                      return false;
+                    }
+                    seenFlexStakes.add(key);
+                    return true;
+                  });
+                  
+                  uniqueFlexStakes.forEach((stake, idx) => {
                     if (!stake.isActive && stake[3] !== true) return;
                     
                     const flexAmount = parseFloat(ethers.formatEther(stake.amount || stake[0] || 0n));
@@ -7030,8 +7304,34 @@ export default function App() {
                     
                     const flexStartTime = Number(stake.startTime || stake[1] || 0) * 1000;
                     
+                    // Calculate pending rewards for Flex stake
+                    let flexPendingRewards = 0;
+                    if (stake.pendingRewards || stake[2]) {
+                      flexPendingRewards = parseFloat(ethers.formatEther(stake.pendingRewards || stake[2] || 0n));
+                    } else {
+                      const startSec = flexStartTime / 1000;
+                      const now = Math.floor(Date.now() / 1000);
+                      const daysStaked = Math.max(0, (now - startSec) / 86400);
+                      flexPendingRewards = (flexAmount * (10 / 100) / 365) * daysStaked;
+                    }
+                    
+                    // ═══════════════════════════════════════════════════════════════
+                    // FIX: Check for duplicate Flex stakes (may already be added from
+                    // V4 LP Staking when detected as Flex by APR/lock criteria)
+                    // ═══════════════════════════════════════════════════════════════
+                    const isDuplicate = positions.some(p => 
+                      p.isFlex && 
+                      Math.abs(p.amount - flexAmount) < 0.0001 && // Same amount (within tolerance)
+                      Math.abs(p.startTime - flexStartTime) < 60000 // Same start time (within 1 min)
+                    );
+                    
+                    if (isDuplicate) {
+                      console.log(`⚠️ Skipping duplicate Flex stake #${idx}: ${flexAmount} LP (already counted)`);
+                      return;
+                    }
+                    
                     positions.push({
-                      id: `v4-flex-stake-${idx}`,
+                      id: `v4-flex-contract-${idx}`, // Changed ID prefix to distinguish source
                       stakeIndex: idx,
                       type: 'FLEX LP',
                       isLP: true,
@@ -7047,9 +7347,11 @@ export default function App() {
                       lpType: 2, // Flex type
                       isActive: true,
                       timeRemaining: 0,
+                      pendingRewards: flexPendingRewards,
                       isV4: true,
+                      sourceContract: 'flexV4', // Track source for debugging
                     });
-                    console.log(`✅ Added V4 Flex stake #${idx}: ${flexAmount} LP @ 10% APR`);
+                    console.log(`✅ Added V4 Flex stake #${idx}: ${flexAmount} LP @ 10% APR, rewards: ${flexPendingRewards.toFixed(4)}`);
                   });
                 }
               } catch (flexErr) {
@@ -7136,17 +7438,25 @@ export default function App() {
             if (lpAmount > 0) {
               const rawLpApr = Number(lpPosition[4] || 0) / 100;
               const lpTierName = lpTypeNum === 1 ? 'DIAMOND+' : 'DIAMOND';
+              const lpStartTime = Number(lpPosition[1] || 0) * 1000;
               
-              // Check for duplicate from V4
-              const existingV4LP = positions.find(p => p.isLP && p.amount === lpAmount && p.isV4);
-              if (!existingV4LP) {
+              // Check for duplicate from V4 (use tolerance for floating point comparison)
+              const existingLP = positions.find(p => 
+                p.isLP && 
+                Math.abs(p.amount - lpAmount) < 0.0001 && // Same amount within tolerance
+                (p.isV4 || Math.abs(p.startTime - lpStartTime) < 60000) // V4 or same start time
+              );
+              
+              if (existingLP) {
+                console.log(`⚠️ Skipping V3 LP - already have this stake from ${existingLP.isV4 ? 'V4' : 'V3'}`);
+              } else {
                 positions.push({
                   id: 'v3-lp-stake-0',
                   stakeIndex: 0,
                   type: 'LP',
                   isLP: true,
                   amount: lpAmount,
-                  startTime: Number(lpPosition[1] || 0) * 1000,
+                  startTime: lpStartTime,
                   endTime: Number(lpPosition[2] || 0) * 1000,
                   lockPeriod: Number(lpPosition[3] || 0),
                   apr: getV19CorrectedAPR(rawLpApr, lpTierName, true),
@@ -7157,6 +7467,7 @@ export default function App() {
                   isActive: lpIsActive || lpAmount > 0,
                   timeRemaining: Number(lpPosition[8] || 0),
                   isV4: false, // V3 Legacy
+                  sourceContract: 'lpV3',
                 });
                 console.log('✅ Added V3 Legacy LP position');
               }
@@ -7166,11 +7477,54 @@ export default function App() {
           console.warn('⚠️ V3 fetch also had issues:', v3Err.message);
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // FINAL DEDUPLICATION - Catch any duplicates that slipped through
+        // This fixes the Diamond+ doubling bug where same stake shows 2x
+        // MORE AGGRESSIVE: Match by amount+type only (ignore time differences)
+        // ═══════════════════════════════════════════════════════════════
+        const seenStakes = new Set();
+        const deduplicatedPositions = positions.filter(pos => {
+          // Create unique key: type + lpType + amount (rounded to 2 decimals)
+          // REMOVED time from key - same amount+type = same stake regardless of timestamp
+          const amountKey = Math.round(pos.amount * 100); // 2 decimal precision (more forgiving)
+          const key = pos.isLP 
+            ? `lp-${pos.lpType || 0}-${amountKey}`
+            : `dtgc-${pos.tier || 0}-${amountKey}`;
+          
+          if (seenStakes.has(key)) {
+            console.log(`⚠️ FINAL DEDUP: Removing duplicate ${pos.tierName || pos.type}: ${pos.amount} LP (key: ${key})`);
+            return false;
+          }
+          seenStakes.add(key);
+          return true;
+        });
+        
+        // Also check for near-identical amounts (within 0.1% tolerance)
+        const finalPositions = [];
+        for (const pos of deduplicatedPositions) {
+          const isDupe = finalPositions.some(existing => 
+            existing.isLP === pos.isLP &&
+            existing.lpType === pos.lpType &&
+            Math.abs(existing.amount - pos.amount) / Math.max(existing.amount, pos.amount) < 0.001 // 0.1% tolerance
+          );
+          if (isDupe) {
+            console.log(`⚠️ NEAR-MATCH DEDUP: Removing ${pos.tierName}: ${pos.amount} LP (within 0.1% of existing)`);
+          } else {
+            finalPositions.push(pos);
+          }
+        }
+        const finalDeduped = finalPositions;
+        
+        if (finalDeduped.length !== positions.length) {
+          console.log(`🔧 DEDUP FIX: Removed ${positions.length - finalDeduped.length} duplicate(s)`);
+          console.log(`📊 Before: ${positions.length}, After: ${finalDeduped.length}`);
+        }
+
         // Only update if we found positions - don't clear with empty array
-        if (positions.length > 0) {
-          setStakedPositions(positions);
-          lastKnownPositionsRef.current = positions; // Save as last known good
-          console.log('📊 Total positions (V3+V4):', positions.length);
+        if (finalDeduped.length > 0) {
+          setStakedPositions(finalDeduped);
+          lastKnownPositionsRef.current = finalDeduped; // Save as last known good
+          console.log('📊 Total positions (V3+V4):', finalDeduped.length);
         } else if (lastKnownPositionsRef.current.length > 0) {
           // No positions found but we had them before - keep the last known good
           console.log('⚠️ No positions from RPC - preserving last known:', lastKnownPositionsRef.current.length);
@@ -13488,7 +13842,7 @@ export default function App() {
               marginBottom: '12px'
             }}>
               <img 
-                src="/favicon1.png"
+                src="/favicon-192.png"
                 alt="DTGC"
                 style={{
                   width: '100%',
@@ -13540,12 +13894,12 @@ export default function App() {
           whiteDiamondNFTs={whiteDiamondNFTs}
         />
 
-        {/* Gold Records - Stake History (Above Calculator) */}
+        {/* Gold Records - Stake History (Above Calculator - TOP widget) */}
         <div
           onClick={() => setShowGoldRecords(true)}
           style={{
             position: 'fixed',
-            bottom: '94px',
+            bottom: '234px', // TOP - Trophy (Treasure Vault)
             right: '24px',
             width: '56px',
             height: '56px',
@@ -13912,14 +14266,14 @@ export default function App() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* CALCULATOR FAB - BOTTOM RIGHT (Below Treasure Vault) */}
+      {/* CALCULATOR FAB - MIDDLE widget (moved up from bottom) */}
       {/* ═══════════════════════════════════════════════════════════════ */}
       {!TESTNET_MODE && account && (stakedPositions.length > 0 || lastKnownPositionsRef.current.length > 0) && (
         <button
           onClick={() => setShowStakeCalculator(true)}
           style={{
             position: 'fixed',
-            bottom: '90px',
+            bottom: '94px', // Moved up from 24px to middle position
             right: '24px',
             zIndex: 1500,
             width: '56px',
@@ -13942,6 +14296,1145 @@ export default function App() {
         >
           🧮
         </button>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* GEX FAB - BOTTOM widget (Growth Engine Monitor) */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {account && (
+        <button
+          onClick={() => setShowGex(true)}
+          style={{
+            position: 'fixed',
+            bottom: '164px', // MIDDLE - GEX
+            right: '24px',
+            zIndex: 1500,
+            width: '56px',
+            height: '56px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
+            border: `3px solid ${hexPrices.zone !== 'NORMAL' ? '#FFD700' : '#D4AF37'}`,
+            color: '#FFD700',
+            fontSize: '0.9rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+            boxShadow: hexPrices.zone !== 'NORMAL' 
+              ? '0 4px 20px rgba(255,215,0,0.6), 0 0 40px rgba(255,215,0,0.4)'
+              : '0 4px 20px rgba(212,175,55,0.4), 0 0 20px rgba(212,175,55,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s ease',
+            animation: hexPrices.zone !== 'NORMAL' ? 'pulse 1.5s infinite' : 'none',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          title="GEX - Growth Engine Monitor (eHEX Spread)"
+        >
+          {hexPrices.zone !== 'NORMAL' && (
+            <span style={{ position: 'absolute', top: '-8px', right: '-8px', fontSize: '1rem' }}>⭐</span>
+          )}
+          GEX
+        </button>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* GEX MODAL - Growth Engine Monitor */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {showGex && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.95)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10001,
+          backdropFilter: 'blur(10px)',
+        }} onClick={() => setShowGex(false)}>
+          <div style={{
+            background: 'linear-gradient(135deg, #1a1505 0%, #0d0d1a 100%)',
+            border: '3px solid #D4AF37',
+            borderRadius: '24px',
+            padding: '24px',
+            maxWidth: '500px',
+            width: '95%',
+            maxHeight: '85vh',
+            overflow: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 80px rgba(212,175,55,0.3)',
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.5rem', color: '#FFD700' }}>⚡</span>
+                <div>
+                  <h2 style={{ color: '#FFD700', fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>GEX</h2>
+                  <span style={{ color: '#888', fontSize: '0.7rem' }}>Growth Engine Monitor</span>
+                </div>
+                <button
+                  onClick={fetchHexPrices}
+                  style={{
+                    background: 'rgba(212,175,55,0.2)',
+                    border: '1px solid #D4AF37',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#D4AF37',
+                    fontSize: '0.9rem',
+                  }}
+                  title="Refresh Prices"
+                >
+                  ?
+                </button>
+              </div>
+              <button
+                onClick={() => setShowGex(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#888',
+                  fontSize: '1.8rem',
+                  cursor: 'pointer',
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '4px' }}>
+              {[
+                { id: 'spread', icon: '📊', label: 'SPREAD' },
+                { id: 'signals', icon: '🎯', label: 'SIGNALS' },
+                { id: 'live', icon: '⚡', label: 'LIVE' },
+                { id: 'learn', icon: '📚', label: 'LEARN' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setGexTab(tab.id)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 8px',
+                    background: gexTab === tab.id ? 'rgba(212,175,55,0.3)' : 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: gexTab === tab.id ? '#FFD700' : '#666',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <span>{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* SPREAD Tab Content */}
+            {gexTab === 'spread' && (
+              <div>
+                {/* Main Spread Display */}
+                <div style={{
+                  background: 'rgba(0,0,0,0.4)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  textAlign: 'center',
+                  marginBottom: '20px',
+                }}>
+                  <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '8px', letterSpacing: '2px' }}>
+                    eHEX(E) / eHEX(P) SPREAD
+                  </div>
+                  <div style={{
+                    fontSize: '3rem',
+                    fontWeight: 800,
+                    color: hexPrices.spreadPercent > 0 ? '#4CAF50' : hexPrices.spreadPercent < 0 ? '#F44336' : '#FFD700',
+                    textShadow: '0 0 30px currentColor',
+                  }}>
+                    {hexPrices.spreadPercent >= 0 ? '+' : ''}{hexPrices.spreadPercent.toFixed(2)}%
+                  </div>
+                  
+                  {/* Zone Indicator with Star */}
+                  <div style={{
+                    marginTop: '12px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 20px',
+                    background: hexPrices.zone !== 'NORMAL' 
+                      ? 'linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,215,0,0.1))'
+                      : 'rgba(128,128,128,0.2)',
+                    borderRadius: '20px',
+                    border: hexPrices.zone !== 'NORMAL' ? '2px solid #FFD700' : '1px solid #444',
+                  }}>
+                    {hexPrices.zone !== 'NORMAL' && <span style={{ fontSize: '1.2rem' }}>⭐</span>}
+                    <span style={{
+                      color: hexPrices.zone !== 'NORMAL' ? '#FFD700' : '#888',
+                      fontWeight: 700,
+                      fontSize: '0.9rem',
+                      letterSpacing: '1px',
+                    }}>
+                      {hexPrices.zone === 'NORMAL' ? 'NORMAL' :
+                       hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? 'BUY eHEX(E)' :
+                       'SELL eHEX(P)'}
+                    </span>
+                  </div>
+                  
+                  {/* Aggressive Zone Direction Hint */}
+                  {hexPrices.zone !== 'NORMAL' && (
+                    <div style={{
+                      marginTop: '16px',
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.05))',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255,215,0,0.3)',
+                    }}>
+                      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        ⭐ {hexPrices.zone === 'AGGRESSIVE_BUY_ETH' 
+                          ? 'Buy eHEX(E) on Ethereum → Bridge to Pulse' 
+                          : 'Sell eHEX(P) on Pulse → Buy eHEX(E) on Ethereum'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Price Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* eHEX(E) Card - Ethereum */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(98,126,234,0.2) 0%, rgba(98,126,234,0.05) 100%)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    border: '1px solid rgba(98,126,234,0.3)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <span style={{ color: '#627EEA' }}>◆</span>
+                      <span style={{ color: '#627EEA', fontSize: '0.75rem', fontWeight: 600 }}>ETHEREUM</span>
+                    </div>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>eHEX(E)</div>
+                    <div style={{ color: '#fff', fontSize: '1.4rem', fontWeight: 700 }}>
+                      ${hexPrices.eHEX.toFixed(6)}
+                    </div>
+                  </div>
+                  
+                  {/* eHEX(P) Card - PulseChain */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(0,212,170,0.2) 0%, rgba(0,212,170,0.05) 100%)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    border: '1px solid rgba(0,212,170,0.3)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                      <span style={{ color: '#E91E8C' }}>💜</span>
+                      <span style={{ color: '#00D4AA', fontSize: '0.75rem', fontWeight: 600 }}>PULSECHAIN</span>
+                    </div>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>eHEX(P)</div>
+                    <div style={{ color: '#fff', fontSize: '1.4rem', fontWeight: 700 }}>
+                      ${hexPrices.pHEX.toFixed(6)}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Last Updated */}
+                {hexPrices.lastUpdated && (
+                  <div style={{ textAlign: 'center', marginTop: '16px', color: '#666', fontSize: '0.65rem' }}>
+                    Last updated: {hexPrices.lastUpdated.toLocaleTimeString()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* GE LIVE Tab - Real-time Market Conditions */}
+            {gexTab === 'live' && (
+              <div style={{ padding: '0' }}>
+                {/* Live Status Header */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.05))',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  marginBottom: '16px',
+                  border: '1px solid rgba(76,175,80,0.3)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        background: '#4CAF50',
+                        boxShadow: '0 0 10px #4CAF50',
+                        animation: 'pulse 2s infinite',
+                      }} />
+                      <span style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.9rem' }}>LIVE MONITORING</span>
+                    </div>
+                    <span style={{ color: '#666', fontSize: '0.7rem' }}>Updates every 30s</span>
+                  </div>
+                  
+                  {/* Current Market Condition */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.65rem', marginBottom: '4px' }}>SPREAD</div>
+                      <div style={{ color: hexPrices.spreadPercent > 3 ? '#4CAF50' : hexPrices.spreadPercent < -3 ? '#F44336' : '#FFD700', fontSize: '1.2rem', fontWeight: 700 }}>
+                        {hexPrices.spreadPercent >= 0 ? '+' : ''}{hexPrices.spreadPercent.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.65rem', marginBottom: '4px' }}>ZONE</div>
+                      <div style={{ color: hexPrices.zone !== 'NORMAL' ? '#FFD700' : '#888', fontSize: '0.9rem', fontWeight: 700 }}>
+                        {hexPrices.zone === 'NORMAL' ? '⚖️ NORMAL' : hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? '🟢 OPPORTUNITY' : '🔴 OPPORTUNITY'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.65rem', marginBottom: '4px' }}>SIGNAL</div>
+                      <div style={{ color: hexPrices.zone !== 'NORMAL' ? '#4CAF50' : '#888', fontSize: '0.9rem', fontWeight: 700 }}>
+                        {hexPrices.zone === 'NORMAL' ? '⏳ WAIT' : '⚡ ACT NOW'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* How It Works - Education */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginBottom: '16px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    📚 HOW eHEX ARBITRAGE WORKS
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #627EEA, #4A5BC7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>1</div>
+                      <div>
+                        <div style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>eHEX exists on TWO chains</div>
+                        <div style={{ color: '#888', fontSize: '0.75rem' }}>Ethereum (eHEX) & PulseChain (bridged eHEX)</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #FFD700, #FFA500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#000' }}>2</div>
+                      <div>
+                        <div style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Prices differ between chains</div>
+                        <div style={{ color: '#888', fontSize: '0.75rem' }}>Supply/demand creates a price spread</div>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ minWidth: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #4CAF50, #2E7D32)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>3</div>
+                      <div>
+                        <div style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Buy low, sell high</div>
+                        <div style={{ color: '#888', fontSize: '0.75rem' }}>Bridge to capture the spread as profit</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Profit Calculator */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))', borderRadius: '16px', padding: '20px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    💰 PROFIT CALCULATOR
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>IF YOU TRADE</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff' }}>$1,000</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>POTENTIAL PROFIT</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: Math.abs(hexPrices.spreadPercent) > 2 ? '#4CAF50' : '#888' }}>
+                        ${(1000 * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', fontSize: '0.7rem', color: '#888' }}>
+                    ⚠️ Minus gas fees (~$5-15 ETH, ~$0.01 PLS) & bridge fees (~0.1%)
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SIGNALS Tab - Clear Actionable Trading Signals */}
+            {gexTab === 'signals' && (
+              <div style={{ padding: '0' }}>
+                {/* Current Signal */}
+                <div style={{
+                  background: hexPrices.zone !== 'NORMAL' 
+                    ? 'linear-gradient(135deg, rgba(76,175,80,0.3), rgba(76,175,80,0.1))'
+                    : 'linear-gradient(135deg, rgba(128,128,128,0.2), rgba(128,128,128,0.05))',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  marginBottom: '16px',
+                  border: hexPrices.zone !== 'NORMAL' ? '2px solid #4CAF50' : '1px solid #444',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '12px', filter: hexPrices.zone !== 'NORMAL' ? 'none' : 'grayscale(1)' }}>
+                    {hexPrices.zone === 'NORMAL' ? '⏳' : hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? '🟢' : '🔴'}
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: hexPrices.zone !== 'NORMAL' ? '#4CAF50' : '#888', marginBottom: '8px' }}>
+                    {hexPrices.zone === 'NORMAL' ? 'NO SIGNAL' : hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? 'BUY SIGNAL' : 'SELL SIGNAL'}
+                  </div>
+                  <div style={{ color: '#888', fontSize: '0.85rem' }}>
+                    {hexPrices.zone === 'NORMAL' ? 'Spread is too small for profitable arbitrage. Wait for >5%.' : 'Spread is large enough for profitable arbitrage!'}
+                  </div>
+                </div>
+
+                {/* Step by Step Instructions - Only show when signal is active */}
+                {hexPrices.zone !== 'NORMAL' && (
+                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginBottom: '16px' }}>
+                    <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      📋 STEP-BY-STEP INSTRUCTIONS
+                    </div>
+                    
+                    {hexPrices.zone === 'AGGRESSIVE_BUY_ETH' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(98,126,234,0.2), rgba(98,126,234,0.05))', borderRadius: '12px', border: '1px solid rgba(98,126,234,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#627EEA', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>1</span>
+                            <span style={{ color: '#627EEA', fontWeight: 700 }}>BUY on Ethereum</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Buy eHEX on Uniswap (Ethereum)</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Current price: ${hexPrices.eHEX.toFixed(6)}</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#FFD700', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.05))', borderRadius: '12px', border: '1px solid rgba(255,215,0,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#FFD700', color: '#000', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>2</span>
+                            <span style={{ color: '#FFD700', fontWeight: 700 }}>BRIDGE to PulseChain</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Use PulseRamp or PortalBridge</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Bridge fee: ~0.1%</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#4CAF50', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.05))', borderRadius: '12px', border: '1px solid rgba(76,175,80,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#4CAF50', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>3</span>
+                            <span style={{ color: '#4CAF50', fontWeight: 700 }}>SELL on PulseChain</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Sell eHEX on PulseX for more $!</div>
+                          <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 700, marginTop: '4px' }}>Profit: ~{Math.abs(hexPrices.spreadPercent).toFixed(1)}% 🎯</div>
+                        </div>
+                        
+                        {/* Zapp Arb Laser Link for ETH→PLS direction */}
+                        {(() => {
+                          const isActive = isGoldStarTriggered() && isGoldStarEligible();
+                          const tooltipText = !isGoldStarEligible() 
+                            ? `🔒 Requires $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or active stake`
+                            : !isGoldStarTriggered()
+                            ? `⏳ Waiting for ${goldStarThreshold}% spread (current: ${Math.abs(hexPrices.spreadPercent).toFixed(1)}%)`
+                            : '';
+                          return (
+                            <div style={{ position: 'relative' }} title={tooltipText}>
+                              <button
+                                onClick={() => isActive && setShowLaserLink(true)}
+                                disabled={!isActive}
+                                style={{
+                                  width: '100%',
+                                  marginTop: '16px',
+                                  padding: '14px 18px',
+                                  background: isActive 
+                                    ? 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)'
+                                    : 'linear-gradient(135deg, #444 0%, #333 50%, #444 100%)',
+                                  border: 'none',
+                                  borderRadius: '12px',
+                                  cursor: isActive ? 'pointer' : 'not-allowed',
+                                  position: 'relative',
+                                  overflow: 'hidden',
+                                  boxShadow: isActive 
+                                    ? '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)'
+                                    : 'none',
+                                  opacity: isActive ? 1 : 0.6,
+                                }}
+                              >
+                                <div style={{ position: 'relative', zIndex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '4px' }}>
+                                    <span style={{ fontSize: '1.3rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                                    <span style={{ color: isActive ? '#000' : '#888', fontWeight: 900, fontSize: '1rem', textShadow: isActive ? '0 0 10px rgba(255,255,255,0.5)' : 'none' }}>
+                                      ZAPP ARB LASER LINK
+                                    </span>
+                                    <span style={{ fontSize: '1.3rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                                  </div>
+                                  <div style={{ color: isActive ? 'rgba(0,0,0,0.7)' : '#666', fontSize: '0.7rem', fontWeight: 600 }}>
+                                    {isActive 
+                                      ? `Calculate route • Est. profit: $${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}`
+                                      : !isGoldStarEligible()
+                                      ? `Hold $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or stake to unlock`
+                                      : `Activates at ${goldStarThreshold}% spread`
+                                    }
+                                  </div>
+                                </div>
+                              </button>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(0,212,170,0.2), rgba(0,212,170,0.05))', borderRadius: '12px', border: '1px solid rgba(0,212,170,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#00D4AA', color: '#000', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>1</span>
+                            <span style={{ color: '#00D4AA', fontWeight: 700 }}>BUY on PulseChain</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Buy eHEX on PulseX (cheaper!)</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Current price: ${hexPrices.pHEX.toFixed(6)}</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#FFD700', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.05))', borderRadius: '12px', border: '1px solid rgba(255,215,0,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#FFD700', color: '#000', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>2</span>
+                            <span style={{ color: '#FFD700', fontWeight: 700 }}>BRIDGE to Ethereum</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Use PulseRamp or PortalBridge</div>
+                          <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>Bridge fee: ~0.1%</div>
+                        </div>
+                        
+                        <div style={{ textAlign: 'center', color: '#4CAF50', fontSize: '1.5rem' }}>⬇️</div>
+                        
+                        <div style={{ padding: '16px', background: 'linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.05))', borderRadius: '12px', border: '1px solid rgba(76,175,80,0.3)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ background: '#4CAF50', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>3</span>
+                            <span style={{ color: '#4CAF50', fontWeight: 700 }}>SELL on Ethereum</span>
+                          </div>
+                          <div style={{ color: '#fff', fontSize: '0.85rem' }}>Sell eHEX on Uniswap for more $!</div>
+                          <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 700, marginTop: '4px' }}>Profit: ~{Math.abs(hexPrices.spreadPercent).toFixed(1)}% 🎯</div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* ═══════════════════════════════════════════════════════════════
+                        ZAPP ARB LASER LINK - Always visible, gated by tier
+                    ═══════════════════════════════════════════════════════════════ */}
+                    {(() => {
+                      const isActive = isGoldStarTriggered() && isGoldStarEligible();
+                      const tooltipText = !isGoldStarEligible() 
+                        ? `🔒 Requires $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or active stake`
+                        : !isGoldStarTriggered()
+                        ? `⏳ Waiting for ${goldStarThreshold}% spread (current: ${Math.abs(hexPrices.spreadPercent).toFixed(1)}%)`
+                        : '🚀 Click to calculate arbitrage route!';
+                      return (
+                        <div style={{ position: 'relative', marginTop: '20px' }} title={tooltipText}>
+                          <button
+                            onClick={() => isActive && setShowLaserLink(true)}
+                            disabled={!isActive}
+                            style={{
+                              width: '100%',
+                              padding: '16px 20px',
+                              background: isActive 
+                                ? 'linear-gradient(135deg, #FF00FF 0%, #00FFFF 50%, #FFD700 100%)'
+                                : 'linear-gradient(135deg, #444 0%, #333 50%, #444 100%)',
+                              border: 'none',
+                              borderRadius: '12px',
+                              cursor: isActive ? 'pointer' : 'not-allowed',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              boxShadow: isActive 
+                                ? '0 0 20px rgba(255,0,255,0.4), 0 0 40px rgba(0,255,255,0.2)'
+                                : 'none',
+                              opacity: isActive ? 1 : 0.6,
+                            }}
+                          >
+                            <div style={{ position: 'relative', zIndex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '1.5rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                                <span style={{ color: isActive ? '#000' : '#888', fontWeight: 900, fontSize: '1.1rem', textShadow: isActive ? '0 0 10px rgba(255,255,255,0.5)' : 'none' }}>
+                                  ZAPP ARB LASER LINK
+                                </span>
+                                <span style={{ fontSize: '1.5rem' }}>{isActive ? '⚡' : '🔒'}</span>
+                              </div>
+                              <div style={{ color: isActive ? 'rgba(0,0,0,0.7)' : '#666', fontSize: '0.75rem', fontWeight: 600 }}>
+                                {isActive 
+                                  ? `Calculate optimal route • Est. profit: $${((parseFloat(laserLinkAmount) || 1000) * Math.abs(hexPrices.spreadPercent) / 100).toFixed(2)}`
+                                  : !isGoldStarEligible()
+                                  ? `Hold $${DTGC_TIER_REQUIREMENT_USD}+ DTGC or stake to unlock`
+                                  : `Activates at ${goldStarThreshold}% spread`
+                                }
+                              </div>
+                            </div>
+                            {/* Animated laser beam effect - only when active */}
+                            {isActive && (
+                              <div style={{
+                                position: 'absolute', top: 0, left: '-100%', width: '50%', height: '100%',
+                                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)',
+                                animation: 'laserSweep 2s infinite',
+                              }} />
+                            )}
+                            <style>{`@keyframes laserSweep { 0% { left: -100%; } 100% { left: 200%; } }`}</style>
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* ═══════════════════════════════════════════════════════════════
+                        GOLD STAR SETTINGS + TELEGRAM ACCESS
+                    ═══════════════════════════════════════════════════════════════ */}
+                    <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(255,215,0,0.1)', borderRadius: '12px', border: '1px solid rgba(255,215,0,0.3)' }}>
+                      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🌟 GOLD STAR SETTINGS
+                      </div>
+                      
+                      {/* Threshold Setting */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ color: '#888', fontSize: '0.7rem', display: 'block', marginBottom: '6px' }}>
+                          Alert Threshold (%)
+                        </label>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {[3, 5, 7, 10].map(val => (
+                            <button
+                              key={val}
+                              onClick={() => setGoldStarThreshold(val)}
+                              style={{
+                                flex: 1,
+                                padding: '8px',
+                                background: goldStarThreshold === val ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.05)',
+                                border: `1px solid ${goldStarThreshold === val ? '#FFD700' : 'rgba(255,255,255,0.1)'}`,
+                                borderRadius: '6px',
+                                color: goldStarThreshold === val ? '#FFD700' : '#888',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >{val}%</button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Eligibility Status */}
+                      <div style={{ padding: '10px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginBottom: '12px' }}>
+                        <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '6px' }}>Your Status:</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ color: '#888' }}>DTGC Value:</span>
+                            <span style={{ color: getUserDtgcValueUsd() >= DTGC_TIER_REQUIREMENT_USD ? '#4CAF50' : '#F44336', fontWeight: 600 }}>
+                              ${getUserDtgcValueUsd().toFixed(2)} {getUserDtgcValueUsd() >= DTGC_TIER_REQUIREMENT_USD ? '✅' : `(need $${DTGC_TIER_REQUIREMENT_USD})`}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ color: '#888' }}>Active Stakes:</span>
+                            <span style={{ color: hasActiveStakes() ? '#4CAF50' : '#888', fontWeight: 600 }}>
+                              {hasActiveStakes() ? `${stakeHistory?.length || 0} stakes ✅` : 'None'}
+                            </span>
+                          </div>
+                          <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                            <span style={{ color: '#FFD700' }}>Eligibility:</span>
+                            <span style={{ color: isGoldStarEligible() ? '#4CAF50' : '#F44336', fontWeight: 700 }}>
+                              {isGoldStarEligible() ? '🌟 GOLD STAR MEMBER' : '🔒 NOT ELIGIBLE'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Telegram Channel Access */}
+                      <div style={{ padding: '12px', background: isGoldStarEligible() ? 'rgba(76,175,80,0.15)' : 'rgba(100,100,100,0.15)', borderRadius: '8px', border: `1px solid ${isGoldStarEligible() ? 'rgba(76,175,80,0.3)' : 'rgba(100,100,100,0.3)'}` }}>
+                        <div style={{ color: isGoldStarEligible() ? '#4CAF50' : '#888', fontWeight: 700, fontSize: '0.8rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          📱 Telegram Alerts Channel
+                        </div>
+                        {isGoldStarEligible() ? (
+                          <a 
+                            href={TELEGRAM_CHANNEL_INVITE}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'block',
+                              padding: '10px 16px',
+                              background: 'linear-gradient(135deg, #0088cc, #0066aa)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              textDecoration: 'none',
+                              fontWeight: 700,
+                              fontSize: '0.85rem',
+                              textAlign: 'center',
+                            }}
+                          >
+                            📲 Join Private Alerts Channel
+                          </a>
+                        ) : (
+                          <div style={{ color: '#666', fontSize: '0.75rem', textAlign: 'center', padding: '8px' }}>
+                            🔒 Hold ${DTGC_TIER_REQUIREMENT_USD}+ DTGC or have active stake to unlock
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Links */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🔗 QUICK LINKS
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <a href="https://app.uniswap.org/swap?chain=mainnet&outputCurrency=0x2b591e99afe9f32eaa6214f7b7629768c40eeb39" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(98,126,234,0.2), rgba(98,126,234,0.05))', borderRadius: '8px', border: '1px solid rgba(98,126,234,0.3)', textDecoration: 'none', color: '#627EEA', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      🦄 Uniswap (ETH)
+                    </a>
+                    <a href="https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x57fde0a71132198bbec939b98976993d8d89d225" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(0,212,170,0.2), rgba(0,212,170,0.05))', borderRadius: '8px', border: '1px solid rgba(0,212,170,0.3)', textDecoration: 'none', color: '#00D4AA', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      💜 PulseX (PLS)
+                    </a>
+                    <a href="https://pulseramp.com" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.05))', borderRadius: '8px', border: '1px solid rgba(255,215,0,0.3)', textDecoration: 'none', color: '#FFD700', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      🌉 PulseRamp
+                    </a>
+                    <a href="https://portalbridge.com" 
+                       target="_blank" rel="noopener noreferrer"
+                       style={{ padding: '12px', background: 'linear-gradient(135deg, rgba(147,51,234,0.2), rgba(147,51,234,0.05))', borderRadius: '8px', border: '1px solid rgba(147,51,234,0.3)', textDecoration: 'none', color: '#9333EA', fontSize: '0.8rem', fontWeight: 600, textAlign: 'center' }}>
+                      🌀 PortalBridge
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* LEARN Tab - Educational Content */}
+            {gexTab === 'learn' && (
+              <div style={{ padding: '0' }}>
+                {/* What is GEX */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.05))', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '1.1rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    ⚡ What is GEX?
+                  </div>
+                  <div style={{ color: '#ddd', fontSize: '0.85rem', lineHeight: 1.6 }}>
+                    <strong>GEX (Growth Engine X-Chain)</strong> monitors the price difference of eHEX between Ethereum and PulseChain. When the spread exceeds 5%, there's an arbitrage opportunity to profit from buying on the cheaper chain and selling on the expensive one.
+                  </div>
+                </div>
+
+                {/* Key Terms */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginBottom: '16px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '16px' }}>📖 KEY TERMS</div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ padding: '12px', background: 'rgba(98,126,234,0.1)', borderRadius: '8px', borderLeft: '3px solid #627EEA' }}>
+                      <div style={{ color: '#627EEA', fontWeight: 700, fontSize: '0.85rem' }}>eHEX(E) - Ethereum HEX</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>The original HEX token on Ethereum mainnet</div>
+                    </div>
+                    
+                    <div style={{ padding: '12px', background: 'rgba(0,212,170,0.1)', borderRadius: '8px', borderLeft: '3px solid #00D4AA' }}>
+                      <div style={{ color: '#00D4AA', fontWeight: 700, fontSize: '0.85rem' }}>eHEX(P) - PulseChain HEX</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>HEX bridged from Ethereum to PulseChain</div>
+                    </div>
+                    
+                    <div style={{ padding: '12px', background: 'rgba(255,215,0,0.1)', borderRadius: '8px', borderLeft: '3px solid #FFD700' }}>
+                      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.85rem' }}>Spread</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>The % price difference between chains. Higher = more profit potential</div>
+                    </div>
+                    
+                    <div style={{ padding: '12px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px', borderLeft: '3px solid #4CAF50' }}>
+                      <div style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.85rem' }}>Arbitrage</div>
+                      <div style={{ color: '#888', fontSize: '0.75rem' }}>Profiting from price differences by buying low, selling high</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Risk Warning */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(244,67,54,0.15), rgba(244,67,54,0.05))', borderRadius: '16px', padding: '20px', border: '1px solid rgba(244,67,54,0.3)' }}>
+                  <div style={{ color: '#F44336', fontWeight: 700, fontSize: '0.9rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    ⚠️ RISKS TO CONSIDER
+                  </div>
+                  
+                  <ul style={{ margin: 0, paddingLeft: '20px', color: '#ddd', fontSize: '0.8rem', lineHeight: 1.8 }}>
+                    <li><strong>Gas fees:</strong> ETH gas can be $5-$50+ during congestion</li>
+                    <li><strong>Bridge fees:</strong> ~0.1% + wait time (10-30 min)</li>
+                    <li><strong>Price slippage:</strong> Large trades move the price</li>
+                    <li><strong>Spread can close:</strong> Others may arbitrage before you</li>
+                    <li><strong>DYOR:</strong> This is not financial advice</li>
+                  </ul>
+                </div>
+
+                {/* Pro Tips */}
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '20px', marginTop: '16px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.9rem', marginBottom: '12px' }}>💡 PRO TIPS</div>
+                  
+                  <div style={{ color: '#ddd', fontSize: '0.8rem', lineHeight: 1.8 }}>
+                    <div style={{ marginBottom: '8px' }}>✓ Wait for spreads &gt;5% to cover fees</div>
+                    <div style={{ marginBottom: '8px' }}>✓ Check ETH gas before trading (low = better)</div>
+                    <div style={{ marginBottom: '8px' }}>✓ Start with small amounts to test</div>
+                    <div style={{ marginBottom: '8px' }}>✓ Use limit orders to avoid slippage</div>
+                    <div>✓ Monitor both prices during bridge wait</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* DTGC Balance Footer */}
+            {account && (
+              <div style={{
+                marginTop: '20px',
+                padding: '12px',
+                background: 'rgba(0,0,0,0.3)',
+                borderRadius: '10px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <span style={{ color: '#666', fontSize: '0.7rem' }}>{account.slice(0, 6)}...{account.slice(-4)}</span>
+                <span style={{ color: '#4CAF50', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  ${formatNumber(parseFloat(dtgcBalance || 0) * (livePrices.dtgc || 0), 0)} DTGC
+                  <span style={{ color: '#4CAF50' }}>✓</span>
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ZAPP ARB LASER LINK MODAL - One-click arbitrage route calculator */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {showLaserLink && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.95)',
+          zIndex: 10002,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            background: 'linear-gradient(135deg, #0a0a15 0%, #1a1a2e 100%)',
+            borderRadius: '24px',
+            border: '2px solid',
+            borderImage: 'linear-gradient(135deg, #FF00FF, #00FFFF, #FFD700) 1',
+            boxShadow: '0 0 60px rgba(255,0,255,0.3), 0 0 100px rgba(0,255,255,0.2)',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px',
+              background: 'linear-gradient(135deg, rgba(255,0,255,0.2), rgba(0,255,255,0.1))',
+              borderBottom: '1px solid rgba(255,255,255,0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}>
+              <div>
+                <h2 style={{ 
+                  margin: 0, 
+                  fontSize: '1.3rem', 
+                  fontWeight: 900,
+                  background: 'linear-gradient(135deg, #FF00FF, #00FFFF, #FFD700)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}>
+                  ⚡ ZAPP ARB LASER LINK ⚡
+                </h2>
+                <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '4px' }}>
+                  Optimal arbitrage route calculator
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLaserLink(false)}
+                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', color: '#fff', fontSize: '1.2rem', cursor: 'pointer' }}
+              >×</button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '20px 24px' }}>
+              {/* Amount Input */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ color: '#888', fontSize: '0.75rem', display: 'block', marginBottom: '8px' }}>
+                  💰 Investment Amount (USD)
+                </label>
+                <input
+                  type="number"
+                  value={laserLinkAmount}
+                  onChange={(e) => setLaserLinkAmount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '1px solid rgba(255,0,255,0.3)',
+                    borderRadius: '12px',
+                    color: '#fff',
+                    fontSize: '1.2rem',
+                    fontWeight: 700,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  placeholder="1000"
+                />
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                  {[100, 500, 1000, 5000].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => setLaserLinkAmount(amt.toString())}
+                      style={{
+                        flex: 1,
+                        padding: '8px',
+                        background: laserLinkAmount === amt.toString() ? 'rgba(255,0,255,0.3)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${laserLinkAmount === amt.toString() ? '#FF00FF' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                      }}
+                    >${amt}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Current Spread Display */}
+              <div style={{
+                padding: '16px',
+                background: `linear-gradient(135deg, ${hexPrices.spreadPercent > 0 ? 'rgba(76,175,80,0.2)' : 'rgba(244,67,54,0.2)'}, transparent)`,
+                borderRadius: '12px',
+                border: `1px solid ${hexPrices.spreadPercent > 0 ? 'rgba(76,175,80,0.3)' : 'rgba(244,67,54,0.3)'}`,
+                marginBottom: '20px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#888', fontSize: '0.8rem' }}>Current Spread:</span>
+                  <span style={{ 
+                    color: hexPrices.spreadPercent > 0 ? '#4CAF50' : '#F44336', 
+                    fontSize: '1.3rem', 
+                    fontWeight: 900 
+                  }}>
+                    {hexPrices.spreadPercent >= 0 ? '+' : ''}{hexPrices.spreadPercent.toFixed(2)}%
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+                  <span style={{ color: '#627EEA', fontSize: '0.75rem' }}>eHEX(E): ${hexPrices.eHEX.toFixed(6)}</span>
+                  <span style={{ color: '#00D4AA', fontSize: '0.75rem' }}>eHEX(P): ${hexPrices.pHEX.toFixed(6)}</span>
+                </div>
+              </div>
+
+              {/* Route Steps */}
+              {laserLinkRoute && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px' }}>
+                    🛤️ OPTIMAL ROUTE
+                  </div>
+                  
+                  {laserLinkRoute.steps.map((step, idx) => (
+                    <div key={idx}>
+                      <div style={{
+                        padding: '14px 16px',
+                        background: step.chain === 'ETH' ? 'rgba(98,126,234,0.15)' : 
+                                   step.chain === 'PLS' ? 'rgba(0,212,170,0.15)' : 
+                                   'rgba(255,215,0,0.15)',
+                        borderRadius: '10px',
+                        border: `1px solid ${step.chain === 'ETH' ? 'rgba(98,126,234,0.3)' : 
+                                            step.chain === 'PLS' ? 'rgba(0,212,170,0.3)' : 
+                                            'rgba(255,215,0,0.3)'}`,
+                        marginBottom: idx < laserLinkRoute.steps.length - 1 ? '0' : '0',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                          <span style={{
+                            width: '24px', height: '24px', borderRadius: '50%',
+                            background: step.chain === 'ETH' ? '#627EEA' : 
+                                        step.chain === 'PLS' ? '#00D4AA' : '#FFD700',
+                            color: step.chain === 'BRIDGE' ? '#000' : '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.75rem', fontWeight: 700,
+                          }}>{idx + 1}</span>
+                          <div>
+                            <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>{step.action}</div>
+                            <div style={{ color: '#888', fontSize: '0.7rem' }}>via {step.dex}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#888', fontSize: '0.75rem' }}>
+                          <span>Gas: ~${step.gasUsd.toFixed(2)}</span>
+                          <span style={{ color: '#4CAF50' }}>→ {step.output}</span>
+                        </div>
+                      </div>
+                      {idx < laserLinkRoute.steps.length - 1 && (
+                        <div style={{ textAlign: 'center', padding: '6px 0', color: '#FFD700', fontSize: '1.2rem' }}>⬇️</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Profit Summary */}
+              {laserLinkRoute && (
+                <div style={{
+                  padding: '20px',
+                  background: laserLinkRoute.isProfit 
+                    ? 'linear-gradient(135deg, rgba(76,175,80,0.3), rgba(76,175,80,0.1))'
+                    : 'linear-gradient(135deg, rgba(244,67,54,0.3), rgba(244,67,54,0.1))',
+                  borderRadius: '16px',
+                  border: `2px solid ${laserLinkRoute.isProfit ? '#4CAF50' : '#F44336'}`,
+                  marginBottom: '20px',
+                }}>
+                  <div style={{ color: '#888', fontSize: '0.75rem', marginBottom: '8px' }}>📊 PROFIT SUMMARY</div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Input</div>
+                      <div style={{ color: '#fff', fontSize: '1rem', fontWeight: 700 }}>${laserLinkRoute.inputAmount.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Output</div>
+                      <div style={{ color: '#4CAF50', fontSize: '1rem', fontWeight: 700 }}>${laserLinkRoute.outputAmount.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Total Fees</div>
+                      <div style={{ color: '#F44336', fontSize: '0.9rem' }}>-${laserLinkRoute.totalFees.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Net Profit</div>
+                      <div style={{ 
+                        color: laserLinkRoute.isProfit ? '#4CAF50' : '#F44336', 
+                        fontSize: '1.2rem', 
+                        fontWeight: 900 
+                      }}>
+                        {laserLinkRoute.isProfit ? '+' : ''}${laserLinkRoute.netProfit.toFixed(2)}
+                        <span style={{ fontSize: '0.75rem', marginLeft: '4px' }}>
+                          ({laserLinkRoute.profitPercent.toFixed(2)}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {!laserLinkRoute.isProfit && (
+                    <div style={{ color: '#F44336', fontSize: '0.75rem', marginTop: '12px', padding: '8px', background: 'rgba(244,67,54,0.2)', borderRadius: '8px' }}>
+                      ⚠️ Spread too small - fees exceed profit. Wait for larger spread.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {laserLinkRoute?.direction === 'ETH_TO_PLS' ? (
+                  <>
+                    <a href={`https://app.uniswap.org/swap?chain=mainnet&outputCurrency=0x2b591e99afe9f32eaa6214f7b7629768c40eeb39&exactAmount=${laserLinkAmount}`}
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #627EEA, #4a5bc7)',
+                         borderRadius: '12px',
+                         color: '#fff',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🦄 Step 1: Buy eHEX on Uniswap
+                    </a>
+                    <a href="https://app.libertyswap.io/bridge"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #FFD700, #DAA520)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🌉 Step 2: Bridge via Liberty Swap
+                    </a>
+                    <a href="https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x57fde0a71132198bbec939b98976993d8d89d225"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #00D4AA, #00a88a)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      💜 Step 3: Sell on PulseX
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <a href="https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x57fde0a71132198bbec939b98976993d8d89d225"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #00D4AA, #00a88a)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      💜 Step 1: Buy eHEX on PulseX
+                    </a>
+                    <a href="https://app.libertyswap.io/bridge"
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #FFD700, #DAA520)',
+                         borderRadius: '12px',
+                         color: '#000',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🌉 Step 2: Bridge via Liberty Swap
+                    </a>
+                    <a href={`https://app.uniswap.org/swap?chain=mainnet&inputCurrency=0x2b591e99afe9f32eaa6214f7b7629768c40eeb39`}
+                       target="_blank" rel="noopener noreferrer"
+                       style={{
+                         padding: '14px 20px',
+                         background: 'linear-gradient(135deg, #627EEA, #4a5bc7)',
+                         borderRadius: '12px',
+                         color: '#fff',
+                         textDecoration: 'none',
+                         fontWeight: 700,
+                         textAlign: 'center',
+                         fontSize: '0.9rem',
+                       }}>
+                      🦄 Step 3: Sell on Uniswap
+                    </a>
+                  </>
+                )}
+              </div>
+
+              {/* Footer Note */}
+              <div style={{ 
+                marginTop: '16px', 
+                padding: '12px', 
+                background: 'rgba(255,215,0,0.1)', 
+                borderRadius: '10px',
+                border: '1px solid rgba(255,215,0,0.2)',
+              }}>
+                <div style={{ color: '#FFD700', fontSize: '0.7rem', fontWeight: 600, marginBottom: '4px' }}>
+                  ⚡ ZAPPER X-CHAIN INTEGRATION
+                </div>
+                <div style={{ color: '#888', fontSize: '0.65rem', lineHeight: 1.5 }}>
+                  Route calculated using live DexScreener prices. Estimates include gas + bridge fees.
+                  Always DYOR and test with small amounts first.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -14992,7 +16485,6 @@ export default function App() {
           {toast.message}
         </div>
       )}
-      <GEXWidget walletAddress={account} dtgcBalance={parseFloat(dtgcBalance) || 0} dtgcPrice={0.0006861} position="bottom-right" />
     </ThemeContext.Provider>
   );
 }

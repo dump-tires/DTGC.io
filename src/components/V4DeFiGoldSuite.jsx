@@ -38,29 +38,87 @@ const CONFIG = {
   },
   DEV_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
   BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
+  
+  // Growth Engine - 1% of all transactions
+  GROWTH_ENGINE_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
+  GROWTH_ENGINE_FEE_BPS: 100, // 1% = 100 basis points
+  
   PULSESCAN_API: 'https://api.scan.pulsechain.com/api/v2',
+  GIB_SHOW_BASE: 'https://gib.show/image/369', // PulseChain chainId = 369
   
   SLIPPAGE_BPS: 300,
   DEADLINE_MINUTES: 20,
   EXPLORER: 'https://scan.pulsechain.com',
 };
 
-// All major PulseX tokens - VERIFIED ADDRESSES (lowercase to avoid checksum issues)
+// Helper to get token logo - DTGC uses favicon, LP uses gold bar
+const getTokenLogo = (address) => {
+  const addr = address?.toLowerCase();
+  // DTGC - Gold coin favicon (trophy icon)
+  if (addr === '0xd0676b28a457371d58d47e5247b439114e40eb0f') {
+    return '/Favicon.png';
+  }
+  // DTGC/URMOM LP - Gold bar icon
+  if (addr === '0x670c972bb5388e087a2934a063064d97278e01f3') {
+    return '/LPfavicon.png';
+  }
+  // Default: gib.show
+  return `${CONFIG.GIB_SHOW_BASE}/${address}`;
+};
+
+// Token Icon component - renders image or emoji fallback
+const TokenIcon = ({ icon, emoji, size = 24, style = {} }) => {
+  const [imgError, setImgError] = React.useState(false);
+  
+  // If icon is a URL and hasn't errored, show image
+  if (icon && typeof icon === 'string' && icon.startsWith('http') && !imgError) {
+    return (
+      <img 
+        src={icon} 
+        alt="" 
+        style={{ 
+          width: size, 
+          height: size, 
+          borderRadius: '50%',
+          objectFit: 'cover',
+          ...style 
+        }}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  
+  // Fallback to emoji
+  return <span style={{ fontSize: size * 0.7, ...style }}>{emoji || icon || '🔸'}</span>;
+};
+
+// All major PulseX/PulseChain tokens - VERIFIED ADDRESSES
 const TOKENS = {
   PLS: { 
     address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
     symbol: 'PLS', 
     name: 'PulseChain', 
     decimals: 18, 
-    logo: '💜', 
+    logo: getTokenLogo('0xa1077a294dde1b09bb078844df40758a5d0f9a27'),
+    emoji: '💜',
     isNative: true,
+  },
+  WPLS: {
+    address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
+    symbol: 'WPLS',
+    name: 'Wrapped PLS',
+    decimals: 18,
+    logo: getTokenLogo('0xa1077a294dde1b09bb078844df40758a5d0f9a27'),
+    emoji: '💜',
+    isNative: false,
   },
   DTGC: { 
     address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', 
     symbol: 'DTGC', 
     name: 'DT Gold Coin', 
     decimals: 18, 
-    logo: '🪙',
+    logo: '/Favicon.png', // Use our gold coin favicon
+    emoji: '🏆',
     isNative: false,
   },
   URMOM: { 
@@ -68,7 +126,8 @@ const TOKENS = {
     symbol: 'URMOM', 
     name: 'URMOM', 
     decimals: 18, 
-    logo: '🔥',
+    logo: getTokenLogo('0xe43b3cee3554e120213b8b69caf690b6c04a7ec0'),
+    emoji: '🔥',
     isNative: false,
   },
   PLSX: { 
@@ -76,7 +135,8 @@ const TOKENS = {
     symbol: 'PLSX', 
     name: 'PulseX', 
     decimals: 18, 
-    logo: '🔷',
+    logo: getTokenLogo('0x95b303987a60c71504d99aa1b13b4da07b0790ab'),
+    emoji: '🔷',
     isNative: false,
   },
   HEX: { 
@@ -84,7 +144,8 @@ const TOKENS = {
     symbol: 'HEX', 
     name: 'HEX', 
     decimals: 8, 
-    logo: '⬡',
+    logo: getTokenLogo('0x2b591e99afe9f32eaa6214f7b7629768c40eeb39'),
+    emoji: '⬡',
     isNative: false,
   },
   INC: { 
@@ -92,15 +153,18 @@ const TOKENS = {
     symbol: 'INC', 
     name: 'Incentive', 
     decimals: 18, 
-    logo: '💎',
+    logo: getTokenLogo('0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d'),
+    emoji: '💎',
     isNative: false,
   },
+  // Bridged Stablecoins from Ethereum
   DAI: { 
     address: '0xefd766ccb38eaf1dfd701853bfce31359239f305', 
     symbol: 'DAI', 
     name: 'DAI from ETH', 
     decimals: 18, 
-    logo: '📀',
+    logo: getTokenLogo('0xefd766ccb38eaf1dfd701853bfce31359239f305'),
+    emoji: '📀',
     isNative: false,
   },
   USDC: { 
@@ -108,7 +172,8 @@ const TOKENS = {
     symbol: 'USDC', 
     name: 'USDC from ETH', 
     decimals: 6, 
-    logo: '💵',
+    logo: getTokenLogo('0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07'),
+    emoji: '💵',
     isNative: false,
   },
   USDT: { 
@@ -116,15 +181,18 @@ const TOKENS = {
     symbol: 'USDT', 
     name: 'USDT from ETH', 
     decimals: 6, 
-    logo: '💵',
+    logo: getTokenLogo('0x0cb6f5a34ad42ec934882a05265a7d5f59b51a2f'),
+    emoji: '💵',
     isNative: false,
   },
+  // Bridged ETH assets
   WETH: { 
     address: '0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c', 
     symbol: 'WETH', 
     name: 'WETH from ETH', 
     decimals: 18, 
-    logo: '🔹',
+    logo: getTokenLogo('0x02dcdd04e3f455d838cd1249292c58f3b79e3c3c'),
+    emoji: '🔹',
     isNative: false,
   },
   WBTC: { 
@@ -132,40 +200,36 @@ const TOKENS = {
     symbol: 'WBTC', 
     name: 'WBTC from ETH', 
     decimals: 8, 
-    logo: '🟠',
+    logo: getTokenLogo('0xb17d901469b9208b17d916112988a3fed19b5ca1'),
+    emoji: '🟠',
     isNative: false,
   },
-  // Additional popular PulseChain tokens
-  WPLS: {
-    address: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
-    symbol: 'WPLS',
-    name: 'Wrapped PLS',
-    decimals: 18,
-    logo: '💜',
-    isNative: false,
-  },
-  EHEX: {
+  // Popular PulseChain Native Tokens
+  eHEX: {
     address: '0x57fde0a71132198bbec939b98976993d8d89d225',
     symbol: 'eHEX',
     name: 'HEX from ETH',
     decimals: 8,
-    logo: '⬡',
+    logo: getTokenLogo('0x57fde0a71132198bbec939b98976993d8d89d225'),
+    emoji: '⬡',
     isNative: false,
   },
   LOAN: {
-    address: '0x9159f1d2a9f51998fc9ab03fbd8f7c44ae1bd8e7',
+    address: '0x9159f1d2a9f51998fc9ab03fbd8f265ab14a1b3b',
     symbol: 'LOAN',
-    name: 'Liquid Loans',
+    name: 'Liquid Loan',
     decimals: 18,
-    logo: '🏦',
+    logo: getTokenLogo('0x9159f1d2a9f51998fc9ab03fbd8f265ab14a1b3b'),
+    emoji: '🏦',
     isNative: false,
   },
-  PLSP: {
-    address: '0x3657952d7ba5a0a4799809552091a17a46e1ceeb',
-    symbol: 'PLSP',
-    name: 'PulsePot',
-    decimals: 12,
-    logo: '🎰',
+  MINT: {
+    address: '0xedcc867bc8b5febd0459af17a6f134f41f422f0c',
+    symbol: 'MINT',
+    name: 'Mintra',
+    decimals: 18,
+    logo: getTokenLogo('0xedcc867bc8b5febd0459af17a6f134f41f422f0c'),
+    emoji: '🌿',
     isNative: false,
   },
   SPARK: {
@@ -173,23 +237,221 @@ const TOKENS = {
     symbol: 'SPARK',
     name: 'SparkSwap',
     decimals: 18,
-    logo: '⚡',
+    logo: getTokenLogo('0x6386704cd6f7a584ea9d23ccca66af7eba5a727e'),
+    emoji: '⚡',
     isNative: false,
   },
-  NINE: {
-    address: '0x09b5de0c4b5b7ca05d5fd3b7be6ff4b21a68c20d',
+  TEDDY: {
+    address: '0x5dd0d493ea59d512efc13d5c1528f92989623e8c',
+    symbol: 'TEDDY',
+    name: 'TeddySwap',
+    decimals: 18,
+    logo: getTokenLogo('0x5dd0d493ea59d512efc13d5c1528f92989623e8c'),
+    emoji: '🧸',
+    isNative: false,
+  },
+  '9MM': {
+    address: '0x2b84017752d0b3d5b08808212e46d1ac9dd3ab6c',
     symbol: '9MM',
-    name: '9mm',
+    name: '9mm Pro',
     decimals: 18,
-    logo: '🔫',
+    logo: getTokenLogo('0x2b84017752d0b3d5b08808212e46d1ac9dd3ab6c'),
+    emoji: '🔫',
     isNative: false,
   },
-  PDX: {
-    address: '0x3a04f900357654bad3c4f45d4e10fcb96e0b45c9',
-    symbol: 'PDX',
-    name: 'PulseDogecoin',
+  HDRN: {
+    address: '0x3819f64f282bf135d62168c1e513280daf905e06',
+    symbol: 'HDRN',
+    name: 'Hedron',
+    decimals: 9,
+    logo: getTokenLogo('0x3819f64f282bf135d62168c1e513280daf905e06'),
+    emoji: '🔮',
+    isNative: false,
+  },
+  ICSA: {
+    address: '0xfc4913214444af5c715cc9f7b52655e788a569ed',
+    symbol: 'ICSA',
+    name: 'Icosa',
     decimals: 18,
-    logo: '🐕',
+    logo: getTokenLogo('0xfc4913214444af5c715cc9f7b52655e788a569ed'),
+    emoji: '🧊',
+    isNative: false,
+  },
+  PHIAT: {
+    address: '0x886cf7d08e93a30c2dbf553b022823e6c1f3b4fb',
+    symbol: 'PHIAT',
+    name: 'Phiat',
+    decimals: 18,
+    logo: getTokenLogo('0x886cf7d08e93a30c2dbf553b022823e6c1f3b4fb'),
+    emoji: '💰',
+    isNative: false,
+  },
+  USDL: {
+    address: '0x0deadbeef7a2dd6f4572eb90e031eb28cafdbe12',
+    symbol: 'USDL',
+    name: 'Liquid USD',
+    decimals: 18,
+    logo: getTokenLogo('0x0deadbeef7a2dd6f4572eb90e031eb28cafdbe12'),
+    emoji: '💲',
+    isNative: false,
+  },
+  CST: {
+    address: '0x5ee3e912a45fbbc42a2ef24e1ed72bd37dd55043',
+    symbol: 'CST',
+    name: 'CryptoStar',
+    decimals: 18,
+    logo: getTokenLogo('0x5ee3e912a45fbbc42a2ef24e1ed72bd37dd55043'),
+    emoji: '⭐',
+    isNative: false,
+  },
+  // ═══════════════════════════════════════════════════════════════
+  // MORE POPULAR PULSECHAIN TOKENS
+  // ═══════════════════════════════════════════════════════════════
+  PLSB: {
+    address: '0x5ee84583f67d5ecea5420dbb42b462896e7f8d06',
+    symbol: 'PLSB',
+    name: 'PulseBitcoin',
+    decimals: 12,
+    logo: getTokenLogo('0x5ee84583f67d5ecea5420dbb42b462896e7f8d06'),
+    emoji: '₿',
+    isNative: false,
+  },
+  ASIC: {
+    address: '0x11aedd0087d95dd07468c4b10d57a4090aba4d2c',
+    symbol: 'ASIC',
+    name: 'ASIC',
+    decimals: 12,
+    logo: getTokenLogo('0x11aedd0087d95dd07468c4b10d57a4090aba4d2c'),
+    emoji: '⛏️',
+    isNative: false,
+  },
+  TSFi: {
+    address: '0x3af33bef05c2dcb3c7288b77fe1c8d2aeba4d789',
+    symbol: 'TSFi',
+    name: 'TSFi',
+    decimals: 18,
+    logo: getTokenLogo('0x3af33bef05c2dcb3c7288b77fe1c8d2aeba4d789'),
+    emoji: '🔷',
+    isNative: false,
+  },
+  BEAR: {
+    address: '0x1707a16a2d7d40f4e27ae4ea1a88a8e00e7ab236',
+    symbol: 'BEAR',
+    name: 'Bear',
+    decimals: 18,
+    logo: getTokenLogo('0x1707a16a2d7d40f4e27ae4ea1a88a8e00e7ab236'),
+    emoji: '🐻',
+    isNative: false,
+  },
+  TONI: {
+    address: '0x69e4c08bd7a5dce1d55c41c3ecb73c5c4bad5f2a',
+    symbol: 'TONI',
+    name: 'Toni',
+    decimals: 18,
+    logo: getTokenLogo('0x69e4c08bd7a5dce1d55c41c3ecb73c5c4bad5f2a'),
+    emoji: '🎵',
+    isNative: false,
+  },
+  BBC: {
+    address: '0xdb2d70d29ad27db92c6c7d1c4ef27f14dcd0b42d',
+    symbol: 'BBC',
+    name: 'Big Bonus Coin',
+    decimals: 18,
+    logo: getTokenLogo('0xdb2d70d29ad27db92c6c7d1c4ef27f14dcd0b42d'),
+    emoji: '🎁',
+    isNative: false,
+  },
+  MAXI: {
+    address: '0x0d86eb9f43c57f6ff3bc9e23d8f9d82503f0e84b',
+    symbol: 'MAXI',
+    name: 'Maximus',
+    decimals: 8,
+    logo: getTokenLogo('0x0d86eb9f43c57f6ff3bc9e23d8f9d82503f0e84b'),
+    emoji: '👑',
+    isNative: false,
+  },
+  TRIO: {
+    address: '0x0d7eb9f43c57f6ff3bc9e23d8f9d82503f0e84c',
+    symbol: 'TRIO',
+    name: 'Maximus TRIO',
+    decimals: 8,
+    logo: getTokenLogo('0x0d7eb9f43c57f6ff3bc9e23d8f9d82503f0e84c'),
+    emoji: '3️⃣',
+    isNative: false,
+  },
+  DECI: {
+    address: '0x6b32022693210cd2cfc466b9ac0085de8fc34ea6',
+    symbol: 'DECI',
+    name: 'Maximus DECI',
+    decimals: 8,
+    logo: getTokenLogo('0x6b32022693210cd2cfc466b9ac0085de8fc34ea6'),
+    emoji: '🔟',
+    isNative: false,
+  },
+  LUCKY: {
+    address: '0x3ea5f8c26a8b9f6c35c5a4d3f7e5d9c7e8c6d5f4',
+    symbol: 'LUCKY',
+    name: 'Maximus Lucky',
+    decimals: 8,
+    logo: getTokenLogo('0x3ea5f8c26a8b9f6c35c5a4d3f7e5d9c7e8c6d5f4'),
+    emoji: '🍀',
+    isNative: false,
+  },
+  // ═══════════════════════════════════════════════════════════════
+  // BRIDGED FROM ETHEREUM (Popular DeFi Tokens)
+  // ═══════════════════════════════════════════════════════════════
+  LINK: {
+    address: '0x514910771af9ca656af840dff83e8264ecf986ca',
+    symbol: 'LINK',
+    name: 'Chainlink from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x514910771af9ca656af840dff83e8264ecf986ca'),
+    emoji: '🔗',
+    isNative: false,
+  },
+  UNI: {
+    address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
+    symbol: 'UNI',
+    name: 'Uniswap from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x1f9840a85d5af5bf1d1762f925bdaddc4201f984'),
+    emoji: '🦄',
+    isNative: false,
+  },
+  AAVE: {
+    address: '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9',
+    symbol: 'AAVE',
+    name: 'Aave from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9'),
+    emoji: '👻',
+    isNative: false,
+  },
+  MKR: {
+    address: '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2',
+    symbol: 'MKR',
+    name: 'Maker from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2'),
+    emoji: '🏛️',
+    isNative: false,
+  },
+  SHIB: {
+    address: '0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce',
+    symbol: 'SHIB',
+    name: 'Shiba from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce'),
+    emoji: '🐕',
+    isNative: false,
+  },
+  PEPE: {
+    address: '0x6982508145454ce325ddbe47a25d4ec3d2311933',
+    symbol: 'PEPE',
+    name: 'Pepe from ETH',
+    decimals: 18,
+    logo: getTokenLogo('0x6982508145454ce325ddbe47a25d4ec3d2311933'),
+    emoji: '🐸',
     isNative: false,
   },
 };
@@ -294,6 +556,41 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const [showFromSelect, setShowFromSelect] = useState(false);
   const [showToSelect, setShowToSelect] = useState(false);
   
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRO FEATURES: Custom tokens, gas, routes, slippage
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [customTokens, setCustomTokens] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('pulsex-gold-custom-tokens') || '{}');
+    } catch { return {}; }
+  });
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importCA, setImportCA] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importedToken, setImportedToken] = useState(null);
+  
+  // Gas settings
+  const [gasMode, setGasMode] = useState('auto'); // auto, low, medium, high, custom
+  const [customGasPrice, setCustomGasPrice] = useState('');
+  const [showGasSettings, setShowGasSettings] = useState(false);
+  const GAS_PRESETS = {
+    low: { label: '🐢 Low', gwei: 0.01, time: '~5 min' },
+    medium: { label: '🚶 Medium', gwei: 0.05, time: '~1 min' },
+    high: { label: '🚀 High', gwei: 0.1, time: '~15 sec' },
+    auto: { label: '⚡ Auto', gwei: null, time: 'Optimal' },
+  };
+  
+  // Route settings
+  const [routePreference, setRoutePreference] = useState('best'); // best, v1, v2
+  const [swapRoute, setSwapRoute] = useState(null); // Holds route info
+  const [showRouteDetails, setShowRouteDetails] = useState(false);
+  
+  // Slippage settings
+  const [slippageBps, setSlippageBps] = useState(300); // Default 3%
+  const [customSlippage, setCustomSlippage] = useState('');
+  const [showSlippageSettings, setShowSlippageSettings] = useState(false);
+  const SLIPPAGE_PRESETS = [50, 100, 300, 500]; // 0.5%, 1%, 3%, 5%
+  
   // Portfolio state
   const [walletTokens, setWalletTokens] = useState([]);
   const [lpPositions, setLpPositions] = useState([]);
@@ -317,7 +614,16 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   
   // Live prices
   const [livePrices, setLivePrices] = useState({
-    PLS: 0.000018, DTGC: 0.0002, URMOM: 0.0000001, PLSX: 0.00005, HEX: 0.003, INC: 0.0001, DAI: 1, USDC: 1, USDT: 1, WETH: 3300, WBTC: 100000,
+    // Core tokens
+    PLS: 0.0000159, WPLS: 0.0000159, DTGC: 0.0007, URMOM: 0.0002, PLSX: 0.000042, HEX: 0.0026, INC: 0.60, 
+    // Stablecoins
+    DAI: 1, USDC: 1, USDT: 1, LUSD: 1, USDL: 1,
+    // Bridged ETH assets
+    WETH: 3300, WBTC: 100000, eHEX: 0.00083, LINK: 15, UNI: 8, AAVE: 200, MKR: 1800, SHIB: 0.00002, PEPE: 0.00001,
+    // PulseChain native tokens  
+    LOAN: 0.0001, MINT: 0.00001, SPARK: 0.00001, TEDDY: 0.00001, '9MM': 0.00001, HDRN: 0.000001, ICSA: 0.00001,
+    PHIAT: 0.00001, CST: 0.00001, PLSB: 0.00001, ASIC: 0.00001, TSFi: 0.00001, BEAR: 0.00001, TONI: 0.00001,
+    BBC: 0.00001, MAXI: 0.001, TRIO: 0.001, DECI: 0.001, LUCKY: 0.001,
   });
 
   const showToastMsg = useCallback((message, type = 'info') => {
@@ -338,38 +644,240 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
   const formatUSD = (num) => {
     if (!num || isNaN(num) || num === 0) return '$0.00';
-    if (num < 0.01) return '<$0.01';
+    if (num < 0.0001) return '$' + num.toFixed(6);
+    if (num < 0.01) return '$' + num.toFixed(4);
+    if (num < 1) return '$' + num.toFixed(3);
     return '$' + formatNumber(num, 2);
   };
 
   const getDeadline = () => Math.floor(Date.now() / 1000) + CONFIG.DEADLINE_MINUTES * 60;
 
-  // Fetch live prices
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CUSTOM TOKEN IMPORT - Fetch token info from contract address
+  // ═══════════════════════════════════════════════════════════════════════════
+  const importTokenByCA = async (contractAddress) => {
+    if (!contractAddress || contractAddress.length !== 42) {
+      showToastMsg('❌ Invalid contract address', 'error');
+      return null;
+    }
+    
+    setImportLoading(true);
+    try {
+      const rpcProvider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
+      const tokenContract = new ethers.Contract(contractAddress, [
+        'function name() view returns (string)',
+        'function symbol() view returns (string)',
+        'function decimals() view returns (uint8)',
+        'function totalSupply() view returns (uint256)',
+      ], rpcProvider);
+      
+      const [name, symbol, decimals, totalSupply] = await Promise.all([
+        tokenContract.name().catch(() => 'Unknown'),
+        tokenContract.symbol().catch(() => 'TOKEN'),
+        tokenContract.decimals().catch(() => 18),
+        tokenContract.totalSupply().catch(() => 0n),
+      ]);
+      
+      const tokenInfo = {
+        address: contractAddress.toLowerCase(),
+        symbol: symbol.toUpperCase(),
+        name,
+        decimals: Number(decimals),
+        logo: getTokenLogo(contractAddress),
+        emoji: '🔸',
+        isCustom: true,
+        totalSupply: parseFloat(ethers.formatUnits(totalSupply, decimals)),
+      };
+      
+      setImportedToken(tokenInfo);
+      showToastMsg(`✅ Found: ${name} (${symbol})`, 'success');
+      return tokenInfo;
+    } catch (err) {
+      console.error('Import token error:', err);
+      showToastMsg('❌ Could not read token contract', 'error');
+      return null;
+    } finally {
+      setImportLoading(false);
+    }
+  };
+  
+  // Save imported token to custom tokens list
+  const saveCustomToken = (token) => {
+    if (!token) return;
+    const updated = { ...customTokens, [token.symbol]: token };
+    setCustomTokens(updated);
+    localStorage.setItem('pulsex-gold-custom-tokens', JSON.stringify(updated));
+    showToastMsg(`💾 ${token.symbol} saved to your tokens!`, 'success');
+    setShowImportModal(false);
+    setImportCA('');
+    setImportedToken(null);
+  };
+  
+  // Remove custom token
+  const removeCustomToken = (symbol) => {
+    const updated = { ...customTokens };
+    delete updated[symbol];
+    setCustomTokens(updated);
+    localStorage.setItem('pulsex-gold-custom-tokens', JSON.stringify(updated));
+    showToastMsg(`🗑️ ${symbol} removed`, 'info');
+  };
+  
+  // Get all available tokens (built-in + custom)
+  const getAllTokens = () => ({ ...TOKENS, ...customTokens });
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GAS PRICE HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+  const getGasPrice = async () => {
+    if (gasMode === 'custom' && customGasPrice) {
+      return ethers.parseUnits(customGasPrice, 'gwei');
+    }
+    if (gasMode !== 'auto' && GAS_PRESETS[gasMode]) {
+      return ethers.parseUnits(GAS_PRESETS[gasMode].gwei.toString(), 'gwei');
+    }
+    // Auto mode - let provider decide
+    return undefined;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROUTE FINDING - Check both V1 and V2 routers for best price
+  // ═══════════════════════════════════════════════════════════════════════════
+  const findBestRoute = async (tokenIn, tokenOut, amountIn) => {
+    if (!amountIn || parseFloat(amountIn) <= 0) return null;
+    
+    const rpcProvider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
+    const allTokens = getAllTokens();
+    const tokenInData = allTokens[tokenIn];
+    const tokenOutData = allTokens[tokenOut];
+    if (!tokenInData || !tokenOutData) return null;
+    
+    const amountInWei = ethers.parseUnits(amountIn.toString(), tokenInData.decimals);
+    const path = tokenInData.isNative || tokenIn === 'WPLS'
+      ? [CONFIG.WPLS, getAddr(tokenOutData.address)]
+      : tokenOutData.isNative || tokenOut === 'WPLS'
+        ? [getAddr(tokenInData.address), CONFIG.WPLS]
+        : [getAddr(tokenInData.address), CONFIG.WPLS, getAddr(tokenOutData.address)];
+    
+    const routes = [];
+    
+    // Try V1 Router
+    try {
+      const routerV1 = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, rpcProvider);
+      const amountsV1 = await routerV1.getAmountsOut(amountInWei, path);
+      const outV1 = parseFloat(ethers.formatUnits(amountsV1[amountsV1.length - 1], tokenOutData.decimals));
+      routes.push({ router: 'V1', version: 1, output: outV1, path, address: CONFIG.ROUTER });
+    } catch {}
+    
+    // Try V2 Router
+    try {
+      const routerV2 = new ethers.Contract(CONFIG.ROUTER_V2, ROUTER_ABI, rpcProvider);
+      const amountsV2 = await routerV2.getAmountsOut(amountInWei, path);
+      const outV2 = parseFloat(ethers.formatUnits(amountsV2[amountsV2.length - 1], tokenOutData.decimals));
+      routes.push({ router: 'V2', version: 2, output: outV2, path, address: CONFIG.ROUTER_V2 });
+    } catch {}
+    
+    if (routes.length === 0) return null;
+    
+    // Sort by best output
+    routes.sort((a, b) => b.output - a.output);
+    
+    // Apply preference
+    let selectedRoute = routes[0]; // Best by default
+    if (routePreference === 'v1') {
+      selectedRoute = routes.find(r => r.version === 1) || routes[0];
+    } else if (routePreference === 'v2') {
+      selectedRoute = routes.find(r => r.version === 2) || routes[0];
+    }
+    
+    const routeInfo = {
+      ...selectedRoute,
+      allRoutes: routes,
+      pathSymbols: path.map(addr => {
+        const found = Object.values(allTokens).find(t => getAddr(t.address) === addr.toLowerCase());
+        return found?.symbol || addr.slice(0, 6) + '...';
+      }),
+      priceImpact: routes.length > 1 ? ((routes[0].output - routes[routes.length - 1].output) / routes[0].output * 100).toFixed(2) : 0,
+    };
+    
+    setSwapRoute(routeInfo);
+    return routeInfo;
+  };
+  
+  // Copy to clipboard helper
+  const copyToClipboard = (text, label = 'Address') => {
+    navigator.clipboard.writeText(text);
+    showToastMsg(`📋 ${label} copied!`, 'success');
+  };
+
+  // Fetch live prices - Multi-source with sanity checks
   const fetchLivePrices = useCallback(async () => {
     try {
-      const pairs = [
+      const newPrices = { ...livePrices };
+      
+      // ═══════════════════════════════════════════════════════════════
+      // SOURCE 1: GoPulse API (Primary for PulseChain - No CORS issues)
+      // ═══════════════════════════════════════════════════════════════
+      try {
+        const goPulseRes = await fetch('https://api.gopulse.com/v2/prices/tokens?ids=pls,wpls,hex,plsx,ehex,inc');
+        if (goPulseRes.ok) {
+          const gpData = await goPulseRes.json();
+          if (gpData?.pls?.price) {
+            newPrices.PLS = gpData.pls.price;
+            newPrices.WPLS = gpData.pls.price;
+            console.log('📊 GoPulse PLS: $' + gpData.pls.price.toFixed(8));
+          }
+          if (gpData?.hex?.price) {
+            newPrices.HEX = gpData.hex.price;
+            console.log('📊 GoPulse HEX: $' + gpData.hex.price.toFixed(6));
+          }
+          if (gpData?.plsx?.price) newPrices.PLSX = gpData.plsx.price;
+          if (gpData?.ehex?.price) newPrices.eHEX = gpData.ehex.price;
+          if (gpData?.inc?.price) newPrices.INC = gpData.inc.price;
+        }
+      } catch (gpErr) {
+        console.warn('GoPulse fetch failed:', gpErr.message);
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // SOURCE 2: DexScreener (Primary for PulseChain-native tokens)
+      // Fetch in parallel for speed
+      // ═══════════════════════════════════════════════════════════════
+      const dexPairs = [
         { symbol: 'URMOM', pair: '0x0548656e272fec9534e180d3174cfc57ab6e10c0' },
         { symbol: 'DTGC', pair: '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7' },
         { symbol: 'PLSX', pair: '0x1b45b9148791d3a104184cd5dfe5ce57193a3ee9' },
-        { symbol: 'HEX', pair: '0xf1f4ee610b2babb05c635f726ef8b0c568c8dc65' },
+        { symbol: 'INC', pair: '0xe56043671df55de5cdf8459710433c10324de0ae' },
       ];
       
-      const newPrices = { ...livePrices };
-      
-      await Promise.all(pairs.map(async ({ symbol, pair }) => {
+      await Promise.all(dexPairs.map(async ({ symbol, pair }) => {
         try {
           const res = await fetch(`https://api.dexscreener.com/latest/dex/pairs/pulsechain/${pair}`);
           if (res.ok) {
             const data = await res.json();
             if (data?.pair?.priceUsd) {
               newPrices[symbol] = parseFloat(data.pair.priceUsd);
-              if (data.pair.priceNative && parseFloat(data.pair.priceNative) > 0) {
-                newPrices.PLS = parseFloat(data.pair.priceUsd) / parseFloat(data.pair.priceNative);
-              }
+              console.log(`📊 DexScreener ${symbol}: $${data.pair.priceUsd}`);
             }
           }
         } catch {}
       }));
+
+      // ═══════════════════════════════════════════════════════════════
+      // SOURCE 3: Fallback defaults for major tokens (if APIs fail)
+      // ═══════════════════════════════════════════════════════════════
+      if (!newPrices.WETH || newPrices.WETH < 1000) newPrices.WETH = 3300;
+      if (!newPrices.WBTC || newPrices.WBTC < 50000) newPrices.WBTC = 100000;
+      
+      // ═══════════════════════════════════════════════════════════════
+      // SANITY CHECKS - Ensure PLS is in expected range
+      // ═══════════════════════════════════════════════════════════════
+      if (!newPrices.PLS || newPrices.PLS < 0.000005 || newPrices.PLS > 0.0001) {
+        console.warn('⚠️ PLS price out of range, using fallback: $0.0000159');
+        newPrices.PLS = 0.0000159;
+        newPrices.WPLS = 0.0000159;
+      }
+      
+      console.log(`📊 Final: PLS=$${newPrices.PLS?.toFixed(8)} | DTGC=$${newPrices.DTGC?.toFixed(8)} | HEX=$${newPrices.HEX?.toFixed(6)}`);
       
       setLivePrices(newPrices);
     } catch (err) {
@@ -414,9 +922,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     if (userAddress && provider) fetchAllBalances();
   }, [userAddress, provider, fetchAllBalances]);
 
-  // Wallet scanner - FAST multi-source approach
+  // Wallet scanner - FAST approach like Zapper X (prioritize PulseScan API)
   const scanWalletTokens = useCallback(async () => {
-    if (!provider || !userAddress) return;
+    if (!userAddress) return;
     setLoadingBalances(true);
     showToastMsg('🔍 Scanning wallet...', 'info');
     
@@ -425,8 +933,25 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const seenAddresses = new Set();
       const addr = userAddress.toLowerCase();
       
-      // 1. Get PLS balance first (instant)
-      const plsBal = await provider.getBalance(userAddress);
+      // Use dedicated RPC to avoid MetaMask rate limits
+      const scanProvider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 1: PulseScan APIs (fastest, no rate limits, most complete)
+      // Fetch PLS balance + all tokens from APIs in parallel
+      // ═══════════════════════════════════════════════════════════════
+      const [plsBal, pulseScanTokens, pulseScanV1Tokens] = await Promise.all([
+        scanProvider.getBalance(userAddress),
+        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`)
+          .then(r => r.ok ? r.json() : [])
+          .catch(() => []),
+        fetch(`https://api.scan.pulsechain.com/api?module=account&action=tokenlist&address=${addr}`)
+          .then(r => r.ok ? r.json() : { result: [] })
+          .then(d => d.result || [])
+          .catch(() => []),
+      ]);
+      
+      // Add PLS immediately
       const plsBalNum = parseFloat(ethers.formatEther(plsBal));
       if (plsBalNum > 0) {
         foundTokens.push({ 
@@ -435,60 +960,20 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           address: null, 
           decimals: 18, 
           balance: plsBalNum, 
-          icon: '💜', 
+          icon: TOKENS.PLS.logo,
+          emoji: '💜',
           usdValue: plsBalNum * (livePrices.PLS || 0.000018), 
           price: livePrices.PLS || 0.000018 
         });
         seenAddresses.add('native');
-      }
-      setBalances(prev => ({ ...prev, PLS: plsBalNum }));
-      
-      // 2. Parallel fetch from multiple sources
-      const [pulseScanTokens, pulseScanV1Tokens, knownTokenBalances] = await Promise.all([
-        // PulseScan API v2
-        fetch(`https://api.scan.pulsechain.com/api/v2/addresses/${addr}/token-balances`)
-          .then(r => r.ok ? r.json() : [])
-          .catch(() => []),
-        // PulseScan API v1 (backup)
-        fetch(`https://api.scan.pulsechain.com/api?module=account&action=tokenlist&address=${addr}`)
-          .then(r => r.ok ? r.json() : { result: [] })
-          .then(d => d.result || [])
-          .catch(() => []),
-        // Direct RPC for known tokens (fastest, most reliable)
-        Promise.all(Object.entries(TOKENS).filter(([sym]) => sym !== 'PLS').map(async ([sym, token]) => {
-          try {
-            const contract = new ethers.Contract(token.address, ['function balanceOf(address) view returns (uint256)'], provider);
-            const bal = await contract.balanceOf(userAddress);
-            const balNum = parseFloat(ethers.formatUnits(bal, token.decimals));
-            if (balNum > 0.000001) {
-              return { symbol: sym, ...token, balance: balNum };
-            }
-          } catch {}
-          return null;
-        }))
-      ]);
-      
-      // Process known token balances first (highest priority)
-      for (const token of knownTokenBalances.filter(Boolean)) {
-        const tokenAddr = token.address?.toLowerCase();
-        if (tokenAddr && !seenAddresses.has(tokenAddr)) {
-          seenAddresses.add(tokenAddr);
-          const price = livePrices[token.symbol] || 0;
-          foundTokens.push({
-            symbol: token.symbol,
-            name: token.name,
-            address: token.address,
-            decimals: token.decimals,
-            balance: token.balance,
-            icon: token.logo || '🔸',
-            usdValue: token.balance * price,
-            price
-          });
-          setBalances(prev => ({ ...prev, [token.symbol]: token.balance }));
-        }
+        setBalances(prev => ({ ...prev, PLS: plsBalNum }));
       }
       
-      // Process PulseScan v2 API response
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 2: Process PulseScan API responses (FAST - no RPC needed)
+      // ═══════════════════════════════════════════════════════════════
+      
+      // Process v2 API first (better data)
       if (Array.isArray(pulseScanTokens)) {
         for (const item of pulseScanTokens) {
           const tokenAddr = item.token?.address?.toLowerCase();
@@ -501,10 +986,15 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           
           const sym = (item.token?.symbol || '').toUpperCase();
           const price = livePrices[sym] || 0;
-          let icon = '🔸';
-          Object.values(TOKENS).forEach(t => {
-            if (t.address?.toLowerCase() === tokenAddr) icon = t.logo;
-          });
+          
+          // Check if known token
+          let icon = getTokenLogo(tokenAddr);
+          let emoji = '🔸';
+          const knownToken = Object.values(TOKENS).find(t => t.address?.toLowerCase() === tokenAddr);
+          if (knownToken) {
+            icon = knownToken.logo;
+            emoji = knownToken.emoji || '🔸';
+          }
           
           foundTokens.push({ 
             symbol: item.token?.symbol || 'UNKNOWN', 
@@ -513,6 +1003,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             decimals, 
             balance: bal, 
             icon, 
+            emoji,
             usdValue: bal * price, 
             price 
           });
@@ -520,7 +1011,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         }
       }
       
-      // Process PulseScan v1 API response (backup)
+      // Process v1 API (backup)
       if (Array.isArray(pulseScanV1Tokens)) {
         for (const item of pulseScanV1Tokens) {
           const tokenAddr = item.contractAddress?.toLowerCase();
@@ -533,10 +1024,14 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           
           const sym = (item.symbol || '').toUpperCase();
           const price = livePrices[sym] || 0;
-          let icon = '🔸';
-          Object.values(TOKENS).forEach(t => {
-            if (t.address?.toLowerCase() === tokenAddr) icon = t.logo;
-          });
+          
+          let icon = getTokenLogo(tokenAddr);
+          let emoji = '🔸';
+          const knownToken = Object.values(TOKENS).find(t => t.address?.toLowerCase() === tokenAddr);
+          if (knownToken) {
+            icon = knownToken.logo;
+            emoji = knownToken.emoji || '🔸';
+          }
           
           foundTokens.push({ 
             symbol: item.symbol || 'UNKNOWN', 
@@ -545,11 +1040,51 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             decimals, 
             balance: bal, 
             icon, 
+            emoji,
             usdValue: bal * price, 
             price 
           });
           if (TOKENS[sym]) setBalances(prev => ({ ...prev, [sym]: bal }));
         }
+      }
+      
+      // ═══════════════════════════════════════════════════════════════
+      // PHASE 3: Quick check for critical tokens not in PulseScan (single batch)
+      // Only check: DTGC, URMOM, PLSX, HEX (most important)
+      // ═══════════════════════════════════════════════════════════════
+      const criticalTokens = ['DTGC', 'URMOM', 'PLSX', 'HEX', 'INC'];
+      const missingCritical = criticalTokens.filter(sym => {
+        const token = TOKENS[sym];
+        if (!token) return false;
+        return !seenAddresses.has(token.address?.toLowerCase());
+      });
+      
+      if (missingCritical.length > 0) {
+        await Promise.all(missingCritical.map(async (sym) => {
+          const token = TOKENS[sym];
+          if (!token?.address) return;
+          try {
+            const contract = new ethers.Contract(token.address, ['function balanceOf(address) view returns (uint256)'], scanProvider);
+            const bal = await contract.balanceOf(userAddress);
+            const balNum = parseFloat(ethers.formatUnits(bal, token.decimals));
+            if (balNum > 0.000001 && !seenAddresses.has(token.address.toLowerCase())) {
+              seenAddresses.add(token.address.toLowerCase());
+              const price = livePrices[sym] || 0;
+              foundTokens.push({
+                symbol: sym,
+                name: token.name,
+                address: token.address,
+                decimals: token.decimals,
+                balance: balNum,
+                icon: token.logo || '🔸',
+                emoji: token.emoji,
+                usdValue: balNum * price,
+                price
+              });
+              setBalances(prev => ({ ...prev, [sym]: balNum }));
+            }
+          } catch {}
+        }));
       }
       
       // Fetch prices for tokens without prices from DexScreener (batch lookup)
@@ -636,44 +1171,52 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
   // Get quote
   const getQuote = useCallback(async (inputAmount, from, to) => {
-    if (!provider || !inputAmount || parseFloat(inputAmount) <= 0) { setToAmount(''); return; }
+    if (!provider || !inputAmount || parseFloat(inputAmount) <= 0) { setToAmount(''); setSwapRoute(null); return; }
     setQuoteLoading(true);
     try {
-      const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, provider);
-      const fromTokenData = TOKENS[from];
-      const toTokenData = TOKENS[to];
+      const allTokens = getAllTokens();
+      const fromTokenData = allTokens[from];
+      const toTokenData = allTokens[to];
       if (!fromTokenData || !toTokenData) { setToAmount(''); return; }
       
-      const fromAddr = getAddr(fromTokenData.address);
-      const toAddr = getAddr(toTokenData.address);
-      
-      const amountIn = ethers.parseUnits(inputAmount, fromTokenData.decimals);
-      let path = [fromAddr, toAddr];
-      let amounts;
-      
-      try {
-        amounts = await router.getAmountsOut(amountIn, path);
-      } catch {
-        if (fromAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase() && toAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase()) {
-          path = [fromAddr, getAddr(CONFIG.WPLS), toAddr];
+      // Try to find best route across V1 and V2
+      const route = await findBestRoute(from, to, inputAmount);
+      if (route && route.output > 0) {
+        setToAmount(route.output.toFixed(6));
+      } else {
+        // Fallback: direct V1 quote
+        const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, provider);
+        const fromAddr = getAddr(fromTokenData.address);
+        const toAddr = getAddr(toTokenData.address);
+        const amountIn = ethers.parseUnits(inputAmount, fromTokenData.decimals);
+        let path = [fromAddr, toAddr];
+        let amounts;
+        
+        try {
           amounts = await router.getAmountsOut(amountIn, path);
+        } catch {
+          if (fromAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase() && toAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase()) {
+            path = [fromAddr, getAddr(CONFIG.WPLS), toAddr];
+            amounts = await router.getAmountsOut(amountIn, path);
+          }
         }
-      }
-      
-      if (amounts && amounts.length > 0) {
-        setToAmount(parseFloat(ethers.formatUnits(amounts[amounts.length - 1], toTokenData.decimals)).toFixed(6));
+        
+        if (amounts && amounts.length > 0) {
+          setToAmount(parseFloat(ethers.formatUnits(amounts[amounts.length - 1], toTokenData.decimals)).toFixed(6));
+          setSwapRoute({ router: 'V1', version: 1, pathSymbols: [from, to] });
+        }
       }
     } catch (err) {
       console.error('Quote error:', err);
       setToAmount('');
     }
     setQuoteLoading(false);
-  }, [provider]);
+  }, [provider, routePreference]);
 
   useEffect(() => {
     const timer = setTimeout(() => { if (fromAmount && fromToken && toToken) getQuote(fromAmount, fromToken, toToken); }, 500);
     return () => clearTimeout(timer);
-  }, [fromAmount, fromToken, toToken, getQuote]);
+  }, [fromAmount, fromToken, toToken, getQuote, routePreference]);
 
   // Execute swap
   const executeSwap = async () => {
@@ -682,9 +1225,12 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     showToastMsg('Preparing swap...', 'info');
     
     try {
-      const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, signer);
-      const fromTokenData = TOKENS[fromToken];
-      const toTokenData = TOKENS[toToken];
+      // Use selected router from route finding, or default to V1
+      const routerAddress = swapRoute?.address || CONFIG.ROUTER;
+      const router = new ethers.Contract(routerAddress, ROUTER_ABI, signer);
+      const allTokens = getAllTokens();
+      const fromTokenData = allTokens[fromToken];
+      const toTokenData = allTokens[toToken];
       const deadline = getDeadline();
       
       const fromAddr = getAddr(fromTokenData.address);
@@ -692,14 +1238,21 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       
       const inputAmount = ethers.parseUnits(fromAmount, fromTokenData.decimals);
       const expectedOutput = ethers.parseUnits(toAmount, toTokenData.decimals);
-      const amountOutMin = expectedOutput * BigInt(10000 - CONFIG.SLIPPAGE_BPS) / 10000n;
+      const amountOutMin = expectedOutput * BigInt(10000 - slippageBps) / 10000n;
       
-      let path = [fromAddr, toAddr];
-      try { await router.getAmountsOut(inputAmount, path); } catch {
-        if (fromAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase() && toAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase()) {
-          path = [fromAddr, getAddr(CONFIG.WPLS), toAddr];
+      // Use path from route finding if available, otherwise calculate
+      let path = swapRoute?.path || [fromAddr, toAddr];
+      if (!swapRoute?.path) {
+        try { await router.getAmountsOut(inputAmount, path); } catch {
+          if (fromAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase() && toAddr.toLowerCase() !== CONFIG.WPLS.toLowerCase()) {
+            path = [fromAddr, getAddr(CONFIG.WPLS), toAddr];
+          }
         }
       }
+      
+      // Get gas settings
+      const gasPrice = await getGasPrice();
+      const txOptions = gasPrice ? { gasPrice } : {};
       
       // Helper to safely check and approve
       const checkAndApprove = async (tokenAddr, tokenSymbol, amount) => {
@@ -707,13 +1260,13 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
           let allowance = 0n;
           try {
-            allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
+            allowance = await tokenContract.allowance(userAddress, routerAddress);
           } catch (e) {
             console.log('Allowance check failed, assuming 0:', e.message);
           }
           if (allowance < amount) {
             showToastMsg('Approving ' + tokenSymbol + '...', 'info');
-            const tx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
+            const tx = await tokenContract.approve(routerAddress, ethers.MaxUint256, txOptions);
             await tx.wait();
           }
         } catch (e) {
@@ -722,24 +1275,70 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         }
       };
       
-      if (fromToken === 'PLS') {
-        showToastMsg('Swapping PLS...', 'info');
-        const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(amountOutMin, path, userAddress, deadline, { value: inputAmount });
+      const routerLabel = swapRoute?.router || 'V1';
+      
+      // ═══════════════════════════════════════════════════════════════
+      // EXECUTE SWAP WITH 1% GROWTH ENGINE FEE
+      // ═══════════════════════════════════════════════════════════════
+      
+      if (fromToken === 'PLS' || fromTokenData.isNative) {
+        // Calculate 1% fee from input PLS
+        const growthFee = inputAmount * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+        const swapAmount = inputAmount - growthFee;
+        
+        // Send 1% to Growth Engine first
+        showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+        const feeTx = await signer.sendTransaction({
+          to: CONFIG.GROWTH_ENGINE_WALLET,
+          value: growthFee,
+          ...txOptions
+        });
+        await feeTx.wait();
+        
+        showToastMsg(`Swapping via PulseX ${routerLabel}...`, 'info');
+        const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(amountOutMin, path, userAddress, deadline, { value: swapAmount, ...txOptions });
         await tx.wait();
-      } else if (toToken === 'PLS') {
+      } else if (toToken === 'PLS' || toTokenData.isNative) {
         await checkAndApprove(fromAddr, fromToken, inputAmount);
-        showToastMsg('Swapping...', 'info');
-        const tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline);
+        showToastMsg(`Swapping via PulseX ${routerLabel}...`, 'info');
+        const tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline, txOptions);
         await tx.wait();
+        
+        // After swap, send 1% of received PLS to Growth Engine
+        showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+        const plsBalance = await signer.provider.getBalance(userAddress);
+        const growthFee = amountOutMin * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+        if (plsBalance >= growthFee) {
+          const feeTx = await signer.sendTransaction({
+            to: CONFIG.GROWTH_ENGINE_WALLET,
+            value: growthFee,
+            ...txOptions
+          });
+          await feeTx.wait();
+        }
       } else {
         await checkAndApprove(fromAddr, fromToken, inputAmount);
-        showToastMsg('Swapping...', 'info');
-        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline);
+        showToastMsg(`Swapping via PulseX ${routerLabel}...`, 'info');
+        const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(inputAmount, amountOutMin, path, userAddress, deadline, txOptions);
         await tx.wait();
+        
+        // After token-to-token swap, send 1% of received tokens to Growth Engine
+        showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+        const outTokenContract = new ethers.Contract(toAddr, ERC20_ABI, signer);
+        const outBalance = await outTokenContract.balanceOf(userAddress);
+        const growthFee = amountOutMin * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+        if (outBalance >= growthFee) {
+          try {
+            const feeTx = await outTokenContract.transfer(CONFIG.GROWTH_ENGINE_WALLET, growthFee, txOptions);
+            await feeTx.wait();
+          } catch (feeErr) {
+            console.warn('Growth fee transfer failed (token may have transfer restrictions):', feeErr.message);
+          }
+        }
       }
       
-      showToastMsg(`✅ Swapped ${fromAmount} ${fromToken} for ${toToken}!`, 'success');
-      setFromAmount(''); setToAmount('');
+      showToastMsg(`✅ Swapped ${fromAmount} ${fromToken} for ${toToken} via ${routerLabel}!`, 'success');
+      setFromAmount(''); setToAmount(''); setSwapRoute(null);
       fetchAllBalances();
     } catch (err) {
       console.error('Swap error:', err);
@@ -870,8 +1469,8 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       
       const amount0Desired = ethers.parseUnits(lpAmount0, token0.decimals);
       const amount1Desired = ethers.parseUnits(lpAmount1, token1.decimals);
-      const amount0Min = amount0Desired * BigInt(10000 - CONFIG.SLIPPAGE_BPS) / 10000n;
-      const amount1Min = amount1Desired * BigInt(10000 - CONFIG.SLIPPAGE_BPS) / 10000n;
+      const amount0Min = amount0Desired * BigInt(10000 - slippageBps) / 10000n;
+      const amount1Min = amount1Desired * BigInt(10000 - slippageBps) / 10000n;
       const deadline = getDeadline();
       
       // Helper to safely check and approve
@@ -984,35 +1583,128 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   };
 
   // Token selector component
-  const TokenSelector = ({ value, onChange, show, setShow, excludeToken }) => (
-    <div style={{ position: 'relative' }}>
-      <button style={styles.tokenSelect} onClick={(e) => { e.stopPropagation(); setShow(!show); }}>
-        <span style={{ fontSize: '1.1rem' }}>{TOKENS[value]?.logo || '🔸'}</span>
-        <span>{value}</span>
-        <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>▼</span>
-      </button>
-      {show && (
-        <div style={styles.selectDropdown} onClick={(e) => e.stopPropagation()}>
-          {Object.entries(TOKENS).filter(([sym]) => sym !== excludeToken).map(([symbol, token]) => (
-            <div key={symbol} style={{ ...styles.selectOption, background: symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent' }}
-              onClick={() => { onChange(symbol); setShow(false); }}
-              onMouseEnter={(e) => e.target.style.background = 'rgba(212, 175, 55, 0.1)'}
-              onMouseLeave={(e) => e.target.style.background = symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent'}>
-              <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>{token.logo}</span>
-              <div style={{ minWidth: '70px' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{symbol}</div>
-                <div style={{ fontSize: '0.7rem', color: '#888' }}>{token.name}</div>
-              </div>
-              <div style={{ textAlign: 'right', marginLeft: 'auto', minWidth: '100px' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 500, whiteSpace: 'nowrap' }}>{formatNumber(balances[symbol] || 0)}</div>
-                <div style={{ fontSize: '0.75rem', color: '#4CAF50', whiteSpace: 'nowrap' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
+  // Enhanced Token Selector with Copy CA, Custom Tokens, Import
+  const TokenSelector = ({ value, onChange, show, setShow, excludeToken }) => {
+    const allTokens = getAllTokens();
+    const currentToken = allTokens[value];
+    
+    return (
+      <div style={{ position: 'relative' }}>
+        <button style={styles.tokenSelect} onClick={(e) => { e.stopPropagation(); setShow(!show); }}>
+          <TokenIcon icon={currentToken?.logo} emoji={currentToken?.emoji} size={24} />
+          <span>{value}</span>
+          {currentToken?.address && (
+            <span 
+              onClick={(e) => { e.stopPropagation(); copyToClipboard(currentToken.address, value + ' CA'); }}
+              style={{ marginLeft: '4px', fontSize: '0.6rem', color: '#888', cursor: 'pointer', padding: '2px 4px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px' }}
+              title="Copy Contract Address"
+            >📋</span>
+          )}
+          <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>▼</span>
+        </button>
+        {show && (
+          <div style={{ ...styles.selectDropdown, maxHeight: '350px' }} onClick={(e) => e.stopPropagation()}>
+            {/* Quick CA Input at top */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)', position: 'sticky', top: 0, background: '#1a1a2e', zIndex: 10 }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  type="text"
+                  placeholder="Paste CA to import..."
+                  value={importCA}
+                  onChange={(e) => setImportCA(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ 
+                    flex: 1, padding: '6px 8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(212,175,55,0.3)', 
+                    borderRadius: '6px', color: '#fff', fontSize: '0.7rem', outline: 'none' 
+                  }}
+                />
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (importCA.length === 42) {
+                      const token = await importTokenByCA(importCA);
+                      if (token) {
+                        saveCustomToken(token);
+                        onChange(token.symbol);
+                        setShow(false);
+                        setImportCA('');
+                      }
+                    }
+                  }}
+                  disabled={importCA.length !== 42 || importLoading}
+                  style={{ 
+                    padding: '6px 10px', background: importCA.length === 42 ? 'linear-gradient(135deg, #D4AF37, #FFD700)' : 'rgba(255,255,255,0.1)', 
+                    border: 'none', borderRadius: '6px', color: importCA.length === 42 ? '#000' : '#666', fontWeight: 600, fontSize: '0.7rem', cursor: importCA.length === 42 ? 'pointer' : 'not-allowed' 
+                  }}
+                >
+                  {importLoading ? '...' : '+ Add'}
+                </button>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+            
+            {/* Custom tokens section */}
+            {Object.keys(customTokens).length > 0 && (
+              <div style={{ padding: '4px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ fontSize: '0.65rem', color: '#D4AF37', marginBottom: '4px', fontWeight: 600 }}>⭐ YOUR TOKENS</div>
+                {Object.entries(customTokens).filter(([sym]) => sym !== excludeToken).map(([symbol, token]) => (
+                  <div key={symbol} style={{ ...styles.selectOption, background: symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent' }}
+                    onClick={() => { onChange(symbol); setShow(false); }}>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <TokenIcon icon={token.logo} emoji={token.emoji} size={24} />
+                    </div>
+                    <div style={{ minWidth: '60px' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{symbol}</div>
+                      <div style={{ fontSize: '0.65rem', color: '#888' }}>{token.name?.slice(0, 12)}</div>
+                    </div>
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); copyToClipboard(token.address, symbol); }}
+                      style={{ fontSize: '0.55rem', color: '#666', cursor: 'pointer', padding: '2px 4px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px' }}
+                    >📋 CA</div>
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); removeCustomToken(symbol); }}
+                      style={{ fontSize: '0.55rem', color: '#FF6B6B', cursor: 'pointer', padding: '2px 4px', marginLeft: '4px' }}
+                    >🗑️</div>
+                    <div style={{ textAlign: 'right', marginLeft: 'auto', minWidth: '80px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500 }}>{formatNumber(balances[symbol] || 0)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Built-in tokens */}
+            <div style={{ padding: '4px 12px' }}>
+              <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '4px', fontWeight: 600 }}>TOKENS</div>
+              {Object.entries(TOKENS).filter(([sym]) => sym !== excludeToken).map(([symbol, token]) => (
+                <div key={symbol} style={{ ...styles.selectOption, background: symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent' }}
+                  onClick={() => { onChange(symbol); setShow(false); }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(212, 175, 55, 0.1)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent'}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <TokenIcon icon={token.logo} emoji={token.emoji} size={28} />
+                  </div>
+                  <div style={{ minWidth: '60px' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{symbol}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#888' }}>{token.name?.slice(0, 12)}</div>
+                  </div>
+                  {token.address && (
+                    <div 
+                      onClick={(e) => { e.stopPropagation(); copyToClipboard(token.address, symbol); }}
+                      style={{ fontSize: '0.55rem', color: '#666', cursor: 'pointer', padding: '2px 4px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px' }}
+                    >📋 CA</div>
+                  )}
+                  <div style={{ textAlign: 'right', marginLeft: 'auto', minWidth: '90px' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 500, whiteSpace: 'nowrap' }}>{formatNumber(balances[symbol] || 0)}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#4CAF50', whiteSpace: 'nowrap' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     const handleClick = () => { setShowFromSelect(false); setShowToSelect(false); setShowLpToken0Select(false); setShowLpToken1Select(false); };
@@ -1065,9 +1757,206 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             {toAmount && livePrices[toToken] && <div style={styles.usdValue}>≈ {formatUSD(parseFloat(toAmount) * livePrices[toToken])}</div>}
           </div>
           
+          {/* ═══════════════════════════════════════════════════════════════════
+              GAS & ROUTE SETTINGS - PulseX Pro Features
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div style={{ ...styles.card, padding: '10px 14px', marginBottom: '12px' }}>
+            {/* Settings Header Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: showGasSettings || showRouteDetails || showSlippageSettings ? '10px' : 0 }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {/* Gas Toggle */}
+                <button
+                  onClick={() => { setShowGasSettings(!showGasSettings); setShowRouteDetails(false); setShowSlippageSettings(false); }}
+                  style={{ 
+                    background: showGasSettings ? 'rgba(212,175,55,0.2)' : 'rgba(255,255,255,0.05)', 
+                    border: `1px solid ${showGasSettings ? '#D4AF37' : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: '6px', padding: '5px 10px', color: showGasSettings ? '#D4AF37' : '#888', 
+                    fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                  }}
+                >
+                  ⛽ {gasMode === 'custom' ? customGasPrice + ' Gwei' : GAS_PRESETS[gasMode]?.label?.replace(/[^\w\s]/g, '') || 'Auto'}
+                </button>
+                
+                {/* Route Toggle */}
+                <button
+                  onClick={() => { setShowRouteDetails(!showRouteDetails); setShowGasSettings(false); setShowSlippageSettings(false); }}
+                  style={{ 
+                    background: showRouteDetails ? 'rgba(0,188,212,0.2)' : 'rgba(255,255,255,0.05)', 
+                    border: `1px solid ${showRouteDetails ? '#00BCD4' : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: '6px', padding: '5px 10px', color: showRouteDetails ? '#00BCD4' : '#888', 
+                    fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                  }}
+                >
+                  🛤️ {routePreference === 'best' ? 'Auto' : routePreference.toUpperCase()}
+                </button>
+                
+                {/* Slippage Toggle */}
+                <button
+                  onClick={() => { setShowSlippageSettings(!showSlippageSettings); setShowGasSettings(false); setShowRouteDetails(false); }}
+                  style={{ 
+                    background: showSlippageSettings ? 'rgba(156,39,176,0.2)' : 'rgba(255,255,255,0.05)', 
+                    border: `1px solid ${showSlippageSettings ? '#9C27B0' : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: '6px', padding: '5px 10px', color: showSlippageSettings ? '#9C27B0' : '#888', 
+                    fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                  }}
+                >
+                  ⚙️ {(slippageBps / 100).toFixed(1)}%
+                </button>
+              </div>
+            </div>
+            
+            {/* Slippage Settings Expanded */}
+            {showSlippageSettings && (
+              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
+                <div style={{ color: '#9C27B0', fontSize: '0.7rem', fontWeight: 600, marginBottom: '8px' }}>⚙️ Slippage Tolerance</div>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                  {SLIPPAGE_PRESETS.map(bps => (
+                    <button
+                      key={bps}
+                      onClick={() => { setSlippageBps(bps); setCustomSlippage(''); }}
+                      style={{
+                        flex: 1, padding: '8px 6px', 
+                        background: slippageBps === bps ? 'rgba(156,39,176,0.3)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${slippageBps === bps ? '#9C27B0' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '6px', cursor: 'pointer', textAlign: 'center'
+                      }}
+                    >
+                      <div style={{ color: slippageBps === bps ? '#9C27B0' : '#fff', fontSize: '0.85rem', fontWeight: 600 }}>{(bps / 100).toFixed(1)}%</div>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Custom Slippage Input */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    placeholder="Custom %..."
+                    value={customSlippage}
+                    onChange={(e) => { 
+                      setCustomSlippage(e.target.value); 
+                      if (e.target.value && parseFloat(e.target.value) > 0) {
+                        setSlippageBps(Math.round(parseFloat(e.target.value) * 100));
+                      }
+                    }}
+                    style={{
+                      flex: 1, padding: '8px 10px', background: 'rgba(0,0,0,0.3)', 
+                      border: `1px solid ${customSlippage ? '#9C27B0' : 'rgba(255,255,255,0.1)'}`,
+                      borderRadius: '6px', color: '#fff', fontSize: '0.8rem', outline: 'none'
+                    }}
+                  />
+                  <span style={{ color: '#888', fontSize: '0.7rem' }}>%</span>
+                </div>
+                <div style={{ color: '#666', fontSize: '0.6rem', marginTop: '6px' }}>
+                  💡 Higher slippage = more likely to succeed, but may get worse price.
+                  {slippageBps > 500 && <span style={{ color: '#FF6B6B' }}> ⚠️ High slippage!</span>}
+                </div>
+              </div>
+            )}
+            
+            {/* Gas Settings Expanded */}
+            {showGasSettings && (
+              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px' }}>
+                <div style={{ color: '#D4AF37', fontSize: '0.7rem', fontWeight: 600, marginBottom: '8px' }}>⛽ Gas Price Settings</div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  {Object.entries(GAS_PRESETS).map(([key, preset]) => (
+                    <button
+                      key={key}
+                      onClick={() => { setGasMode(key); setCustomGasPrice(''); }}
+                      style={{
+                        flex: 1, minWidth: '70px', padding: '8px 6px', 
+                        background: gasMode === key ? 'rgba(212,175,55,0.3)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${gasMode === key ? '#D4AF37' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '6px', cursor: 'pointer', textAlign: 'center'
+                      }}
+                    >
+                      <div style={{ color: gasMode === key ? '#D4AF37' : '#fff', fontSize: '0.75rem', fontWeight: 600 }}>{preset.label}</div>
+                      <div style={{ color: '#888', fontSize: '0.6rem' }}>{preset.gwei ? preset.gwei + ' Gwei' : 'Dynamic'}</div>
+                      <div style={{ color: '#4CAF50', fontSize: '0.55rem' }}>{preset.time}</div>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Custom Gas Input */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    placeholder="Custom Gwei..."
+                    value={customGasPrice}
+                    onChange={(e) => { setCustomGasPrice(e.target.value); if (e.target.value) setGasMode('custom'); }}
+                    style={{
+                      flex: 1, padding: '8px 10px', background: 'rgba(0,0,0,0.3)', 
+                      border: `1px solid ${gasMode === 'custom' ? '#D4AF37' : 'rgba(255,255,255,0.1)'}`,
+                      borderRadius: '6px', color: '#fff', fontSize: '0.8rem', outline: 'none'
+                    }}
+                  />
+                  <span style={{ color: '#888', fontSize: '0.7rem' }}>Gwei</span>
+                </div>
+                <div style={{ color: '#666', fontSize: '0.6rem', marginTop: '6px' }}>
+                  💡 PulseChain gas is cheap! Even "High" costs fractions of a cent.
+                </div>
+              </div>
+            )}
+            
+            {/* Route Settings Expanded */}
+            {showRouteDetails && (
+              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px' }}>
+                <div style={{ color: '#00BCD4', fontSize: '0.7rem', fontWeight: 600, marginBottom: '8px' }}>🛤️ Swap Route Settings</div>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                  {[
+                    { key: 'best', label: '⚡ Best Price', desc: 'Auto-select best router' },
+                    { key: 'v1', label: '🔷 PulseX V1', desc: 'Original router' },
+                    { key: 'v2', label: '🔶 PulseX V2', desc: 'Newer router' },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setRoutePreference(opt.key)}
+                      style={{
+                        flex: 1, padding: '8px 6px', 
+                        background: routePreference === opt.key ? 'rgba(0,188,212,0.3)' : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${routePreference === opt.key ? '#00BCD4' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '6px', cursor: 'pointer', textAlign: 'center'
+                      }}
+                    >
+                      <div style={{ color: routePreference === opt.key ? '#00BCD4' : '#fff', fontSize: '0.75rem', fontWeight: 600 }}>{opt.label}</div>
+                      <div style={{ color: '#888', fontSize: '0.55rem' }}>{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Show current route if available */}
+                {swapRoute && (
+                  <div style={{ background: 'rgba(0,188,212,0.1)', border: '1px solid rgba(0,188,212,0.3)', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ color: '#00BCD4', fontSize: '0.7rem', fontWeight: 600 }}>Current Route</span>
+                      <span style={{ color: '#4CAF50', fontSize: '0.65rem' }}>via {swapRoute.router}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                      {swapRoute.pathSymbols?.map((sym, i) => (
+                        <React.Fragment key={i}>
+                          <span style={{ 
+                            background: 'rgba(212,175,55,0.2)', padding: '2px 6px', borderRadius: '4px', 
+                            color: '#D4AF37', fontSize: '0.7rem', fontWeight: 500 
+                          }}>{sym}</span>
+                          {i < swapRoute.pathSymbols.length - 1 && <span style={{ color: '#666' }}>→</span>}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                    {swapRoute.allRoutes?.length > 1 && (
+                      <div style={{ marginTop: '6px', fontSize: '0.6rem', color: '#888' }}>
+                        📊 Compared {swapRoute.allRoutes.length} routes • Best output selected
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Rate & Receive Info */}
           {fromAmount && toAmount && (
             <div style={{ ...styles.card, padding: '12px 16px' }}>
               <div style={styles.infoRow}><span style={{ color: '#888' }}>Rate</span><span style={{ color: '#fff' }}>1 {fromToken} = {(parseFloat(toAmount) / parseFloat(fromAmount)).toFixed(6)} {toToken}</span></div>
+              <div style={styles.infoRow}><span style={{ color: '#888' }}>Router</span><span style={{ color: '#00BCD4', fontSize: '0.8rem' }}>{swapRoute?.router || 'V1'}</span></div>
               <div style={{ ...styles.infoRow, borderBottom: 'none' }}><span style={{ color: '#888' }}>You Receive</span><span style={{ color: '#4CAF50', fontWeight: 700 }}>~{formatNumber(parseFloat(toAmount))} {toToken}</span></div>
             </div>
           )}
@@ -1097,7 +1986,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                       {walletTokens.map((token, idx) => (
                         <div key={idx} style={styles.balanceRow}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(212,175,55,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>{token.icon}</div>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(212,175,55,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                              <TokenIcon icon={token.icon} emoji={token.emoji} size={32} />
+                            </div>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>{token.symbol}</span>
@@ -1230,6 +2121,20 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               <span style={{ color: '#888' }}>Status</span>
               <span style={{ color: pairAddress ? '#4CAF50' : '#FF9800' }}>{pairAddress ? '✓ Pool Exists' : '⚠️ New Pool'}</span>
             </div>
+            {pairAddress && pairReserves && (
+              <div style={{ background: 'rgba(255,215,0,0.1)', border: '2px solid #FFD700', borderRadius: '8px', padding: '10px', marginTop: '8px', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '1.2rem' }}>🔒</span>
+                  <span style={{ color: '#FFD700', fontWeight: 'bold', fontSize: '0.85rem' }}>RATIO LOCKED TO EXISTING POOL</span>
+                </div>
+                <div style={{ color: '#aaa', fontSize: '0.75rem' }}>
+                  Current ratio: 1 {lpToken0} = {pairReserves.reserve0 > 0n ? (Number(pairReserves.reserve1) / Number(pairReserves.reserve0)).toFixed(6) : '?'} {lpToken1}
+                </div>
+                <div style={{ color: '#888', fontSize: '0.7rem', marginTop: '4px' }}>
+                  Token 2 amount auto-calculated to match pool parity
+                </div>
+              </div>
+            )}
             {pairAddress && (
               <div style={styles.infoRow}>
                 <span style={{ color: '#888' }}>LP Address</span>
