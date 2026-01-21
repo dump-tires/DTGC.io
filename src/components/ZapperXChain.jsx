@@ -478,6 +478,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
   const [deepScanAvailable, setDeepScanAvailable] = useState(false);
   const [ultraScanAvailable, setUltraScanAvailable] = useState(false);
   const [gaslessMode, setGaslessMode] = useState(false);
+  const [slippageTolerance, setSlippageTolerance] = useState(3); // Default 3% slippage
   
   const [zapAmounts, setZapAmounts] = useState({});
   const [selectedAssets, setSelectedAssets] = useState(new Set());
@@ -701,9 +702,9 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       const wethContract = new ethers.Contract(wrappedAddress, WETH_ABI, signer);
       const wrapTx = await wethContract.deposit({ value: amountWei });
       await wrapTx.wait();
-      swapResult = await swapTokenToUsdc(signer, wrappedAddress, usdcAddress, amountWei, routerAddress, chainKey, userAddress);
+      swapResult = await swapTokenToUsdc(signer, wrappedAddress, usdcAddress, amountWei, routerAddress, chainKey, userAddress, dollarAmount);
     } else {
-      swapResult = await swapTokenToUsdc(signer, asset.address, usdcAddress, amountWei, routerAddress, chainKey, userAddress);
+      swapResult = await swapTokenToUsdc(signer, asset.address, usdcAddress, amountWei, routerAddress, chainKey, userAddress, dollarAmount);
     }
     
     if (swapResult.success) await sendFeeToGrowthEngine(signer, usdcAddress, chainKey, dollarAmount);
@@ -726,7 +727,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
     } catch (e) { console.log('Fee transfer failed:', e.message); }
   };
 
-  const swapTokenToUsdc = async (signer, tokenIn, tokenOut, amountIn, routerAddress, chainKey, userAddress) => {
+  const swapTokenToUsdc = async (signer, tokenIn, tokenOut, amountIn, routerAddress, chainKey, userAddress, expectedUsdValue = 0) => {
     setZapProgress(prev => ({ ...prev, status: 'Checking approval...' }));
     const tokenContract = new ethers.Contract(tokenIn, ERC20_ABI, signer);
     const usdcContract = new ethers.Contract(tokenOut, ERC20_ABI, signer);
@@ -741,28 +742,32 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       await approveTx.wait();
     }
     
-    setZapProgress(prev => ({ ...prev, status: 'Swapping to USDC...' }));
+    setZapProgress(prev => ({ ...prev, status: `Swapping to USDC (${slippageTolerance}% slippage)...` }));
     const router = new ethers.Contract(routerAddress, SWAP_ROUTER_ABI, signer);
     const deadline = Math.floor(Date.now() / 1000) + 1800;
+    
+    // Calculate minimum output with slippage protection
+    const decimals = chainKey === 'bsc' ? 18 : 6;
+    const minOutputUsd = expectedUsdValue * (1 - slippageTolerance / 100);
+    const amountOutMinimum = minOutputUsd > 0 ? BigInt(Math.floor(minOutputUsd * Math.pow(10, decimals))) : BigInt(0);
     
     const fees = [3000, 500, 10000];
     for (const fee of fees) {
       try {
         const tx = await router.exactInputSingle({
           tokenIn, tokenOut, fee, recipient: userAddress, deadline, amountIn,
-          amountOutMinimum: 0, sqrtPriceLimitX96: 0
+          amountOutMinimum, sqrtPriceLimitX96: 0
         });
         await tx.wait();
         
         // Get USDC balance after swap to calculate actual received
         const usdcBalanceAfter = await usdcContract.balanceOf(userAddress);
-        const decimals = chainKey === 'bsc' ? 18 : 6;
         const usdcReceived = Number(usdcBalanceAfter - usdcBalanceBefore) / Math.pow(10, decimals);
         
         return { success: true, usdcReceived };
       } catch (e) { continue; }
     }
-    return { success: false, error: 'No liquidity', usdcReceived: 0 };
+    return { success: false, error: 'No liquidity or slippage too tight', usdcReceived: 0 };
   };
 
   const executeZap = async () => {
@@ -884,6 +889,21 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                     background: gaslessMode ? '#4ade80' : '#ef4444', color: '#fff',
                     cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem'
                   }}>{gaslessMode ? '✓ ON' : '✗ OFF'}</button>
+                </div>
+                
+                {/* Slippage Tolerance */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #444' }}>
+                  <span style={{ color: '#888', fontSize: '0.8rem' }}>Slippage:</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[1, 2, 3, 5].map(pct => (
+                      <button key={pct} onClick={() => setSlippageTolerance(pct)} style={{
+                        padding: '4px 8px', borderRadius: '4px', border: 'none',
+                        background: slippageTolerance === pct ? '#FFD700' : '#333',
+                        color: slippageTolerance === pct ? '#000' : '#888',
+                        cursor: 'pointer', fontWeight: 'bold', fontSize: '0.7rem'
+                      }}>{pct}%</button>
+                    ))}
+                  </div>
                 </div>
                 
                 {/* Test Vitalik Button */}
