@@ -103,7 +103,7 @@ const DEX_ROUTERS = {
 const CHAIN_CONFIG = {
   ethereum: {
     name: 'Ethereum', chainId: 1, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#627EEA',
-    rpcs: ['https://eth.llamarpc.com', 'https://ethereum.publicnode.com', 'https://1rpc.io/eth'],
+    rpcs: ['https://ethereum.publicnode.com', 'https://eth.drpc.org', 'https://rpc.ankr.com/eth'],
     fallbackTokens: [
       { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, coingeckoId: 'usd-coin' },
@@ -127,7 +127,7 @@ const CHAIN_CONFIG = {
   },
   polygon: {
     name: 'Polygon', chainId: 137, symbol: 'MATIC', decimals: 18, coingeckoId: 'matic-network', color: '#8247E5',
-    rpcs: ['https://polygon-rpc.com', 'https://polygon.llamarpc.com'],
+    rpcs: ['https://polygon.publicnode.com', 'https://polygon.drpc.org', 'https://rpc.ankr.com/polygon'],
     fallbackTokens: [
       { symbol: 'USDT', address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', decimals: 6, coingeckoId: 'tether' },
       { symbol: 'USDC', address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', decimals: 6, coingeckoId: 'usd-coin' },
@@ -136,7 +136,7 @@ const CHAIN_CONFIG = {
   },
   arbitrum: {
     name: 'Arbitrum', chainId: 42161, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#28A0F0',
-    rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com'],
+    rpcs: ['https://arbitrum.publicnode.com', 'https://arbitrum.drpc.org', 'https://rpc.ankr.com/arbitrum'],
     fallbackTokens: [
       { symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'USDT', address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', decimals: 6, coingeckoId: 'tether' },
@@ -146,7 +146,7 @@ const CHAIN_CONFIG = {
   },
   optimism: {
     name: 'Optimism', chainId: 10, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#FF0420',
-    rpcs: ['https://mainnet.optimism.io', 'https://optimism.llamarpc.com'],
+    rpcs: ['https://optimism.publicnode.com', 'https://optimism.drpc.org', 'https://rpc.ankr.com/optimism'],
     fallbackTokens: [
       { symbol: 'USDC', address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'OP', address: '0x4200000000000000000000000000000000000042', decimals: 18, coingeckoId: 'optimism' },
@@ -154,7 +154,7 @@ const CHAIN_CONFIG = {
   },
   base: {
     name: 'Base', chainId: 8453, symbol: 'ETH', decimals: 18, coingeckoId: 'ethereum', color: '#0052FF',
-    rpcs: ['https://base.llamarpc.com', 'https://mainnet.base.org'],
+    rpcs: ['https://base.publicnode.com', 'https://base.drpc.org', 'https://rpc.ankr.com/base'],
     fallbackTokens: [
       { symbol: 'USDC', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6, coingeckoId: 'usd-coin' },
       { symbol: 'AERO', address: '0x940181a94A35A4569E4529A3CDfB74e38FD98631', decimals: 18, coingeckoId: 'aerodrome-finance' },
@@ -729,7 +729,11 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
   const swapTokenToUsdc = async (signer, tokenIn, tokenOut, amountIn, routerAddress, chainKey, userAddress) => {
     setZapProgress(prev => ({ ...prev, status: 'Checking approval...' }));
     const tokenContract = new ethers.Contract(tokenIn, ERC20_ABI, signer);
+    const usdcContract = new ethers.Contract(tokenOut, ERC20_ABI, signer);
     const currentAllowance = await tokenContract.allowance(userAddress, routerAddress);
+    
+    // Get USDC balance before swap
+    const usdcBalanceBefore = await usdcContract.balanceOf(userAddress);
     
     if (currentAllowance < amountIn) {
       setZapProgress(prev => ({ ...prev, status: 'Requesting approval...' }));
@@ -749,10 +753,16 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           amountOutMinimum: 0, sqrtPriceLimitX96: 0
         });
         await tx.wait();
-        return { success: true };
+        
+        // Get USDC balance after swap to calculate actual received
+        const usdcBalanceAfter = await usdcContract.balanceOf(userAddress);
+        const decimals = chainKey === 'bsc' ? 18 : 6;
+        const usdcReceived = Number(usdcBalanceAfter - usdcBalanceBefore) / Math.pow(10, decimals);
+        
+        return { success: true, usdcReceived };
       } catch (e) { continue; }
     }
-    return { success: false, error: 'No liquidity' };
+    return { success: false, error: 'No liquidity', usdcReceived: 0 };
   };
 
   const executeZap = async () => {
@@ -778,12 +788,14 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       
       try {
         const result = await executeSwapWithFee(asset, amount);
-        results.push({ asset, ...result });
+        const usdcNet = result.usdcReceived ? (result.usdcReceived * (100 - FEE_PERCENT) / 100) : 0;
+        const zapPercent = amount > 0 ? ((usdcNet / amount) * 100).toFixed(1) : 0;
+        results.push({ asset, ...result, inputValue: amount, usdcNet, zapPercent });
         if (result.success) {
-          const newUsdcAmount = (amount * (100 - FEE_PERCENT)) / 100;
+          const newUsdcAmount = usdcNet > 0 ? usdcNet : (amount * (100 - FEE_PERCENT)) / 100;
           setBridgeReady(prev => ({ ...prev, [asset.chainKey]: (prev[asset.chainKey] || 0) + newUsdcAmount }));
         }
-      } catch (e) { results.push({ asset, success: false, error: e.message }); }
+      } catch (e) { results.push({ asset, success: false, error: e.message, inputValue: amount, usdcNet: 0, zapPercent: 0 }); }
     }
     
     setZapResults(results);
@@ -963,9 +975,11 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
           {Object.entries(groupedAssets).map(([chainKey, chainAssets]) => {
             const chain = CHAIN_CONFIG[chainKey];
             const chainTotal = chainAssets.reduce((s, a) => s + a.value, 0);
+            const chainUsdc = chainAssets.filter(a => isUsdcToken(a.symbol)).reduce((s, a) => s + a.value, 0);
+            const bridgeableUsdc = (bridgeReady[chainKey] || 0) + chainUsdc;
             return (
               <div key={chainKey} style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: '15px', padding: '20px', border: `2px solid ${chain.color}30` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: chain.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#000', fontSize: '1.1rem' }}>{chain.symbol[0]}</div>
                     <div>
@@ -973,7 +987,18 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                       <div style={{ color: chain.color }}>${formatNumber(chainTotal)} • {chainAssets.length} tokens</div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {bridgeableUsdc > 0.01 && (
+                      <button onClick={() => openBridge(chainKey)} style={{ 
+                        padding: '8px 14px', borderRadius: '8px', border: 'none',
+                        background: 'linear-gradient(90deg, #4ade80, #22c55e)', color: '#000', 
+                        cursor: 'pointer', fontWeight: 'bold', fontSize: '0.8rem',
+                        display: 'flex', alignItems: 'center', gap: '6px'
+                      }}>
+                        <span>🌉</span>
+                        <span>${formatNumber(bridgeableUsdc)} USDC</span>
+                      </button>
+                    )}
                     {chainAssets.filter(a => !isUsdcToken(a.symbol)).length > 0 && <>
                       <button onClick={() => {
                         chainAssets.filter(a => !isUsdcToken(a.symbol)).forEach(a => setSelectedAssets(prev => new Set([...prev, `${a.chainKey}-${a.symbol}`])));
@@ -1077,10 +1102,35 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
       {/* Zap Results */}
       {zapResults.length > 0 && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: '15px', padding: '25px', maxWidth: '400px', width: '100%', border: '2px solid #FFD700', maxHeight: '80vh', overflow: 'auto' }}>
+          <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: '15px', padding: '25px', maxWidth: '450px', width: '100%', border: '2px solid #FFD700', maxHeight: '80vh', overflow: 'auto' }}>
             <h3 style={{ color: '#FFD700', marginBottom: '15px', textAlign: 'center' }}>⚡ Zap Results</h3>
-            {zapResults.map((r, i) => <div key={i} style={{ padding: '10px', borderRadius: '8px', marginBottom: '8px', background: r.success ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${r.success ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}` }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#fff' }}>{r.asset.symbol}</span><span style={{ color: r.success ? '#4ade80' : '#f87171', fontSize: '0.85rem' }}>{r.success ? '✅' : '❌'}</span></div></div>)}
-            <div style={{ padding: '10px', background: 'rgba(74,222,128,0.1)', borderRadius: '8px', marginBottom: '15px', textAlign: 'center' }}><div style={{ color: '#4ade80', fontSize: '0.85rem' }}>💰 {FEE_PERCENT}% fee → Growth Engine</div></div>
+            {zapResults.map((r, i) => (
+              <div key={i} style={{ padding: '12px', borderRadius: '8px', marginBottom: '8px', background: r.success ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${r.success ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ color: '#fff', fontWeight: 'bold' }}>{r.asset.symbol}</span>
+                    <span style={{ color: '#888', fontSize: '0.8rem', marginLeft: '8px' }}>{CHAIN_CONFIG[r.asset.chainKey]?.name}</span>
+                  </div>
+                  <span style={{ color: r.success ? '#4ade80' : '#f87171', fontSize: '1rem' }}>{r.success ? '✅' : '❌'}</span>
+                </div>
+                {r.success ? (
+                  <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ color: '#888', fontSize: '0.8rem' }}>${r.inputValue?.toFixed(2) || '0.00'} → </div>
+                    <div style={{ color: '#4ade80', fontWeight: 'bold' }}>${r.usdcNet?.toFixed(2) || '0.00'} USDC</div>
+                    <div style={{ background: 'rgba(74,222,128,0.2)', padding: '2px 8px', borderRadius: '4px', color: '#4ade80', fontSize: '0.75rem', fontWeight: 'bold' }}>{r.zapPercent || 99}%</div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '6px', color: '#f87171', fontSize: '0.75rem' }}>{r.error || 'No liquidity'}</div>
+                )}
+              </div>
+            ))}
+            <div style={{ padding: '12px', background: 'rgba(74,222,128,0.15)', borderRadius: '8px', marginBottom: '15px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#4ade80' }}>💰 Total USDC Ready</span>
+                <span style={{ color: '#4ade80', fontWeight: 'bold', fontSize: '1.1rem' }}>${zapResults.filter(r => r.success).reduce((sum, r) => sum + (r.usdcNet || 0), 0).toFixed(2)}</span>
+              </div>
+              <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '4px', textAlign: 'center' }}>{FEE_PERCENT}% fee → Growth Engine 🚀</div>
+            </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setZapResults([])} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #666', background: 'transparent', color: '#888', cursor: 'pointer', fontWeight: 'bold' }}>Close</button>
               {zapResults.some(r => r.success) && <button onClick={() => { setZapResults([]); setActiveTab('bridge'); }} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', background: 'linear-gradient(90deg, #4ade80, #22c55e)', color: '#000', cursor: 'pointer', fontWeight: 'bold' }}>🌉 Bridge</button>}
