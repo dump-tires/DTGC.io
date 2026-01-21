@@ -800,7 +800,7 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
   };
 
   const openBridge = (chainKey) => {
-    window.open(`https://swap.liberty.io/#/?chainId=369`, '_blank');
+    window.open(`https://libertyswap.finance`, '_blank');
     setBridgeStatus(`Bridge opened for ${CHAIN_CONFIG[chainKey].name} USDC`);
   };
 
