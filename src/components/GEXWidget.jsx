@@ -49,7 +49,7 @@ const CONFIG = {
   
   // 🔥 NEW: Signal thresholds
   MIN_SPREAD_SIGNAL: 3,      // Push to Lambda at 3%
-  MIN_SPREAD_OPPORTUNITY: 5, // Show as opportunity at 5%
+  MIN_SPREAD_OPPORTUNITY: 4, // Show as opportunity at 4% (was 5%)
   SIGNAL_COOLDOWN_MS: 120000, // 2 minutes between same signal type
 };
 
@@ -295,8 +295,8 @@ const SpreadMonitor = () => {
     const abs = Math.abs(spread || 0);
     if (abs < 2) return { color: '#888', label: 'NORMAL' };
     if (abs < 3) return { color: '#FFD700', label: 'WATCHING' };
-    if (abs < 5) return { color: '#FFA500', label: 'SIGNAL SENT' }; // 🔥 NEW status
-    return { color: '#00FF88', label: 'OPPORTUNITY' };
+    if (abs < 4) return { color: '#FFA500', label: 'SIGNAL SENT' }; // 🔥 Changed from 5 to 4
+    return { color: '#00FF88', label: 'OPPORTUNITY' }; // Now triggers at 4%+
   };
 
   const status = getStatus(prices.spread);
@@ -516,9 +516,9 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
             title: `${direction.buy}→${direction.sell} +${absSpread.toFixed(1)}%`,
             description: `Est. profit: $${profit.toFixed(0)} | GE share: $${geShare.toFixed(0)}`,
             profit: `$${profit.toFixed(0)}`,
-            confidence: absSpread >= 6 ? 'HIGH' : 'MEDIUM',
+            confidence: absSpread >= 4 ? 'HIGH' : 'MEDIUM', // 🔥 Changed from 6 to 4
             timestamp: Date.now(),
-            canAutoTrade: absSpread >= 6 && profit >= CONFIG.MIN_PROFIT_USD,
+            canAutoTrade: absSpread >= 4 && profit >= CONFIG.MIN_PROFIT_USD, // 🔥 Changed from 6 to 4
             pushedToLambda: false, // 🔥 NEW: Track if pushed
           };
 
