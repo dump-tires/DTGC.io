@@ -864,17 +864,29 @@ const ZapperXChain = ({ connectedAddress: propAddress }) => {
                   <option value="ultra">🚀 ULTRA (~95K+)</option>
                 </select>
                 
+                {/* Gasless Toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid #444' }}>
+                  <span style={{ color: '#888', fontSize: '0.8rem' }}>Gasless (EIP-2612):</span>
+                  <button onClick={() => setGaslessMode(!gaslessMode)} style={{
+                    padding: '4px 10px', borderRadius: '5px', border: 'none',
+                    background: gaslessMode ? '#4ade80' : '#ef4444', color: '#fff',
+                    cursor: 'pointer', fontWeight: 'bold', fontSize: '0.75rem'
+                  }}>{gaslessMode ? '✓ ON' : '✗ OFF'}</button>
+                </div>
+                
+                {/* Test Vitalik Button */}
+                <button onClick={() => { setTestWalletInput('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'); setShowTestInput(true); }} style={{
+                  padding: '10px 15px', borderRadius: '8px', border: '1px solid #8B5CF6',
+                  background: 'rgba(139,92,246,0.1)', color: '#8B5CF6', cursor: 'pointer', fontSize: '0.85rem'
+                }}>🧪 Test Vitalik</button>
+                
                 <button onClick={() => scanAllChains()} disabled={isScanning} style={{
                   padding: '12px 25px', borderRadius: '10px', border: 'none',
                   background: isScanning ? '#666' : 'linear-gradient(90deg, #FFD700, #FFA500)',
                   color: '#000', cursor: isScanning ? 'not-allowed' : 'pointer', fontWeight: 'bold'
                 }}>{isScanning ? '⏳ Scanning...' : '🔍 Scan All Chains'}</button>
                 
-                {/* Test Wallet Button */}
-                <button onClick={() => setShowTestInput(!showTestInput)} style={{
-                  padding: '10px 12px', borderRadius: '8px', border: '1px solid #8B5CF6',
-                  background: 'transparent', color: '#8B5CF6', cursor: 'pointer', fontSize: '0.85rem'
-                }} title="Test any wallet">🧪</button>
+
               </div>
             </div>
             
