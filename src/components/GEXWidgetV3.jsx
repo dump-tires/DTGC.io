@@ -1,8 +1,8 @@
 /**
- * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.1
+ * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.2
  * 
  * MULTI-PAIR ARBITRAGE MONITORING
- * eHEX, WETH, USDC, USDT, DAI, WBTC
+ * eHEX, WETH, USDC, DAI, WBTC (5 pairs - USDT removed due to bad liquidity)
  * 
  * Features:
  * - All pairs view sorted by best opportunity
@@ -22,12 +22,19 @@ const CONFIG = {
   PRICE_REFRESH_MS: 15000,
 };
 
+// ═══════════════════════════════════════════════════════════════
+// BRIDGED TOKEN PAIRS - Verified addresses only
+// Using token addresses for DexScreener /tokens/ endpoint
+// ═══════════════════════════════════════════════════════════════
+
 const BRIDGED_PAIRS = [
   {
     id: 'ehex',
     name: 'eHEX',
     icon: '💎',
+    // HEX on Ethereum (native)
     ethAddress: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
+    // eHEX on PulseChain (bridged from Ethereum)
     plsAddress: '0x57fde0a71132198BBeC939B98976993d8D89D225',
     color: '#627eea',
     dexLinks: {
@@ -39,7 +46,9 @@ const BRIDGED_PAIRS = [
     id: 'weth',
     name: 'WETH',
     icon: '⟠',
+    // WETH on Ethereum
     ethAddress: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    // eWETH on PulseChain (bridged from Ethereum)
     plsAddress: '0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C',
     color: '#627eea',
     dexLinks: {
@@ -51,7 +60,9 @@ const BRIDGED_PAIRS = [
     id: 'usdc',
     name: 'USDC',
     icon: '💵',
+    // USDC on Ethereum
     ethAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    // eUSDC on PulseChain (bridged from Ethereum)
     plsAddress: '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07',
     color: '#2775CA',
     dexLinks: {
@@ -59,23 +70,14 @@ const BRIDGED_PAIRS = [
       pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07',
     },
   },
-  {
-    id: 'usdt',
-    name: 'USDT',
-    icon: '💲',
-    ethAddress: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-    plsAddress: '0x0Cb6F5a34ad42ec934882A05265A7d5F59b51A2f',
-    color: '#26A17B',
-    dexLinks: {
-      eth: 'https://app.uniswap.org/#/swap?outputCurrency=0xdAC17F958D2ee523a2206206994597C13D831ec7',
-      pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x0Cb6F5a34ad42ec934882A05265A7d5F59b51A2f',
-    },
-  },
+  // USDT REMOVED - pCopy has bad liquidity data
   {
     id: 'dai',
     name: 'DAI',
     icon: '🔶',
+    // DAI on Ethereum - MakerDAO
     ethAddress: '0x6B175474E89094C44Da98b954EedeBC495271d0F',
+    // eDAI on PulseChain (bridged from Ethereum via PulseChain bridge)
     plsAddress: '0xefD766cCb38EaF1dfd701853BFCe31359239F305',
     color: '#F5AC37',
     dexLinks: {
@@ -87,7 +89,9 @@ const BRIDGED_PAIRS = [
     id: 'wbtc',
     name: 'WBTC',
     icon: '₿',
+    // WBTC on Ethereum
     ethAddress: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+    // eWBTC on PulseChain (bridged from Ethereum)
     plsAddress: '0xb17D901469B9208B17d916112988A3FeD19b5cA1',
     color: '#F7931A',
     dexLinks: {
@@ -121,7 +125,7 @@ class SignalService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'ADD_SIGNAL',
-          signal: { ...signal, source: 'GEX_V3.1', timestamp: now }
+          signal: { ...signal, source: 'GEX_V3.2', timestamp: now }
         })
       });
       
@@ -154,11 +158,25 @@ class PriceService {
       
       const chainId = chain === 'eth' ? 'ethereum' : 'pulsechain';
       let pairs = data.pairs?.filter(p => p.chainId === chainId) || [];
-      if (pairs.length === 0) pairs = data.pairs || [];
       
+      // If no chain-specific pairs, skip (don't use wrong chain data)
+      if (pairs.length === 0) {
+        console.log(`[GEX] No ${chainId} pairs found for ${address}`);
+        return null;
+      }
+      
+      // Sort by liquidity to get most accurate price
       pairs.sort((a, b) => (parseFloat(b.liquidity?.usd) || 0) - (parseFloat(a.liquidity?.usd) || 0));
       
-      const price = pairs[0]?.priceUsd ? parseFloat(pairs[0].priceUsd) : null;
+      // Only use if reasonable liquidity (> $1000)
+      const topPair = pairs[0];
+      const liquidity = parseFloat(topPair.liquidity?.usd) || 0;
+      if (liquidity < 1000) {
+        console.log(`[GEX] Low liquidity for ${address} on ${chainId}: $${liquidity}`);
+        return null;
+      }
+      
+      const price = topPair.priceUsd ? parseFloat(topPair.priceUsd) : null;
       if (price) this.cache[cacheKey] = { price, time: Date.now() };
       
       return price;
@@ -188,7 +206,10 @@ class PriceService {
       })
     );
     
-    return results.sort((a, b) => b.absSpread - a.absSpread);
+    // Filter out pairs with missing prices, then sort by spread
+    return results
+      .filter(p => p.ethPrice && p.plsPrice)
+      .sort((a, b) => b.absSpread - a.absSpread);
   }
 }
 
@@ -298,8 +319,8 @@ export const GEXWidgetV3 = ({
 
             {showInfo && (
               <div className="gex-info-v3">
-                <p><strong>GEX V3</strong> monitors 6 bridged tokens for arbitrage between ETH ↔ PLS.</p>
-                <p>📊 eHEX, WETH, USDC, USDT, DAI, WBTC</p>
+                <p><strong>GEX V3</strong> monitors bridged tokens for arbitrage between ETH ↔ PLS.</p>
+                <p>📊 eHEX, WETH, USDC, DAI, WBTC</p>
                 <p>🎯 Signals at 3%+ spread → Telegram</p>
                 <p>🔗 Use ZapperX or PulseRamp to bridge!</p>
                 <button onClick={() => setShowInfo(false)}>Got it!</button>
@@ -328,7 +349,9 @@ export const GEXWidgetV3 = ({
 
                   {loading ? <div className="loading-v3">Loading prices...</div> : viewMode === 'all' ? (
                     <div className="pairs-list-v3">
-                      {pairData.map(p => (
+                      {pairData.length === 0 ? (
+                        <div className="no-data-v3">No price data available</div>
+                      ) : pairData.map(p => (
                         <div key={p.id} className={`pair-row-v3 ${p.absSpread >= 3 ? 'hot' : ''}`} onClick={() => { setSelectedPair(p.id); setViewMode('single'); }}>
                           <span className="pair-icon-v3">{p.icon}</span>
                           <span className="pair-name-v3">{p.name}</span>
@@ -519,6 +542,7 @@ const STYLES = `
 
 .gex-content-v3 { padding: 14px; max-height: 380px; overflow-y: auto; }
 .loading-v3 { text-align: center; padding: 30px; color: #888; }
+.no-data-v3 { text-align: center; padding: 30px; color: #666; font-size: 12px; }
 
 .gex-footer-v3 { display: flex; justify-content: space-between; padding: 10px 14px; border-top: 1px solid rgba(255,215,0,0.2); background: rgba(0,0,0,0.3); font-size: 10px; }
 .wallet-v3 { color: #666; }
