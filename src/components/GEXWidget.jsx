@@ -644,3 +644,4 @@ const STYLES = `
 `;
 
 export default GEXWidget;
+// V3.0.1
