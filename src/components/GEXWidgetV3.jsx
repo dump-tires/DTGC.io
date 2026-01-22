@@ -16,7 +16,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 const CONFIG = {
   DTGC_GATE_USD: 200,
   SIGNAL_QUEUE_URL: 'https://iwnaatxjwerbpg7jtslldoxeqm0msvdt.lambda-url.us-east-2.on.aws/',
-  MIN_SPREAD_SIGNAL: 3,
+  MIN_SPREAD_SIGNAL: 4,
   MIN_SPREAD_OPPORTUNITY: 5,
   SIGNAL_COOLDOWN_MS: 120000,
   PRICE_REFRESH_MS: 15000,
