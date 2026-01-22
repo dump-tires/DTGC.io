@@ -31,10 +31,12 @@ const CONFIG = {
   // 🔥 NEW: Signal Queue Lambda URL
   SIGNAL_QUEUE_URL: 'https://iwnaatxjwerbpg7jtslldoxeqm0msvdt.lambda-url.us-east-2.on.aws/',
 
-  // DexScreener
+  // DexScreener - FIXED: Using TOKEN addresses, not pair addresses
+  // eHEX(E) Token: 0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39
+  // eHEX(P) Token: 0x57fde0a71132198BBeC939B98976993d8D89D225
   DEXSCREENER: {
-    HEX_ETH: 'https://api.dexscreener.com/latest/dex/pairs/ethereum/0x69d91b94f0aaf8e8a2586909fa77a5c2c89818d5',
-    HEX_PLS: 'https://api.dexscreener.com/latest/dex/pairs/pulsechain/0xf0ea3efe42c11c8819948ec2d3179f4084863d3f',
+    HEX_ETH: 'https://api.dexscreener.com/latest/dex/tokens/0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
+    HEX_PLS: 'https://api.dexscreener.com/latest/dex/tokens/0x57fde0a71132198BBeC939B98976993d8D89D225',
     DTGC: 'https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
   },
 
@@ -255,9 +257,12 @@ const SpreadMonitor = () => {
         fetch(CONFIG.DEXSCREENER.HEX_PLS).then(r => r.json()),
       ]);
 
-      const ethHex = parseFloat(ethRes?.pair?.priceUsd || 0);
-      const plsHex = parseFloat(plsRes?.pair?.priceUsd || 0);
+      // FIXED: /tokens/ endpoint returns { pairs: [...] }, not { pair: {...} }
+      const ethHex = parseFloat(ethRes?.pairs?.[0]?.priceUsd || 0);
+      const plsHex = parseFloat(plsRes?.pairs?.[0]?.priceUsd || 0);
       const spread = ethHex && plsHex ? ((ethHex - plsHex) / plsHex) * 100 : null;
+
+      console.log('[GEX] Prices:', { ethHex, plsHex, spread: spread?.toFixed(2) + '%' });
 
       setPrices({ ethHex, plsHex, spread });
       setHistory(prev => [...prev.slice(-19), { spread, time: Date.now() }]);
@@ -266,7 +271,10 @@ const SpreadMonitor = () => {
       // 🔥 NEW: Auto-push signal to Lambda when spread >= 3%
       const absSpread = Math.abs(spread || 0);
       if (absSpread >= CONFIG.MIN_SPREAD_SIGNAL) {
+        // CORRECTED: If ETH price higher (spread > 0), buy on PLS (cheaper)
         const direction = spread > 0 ? 'BUY_PHEX' : 'BUY_EHEX';
+        console.log('[GEX] Signal triggered:', { direction, absSpread: absSpread.toFixed(2) + '%' });
+        
         const result = await SignalQueueService.pushSignal({
           type: 'EHEX_ARB',
           spread: absSpread,
@@ -327,7 +335,7 @@ const SpreadMonitor = () => {
   return (
     <div className="spread-monitor">
       <div className="spread-main">
-        <div className="spread-label">eHEX ETH / eHEX PLS SPREAD</div>
+        <div className="spread-label">eHEX(E) / eHEX(P) SPREAD</div>
         <div className="spread-value" style={{ color: prices.spread >= 0 ? '#00FF88' : '#FF6B6B' }}>
           {prices.spread !== null ? `${prices.spread >= 0 ? '+' : ''}${prices.spread.toFixed(2)}%` : '--'}
         </div>
@@ -336,6 +344,38 @@ const SpreadMonitor = () => {
         </div>
         {renderSparkline()}
       </div>
+
+      {/* CORRECTED: BUY button shows the CHEAPER chain */}
+      {prices.spread !== null && Math.abs(prices.spread) >= 2 && (
+        <button 
+          className="gex-buy-btn"
+          onClick={() => {
+            // Open the DEX for the cheaper chain
+            const url = prices.spread > 0 
+              ? `https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x57fde0a71132198BBeC939B98976993d8D89D225`
+              : `https://app.uniswap.org/#/swap?outputCurrency=0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39`;
+            window.open(url, '_blank');
+          }}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            marginBottom: '12px',
+            background: 'transparent',
+            border: '2px solid #FFD700',
+            borderRadius: '10px',
+            color: '#FFD700',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
+        >
+          ⭐ BUY eHEX on {prices.spread > 0 ? 'PULSECHAIN' : 'ETHEREUM'} (CHEAPER)
+        </button>
+      )}
 
       {/* 🔥 NEW: Lambda push confirmation */}
       {lastPush && (Date.now() - lastPush.time) < 60000 && (
@@ -361,11 +401,21 @@ const SpreadMonitor = () => {
 
       {prices.spread !== null && Math.abs(prices.spread) >= 2 && (
         <div className="direction-box">
-          <div className="direction-label">SUGGESTED DIRECTION</div>
+          <div className="direction-label">⭐ ARBITRAGE DIRECTION</div>
           <div className="direction-value">
             {prices.spread > 0
-              ? <><span className="buy">Buy eHEX (PLS)</span> → Bridge → <span className="sell">Sell eHEX</span></>
-              : <><span className="buy-eth">Buy eHEX</span> → Bridge → <span className="sell">Sell eHEX (PLS)</span></>
+              ? <>
+                  {/* ETH is MORE expensive, so BUY on PulseChain (cheaper) */}
+                  <span className="buy">BUY eHEX on PULSECHAIN</span> (${prices.plsHex?.toFixed(6)})<br/>
+                  → Bridge to Ethereum →<br/>
+                  <span className="sell">SELL eHEX on ETHEREUM</span> (${prices.ethHex?.toFixed(6)})
+                </>
+              : <>
+                  {/* PLS is MORE expensive, so BUY on Ethereum (cheaper) */}
+                  <span className="buy-eth">BUY eHEX on ETHEREUM</span> (${prices.ethHex?.toFixed(6)})<br/>
+                  → Bridge to PulseChain →<br/>
+                  <span className="sell">SELL eHEX on PULSECHAIN</span> (${prices.plsHex?.toFixed(6)})
+                </>
             }
           </div>
         </div>
@@ -500,8 +550,9 @@ const SignalPanel = ({ isUnlocked, dtgcUSDValue, requiredUSD, signer }) => {
           fetch(CONFIG.DEXSCREENER.HEX_PLS).then(r => r.json()),
         ]);
 
-        const ethHex = parseFloat(ethRes?.pair?.priceUsd || 0);
-        const plsHex = parseFloat(plsRes?.pair?.priceUsd || 0);
+        // FIXED: /tokens/ endpoint returns { pairs: [...] }, not { pair: {...} }
+        const ethHex = parseFloat(ethRes?.pairs?.[0]?.priceUsd || 0);
+        const plsHex = parseFloat(plsRes?.pairs?.[0]?.priceUsd || 0);
         const spread = ethHex && plsHex ? ((ethHex - plsHex) / plsHex) * 100 : 0;
         const absSpread = Math.abs(spread);
 
