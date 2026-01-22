@@ -6392,7 +6392,13 @@ export default function App() {
       if (currentAllowance < amountWei) {
         console.log('🔓 Requesting token approval...');
         showToast('Step 1/2: Approve tokens in wallet...', 'info');
-        const approveTx = await tokenContract.approve(stakingAddress, ethers.MaxUint256);
+        
+        // ═══════════════════════════════════════════════════════════════
+        // FIX: Approve exact amount instead of MaxUint256
+        // This avoids MetaMask's scary "unlimited approval" warning
+        // which can look like an NFT transfer warning
+        // ═══════════════════════════════════════════════════════════════
+        const approveTx = await tokenContract.approve(stakingAddress, amountWei);
         console.log('⏳ Approval tx sent:', approveTx.hash);
         await approveTx.wait();
         console.log('✅ Approval confirmed!');
