@@ -1,0 +1,497 @@
+/**
+ * MetalsWidget.css
+ * Styles for Precious Metals Widget V1
+ * Import this in your main App.css or component
+ */
+
+/* ============ WIDGET ANIMATIONS ============ */
+@keyframes metalsPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes metalsSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes metalsShine {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes metalsBounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* ============ COLLAPSED BUTTON ============ */
+.metals-collapsed-btn {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 2px solid #C9A227;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(201, 162, 39, 0.3);
+  z-index: 9998;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.metals-collapsed-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 30px rgba(201, 162, 39, 0.5);
+  border-color: #FFD700;
+}
+
+.metals-collapsed-btn:active {
+  transform: scale(0.98);
+}
+
+.metals-price-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: linear-gradient(135deg, #C9A227 0%, #FFD700 100%);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  min-width: 36px;
+  text-align: center;
+  animation: metalsPulse 2s ease-in-out infinite;
+}
+
+/* ============ MAIN WIDGET ============ */
+.metals-widget-v1 {
+  position: fixed;
+  bottom: 90px;
+  right: 20px;
+  width: 340px;
+  background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+  border: 1px solid rgba(201, 162, 39, 0.3);
+  border-radius: 16px;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 215, 0, 0.1) inset;
+  z-index: 9999;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  animation: metalsSlideIn 0.3s ease-out;
+}
+
+/* ============ HEADER ============ */
+.metals-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.2);
+  background: linear-gradient(90deg, rgba(201, 162, 39, 0.15) 0%, transparent 100%);
+}
+
+.metals-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.metals-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #C9A227 0%, #FFD700 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(201, 162, 39, 0.4);
+}
+
+.metals-title {
+  color: #FFD700;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+.metals-subtitle {
+  color: #888;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+.metals-icon-btn {
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.metals-icon-btn:hover {
+  color: #FFD700;
+  background: rgba(255, 215, 0, 0.1);
+}
+
+/* ============ TABS ============ */
+.metals-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.15);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.metals-tab {
+  flex: 1;
+  padding: 10px 6px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #555;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.metals-tab:hover {
+  color: #999;
+  background: rgba(255, 215, 0, 0.05);
+}
+
+.metals-tab.active {
+  color: #FFD700;
+  border-bottom-color: #FFD700;
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.metals-tab-icon {
+  font-size: 12px;
+}
+
+/* ============ CONTENT ============ */
+.metals-content {
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.metals-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.metals-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.metals-content::-webkit-scrollbar-thumb {
+  background: rgba(201, 162, 39, 0.3);
+  border-radius: 2px;
+}
+
+/* ============ METAL ROWS ============ */
+.metals-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.metals-row:hover {
+  background: rgba(201, 162, 39, 0.12);
+  border-color: rgba(201, 162, 39, 0.4);
+  transform: translateX(4px);
+}
+
+.metals-row:active {
+  transform: translateX(2px) scale(0.99);
+}
+
+.metals-row-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metals-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.metals-icon.gold {
+  background: linear-gradient(135deg, #C9A227 0%, #FFD700 100%);
+  box-shadow: 0 3px 12px rgba(201, 162, 39, 0.5);
+}
+
+.metals-icon.silver {
+  background: linear-gradient(135deg, #7B7B7B 0%, #C0C0C0 100%);
+  box-shadow: 0 3px 12px rgba(192, 192, 192, 0.4);
+}
+
+.metals-name {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.metals-symbol {
+  color: #666;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.metals-prices {
+  text-align: right;
+}
+
+.metals-price-main {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.metals-price-change {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.metals-price-change.up {
+  color: #00D4AA;
+}
+
+.metals-price-change.down {
+  color: #FF4757;
+}
+
+/* ============ TRADE BUTTON ============ */
+.metals-trade-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #C9A227 0%, #FFD700 50%, #C9A227 100%);
+  background-size: 200% auto;
+  border: none;
+  border-radius: 12px;
+  color: #000;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: all 0.3s;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.metals-trade-btn:hover {
+  background-position: right center;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(201, 162, 39, 0.5);
+}
+
+.metals-trade-btn:active {
+  transform: translateY(0);
+}
+
+/* ============ SIGNALS ============ */
+.metals-signal {
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.25);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.metals-signal.bearish {
+  background: rgba(255, 71, 87, 0.08);
+  border-color: rgba(255, 71, 87, 0.25);
+}
+
+.metals-signal.neutral {
+  background: rgba(255, 215, 0, 0.08);
+  border-color: rgba(255, 215, 0, 0.25);
+}
+
+.metals-signal-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.metals-signal-type {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metals-signal-type.bullish { color: #00D4AA; }
+.metals-signal-type.bearish { color: #FF4757; }
+.metals-signal-type.neutral { color: #FFD700; }
+
+.metals-signal-time {
+  color: #555;
+  font-size: 10px;
+}
+
+.metals-signal-text {
+  color: #bbb;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ============ LIVE TAB ============ */
+.metals-live {
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.metals-live-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  animation: metalsBounce 2s ease-in-out infinite;
+}
+
+.metals-live-title {
+  color: #FFD700;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.metals-live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #00D4AA;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.metals-live-status::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #00D4AA;
+  border-radius: 50%;
+  animation: metalsPulse 1.5s ease-in-out infinite;
+}
+
+.metals-live-stats {
+  color: #888;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.metals-live-stats strong {
+  color: #FFD700;
+}
+
+/* ============ LEARN TAB ============ */
+.metals-learn-item {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.metals-learn-item:hover {
+  background: rgba(201, 162, 39, 0.1);
+  border-color: rgba(201, 162, 39, 0.3);
+}
+
+.metals-learn-title {
+  color: #FFD700;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.metals-learn-desc {
+  color: #777;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ============ FOOTER ============ */
+.metals-footer {
+  padding: 10px 16px;
+  border-top: 1px solid rgba(201, 162, 39, 0.15);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: #555;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.metals-footer-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metals-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00D4AA;
+}
+
+.metals-status-dot.offline {
+  background: #FF4757;
+}
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 400px) {
+  .metals-widget-v1 {
+    width: calc(100vw - 40px);
+    right: 20px;
+    left: 20px;
+  }
+  
+  .metals-collapsed-btn {
+    bottom: 80px;
+    right: 16px;
+    width: 50px;
+    height: 50px;
+  }
+}

@@ -1,4 +1,6 @@
 import { GEXWidgetV3 } from './components/GEXWidgetV3';
+import MetalsWidgetV1 from './components/widgets/MetalsWidgetV1';
+import './components/widgets/MetalsWidget.css';
 import DapperComponent from './components/DapperComponent';
 import ZapperXChain from './components/ZapperXChain';
 import PricingPage from './pages/PricingPage';
@@ -14315,6 +14317,11 @@ export default function App() {
         dtgcPrice={livePrices.dtgc || 0}
         position="bottom-right"
       />
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* METALS V1 - Precious Metals Perps Trading Widget */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      <MetalsWidgetV1 />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ZAPP ARB LASER LINK MODAL - One-click arbitrage route calculator */}
