@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
 const LAMBDA_URL = 'https://kz45776mye3b2ywtra43m4wwl40hmrdu.lambda-url.us-east-2.on.aws/';
-const PRICE_UPDATE_INTERVAL = 1500; // 1.5 seconds for live feel
+const PRICE_UPDATE_INTERVAL = 1000; // 1 second for real-time feel
 
 // Use our own Vercel API route to proxy gTrade (no CORS issues)
 const GTRADE_API = '/api/gtrade-prices';
@@ -107,10 +107,11 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch ALL prices from gTrade via CORS proxy - EXACT match to gains.trade
+  // Fetch ALL prices from gTrade via Vercel API - EXACT match to gains.trade
   const fetchAllPrices = useCallback(async () => {
     try {
-      const response = await fetch(GTRADE_API);
+      // Add cache-busting timestamp
+      const response = await fetch(`${GTRADE_API}?t=${Date.now()}`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -118,16 +119,34 @@ export default function MetalPerpsWidget() {
       
       const data = await response.json();
       
-      // gTrade returns array indexed by pair ID
+      // Debug: log raw response to see what we're getting
+      if (data && data.length > 0) {
+        console.log('🔍 Raw gTrade data[0-5]:', data.slice(0, 5));
+        console.log('🔍 BTC raw:', data[PAIR_IDS.BTC], 'ETH raw:', data[PAIR_IDS.ETH]);
+      }
+      
+      // gTrade returns array indexed by pair ID - prices are strings or numbers
       if (Array.isArray(data) && data.length > 50) {
+        // Parse with full precision - gTrade returns prices like "89713.5" or 89713.5
+        const btcRaw = data[PAIR_IDS.BTC];
+        const ethRaw = data[PAIR_IDS.ETH];
+        const goldRaw = data[PAIR_IDS.GOLD];
+        const silverRaw = data[PAIR_IDS.SILVER];
+        
         const newPrices = {
-          BTC: parseFloat(data[PAIR_IDS.BTC]) || priceRef.current.BTC,
-          ETH: parseFloat(data[PAIR_IDS.ETH]) || priceRef.current.ETH,
-          GOLD: parseFloat(data[PAIR_IDS.GOLD]) || priceRef.current.GOLD,
-          SILVER: parseFloat(data[PAIR_IDS.SILVER]) || priceRef.current.SILVER,
+          BTC: typeof btcRaw === 'string' ? Number(btcRaw) : btcRaw,
+          ETH: typeof ethRaw === 'string' ? Number(ethRaw) : ethRaw,
+          GOLD: typeof goldRaw === 'string' ? Number(goldRaw) : goldRaw,
+          SILVER: typeof silverRaw === 'string' ? Number(silverRaw) : silverRaw,
         };
         
-        // Calculate changes and flashes
+        // Validate prices are reasonable
+        if (newPrices.BTC < 1000 || newPrices.BTC > 500000) {
+          console.warn('⚠️ BTC price out of range:', newPrices.BTC);
+          return;
+        }
+        
+        // Calculate changes and flashes - trigger on ANY change
         const changes = {};
         const flashes = {};
         
@@ -135,10 +154,14 @@ export default function MetalPerpsWidget() {
           const oldPrice = priceRef.current[asset];
           const newPrice = newPrices[asset];
           
-          if (oldPrice && newPrice && Math.abs(newPrice - oldPrice) > 0.01) {
+          if (oldPrice && newPrice) {
             const change = ((newPrice - oldPrice) / oldPrice) * 100;
             changes[asset] = change;
-            flashes[asset] = change > 0 ? 'up' : 'down';
+            
+            // Flash on any price movement > $0.001
+            if (Math.abs(newPrice - oldPrice) > 0.001) {
+              flashes[asset] = change > 0 ? 'up' : 'down';
+            }
           }
         });
         
@@ -150,14 +173,14 @@ export default function MetalPerpsWidget() {
         setLastUpdate(new Date());
         setPriceSource('gTrade Live');
         
-        // Clear flashes
-        setTimeout(() => setPriceFlash({}), 400);
+        // Clear flashes quickly for rapid updates
+        setTimeout(() => setPriceFlash({}), 300);
         
         console.log('📊 gTrade prices:', {
-          BTC: newPrices.BTC.toFixed(2),
-          ETH: newPrices.ETH.toFixed(2),
-          GOLD: newPrices.GOLD.toFixed(2),
-          SILVER: newPrices.SILVER.toFixed(2)
+          BTC: newPrices.BTC,
+          ETH: newPrices.ETH,
+          GOLD: newPrices.GOLD,
+          SILVER: newPrices.SILVER
         });
       }
     } catch (err) {
@@ -247,10 +270,12 @@ export default function MetalPerpsWidget() {
     };
   }, [fetchAllPrices, fetchPositions, fetchBalance]);
 
-  // Formatters - Institutional grade precision
-  const formatPrice = (price) => {
+  // Formatters - Match gTrade display precision
+  const formatPrice = (price, asset = null) => {
     if (!price) return '$0.00';
-    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // gTrade shows 1 decimal for BTC/ETH/GOLD, 2 for SILVER
+    const decimals = (asset === 'SILVER' || price < 100) ? 2 : 1;
+    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   };
 
   const calcLiquidationPrice = () => {
@@ -472,7 +497,10 @@ export default function MetalPerpsWidget() {
                       color: '#fff',
                       fontFamily: "'Orbitron', sans-serif",
                     }}>
-                      ${prices[key]?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                      ${prices[key]?.toLocaleString('en-US', { 
+                        minimumFractionDigits: key === 'SILVER' ? 2 : 1, 
+                        maximumFractionDigits: key === 'SILVER' ? 2 : 1 
+                      }) || '0.0'}
                     </div>
                     <div style={{ 
                       fontSize: '8px', 
@@ -582,7 +610,7 @@ export default function MetalPerpsWidget() {
                   : 'none',
                 transition: 'text-shadow 0.3s',
               }}>
-                {formatPrice(currentPrice)}
+                {formatPrice(currentPrice, selectedAsset)}
               </div>
               {isCommodity && (
                 <div style={{
@@ -709,7 +737,7 @@ export default function MetalPerpsWidget() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#888' }}>Liq. Price</span>
-                <span style={{ color: '#ff4444', fontWeight: 600 }}>{formatPrice(calcLiquidationPrice())}</span>
+                <span style={{ color: '#ff4444', fontWeight: 600 }}>{formatPrice(calcLiquidationPrice(), selectedAsset)}</span>
               </div>
             </div>
 
