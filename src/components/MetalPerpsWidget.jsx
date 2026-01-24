@@ -118,7 +118,7 @@ const ASSETS = {
     minLev: 2, 
     pairIndex: 10, 
     icon: '🥇',
-    iconUrl: 'https://assets.coingecko.com/coins/images/33517/small/Icon_gold.png',
+    iconUrl: '/images/gold_bar.png',
   },
   SILVER: { 
     name: 'Silver', 
@@ -127,7 +127,7 @@ const ASSETS = {
     minLev: 2, 
     pairIndex: 11, 
     icon: '🥈',
-    iconUrl: 'https://assets.coingecko.com/coins/images/33930/small/Icon_silver_%281%29.png',
+    iconUrl: '/images/silver_bar.png',
   },
 };
 
