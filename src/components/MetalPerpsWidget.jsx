@@ -1,18 +1,15 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
 const LAMBDA_URL = 'https://kz45776mye3b2ywtra43m4wwl40hmrdu.lambda-url.us-east-2.on.aws/';
-const PRICE_UPDATE_INTERVAL = 1000; // 1 second for real-time feel
 
-// gTrade API endpoints - try multiple CORS proxies
-const GTRADE_ENDPOINTS = [
-  '/api/gtrade-prices', // Our Vercel API route (best)
-  'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://backend-arbitrum.gains.trade/prices'),
-  'https://corsproxy.io/?' + encodeURIComponent('https://backend-arbitrum.gains.trade/prices'),
-];
-
-// gTrade pair indices - EXACT match to gains.trade
-const PAIR_IDS = { BTC: 0, ETH: 1, GOLD: 52, SILVER: 53 };
+// TradingView symbols for each asset
+const TV_SYMBOLS = {
+  BTC: 'BINANCE:BTCUSDT',
+  ETH: 'BINANCE:ETHUSDT',
+  GOLD: 'TVC:GOLD',
+  SILVER: 'TVC:SILVER',
+};
 
 const ASSET_IMAGES = {
   BTC: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
@@ -40,6 +37,133 @@ const ASSETS = {
   SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2 },
 };
 
+// TradingView Mini Symbol Overview - Shows live price + mini chart
+const TradingViewMiniSymbol = ({ symbol, height = 220 }) => {
+  const containerRef = useRef(null);
+  
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    containerRef.current.innerHTML = '';
+    
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      symbol: symbol,
+      width: '100%',
+      height: height,
+      locale: 'en',
+      dateRange: '1D',
+      colorTheme: 'dark',
+      isTransparent: true,
+      autosize: false,
+      largeChartUrl: '',
+    });
+    
+    const container = document.createElement('div');
+    container.className = 'tradingview-widget-container';
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'tradingview-widget-container__widget';
+    container.appendChild(widgetDiv);
+    container.appendChild(script);
+    
+    containerRef.current.appendChild(container);
+    
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+      }
+    };
+  }, [symbol, height]);
+  
+  return <div ref={containerRef} style={{ height: `${height}px`, width: '100%' }} />;
+};
+
+// TradingView Ticker Tape - Live scrolling prices
+const TradingViewTickerTape = () => {
+  const containerRef = useRef(null);
+  
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    containerRef.current.innerHTML = '';
+    
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      symbols: [
+        { proName: 'BINANCE:BTCUSDT', title: 'BTC' },
+        { proName: 'BINANCE:ETHUSDT', title: 'ETH' },
+        { proName: 'TVC:GOLD', title: 'GOLD' },
+        { proName: 'TVC:SILVER', title: 'SILVER' },
+      ],
+      showSymbolLogo: true,
+      isTransparent: true,
+      displayMode: 'compact',
+      colorTheme: 'dark',
+      locale: 'en',
+    });
+    
+    const container = document.createElement('div');
+    container.className = 'tradingview-widget-container';
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'tradingview-widget-container__widget';
+    container.appendChild(widgetDiv);
+    container.appendChild(script);
+    
+    containerRef.current.appendChild(container);
+    
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+      }
+    };
+  }, []);
+  
+  return <div ref={containerRef} style={{ height: '46px', width: '100%', overflow: 'hidden' }} />;
+};
+
+// TradingView Symbol Info - Large price display with change
+const TradingViewSymbolInfo = ({ symbol }) => {
+  const containerRef = useRef(null);
+  
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    containerRef.current.innerHTML = '';
+    
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-symbol-info.js';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      symbol: symbol,
+      width: '100%',
+      locale: 'en',
+      colorTheme: 'dark',
+      isTransparent: true,
+    });
+    
+    const container = document.createElement('div');
+    container.className = 'tradingview-widget-container';
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'tradingview-widget-container__widget';
+    container.appendChild(widgetDiv);
+    container.appendChild(script);
+    
+    containerRef.current.appendChild(container);
+    
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+      }
+    };
+  }, [symbol]);
+  
+  return <div ref={containerRef} style={{ height: '110px', width: '100%' }} />;
+};
+
 export default function MetalPerpsWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('trade');
@@ -47,35 +171,17 @@ export default function MetalPerpsWidget() {
   const [direction, setDirection] = useState('LONG');
   const [collateral, setCollateral] = useState('50');
   const [leverage, setLeverage] = useState(10);
-  const [prices, setPrices] = useState({
-    BTC: 89713,
-    ETH: 3320,
-    GOLD: 2720,
-    SILVER: 30.50,
-  });
-  const [prevPrices, setPrevPrices] = useState({});
-  const [priceChanges, setPriceChanges] = useState({});
   const [positions, setPositions] = useState([]);
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [priceFlash, setPriceFlash] = useState({});
-  const [priceSource, setPriceSource] = useState('connecting...');
-  
-  const priceRef = useRef({
-    BTC: 89713,
-    ETH: 3320,
-    GOLD: 2720,
-    SILVER: 30.50,
-  });
 
   const asset = ASSETS[selectedAsset];
-  const currentPrice = prices[selectedAsset] || 0;
+  const tvSymbol = TV_SYMBOLS[selectedAsset];
   const positionSize = parseFloat(collateral || 0) * leverage;
 
   // Check if commodity market is open
-  const isMarketOpen = useCallback(() => {
+  const isMarketOpen = () => {
     const now = new Date();
     const utcDay = now.getUTCDay();
     const utcHour = now.getUTCHours();
@@ -83,7 +189,7 @@ export default function MetalPerpsWidget() {
     if (utcDay === 0 && utcHour < 22) return false;
     if (utcDay === 5 && utcHour >= 22) return false;
     return true;
-  }, []);
+  };
 
   const isCommodity = selectedAsset === 'GOLD' || selectedAsset === 'SILVER';
   const marketOpen = !isCommodity || isMarketOpen();
@@ -111,108 +217,25 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Track which endpoint is working
-  const workingEndpointRef = useRef(0);
-
-  // Fetch ALL prices from gTrade - tries multiple endpoints
-  const fetchAllPrices = useCallback(async () => {
-    let data = null;
-    let success = false;
-    
-    // Try endpoints starting with the last one that worked
-    for (let i = 0; i < GTRADE_ENDPOINTS.length && !success; i++) {
-      const endpointIndex = (workingEndpointRef.current + i) % GTRADE_ENDPOINTS.length;
-      const endpoint = GTRADE_ENDPOINTS[endpointIndex];
-      
-      try {
-        const response = await fetch(`${endpoint}${endpoint.includes('?') ? '&' : '?'}t=${Date.now()}`, {
-          cache: 'no-store',
-        });
-        
-        if (response.ok) {
-          data = await response.json();
-          if (Array.isArray(data) && data.length > 50) {
-            success = true;
-            workingEndpointRef.current = endpointIndex;
-            console.log('✅ Using endpoint:', endpointIndex);
-          }
-        }
-      } catch (e) {
-        console.warn(`Endpoint ${endpointIndex} failed:`, e.message);
-      }
-    }
-    
-    if (!success || !data) {
-      setPriceSource('Reconnecting...');
-      return;
-    }
-    
-    // Parse prices with full precision
-    const newPrices = {
-      BTC: Number(data[PAIR_IDS.BTC]) || priceRef.current.BTC,
-      ETH: Number(data[PAIR_IDS.ETH]) || priceRef.current.ETH,
-      GOLD: Number(data[PAIR_IDS.GOLD]) || priceRef.current.GOLD,
-      SILVER: Number(data[PAIR_IDS.SILVER]) || priceRef.current.SILVER,
-    };
-    
-    // Validate BTC price is reasonable
-    if (newPrices.BTC < 10000 || newPrices.BTC > 500000) {
-      console.warn('⚠️ Invalid BTC price:', newPrices.BTC);
-      return;
-    }
-    
-    // Calculate changes and flashes
-    const changes = {};
-    const flashes = {};
-    
-    Object.keys(newPrices).forEach(asset => {
-      const oldPrice = priceRef.current[asset];
-      const newPrice = newPrices[asset];
-      
-      if (oldPrice && newPrice) {
-        const change = ((newPrice - oldPrice) / oldPrice) * 100;
-        changes[asset] = change;
-        
-        // Flash on any price movement
-        if (Math.abs(newPrice - oldPrice) > 0.001) {
-          flashes[asset] = change > 0 ? 'up' : 'down';
-        }
-      }
-    });
-    
-    // Update state
-    setPrices(newPrices);
-    setPriceChanges(changes);
-    setPriceFlash(flashes);
-    priceRef.current = newPrices;
-    setLastUpdate(new Date());
-    setPriceSource('gTrade Live');
-    
-    // Clear flashes
-    setTimeout(() => setPriceFlash({}), 250);
-    
-    console.log('📊 Prices:', newPrices.BTC.toFixed(2), newPrices.ETH.toFixed(2));
-  }, []);
-
   // Fetch positions
-  const fetchPositions = useCallback(async () => {
+  const fetchPositions = async () => {
     try {
       const result = await apiCall('POSITIONS');
       if (result.positions) setPositions(result.positions);
     } catch (error) {
       console.error('Failed to fetch positions:', error);
     }
-  }, []);
+  };
 
   // Fetch balance
-  const fetchBalance = useCallback(async () => {
+  const fetchBalance = async () => {
     try {
       const result = await apiCall('BALANCE');
       if (result.balance !== undefined) setBalance(result.balance);
     } catch (error) {
       console.error('Failed to fetch balance:', error);
     }
-  }, []);
+  };
 
   // Trade functions
   const openTrade = async () => {
@@ -225,15 +248,15 @@ export default function MetalPerpsWidget() {
       const result = await apiCall('OPEN_TRADE', {
         asset: selectedAsset,
         direction,
-        collateralUsd: parseFloat(collateral),
+        collateral: parseFloat(collateral),
         leverage,
       });
       if (result.success) {
-        showToast(`${direction} ${selectedAsset} opened! (1% fee applied)`, 'success');
+        showToast(`${direction} position opened!`, 'success');
         fetchPositions();
         fetchBalance();
       } else {
-        showToast(result.error || 'Trade failed', 'error');
+        showToast(result.error || 'Failed to open trade', 'error');
       }
     } catch (error) {
       showToast('Failed to open trade', 'error');
@@ -241,10 +264,10 @@ export default function MetalPerpsWidget() {
     setLoading(false);
   };
 
-  const closePosition = async (index) => {
+  const closeTrade = async (positionId) => {
     setLoading(true);
     try {
-      const result = await apiCall('CLOSE_TRADE', { positionIndex: index });
+      const result = await apiCall('CLOSE_TRADE', { positionId });
       if (result.success) {
         showToast('Position closed!', 'success');
         fetchPositions();
@@ -258,203 +281,135 @@ export default function MetalPerpsWidget() {
     setLoading(false);
   };
 
-  // Initial fetch and polling - gTrade prices every 1.5s
+  // Initial fetch
   useEffect(() => {
-    // Initial fetch
-    fetchAllPrices();
     fetchPositions();
     fetchBalance();
-    
-    // Poll gTrade API every 1.5 seconds for live prices
-    const priceInterval = setInterval(fetchAllPrices, PRICE_UPDATE_INTERVAL);
-    const positionInterval = setInterval(fetchPositions, 30000);
-    
-    return () => {
-      clearInterval(priceInterval);
-      clearInterval(positionInterval);
-    };
-  }, [fetchAllPrices, fetchPositions, fetchBalance]);
+    const interval = setInterval(fetchPositions, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Formatters - 2 decimal precision like institutional trading
-  const formatPrice = (price) => {
-    if (!price) return '$0.00';
-    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-  const calcLiquidationPrice = () => {
-    if (!currentPrice || !leverage) return 0;
-    const liqDistance = currentPrice / leverage;
-    return direction === 'LONG' 
-      ? currentPrice - liqDistance * 0.9
-      : currentPrice + liqDistance * 0.9;
-  };
-
-  const formatTimeAgo = (date) => {
-    if (!date) return 'Never';
-    const seconds = Math.floor((new Date() - date) / 1000);
-    if (seconds < 5) return 'Just now';
-    if (seconds < 60) return `${seconds}s ago`;
-    return `${Math.floor(seconds / 60)}m ago`;
-  };
-
-  // Get price change color and arrow
-  const getPriceChangeDisplay = (assetKey) => {
-    const change = priceChanges[assetKey] || 0;
-    if (Math.abs(change) < 0.001) return { color: '#888', arrow: '•', text: '0.00%' };
-    if (change > 0) return { color: '#00ff88', arrow: '▲', text: `+${change.toFixed(2)}%` };
-    return { color: '#ff4444', arrow: '▼', text: `${change.toFixed(2)}%` };
-  };
-
-  // ==================== COLLAPSED BUTTON ====================
+  // Collapsed State - Floating Button
   if (!isExpanded) {
     return (
-      <button
+      <div
         onClick={() => setIsExpanded(true)}
         style={{
           position: 'fixed',
-          bottom: '90px',
+          bottom: '100px',
           left: '20px',
-          zIndex: 9998,
           width: '56px',
           height: '56px',
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #FFD700 0%, #B8860B 100%)',
-          border: '2px solid #FFD700',
-          cursor: 'pointer',
+          background: 'linear-gradient(135deg, #FFD700, #FFA500)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '24px',
-          boxShadow: '0 4px 20px rgba(255, 215, 0, 0.5), 0 0 30px rgba(255, 215, 0, 0.3)',
-          transition: 'transform 0.2s, box-shadow 0.2s',
+          cursor: 'pointer',
+          boxShadow: '0 4px 20px rgba(255, 215, 0, 0.4)',
+          zIndex: 9999,
+          transition: 'all 0.3s ease',
         }}
-        onMouseOver={(e) => {
+        onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'scale(1.1)';
-          e.currentTarget.style.boxShadow = '0 6px 30px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.4)';
+          e.currentTarget.style.boxShadow = '0 6px 30px rgba(255, 215, 0, 0.6)';
         }}
-        onMouseOut={(e) => {
+        onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255, 215, 0, 0.5), 0 0 30px rgba(255, 215, 0, 0.3)';
+          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255, 215, 0, 0.4)';
         }}
-        title="⚔️ Metal Perps Trading"
       >
-        ⚔️
-      </button>
+        <span style={{ fontSize: '24px' }}>📊</span>
+      </div>
     );
   }
 
-  // ==================== EXPANDED WIDGET ====================
+  // Expanded State
   return (
     <div style={{
       position: 'fixed',
-      bottom: '90px',
+      bottom: '20px',
       left: '20px',
-      zIndex: 9998,
-      width: '400px',
-      maxHeight: '85vh',
-      overflowY: 'auto',
-      background: 'linear-gradient(145deg, #0a0a0a 0%, #0d0d0d 50%, #0a0a0a 100%)',
-      border: '1px solid #B8860B',
+      width: '420px',
+      maxHeight: '90vh',
+      background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
       borderRadius: '16px',
-      boxShadow: '0 0 60px rgba(255, 215, 0, 0.15), 0 20px 60px rgba(0, 0, 0, 0.5)',
-      fontFamily: "'Rajdhani', sans-serif",
-      color: '#fff',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 215, 0, 0.2)',
+      zIndex: 9999,
+      fontFamily: "'Inter', -apple-system, sans-serif",
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
     }}>
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'absolute',
-          top: '10px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          padding: '8px 16px',
-          borderRadius: '8px',
-          background: toast.type === 'success' ? '#00ff88' : toast.type === 'error' ? '#ff4444' : '#FFD700',
-          color: '#000',
-          fontWeight: 600,
-          fontSize: '12px',
-          zIndex: 10000,
-        }}>
-          {toast.message}
-        </div>
-      )}
-
       {/* Header */}
       <div style={{
         padding: '12px 16px',
-        borderBottom: '1px solid #2a2a2a',
+        borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        background: 'linear-gradient(180deg, rgba(255,215,0,0.1) 0%, transparent 100%)',
+        justifyContent: 'space-between',
+        background: 'rgba(0, 0, 0, 0.3)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '20px' }}>⚔️</span>
           <div>
-            <span style={{ 
-              fontFamily: "'Orbitron', sans-serif", 
-              fontWeight: 700, 
-              fontSize: '14px',
-              background: 'linear-gradient(135deg, #FFD700, #FFA500)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              display: 'block',
-            }}>
+            <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '14px', fontFamily: "'Orbitron', sans-serif" }}>
               METAL PERPS
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#888' }}>
               <ArbitrumLogo size={12} />
-              <span style={{ fontSize: '9px', color: '#12AAFF', fontWeight: 500 }}>Arbitrum</span>
-              <span style={{ fontSize: '9px', color: '#444', marginLeft: '4px' }}>
-                • {formatTimeAgo(lastUpdate)}
-              </span>
+              <span style={{ color: '#12AAFF' }}>Arbitrum</span>
+              <span>• TradingView Live</span>
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {balance !== null && (
-            <span style={{ fontSize: '11px', color: '#888' }}>
-              ${balance?.toFixed(2) || '0.00'}
-            </span>
-          )}
-          <button
-            onClick={() => setIsExpanded(false)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#888',
-              cursor: 'pointer',
-              fontSize: '18px',
-              padding: '4px',
-            }}
-          >
-            ✕
-          </button>
-        </div>
+        <button
+          onClick={() => setIsExpanded(false)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#888',
+            cursor: 'pointer',
+            fontSize: '20px',
+            padding: '4px',
+          }}
+        >
+          ×
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #2a2a2a' }}>
+      {/* Live Ticker Tape */}
+      <div style={{
+        borderBottom: '1px solid rgba(255, 215, 0, 0.1)',
+        background: 'rgba(0, 0, 0, 0.2)',
+      }}>
+        <TradingViewTickerTape />
+      </div>
+
+      {/* Tab Navigation */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid rgba(255, 215, 0, 0.1)',
+      }}>
         {[
-          { key: 'trade', label: '📈 Trade' },
-          { key: 'positions', label: `📊 (${positions.length})` },
-          { key: 'learn', label: '📚 Learn' },
-        ].map((tab) => (
+          { id: 'trade', label: '📈 TRADE' },
+          { id: 'positions', label: `📊 (${positions.length})` },
+          { id: 'learn', label: '🎓 LEARN' },
+        ].map(tab => (
           <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
             style={{
               flex: 1,
-              padding: '10px 6px',
-              background: activeTab === tab.key ? 'rgba(255,215,0,0.1)' : 'transparent',
+              padding: '10px',
+              background: activeTab === tab.id ? 'rgba(255, 215, 0, 0.1)' : 'transparent',
               border: 'none',
-              borderBottom: activeTab === tab.key ? '2px solid #FFD700' : '2px solid transparent',
-              color: activeTab === tab.key ? '#FFD700' : '#888',
+              borderBottom: activeTab === tab.id ? '2px solid #FFD700' : '2px solid transparent',
+              color: activeTab === tab.id ? '#FFD700' : '#666',
               cursor: 'pointer',
-              fontFamily: "'Rajdhani', sans-serif",
-              fontWeight: 600,
               fontSize: '11px',
-              textTransform: 'uppercase',
+              fontWeight: 600,
+              transition: 'all 0.2s',
             }}
           >
             {tab.label}
@@ -462,217 +417,138 @@ export default function MetalPerpsWidget() {
         ))}
       </div>
 
-      <div style={{ padding: '16px' }}>
-        {/* ==================== TRADE TAB ==================== */}
+      {/* Scrollable Content */}
+      <div style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(90vh - 150px)' }}>
         {activeTab === 'trade' && (
-          <>
-            {/* Live Prices Bar */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '4px',
-              marginBottom: '12px',
-              padding: '8px',
-              background: '#111',
-              borderRadius: '8px',
-              border: '1px solid #1a1a1a',
-            }}>
-              {Object.keys(ASSETS).map((key) => {
-                const priceChange = getPriceChangeDisplay(key);
-                const isFlashing = priceFlash[key];
-                return (
-                  <div 
-                    key={key}
-                    style={{
-                      textAlign: 'center',
-                      padding: '4px',
-                      borderRadius: '4px',
-                      background: isFlashing 
-                        ? isFlashing === 'up' ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)'
-                        : 'transparent',
-                      transition: 'background 0.3s',
-                    }}
-                  >
-                    <div style={{ fontSize: '9px', color: '#666' }}>{key}</div>
-                    <div style={{ 
-                      fontSize: '11px', 
-                      fontWeight: 700, 
-                      color: '#fff',
-                      fontFamily: "'Orbitron', sans-serif",
-                    }}>
-                      ${prices[key]?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
-                    </div>
-                    <div style={{ 
-                      fontSize: '8px', 
-                      color: priceChange.color,
-                      fontWeight: 600,
-                    }}>
-                      {priceChange.arrow} {priceChange.text}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
+          <div style={{ padding: '12px' }}>
             {/* Asset Selection */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
               gap: '8px',
-              marginBottom: '16px',
+              marginBottom: '12px',
             }}>
-              {Object.keys(ASSETS).map((key) => {
-                const priceChange = getPriceChangeDisplay(key);
-                return (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      setSelectedAsset(key);
-                      setLeverage(Math.min(leverage, ASSETS[key].maxLev));
-                    }}
-                    style={{
-                      padding: '8px 4px',
-                      borderRadius: '8px',
-                      border: selectedAsset === key ? '2px solid #FFD700' : '1px solid #2a2a2a',
-                      background: selectedAsset === key 
-                        ? 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(184,134,11,0.1))'
-                        : '#1a1a1a',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '4px',
-                      position: 'relative',
-                    }}
-                  >
-                    <img 
-                      src={ASSET_IMAGES[key]} 
-                      alt={key}
-                      style={{ width: '24px', height: '24px', borderRadius: '50%' }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                    <span style={{ 
-                      fontSize: '10px', 
-                      fontWeight: 600,
-                      color: selectedAsset === key ? '#FFD700' : '#888',
-                    }}>
-                      {key}
-                    </span>
-                    {/* Live indicator dot */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '4px',
-                      right: '4px',
-                      width: '6px',
-                      height: '6px',
-                      borderRadius: '50%',
-                      background: priceChange.color,
-                      animation: 'pulse 2s infinite',
-                    }} />
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Price Display */}
-            <div style={{
-              textAlign: 'center',
-              padding: '16px',
-              background: priceFlash[selectedAsset] 
-                ? priceFlash[selectedAsset] === 'up' 
-                  ? 'linear-gradient(135deg, rgba(0,255,136,0.15), #1a1a1a)'
-                  : 'linear-gradient(135deg, rgba(255,68,68,0.15), #1a1a1a)'
-                : '#1a1a1a',
-              borderRadius: '8px',
-              marginBottom: '16px',
-              transition: 'background 0.3s',
-              border: `1px solid ${priceFlash[selectedAsset] ? (priceFlash[selectedAsset] === 'up' ? '#00ff88' : '#ff4444') : '#2a2a2a'}`,
-            }}>
-              <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>
-                {asset.name} Price
-                <span style={{ 
-                  marginLeft: '8px', 
-                  color: getPriceChangeDisplay(selectedAsset).color,
-                  fontWeight: 600,
-                }}>
-                  {getPriceChangeDisplay(selectedAsset).arrow} {getPriceChangeDisplay(selectedAsset).text}
-                </span>
-              </div>
-              <div style={{ 
-                fontSize: '28px', 
-                fontWeight: 700,
-                fontFamily: "'Orbitron', sans-serif",
-                color: '#FFD700',
-                textShadow: priceFlash[selectedAsset] 
-                  ? priceFlash[selectedAsset] === 'up'
-                    ? '0 0 20px rgba(0,255,136,0.5)'
-                    : '0 0 20px rgba(255,68,68,0.5)'
-                  : 'none',
-                transition: 'text-shadow 0.3s',
-              }}>
-                {formatPrice(currentPrice)}
-              </div>
-              {isCommodity && (
-                <div style={{
-                  fontSize: '10px',
-                  color: marketOpen ? '#00ff88' : '#ff4444',
-                  marginTop: '4px',
-                }}>
-                  {marketOpen ? '● Market Open' : '● Market Closed (Weekend)'}
-                </div>
-              )}
-              <div style={{ fontSize: '9px', color: '#444', marginTop: '4px' }}>
-                🔴 LIVE • {priceSource}
-              </div>
-            </div>
-
-            {/* Direction */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '8px',
-              marginBottom: '16px',
-            }}>
-              {['LONG', 'SHORT'].map((dir) => (
+              {Object.keys(ASSETS).map(key => (
                 <button
-                  key={dir}
-                  onClick={() => setDirection(dir)}
+                  key={key}
+                  onClick={() => setSelectedAsset(key)}
                   style={{
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: direction === dir
-                      ? dir === 'LONG' 
-                        ? 'linear-gradient(135deg, #00ff88, #00aa55)'
-                        : 'linear-gradient(135deg, #ff4444, #aa2222)'
-                      : '#1a1a1a',
-                    color: direction === dir ? '#000' : '#888',
+                    padding: '10px 8px',
+                    borderRadius: '10px',
+                    border: selectedAsset === key ? '2px solid #FFD700' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: selectedAsset === key 
+                      ? 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1))'
+                      : 'rgba(255, 255, 255, 0.03)',
                     cursor: 'pointer',
-                    fontWeight: 700,
-                    fontSize: '14px',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '4px',
                   }}
                 >
-                  {dir === 'LONG' ? '📈' : '📉'} {dir}
+                  <img 
+                    src={ASSET_IMAGES[key]} 
+                    alt={key}
+                    style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <span style={{ 
+                    fontSize: '11px', 
+                    fontWeight: 600,
+                    color: selectedAsset === key ? '#FFD700' : '#888',
+                  }}>
+                    {key}
+                  </span>
                 </button>
               ))}
             </div>
 
+            {/* TradingView Mini Symbol Overview - Live Price + Chart */}
+            <div style={{
+              marginBottom: '12px',
+              borderRadius: '10px',
+              overflow: 'hidden',
+              border: '1px solid rgba(255, 215, 0, 0.2)',
+              background: 'rgba(0, 0, 0, 0.3)',
+            }}>
+              <TradingViewMiniSymbol symbol={tvSymbol} height={220} />
+              {isCommodity && (
+                <div style={{
+                  padding: '8px 12px',
+                  fontSize: '10px',
+                  color: marketOpen ? '#00ff88' : '#ff4444',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                }}>
+                  {marketOpen ? '● Market Open' : '● Market Closed (Weekend)'}
+                </div>
+              )}
+            </div>
+
+            {/* Direction Buttons */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <button
+                onClick={() => setDirection('LONG')}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: direction === 'LONG' 
+                    ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
+                    : 'rgba(255, 255, 255, 0.05)',
+                  color: direction === 'LONG' ? '#000' : '#666',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                📈 LONG
+              </button>
+              <button
+                onClick={() => setDirection('SHORT')}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: direction === 'SHORT'
+                    ? 'linear-gradient(135deg, #ff4444, #cc0000)'
+                    : 'rgba(255, 255, 255, 0.05)',
+                  color: direction === 'SHORT' ? '#fff' : '#666',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                📉 SHORT
+              </button>
+            </div>
+
             {/* Collateral Input */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '11px', color: '#888', marginBottom: '6px', display: 'block' }}>
-                Collateral (USDC) - Min $5 • <span style={{ color: '#FFD700' }}>1% fee applied</span>
-              </label>
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginBottom: '6px',
+                fontSize: '11px',
+              }}>
+                <span style={{ color: '#888' }}>Collateral (USDC) - Min $5</span>
+                <span style={{ color: '#ff6b6b' }}>• 1% fee applied</span>
+              </div>
               <input
                 type="number"
                 value={collateral}
                 onChange={(e) => setCollateral(e.target.value)}
-                placeholder="50"
+                min="5"
                 style={{
                   width: '100%',
                   padding: '12px',
                   borderRadius: '8px',
-                  border: '1px solid #2a2a2a',
-                  background: '#1a1a1a',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'rgba(0, 0, 0, 0.4)',
                   color: '#fff',
                   fontSize: '16px',
                   fontWeight: 600,
@@ -680,21 +556,30 @@ export default function MetalPerpsWidget() {
                   boxSizing: 'border-box',
                 }}
               />
-              {parseFloat(collateral) >= 5 && (
-                <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
-                  Fee: ${(parseFloat(collateral) * 0.01).toFixed(2)} • Net: ${(parseFloat(collateral) * 0.99).toFixed(2)}
-                </div>
-              )}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                marginTop: '4px',
+                fontSize: '10px',
+                color: '#666',
+              }}>
+                <span>Fee: ${(parseFloat(collateral || 0) * 0.01).toFixed(2)}</span>
+                <span>Net: ${(parseFloat(collateral || 0) * 0.99).toFixed(2)}</span>
+              </div>
             </div>
 
             {/* Leverage Slider */}
             <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label style={{ fontSize: '11px', color: '#888' }}>Leverage</label>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                marginBottom: '8px',
+              }}>
+                <span style={{ color: '#888', fontSize: '11px' }}>Leverage</span>
                 <span style={{ 
-                  fontSize: '14px', 
+                  color: '#FFD700', 
                   fontWeight: 700, 
-                  color: leverage > 50 ? '#ff4444' : leverage > 25 ? '#FFA500' : '#FFD700',
+                  fontSize: '14px',
                   fontFamily: "'Orbitron', sans-serif",
                 }}>
                   {leverage}x
@@ -704,40 +589,44 @@ export default function MetalPerpsWidget() {
                 type="range"
                 min={asset.minLev}
                 max={asset.maxLev}
-                step={asset.maxLev > 50 ? 1 : 0.5}
+                step="0.1"
                 value={leverage}
                 onChange={(e) => setLeverage(parseFloat(e.target.value))}
                 style={{
                   width: '100%',
                   height: '6px',
                   borderRadius: '3px',
-                  background: `linear-gradient(to right, #FFD700 0%, #FFD700 ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #2a2a2a ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #2a2a2a 100%)`,
+                  background: `linear-gradient(to right, #FFD700 0%, #FFD700 ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #333 ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #333 100%)`,
                   outline: 'none',
                   cursor: 'pointer',
                   WebkitAppearance: 'none',
                 }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                <span style={{ fontSize: '9px', color: '#666' }}>{asset.minLev}x</span>
-                <span style={{ fontSize: '9px', color: '#666' }}>{asset.maxLev}x</span>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                fontSize: '9px',
+                color: '#555',
+                marginTop: '4px',
+              }}>
+                <span>{asset.minLev}x</span>
+                <span>{asset.maxLev}x</span>
               </div>
             </div>
 
-            {/* Position Summary */}
+            {/* Position Info */}
             <div style={{
-              padding: '12px',
-              background: '#1a1a1a',
+              background: 'rgba(0, 0, 0, 0.3)',
               borderRadius: '8px',
-              marginBottom: '16px',
+              padding: '10px',
+              marginBottom: '12px',
               fontSize: '11px',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                 <span style={{ color: '#888' }}>Position Size</span>
-                <span style={{ color: '#fff', fontWeight: 600 }}>${positionSize.toFixed(2)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#888' }}>Liq. Price</span>
-                <span style={{ color: '#ff4444', fontWeight: 600 }}>{formatPrice(calcLiquidationPrice())}</span>
+                <span style={{ color: '#fff', fontWeight: 600 }}>
+                  ${positionSize.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
 
@@ -748,61 +637,86 @@ export default function MetalPerpsWidget() {
               style={{
                 width: '100%',
                 padding: '14px',
-                borderRadius: '8px',
+                borderRadius: '10px',
                 border: 'none',
-                background: loading || !marketOpen || parseFloat(collateral) < 5
+                background: !marketOpen 
                   ? '#333'
                   : direction === 'LONG'
-                    ? 'linear-gradient(135deg, #00ff88, #00aa55)'
-                    : 'linear-gradient(135deg, #ff4444, #aa2222)',
-                color: loading || !marketOpen ? '#666' : '#000',
-                cursor: loading || !marketOpen || parseFloat(collateral) < 5 ? 'not-allowed' : 'pointer',
+                    ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
+                    : 'linear-gradient(135deg, #ff4444, #cc0000)',
+                color: direction === 'LONG' ? '#000' : '#fff',
                 fontWeight: 700,
                 fontSize: '14px',
-                fontFamily: "'Rajdhani', sans-serif",
+                cursor: loading || !marketOpen ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                transition: 'all 0.2s',
               }}
             >
-              {loading ? '⏳ Processing...' : `Open ${direction}`}
+              {loading ? '⏳ Processing...' : `Market ${direction}`}
             </button>
-          </>
+
+            {/* One-Click Trading Setup */}
+            <div style={{
+              marginTop: '12px',
+              padding: '10px',
+              background: 'rgba(255, 215, 0, 0.05)',
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 215, 0, 0.1)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#FFD700', fontSize: '11px', fontWeight: 600 }}>
+                  ⚡ ONE-CLICK TRADING
+                </span>
+                <span style={{ color: '#00ff88', fontSize: '10px' }}>
+                  SETUP →
+                </span>
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* ==================== POSITIONS TAB ==================== */}
         {activeTab === 'positions' && (
-          <div>
+          <div style={{ padding: '12px' }}>
             {positions.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
-                <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
-                <div>No open positions</div>
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '40px 20px',
+                color: '#666',
+              }}>
+                <div style={{ fontSize: '32px', marginBottom: '12px' }}>📭</div>
+                <div style={{ fontSize: '13px' }}>No open positions</div>
+                <div style={{ fontSize: '11px', marginTop: '4px' }}>
+                  Open a trade to get started
+                </div>
               </div>
             ) : (
               positions.map((pos, idx) => (
-                <div key={idx} style={{
-                  padding: '12px',
-                  background: '#1a1a1a',
-                  borderRadius: '8px',
-                  marginBottom: '8px',
-                  border: '1px solid #2a2a2a',
-                }}>
+                <div
+                  key={idx}
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    marginBottom: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                  }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontWeight: 600, color: '#FFD700' }}>
-                      {pos.pairIndex === 0 ? 'BTC' : pos.pairIndex === 1 ? 'ETH' : pos.pairIndex === 90 ? 'GOLD' : 'SILVER'}
+                    <span style={{ color: '#fff', fontWeight: 600 }}>
+                      {pos.asset} {pos.direction}
                     </span>
                     <span style={{ 
-                      color: pos.long ? '#00ff88' : '#ff4444',
+                      color: pos.pnl >= 0 ? '#00ff88' : '#ff4444',
                       fontWeight: 600,
-                      fontSize: '12px',
                     }}>
-                      {pos.long ? '📈 LONG' : '📉 SHORT'}
+                      {pos.pnl >= 0 ? '+' : ''}{pos.pnl?.toFixed(2)}%
                     </span>
                   </div>
                   <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>
-                    <div>Size: ${(pos.positionSizeUsd || 0).toFixed(2)}</div>
-                    <div>Leverage: {pos.leverage || 'N/A'}x</div>
+                    Size: ${pos.size?.toLocaleString()} • Leverage: {pos.leverage}x
                   </div>
                   <button
-                    onClick={() => closePosition(idx)}
-                    disabled={loading}
+                    onClick={() => closeTrade(pos.id)}
                     style={{
                       width: '100%',
                       padding: '8px',
@@ -810,8 +724,8 @@ export default function MetalPerpsWidget() {
                       border: '1px solid #ff4444',
                       background: 'transparent',
                       color: '#ff4444',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontSize: '11px',
                       fontWeight: 600,
                     }}
                   >
@@ -823,120 +737,60 @@ export default function MetalPerpsWidget() {
           </div>
         )}
 
-        {/* ==================== LEARN TAB ==================== */}
         {activeTab === 'learn' && (
-          <div style={{ fontSize: '12px', lineHeight: 1.6 }}>
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(255,215,0,0.1), rgba(18,170,255,0.05))',
-              borderRadius: '12px',
+          <div style={{ padding: '16px' }}>
+            <div style={{ 
+              background: 'rgba(255, 215, 0, 0.1)',
+              borderRadius: '10px',
               padding: '16px',
-              marginBottom: '16px',
-              border: '1px solid rgba(255,215,0,0.2)',
+              marginBottom: '12px',
             }}>
-              <h3 style={{ color: '#FFD700', margin: '0 0 12px 0', fontSize: '14px' }}>
-                ⚔️ What is Metal Perps?
+              <h3 style={{ color: '#FFD700', margin: '0 0 8px 0', fontSize: '14px' }}>
+                🎓 Trading Guide
               </h3>
-              <p style={{ color: '#ccc', margin: 0 }}>
-                Trade <strong style={{ color: '#FFD700' }}>perpetual futures</strong> on crypto & metals with up to <strong style={{ color: '#00ff88' }}>150x leverage</strong>.
+              <p style={{ color: '#ccc', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
+                Metal Perps lets you trade BTC, ETH, Gold, and Silver with up to 150x leverage 
+                on Arbitrum via gTrade.
               </p>
             </div>
-
-            <div style={{
-              background: '#1a1a1a',
-              borderRadius: '12px',
-              padding: '16px',
-              marginBottom: '16px',
-            }}>
-              <h3 style={{ color: '#FFD700', margin: '0 0 12px 0', fontSize: '14px' }}>📖 Quick Guide</h3>
-              <div style={{ color: '#aaa' }}>
-                <div style={{ marginBottom: '8px' }}><span style={{ color: '#00ff88' }}>1.</span> <strong>LONG</strong> = bet price goes UP</div>
-                <div style={{ marginBottom: '8px' }}><span style={{ color: '#00ff88' }}>2.</span> <strong>SHORT</strong> = bet price goes DOWN</div>
-                <div style={{ marginBottom: '8px' }}><span style={{ color: '#00ff88' }}>3.</span> <strong>Leverage</strong> = multiplies your position</div>
-                <div><span style={{ color: '#ff4444' }}>⚠️</span> Higher leverage = higher risk!</div>
+            
+            <div style={{ fontSize: '12px', color: '#888' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <strong style={{ color: '#FFD700' }}>📈 Long</strong>: Profit when price goes up
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <strong style={{ color: '#FFD700' }}>📉 Short</strong>: Profit when price goes down
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <strong style={{ color: '#FFD700' }}>⚡ Leverage</strong>: Multiply your position size
+              </div>
+              <div>
+                <strong style={{ color: '#ff4444' }}>⚠️ Risk</strong>: Higher leverage = higher liquidation risk
               </div>
             </div>
-
-            <div style={{
-              background: 'rgba(255,68,68,0.1)',
-              borderRadius: '12px',
-              padding: '16px',
-              marginBottom: '16px',
-              border: '1px solid rgba(255,68,68,0.3)',
-            }}>
-              <h3 style={{ color: '#ff4444', margin: '0 0 8px 0', fontSize: '14px' }}>⚠️ Risk Warning</h3>
-              <p style={{ color: '#ffaaaa', margin: 0, fontSize: '11px' }}>
-                Leveraged trading is <strong>HIGH RISK</strong>. You can lose your entire collateral.
-              </p>
-            </div>
-
-            <div style={{
-              background: 'rgba(255,215,0,0.1)',
-              borderRadius: '12px',
-              padding: '16px',
-              marginBottom: '16px',
-              border: '1px solid rgba(255,215,0,0.3)',
-            }}>
-              <h3 style={{ color: '#FFD700', margin: '0 0 8px 0', fontSize: '14px' }}>💰 1% Fee</h3>
-              <p style={{ color: '#ccc', margin: 0, fontSize: '11px' }}>
-                1% of every trade goes to the DTGC Metals Treasury for ecosystem growth.
-              </p>
-            </div>
-
-            <a
-              href="/docs/MetalPerps_Whitepaper.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: '14px',
-                background: 'linear-gradient(135deg, #FFD700, #B8860B)',
-                borderRadius: '8px',
-                color: '#000',
-                textDecoration: 'none',
-                fontWeight: 700,
-                fontSize: '13px',
-              }}
-            >
-              📄 Download Full Whitepaper (PDF)
-            </a>
           </div>
         )}
       </div>
 
-      {/* Footer */}
-      <div style={{
-        padding: '10px 16px',
-        borderTop: '1px solid #2a2a2a',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        fontSize: '9px',
-        color: '#444',
-      }}>
-        <span>Powered by gTrade Protocol</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <div style={{
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-            background: '#00ff88',
-            animation: 'pulse 2s infinite',
-          }} />
-          <span>LIVE</span>
-          <ArbitrumLogo size={10} />
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: toast.type === 'error' ? '#ff4444' : toast.type === 'success' ? '#00ff88' : '#FFD700',
+          color: toast.type === 'success' ? '#000' : '#fff',
+          padding: '10px 20px',
+          borderRadius: '8px',
+          fontSize: '12px',
+          fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+          zIndex: 10000,
+        }}>
+          {toast.message}
         </div>
-      </div>
-
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
+      )}
     </div>
   );
 }
