@@ -93,10 +93,42 @@ const ArbitrumLogo = ({ size = 16 }) => (
 );
 
 const ASSETS = {
-  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 1.1, pairIndex: 0, icon: '₿' },
-  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 1.1, pairIndex: 1, icon: 'Ξ' },
-  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2, pairIndex: 10, icon: '🥇' },
-  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2, pairIndex: 11, icon: '🥈' },
+  BTC: { 
+    name: 'Bitcoin', 
+    symbol: 'BTC', 
+    maxLev: 150, 
+    minLev: 1.1, 
+    pairIndex: 0, 
+    icon: '₿',
+    iconUrl: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
+  },
+  ETH: { 
+    name: 'Ethereum', 
+    symbol: 'ETH', 
+    maxLev: 150, 
+    minLev: 1.1, 
+    pairIndex: 1, 
+    icon: 'Ξ',
+    iconUrl: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+  },
+  GOLD: { 
+    name: 'Gold', 
+    symbol: 'XAU', 
+    maxLev: 25, 
+    minLev: 2, 
+    pairIndex: 10, 
+    icon: '🥇',
+    iconUrl: 'https://assets.coingecko.com/coins/images/33517/small/Icon_gold.png',
+  },
+  SILVER: { 
+    name: 'Silver', 
+    symbol: 'XAG', 
+    maxLev: 25, 
+    minLev: 2, 
+    pairIndex: 11, 
+    icon: '🥈',
+    iconUrl: 'https://assets.coingecko.com/coins/images/33930/small/Icon_silver_%281%29.png',
+  },
 };
 
 // Pair index to asset name mapping
@@ -105,6 +137,30 @@ const PAIR_INDEX_TO_ASSET = {
   1: 'ETH',
   10: 'GOLD',
   11: 'SILVER',
+};
+
+// Asset Icon Component - Uses CoinGecko images
+const AssetIcon = ({ asset, size = 20 }) => {
+  const assetData = ASSETS[asset];
+  if (!assetData?.iconUrl) {
+    return <span style={{ fontSize: size * 0.8 }}>{assetData?.icon || '?'}</span>;
+  }
+  return (
+    <img 
+      src={assetData.iconUrl} 
+      alt={asset}
+      style={{ 
+        width: size, 
+        height: size, 
+        borderRadius: '50%',
+        objectFit: 'cover',
+      }}
+      onError={(e) => {
+        e.target.style.display = 'none';
+        e.target.parentNode.innerHTML = assetData.icon;
+      }}
+    />
+  );
 };
 
 // Bot wallets for status indicator
@@ -622,6 +678,16 @@ export default function MetalPerpsWidget() {
     if (window.ethereum?.selectedAddress) connectWallet();
   }, []);
 
+  // Auto-expand if URL contains #metals or ?metals
+  useEffect(() => {
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    if (hash.includes('metals') || hash.includes('perps') || 
+        search.includes('metals') || search.includes('perps')) {
+      setIsExpanded(true);
+    }
+  }, []);
+
   const formatPrice = (price, pairIndex) => {
     if (pairIndex === 11) return price?.toFixed(3);
     return price?.toFixed(2);
@@ -841,9 +907,14 @@ export default function MetalPerpsWidget() {
                       cursor: 'pointer',
                       fontSize: '11px',
                       fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px',
                     }}
                   >
-                    {ASSETS[key].icon} {key}
+                    <AssetIcon asset={key} size={16} />
+                    {key}
                   </button>
                 ))}
               </div>
@@ -1336,7 +1407,7 @@ export default function MetalPerpsWidget() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '18px' }}>{ASSETS[pos.asset]?.icon || '?'}</span>
+                      <AssetIcon asset={pos.asset} size={24} />
                       <div>
                         <div style={{ color: '#fff', fontWeight: 600, fontSize: '14px' }}>{pos.asset}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
