@@ -106,7 +106,6 @@ const BRIDGED_PAIRS = [
     },
   },
 ];
-];
 
 // Bridge/Zap Links
 const BRIDGE_LINKS = {
