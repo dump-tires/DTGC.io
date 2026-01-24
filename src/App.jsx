@@ -4145,9 +4145,9 @@ export default function App() {
 
   // Metal prices state (per troy ounce in USD)
   const [metalPrices, setMetalPrices] = useState({
-    gold: 2650.00,
-    silver: 31.50,
-    copper: 4.25,
+    gold: 2750.00,    // XAU/USD per troy oz
+    silver: 31.00,    // XAG/USD per troy oz
+    copper: 4.20,     // Copper /lb (not troy oz)
     loading: false,
     lastUpdated: null,
   });
@@ -4157,11 +4157,13 @@ export default function App() {
     setMetalPrices(prev => ({ ...prev, loading: true }));
     
     // Current accurate fallbacks (Jan 2026)
-    let goldPrice = 2650, silverPrice = 31.50, copperPrice = 4.25;
+    let goldPrice = 2750, silverPrice = 31.00, copperPrice = 4.20;
     
     try {
-      // PRIMARY: goldprice.org (most reliable, per-ounce prices)
-      const response = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+      // PRIMARY: goldapi.io proxy via backend OR direct goldprice.org
+      const response = await fetch('https://data-asg.goldprice.org/dbXRates/USD', {
+        headers: { 'Accept': 'application/json' }
+      });
       const data = await response.json();
       
       if (data?.items?.[0]) {
@@ -4170,18 +4172,35 @@ export default function App() {
         const fetchedGold = parseFloat(item.xauPrice);
         const fetchedSilver = parseFloat(item.xagPrice);
         
-        // Gold should be between $1,500 and $5,000 per oz
-        if (fetchedGold >= 1500 && fetchedGold <= 5000) {
+        // Gold should be between $2,000 and $4,000 per oz (Jan 2026 range)
+        if (fetchedGold >= 2000 && fetchedGold <= 4000) {
           goldPrice = fetchedGold;
         }
-        // Silver should be between $15 and $60 per oz
-        if (fetchedSilver >= 15 && fetchedSilver <= 60) {
+        // Silver should be between $20 and $50 per oz
+        if (fetchedSilver >= 20 && fetchedSilver <= 50) {
           silverPrice = fetchedSilver;
         }
         console.log('🥇 Metal prices (goldprice.org):', { gold: goldPrice.toFixed(2), silver: silverPrice.toFixed(2) });
       }
     } catch (err) {
       console.warn('Primary metals API failed:', err.message);
+      
+      // FALLBACK: Try metals-api or use accurate fallbacks
+      try {
+        // Backup: CoinGecko tether-gold approximation (tracks gold price)
+        const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether-gold&vs_currencies=usd');
+        const cgData = await cgRes.json();
+        if (cgData?.['tether-gold']?.usd) {
+          const xautPrice = cgData['tether-gold'].usd;
+          // XAUT tracks gold price closely
+          if (xautPrice >= 2000 && xautPrice <= 4000) {
+            goldPrice = xautPrice;
+            console.log('🥇 Gold price (CoinGecko XAUT):', goldPrice.toFixed(2));
+          }
+        }
+      } catch (cgErr) {
+        console.warn('CoinGecko metals fallback failed:', cgErr.message);
+      }
     }
     
     setMetalPrices({
@@ -4195,10 +4214,10 @@ export default function App() {
     console.log('🥇 Final metal prices:', { gold: goldPrice.toFixed(2), silver: silverPrice.toFixed(2), copper: copperPrice.toFixed(2) });
   }, []);
 
-  // Fetch metal prices on mount and every 5 minutes
+  // Fetch metal prices on mount and every 30 seconds for live feel
   useEffect(() => {
     fetchMetalPrices();
-    const interval = setInterval(fetchMetalPrices, 300000); // Refresh every 5 min
+    const interval = setInterval(fetchMetalPrices, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, [fetchMetalPrices]);
 
@@ -5150,10 +5169,10 @@ export default function App() {
     }
   }, []);
 
-  // Fetch crypto prices on mount and every 2 minutes
+  // Fetch crypto prices on mount and every 30 seconds for live feel
   useEffect(() => {
     fetchCryptoPrices();
-    const interval = setInterval(fetchCryptoPrices, 120000);
+    const interval = setInterval(fetchCryptoPrices, 30000); // 30 second refresh
     return () => clearInterval(interval);
   }, [fetchCryptoPrices]);
 
@@ -8607,7 +8626,10 @@ export default function App() {
                   }}>
                     {/* Metals */}
                     <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
-                      <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '6px', fontWeight: 600 }}>METALS /oz</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#888', fontWeight: 600 }}>METALS</span>
+                        <span style={{ fontSize: '0.5rem', color: '#666' }}>per oz t</span>
+                      </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#FFD700', fontSize: '0.7rem' }}>🥇 Gold</span>
@@ -8618,14 +8640,17 @@ export default function App() {
                           <span style={{ color: '#C0C0C0', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.silver.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#CD7F32', fontSize: '0.7rem' }}>🥉 Copper</span>
+                          <span style={{ color: '#CD7F32', fontSize: '0.7rem' }}>🥉 Copper <span style={{ fontSize: '0.5rem', color: '#888' }}>/lb</span></span>
                           <span style={{ color: '#CD7F32', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.copper.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     </div>
                     {/* Crypto */}
                     <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
-                      <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '6px', fontWeight: 600 }}>CRYPTO</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#888', fontWeight: 600 }}>CRYPTO</span>
+                        <span style={{ fontSize: '0.5rem', color: '#00ff88' }}>● LIVE</span>
+                      </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#F7931A', fontSize: '0.7rem' }}>₿ Bitcoin</span>
@@ -8638,8 +8663,11 @@ export default function App() {
                       </div>
                     </div>
                     {/* PulseChain */}
-                    <div>
-                      <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '6px', fontWeight: 600 }}>PULSECHAIN</div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#888', fontWeight: 600 }}>PULSECHAIN</span>
+                        <span style={{ fontSize: '0.5rem', color: '#00ff88' }}>● LIVE</span>
+                      </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#00D4AA', fontSize: '0.7rem' }}>💜 PLS</span>
@@ -8654,6 +8682,17 @@ export default function App() {
                           <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.75rem' }}>${(livePrices.dtgc || 0).toFixed(7)}</span>
                         </div>
                       </div>
+                    </div>
+                    {/* Timestamp */}
+                    <div style={{ 
+                      borderTop: '1px solid rgba(212,175,55,0.1)', 
+                      paddingTop: '6px', 
+                      marginTop: '4px',
+                      textAlign: 'center',
+                      fontSize: '0.5rem',
+                      color: '#666',
+                    }}>
+                      Updated: {cryptoPrices.lastUpdated?.toLocaleTimeString() || 'Loading...'}
                     </div>
                   </div>
                 )}
