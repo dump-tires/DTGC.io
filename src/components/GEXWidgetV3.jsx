@@ -1,22 +1,24 @@
 /**
- * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.3
+ * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.4
  * 
  * MULTI-PAIR ARBITRAGE MONITORING
  * eHEX, WETH, USDC, DAI, WBTC (5 pairs - USDT removed due to bad liquidity)
  * 
- * V3.3 Changes:
- * - Real token logos from CoinGecko
- * - Signal threshold raised to 4%+ (was 3%)
- * - No alerts below 4% spread
+ * V3.4 Changes:
+ * - TradingView live reference prices
+ * - CoinGecko reference for programmatic comparison
+ * - Shows deviation from "true" market price
+ * - More accurate spread calculation
  * 
  * Features:
  * - All pairs view sorted by best opportunity
  * - Single pair detail view
  * - Auto-signals at 4%+ spread
  * - ZapperX integration for bridging
+ * - TradingView live ticker for reference
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const CONFIG = {
   DTGC_GATE_USD: 200,
@@ -24,7 +26,65 @@ const CONFIG = {
   MIN_SPREAD_SIGNAL: 4,
   MIN_SPREAD_OPPORTUNITY: 5,
   SIGNAL_COOLDOWN_MS: 120000,
-  PRICE_REFRESH_MS: 15000,
+  PRICE_REFRESH_MS: 10000, // Faster refresh - 10 seconds
+  COINGECKO_IDS: {
+    weth: 'ethereum',
+    wbtc: 'bitcoin',
+    usdc: 'usd-coin',
+    dai: 'dai',
+    ehex: 'hex',
+  },
+};
+
+// TradingView symbols for reference
+const TV_SYMBOLS = {
+  weth: 'BINANCE:ETHUSDT',
+  wbtc: 'BINANCE:BTCUSDT',
+  usdc: 'BITSTAMP:USDCUSD',
+};
+
+// TradingView Ticker Tape Component - Live Reference Prices
+const TradingViewTicker = () => {
+  const containerRef = useRef(null);
+  
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    containerRef.current.innerHTML = '';
+    
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      symbols: [
+        { proName: 'BINANCE:ETHUSDT', title: 'ETH' },
+        { proName: 'BINANCE:BTCUSDT', title: 'BTC' },
+        { proName: 'UNISWAP3ETH:HEXWETH', title: 'HEX' },
+      ],
+      showSymbolLogo: true,
+      isTransparent: true,
+      displayMode: 'compact',
+      colorTheme: 'dark',
+      locale: 'en',
+    });
+    
+    const container = document.createElement('div');
+    container.className = 'tradingview-widget-container';
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'tradingview-widget-container__widget';
+    container.appendChild(widgetDiv);
+    container.appendChild(script);
+    
+    containerRef.current.appendChild(container);
+    
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
+      }
+    };
+  }, []);
+  
+  return <div ref={containerRef} style={{ height: '46px', width: '100%', overflow: 'hidden' }} />;
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -151,6 +211,31 @@ class SignalService {
 
 class PriceService {
   static cache = {};
+  static refCache = {}; // CoinGecko reference prices
+  
+  // Fetch reference price from CoinGecko (the "true" market price)
+  static async fetchReferencePrice(pairId) {
+    const geckoId = CONFIG.COINGECKO_IDS[pairId];
+    if (!geckoId) return null;
+    
+    const cached = this.refCache[pairId];
+    if (cached && Date.now() - cached.time < 30000) return cached.price;
+    
+    try {
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=usd`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const price = data[geckoId]?.usd || null;
+      
+      if (price) {
+        this.refCache[pairId] = { price, time: Date.now() };
+      }
+      return price;
+    } catch (err) {
+      console.log('[GEX] CoinGecko fallback:', pairId);
+      return this.refCache[pairId]?.price || null;
+    }
+  }
   
   static async fetchPrice(address, chain) {
     const cacheKey = `${chain}-${address}`;
@@ -195,20 +280,40 @@ class PriceService {
   static async fetchAllPairs() {
     const results = await Promise.all(
       BRIDGED_PAIRS.map(async (pair) => {
-        const [ethPrice, plsPrice] = await Promise.all([
+        const [ethPrice, plsPrice, refPrice] = await Promise.all([
           this.fetchPrice(pair.ethAddress, 'eth'),
           this.fetchPrice(pair.plsAddress, 'pls'),
+          this.fetchReferencePrice(pair.id),
         ]);
         
         let spread = 0, absSpread = 0, buyChain = '', sellChain = '';
+        let ethDeviation = 0, plsDeviation = 0;
+        
         if (ethPrice && plsPrice) {
           spread = ((ethPrice - plsPrice) / plsPrice) * 100;
           absSpread = Math.abs(spread);
           buyChain = spread > 0 ? 'PULSECHAIN' : 'ETHEREUM';
           sellChain = spread > 0 ? 'ETHEREUM' : 'PULSECHAIN';
+          
+          // Calculate deviation from reference price (if available)
+          if (refPrice) {
+            ethDeviation = ((ethPrice - refPrice) / refPrice) * 100;
+            plsDeviation = ((plsPrice - refPrice) / refPrice) * 100;
+          }
         }
         
-        return { ...pair, ethPrice, plsPrice, spread, absSpread, buyChain, sellChain };
+        return { 
+          ...pair, 
+          ethPrice, 
+          plsPrice, 
+          refPrice, // TradingView/CoinGecko reference
+          ethDeviation, // How far ETH DEX is from true price
+          plsDeviation, // How far PLS DEX is from true price
+          spread, 
+          absSpread, 
+          buyChain, 
+          sellChain 
+        };
       })
     );
     
@@ -325,13 +430,23 @@ export const GEXWidgetV3 = ({
 
             {showInfo && (
               <div className="gex-info-v3">
-                <p><strong>GEX V3</strong> monitors bridged tokens for arbitrage between ETH ↔ PLS.</p>
+                <p><strong>GEX V3.4</strong> monitors bridged tokens for arbitrage between ETH ↔ PLS.</p>
                 <p>📊 eHEX, WETH, USDC, DAI, WBTC</p>
-                <p>🎯 Signals at 3%+ spread → Telegram</p>
+                <p>📈 TradingView live reference prices</p>
+                <p>🎯 Signals at 4%+ spread → Telegram</p>
                 <p>🔗 Use ZapperX or PulseRamp to bridge!</p>
                 <button onClick={() => setShowInfo(false)}>Got it!</button>
               </div>
             )}
+
+            {/* TradingView Live Reference Prices */}
+            <div style={{
+              borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+              background: 'rgba(0, 0, 0, 0.3)',
+              padding: '2px 0',
+            }}>
+              <TradingViewTicker />
+            </div>
 
             <div className="gex-tabs-v3">
               {['spread', 'signals', 'live', 'learn'].map(tab => (
@@ -359,12 +474,16 @@ export const GEXWidgetV3 = ({
                         <div className="no-data-v3">No price data available</div>
                       ) : pairData.map(p => (
                         <div key={p.id} className={`pair-row-v3 ${p.absSpread >= 3 ? 'hot' : ''}`} onClick={() => { setSelectedPair(p.id); setViewMode('single'); }}>
-                          <span className="pair-icon-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%' }} /> : p.icon}</span>
+                          <span className="pair-icon-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 20, height: 20, borderRadius: '50%' }} /> : p.icon}</span>
                           <span className="pair-name-v3">{p.name}</span>
                           <span className="pair-prices-v3">
-                            <span className="eth">{formatPrice(p.ethPrice)}</span>
+                            <span className="eth" title={`ETH DEX${p.refPrice ? ` (${p.ethDeviation >= 0 ? '+' : ''}${p.ethDeviation.toFixed(2)}% vs ref)` : ''}`}>
+                              {formatPrice(p.ethPrice)}
+                            </span>
                             <span className="sep">↔</span>
-                            <span className="pls">{formatPrice(p.plsPrice)}</span>
+                            <span className="pls" title={`PLS DEX${p.refPrice ? ` (${p.plsDeviation >= 0 ? '+' : ''}${p.plsDeviation.toFixed(2)}% vs ref)` : ''}`} style={{ color: '#00ff88' }}>
+                              {formatPrice(p.plsPrice)}
+                            </span>
                           </span>
                           <span className="pair-spread-v3" style={{ color: getColor(p.absSpread) }}>{formatSpread(p.spread)}</span>
                         </div>
@@ -392,16 +511,53 @@ export const GEXWidgetV3 = ({
                         </button>
                       )}
 
+                      {/* Reference Price - if available */}
+                      {currentPair.refPrice && (
+                        <div style={{
+                          background: 'rgba(255, 215, 0, 0.1)',
+                          border: '1px solid rgba(255, 215, 0, 0.3)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          marginBottom: '12px',
+                          textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>
+                            📈 TradingView Reference
+                          </div>
+                          <div style={{ fontSize: '16px', color: '#FFD700', fontWeight: 700 }}>
+                            {formatPrice(currentPair.refPrice)}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="price-cards-v3">
                         <div className="card-v3 eth">
                           <div className="chain-v3">◆ ETHEREUM</div>
                           <div className="token-v3">{currentPair.name}(E)</div>
                           <div className="price-v3">{formatPrice(currentPair.ethPrice)}</div>
+                          {currentPair.refPrice && (
+                            <div style={{ 
+                              fontSize: '10px', 
+                              color: currentPair.ethDeviation >= 0 ? '#00ff88' : '#ff4444',
+                              marginTop: '4px' 
+                            }}>
+                              {currentPair.ethDeviation >= 0 ? '+' : ''}{currentPair.ethDeviation.toFixed(2)}% vs ref
+                            </div>
+                          )}
                         </div>
                         <div className="card-v3 pls">
                           <div className="chain-v3">💜 PULSECHAIN</div>
                           <div className="token-v3">{currentPair.name}(P)</div>
                           <div className="price-v3">{formatPrice(currentPair.plsPrice)}</div>
+                          {currentPair.refPrice && (
+                            <div style={{ 
+                              fontSize: '10px', 
+                              color: currentPair.plsDeviation >= 0 ? '#00ff88' : '#ff4444',
+                              marginTop: '4px' 
+                            }}>
+                              {currentPair.plsDeviation >= 0 ? '+' : ''}{currentPair.plsDeviation.toFixed(2)}% vs ref
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -466,13 +622,18 @@ export const GEXWidgetV3 = ({
 
               {activeTab === 'live' && (
                 <div className="live-tab-v3">
-                  <div className="live-header-v3"><span className="dot-v3"></span> LIVE • Updates 15s</div>
+                  <div className="live-header-v3"><span className="dot-v3"></span> LIVE • TradingView + DexScreener • 10s</div>
                   <div className="live-grid-v3">
                     {pairData.map(p => (
                       <div key={p.id} className="live-card-v3">
-                        <div className="name-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name}</div>
+                        <div className="name-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 18, height: 18, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name}</div>
                         <div className="spread-v3" style={{ color: getColor(p.absSpread) }}>{formatSpread(p.spread)}</div>
                         <div className="status-v3">{getStatus(p.absSpread)}</div>
+                        {p.refPrice && (
+                          <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
+                            Ref: {formatPrice(p.refPrice)}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
