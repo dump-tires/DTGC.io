@@ -2,7 +2,7 @@
  * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.4
  * 
  * MULTI-PAIR ARBITRAGE MONITORING
- * eHEX, WETH, USDC, DAI, WBTC (5 pairs - USDT removed due to bad liquidity)
+ * eHEX, WETH, WBTC (3 pairs - stablecoins removed)
  * 
  * V3.4 Changes:
  * - TradingView live reference prices
@@ -30,8 +30,6 @@ const CONFIG = {
   COINGECKO_IDS: {
     weth: 'ethereum',
     wbtc: 'wrapped-bitcoin',
-    usdc: 'usd-coin',
-    dai: 'dai',
     ehex: 'hex',
   },
 };
@@ -122,35 +120,7 @@ const BRIDGED_PAIRS = [
       pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C',
     },
   },
-  {
-    id: 'usdc',
-    name: 'USDC',
-    icon: 'https://gib.show/image/1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    // USDC on Ethereum
-    ethAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    // eUSDC on PulseChain (bridged from Ethereum)
-    plsAddress: '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07',
-    color: '#2775CA',
-    dexLinks: {
-      eth: 'https://app.uniswap.org/#/swap?outputCurrency=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07',
-    },
-  },
-  // USDT REMOVED - pCopy has bad liquidity data
-  {
-    id: 'dai',
-    name: 'DAI',
-    icon: 'https://gib.show/image/1/0x6B175474E89094C44Da98b954EedeBC495271d0F',
-    // DAI on Ethereum - MakerDAO
-    ethAddress: '0x6B175474E89094C44Da98b954EedeBC495271d0F',
-    // eDAI on PulseChain (bridged from Ethereum via PulseChain bridge)
-    plsAddress: '0xefD766cCb38EaF1dfd701853BFCe31359239F305',
-    color: '#F5AC37',
-    dexLinks: {
-      eth: 'https://app.uniswap.org/#/swap?outputCurrency=0x6B175474E89094C44Da98b954EedeBC495271d0F',
-      pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0xefD766cCb38EaF1dfd701853BFCe31359239F305',
-    },
-  },
+  // USDC & DAI REMOVED - stablecoins not useful for arb
   {
     id: 'wbtc',
     name: 'WBTC',
@@ -453,7 +423,7 @@ export const GEXWidgetV3 = ({
             {showInfo && (
               <div className="gex-info-v3">
                 <p><strong>GEX V3.4</strong> monitors bridged tokens for arbitrage between ETH ↔ PLS.</p>
-                <p>📊 eHEX, WETH, USDC, DAI, WBTC</p>
+                <p>📊 eHEX, WETH, WBTC</p>
                 <p>📈 TradingView live reference prices</p>
                 <p>🎯 Signals at 4%+ spread → Telegram</p>
                 <p>🔗 Use ZapperX or PulseRamp to bridge!</p>
