@@ -4,8 +4,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 const LAMBDA_URL = 'https://kz45776mye3b2ywtra43m4wwl40hmrdu.lambda-url.us-east-2.on.aws/';
 const PRICE_UPDATE_INTERVAL = 1000; // 1 second for real-time feel
 
-// Use our own Vercel API route to proxy gTrade (no CORS issues)
-const GTRADE_API = '/api/gtrade-prices';
+// gTrade API endpoints - try multiple CORS proxies
+const GTRADE_ENDPOINTS = [
+  '/api/gtrade-prices', // Our Vercel API route (best)
+  'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://backend-arbitrum.gains.trade/prices'),
+  'https://corsproxy.io/?' + encodeURIComponent('https://backend-arbitrum.gains.trade/prices'),
+];
 
 // gTrade pair indices - EXACT match to gains.trade
 const PAIR_IDS = { BTC: 0, ETH: 1, GOLD: 52, SILVER: 53 };
@@ -107,86 +111,87 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch ALL prices from gTrade via Vercel API - EXACT match to gains.trade
+  // Track which endpoint is working
+  const workingEndpointRef = useRef(0);
+
+  // Fetch ALL prices from gTrade - tries multiple endpoints
   const fetchAllPrices = useCallback(async () => {
-    try {
-      // Add cache-busting timestamp
-      const response = await fetch(`${GTRADE_API}?t=${Date.now()}`);
+    let data = null;
+    let success = false;
+    
+    // Try endpoints starting with the last one that worked
+    for (let i = 0; i < GTRADE_ENDPOINTS.length && !success; i++) {
+      const endpointIndex = (workingEndpointRef.current + i) % GTRADE_ENDPOINTS.length;
+      const endpoint = GTRADE_ENDPOINTS[endpointIndex];
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Debug: log raw response to see what we're getting
-      if (data && data.length > 0) {
-        console.log('🔍 Raw gTrade data[0-5]:', data.slice(0, 5));
-        console.log('🔍 BTC raw:', data[PAIR_IDS.BTC], 'ETH raw:', data[PAIR_IDS.ETH]);
-      }
-      
-      // gTrade returns array indexed by pair ID - prices are strings or numbers
-      if (Array.isArray(data) && data.length > 50) {
-        // Parse with full precision - gTrade returns prices like "89713.5" or 89713.5
-        const btcRaw = data[PAIR_IDS.BTC];
-        const ethRaw = data[PAIR_IDS.ETH];
-        const goldRaw = data[PAIR_IDS.GOLD];
-        const silverRaw = data[PAIR_IDS.SILVER];
+      try {
+        const response = await fetch(`${endpoint}${endpoint.includes('?') ? '&' : '?'}t=${Date.now()}`, {
+          cache: 'no-store',
+        });
         
-        const newPrices = {
-          BTC: typeof btcRaw === 'string' ? Number(btcRaw) : btcRaw,
-          ETH: typeof ethRaw === 'string' ? Number(ethRaw) : ethRaw,
-          GOLD: typeof goldRaw === 'string' ? Number(goldRaw) : goldRaw,
-          SILVER: typeof silverRaw === 'string' ? Number(silverRaw) : silverRaw,
-        };
-        
-        // Validate prices are reasonable
-        if (newPrices.BTC < 1000 || newPrices.BTC > 500000) {
-          console.warn('⚠️ BTC price out of range:', newPrices.BTC);
-          return;
-        }
-        
-        // Calculate changes and flashes - trigger on ANY change
-        const changes = {};
-        const flashes = {};
-        
-        Object.keys(newPrices).forEach(asset => {
-          const oldPrice = priceRef.current[asset];
-          const newPrice = newPrices[asset];
-          
-          if (oldPrice && newPrice) {
-            const change = ((newPrice - oldPrice) / oldPrice) * 100;
-            changes[asset] = change;
-            
-            // Flash on any price movement > $0.001
-            if (Math.abs(newPrice - oldPrice) > 0.001) {
-              flashes[asset] = change > 0 ? 'up' : 'down';
-            }
+        if (response.ok) {
+          data = await response.json();
+          if (Array.isArray(data) && data.length > 50) {
+            success = true;
+            workingEndpointRef.current = endpointIndex;
+            console.log('✅ Using endpoint:', endpointIndex);
           }
-        });
-        
-        // Update state
-        setPrices(newPrices);
-        setPriceChanges(changes);
-        setPriceFlash(flashes);
-        priceRef.current = newPrices;
-        setLastUpdate(new Date());
-        setPriceSource('gTrade Live');
-        
-        // Clear flashes quickly for rapid updates
-        setTimeout(() => setPriceFlash({}), 300);
-        
-        console.log('📊 gTrade prices:', {
-          BTC: newPrices.BTC,
-          ETH: newPrices.ETH,
-          GOLD: newPrices.GOLD,
-          SILVER: newPrices.SILVER
-        });
+        }
+      } catch (e) {
+        console.warn(`Endpoint ${endpointIndex} failed:`, e.message);
       }
-    } catch (err) {
-      console.warn('gTrade fetch failed:', err.message);
-      setPriceSource('Reconnecting...');
     }
+    
+    if (!success || !data) {
+      setPriceSource('Reconnecting...');
+      return;
+    }
+    
+    // Parse prices with full precision
+    const newPrices = {
+      BTC: Number(data[PAIR_IDS.BTC]) || priceRef.current.BTC,
+      ETH: Number(data[PAIR_IDS.ETH]) || priceRef.current.ETH,
+      GOLD: Number(data[PAIR_IDS.GOLD]) || priceRef.current.GOLD,
+      SILVER: Number(data[PAIR_IDS.SILVER]) || priceRef.current.SILVER,
+    };
+    
+    // Validate BTC price is reasonable
+    if (newPrices.BTC < 10000 || newPrices.BTC > 500000) {
+      console.warn('⚠️ Invalid BTC price:', newPrices.BTC);
+      return;
+    }
+    
+    // Calculate changes and flashes
+    const changes = {};
+    const flashes = {};
+    
+    Object.keys(newPrices).forEach(asset => {
+      const oldPrice = priceRef.current[asset];
+      const newPrice = newPrices[asset];
+      
+      if (oldPrice && newPrice) {
+        const change = ((newPrice - oldPrice) / oldPrice) * 100;
+        changes[asset] = change;
+        
+        // Flash on any price movement
+        if (Math.abs(newPrice - oldPrice) > 0.001) {
+          flashes[asset] = change > 0 ? 'up' : 'down';
+        }
+      }
+    });
+    
+    // Update state
+    setPrices(newPrices);
+    setPriceChanges(changes);
+    setPriceFlash(flashes);
+    priceRef.current = newPrices;
+    setLastUpdate(new Date());
+    setPriceSource('gTrade Live');
+    
+    // Clear flashes
+    setTimeout(() => setPriceFlash({}), 250);
+    
+    console.log('📊 Prices:', newPrices.BTC.toFixed(2), newPrices.ETH.toFixed(2));
   }, []);
 
   // Fetch positions
@@ -270,12 +275,10 @@ export default function MetalPerpsWidget() {
     };
   }, [fetchAllPrices, fetchPositions, fetchBalance]);
 
-  // Formatters - Match gTrade display precision
-  const formatPrice = (price, asset = null) => {
+  // Formatters - 2 decimal precision like institutional trading
+  const formatPrice = (price) => {
     if (!price) return '$0.00';
-    // gTrade shows 1 decimal for BTC/ETH/GOLD, 2 for SILVER
-    const decimals = (asset === 'SILVER' || price < 100) ? 2 : 1;
-    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const calcLiquidationPrice = () => {
@@ -497,10 +500,7 @@ export default function MetalPerpsWidget() {
                       color: '#fff',
                       fontFamily: "'Orbitron', sans-serif",
                     }}>
-                      ${prices[key]?.toLocaleString('en-US', { 
-                        minimumFractionDigits: key === 'SILVER' ? 2 : 1, 
-                        maximumFractionDigits: key === 'SILVER' ? 2 : 1 
-                      }) || '0.0'}
+                      ${prices[key]?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                     </div>
                     <div style={{ 
                       fontSize: '8px', 
@@ -610,7 +610,7 @@ export default function MetalPerpsWidget() {
                   : 'none',
                 transition: 'text-shadow 0.3s',
               }}>
-                {formatPrice(currentPrice, selectedAsset)}
+                {formatPrice(currentPrice)}
               </div>
               {isCommodity && (
                 <div style={{
@@ -737,7 +737,7 @@ export default function MetalPerpsWidget() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#888' }}>Liq. Price</span>
-                <span style={{ color: '#ff4444', fontWeight: 600 }}>{formatPrice(calcLiquidationPrice(), selectedAsset)}</span>
+                <span style={{ color: '#ff4444', fontWeight: 600 }}>{formatPrice(calcLiquidationPrice())}</span>
               </div>
             </div>
 
