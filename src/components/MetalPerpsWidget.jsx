@@ -2,7 +2,18 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
 const LAMBDA_URL = 'https://kz45776mye3b2ywtra43m4wwl40hmrdu.lambda-url.us-east-2.on.aws/';
-const PRICE_UPDATE_INTERVAL = 10000; // 10 seconds for more live feel
+const PRICE_UPDATE_INTERVAL = 2000; // 2 seconds for live feel
+
+// Direct price APIs for accuracy
+const PRICE_APIS = {
+  // Binance public API - most accurate for BTC/ETH
+  binance: {
+    btc: 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT',
+    eth: 'https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT',
+  },
+  // Metals fallback (goldprice.org provides accurate per-ounce data)
+  metals: 'https://data-asg.goldprice.org/dbXRates/USD',
+};
 
 const ASSET_IMAGES = {
   BTC: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
@@ -37,7 +48,12 @@ export default function MetalPerpsWidget() {
   const [direction, setDirection] = useState('LONG');
   const [collateral, setCollateral] = useState('50');
   const [leverage, setLeverage] = useState(10);
-  const [prices, setPrices] = useState({});
+  const [prices, setPrices] = useState({
+    BTC: 89500,
+    ETH: 2950,
+    GOLD: 2650,
+    SILVER: 31,
+  });
   const [prevPrices, setPrevPrices] = useState({});
   const [priceChanges, setPriceChanges] = useState({});
   const [positions, setPositions] = useState([]);
@@ -47,7 +63,12 @@ export default function MetalPerpsWidget() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [priceFlash, setPriceFlash] = useState({});
   
-  const priceRef = useRef(prices);
+  const priceRef = useRef({
+    BTC: 89500,
+    ETH: 2950,
+    GOLD: 2650,
+    SILVER: 31,
+  });
 
   const asset = ASSETS[selectedAsset];
   const currentPrice = prices[selectedAsset] || 0;
@@ -90,39 +111,68 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch prices with change tracking
+  // Fetch prices with change tracking - DIRECT API CALLS for accuracy
   const fetchPrices = useCallback(async () => {
     try {
-      const result = await apiCall('PRICES');
-      if (result.prices) {
-        const newPrices = result.prices;
-        const oldPrices = priceRef.current;
-        
-        // Calculate price changes
-        const changes = {};
-        const flashes = {};
-        Object.keys(newPrices).forEach(asset => {
-          const oldPrice = oldPrices[asset] || newPrices[asset];
-          const newPrice = newPrices[asset];
+      let newPrices = { ...priceRef.current };
+      
+      // PARALLEL fetch for speed - Binance for crypto, goldprice.org for metals
+      const [btcRes, ethRes, metalsRes] = await Promise.allSettled([
+        fetch(PRICE_APIS.binance.btc),
+        fetch(PRICE_APIS.binance.eth),
+        fetch(PRICE_APIS.metals),
+      ]);
+      
+      // Parse BTC
+      if (btcRes.status === 'fulfilled') {
+        const btcData = await btcRes.value.json();
+        if (btcData?.price) newPrices.BTC = parseFloat(btcData.price);
+      }
+      
+      // Parse ETH
+      if (ethRes.status === 'fulfilled') {
+        const ethData = await ethRes.value.json();
+        if (ethData?.price) newPrices.ETH = parseFloat(ethData.price);
+      }
+      
+      // Parse Gold/Silver from goldprice.org
+      if (metalsRes.status === 'fulfilled') {
+        const metalsData = await metalsRes.value.json();
+        if (metalsData?.items?.[0]) {
+          const item = metalsData.items[0];
+          if (item.xauPrice) newPrices.GOLD = parseFloat(item.xauPrice);
+          if (item.xagPrice) newPrices.SILVER = parseFloat(item.xagPrice);
+        }
+      }
+      
+      const oldPrices = priceRef.current;
+      
+      // Calculate price changes
+      const changes = {};
+      const flashes = {};
+      Object.keys(newPrices).forEach(asset => {
+        const oldPrice = oldPrices[asset] || newPrices[asset];
+        const newPrice = newPrices[asset];
+        if (oldPrice && newPrice) {
           const change = ((newPrice - oldPrice) / oldPrice) * 100;
           changes[asset] = change;
           
           // Trigger flash animation if price changed
-          if (oldPrice !== newPrice) {
+          if (Math.abs(newPrice - oldPrice) > 0.01) {
             flashes[asset] = change > 0 ? 'up' : 'down';
           }
-        });
-        
-        setPrevPrices(oldPrices);
-        setPrices(newPrices);
-        setPriceChanges(changes);
-        setPriceFlash(flashes);
-        priceRef.current = newPrices;
-        setLastUpdate(new Date());
-        
-        // Clear flash after animation
-        setTimeout(() => setPriceFlash({}), 500);
-      }
+        }
+      });
+      
+      setPrevPrices(oldPrices);
+      setPrices(newPrices);
+      setPriceChanges(changes);
+      setPriceFlash(flashes);
+      priceRef.current = newPrices;
+      setLastUpdate(new Date());
+      
+      // Clear flash after animation
+      setTimeout(() => setPriceFlash({}), 500);
     } catch (error) {
       console.error('Failed to fetch prices:', error);
     }
@@ -208,12 +258,10 @@ export default function MetalPerpsWidget() {
     };
   }, [fetchPrices, fetchPositions, fetchBalance]);
 
-  // Formatters
+  // Formatters - Institutional grade precision
   const formatPrice = (price) => {
     if (!price) return '$0.00';
-    if (price >= 1000) return '$' + price.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    if (price >= 1) return '$' + price.toFixed(2);
-    return '$' + price.toFixed(4);
+    return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const calcLiquidationPrice = () => {
@@ -435,10 +483,7 @@ export default function MetalPerpsWidget() {
                       color: '#fff',
                       fontFamily: "'Orbitron', sans-serif",
                     }}>
-                      {prices[key] >= 1000 
-                        ? `$${(prices[key]/1000).toFixed(1)}k`
-                        : formatPrice(prices[key])
-                      }
+                      ${prices[key]?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                     </div>
                     <div style={{ 
                       fontSize: '8px', 
@@ -560,7 +605,7 @@ export default function MetalPerpsWidget() {
                 </div>
               )}
               <div style={{ fontSize: '9px', color: '#444', marginTop: '4px' }}>
-                🔴 LIVE • Updates every 10s
+                🔴 LIVE • Updates every 2s
               </div>
             </div>
 
