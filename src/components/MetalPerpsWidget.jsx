@@ -4,10 +4,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 const LAMBDA_URL = 'https://kz45776mye3b2ywtra43m4wwl40hmrdu.lambda-url.us-east-2.on.aws/';
 const PRICE_UPDATE_INTERVAL = 1500; // 1.5 seconds for live feel
 
-// Use corsproxy.io for gTrade API (most reliable CORS proxy)
-const GTRADE_API = 'https://corsproxy.io/?' + encodeURIComponent('https://backend-arbitrum.gains.trade/prices');
+// Use our own Vercel API route to proxy gTrade (no CORS issues)
+const GTRADE_API = '/api/gtrade-prices';
 
-// gTrade pair indices
+// gTrade pair indices - EXACT match to gains.trade
 const PAIR_IDS = { BTC: 0, ETH: 1, GOLD: 52, SILVER: 53 };
 
 const ASSET_IMAGES = {
@@ -44,8 +44,8 @@ export default function MetalPerpsWidget() {
   const [collateral, setCollateral] = useState('50');
   const [leverage, setLeverage] = useState(10);
   const [prices, setPrices] = useState({
-    BTC: 102500,
-    ETH: 3250,
+    BTC: 89713,
+    ETH: 3320,
     GOLD: 2720,
     SILVER: 30.50,
   });
@@ -60,8 +60,8 @@ export default function MetalPerpsWidget() {
   const [priceSource, setPriceSource] = useState('connecting...');
   
   const priceRef = useRef({
-    BTC: 102500,
-    ETH: 3250,
+    BTC: 89713,
+    ETH: 3320,
     GOLD: 2720,
     SILVER: 30.50,
   });
