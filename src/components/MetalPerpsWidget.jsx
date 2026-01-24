@@ -2,27 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
 const LAMBDA_URL = 'https://kz45776mye3b2ywtra43m4wwl40hmrdu.lambda-url.us-east-2.on.aws/';
-const PRICE_UPDATE_INTERVAL = 2000; // 2 seconds for live feel
+const PRICE_UPDATE_INTERVAL = 1500; // 1.5 seconds for live feel
 
-// gTrade Backend API - EXACT prices matching gains.trade UI
-const GTRADE_PRICES_API = 'https://backend-arbitrum.gains.trade/prices';
+// Use corsproxy.io for gTrade API (most reliable CORS proxy)
+const GTRADE_API = 'https://corsproxy.io/?' + encodeURIComponent('https://backend-arbitrum.gains.trade/prices');
 
-// Pair indices on gTrade (these are the trading pair IDs)
-const GTRADE_PAIR_IDS = {
-  BTC: 0,   // BTC-USD
-  ETH: 1,   // ETH-USD  
-  GOLD: 52, // XAU-USD (Gold)
-  SILVER: 53, // XAG-USD (Silver)
-};
-
-// Fallback APIs if gTrade fails
-const FALLBACK_APIS = {
-  binance: {
-    btc: 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT',
-    eth: 'https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT',
-  },
-  metals: 'https://data-asg.goldprice.org/dbXRates/USD',
-};
+// gTrade pair indices
+const PAIR_IDS = { BTC: 0, ETH: 1, GOLD: 52, SILVER: 53 };
 
 const ASSET_IMAGES = {
   BTC: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
@@ -58,10 +44,10 @@ export default function MetalPerpsWidget() {
   const [collateral, setCollateral] = useState('50');
   const [leverage, setLeverage] = useState(10);
   const [prices, setPrices] = useState({
-    BTC: 89500,
-    ETH: 2950,
-    GOLD: 2650,
-    SILVER: 31,
+    BTC: 102500,
+    ETH: 3250,
+    GOLD: 2720,
+    SILVER: 30.50,
   });
   const [prevPrices, setPrevPrices] = useState({});
   const [priceChanges, setPriceChanges] = useState({});
@@ -71,12 +57,13 @@ export default function MetalPerpsWidget() {
   const [toast, setToast] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [priceFlash, setPriceFlash] = useState({});
+  const [priceSource, setPriceSource] = useState('connecting...');
   
   const priceRef = useRef({
-    BTC: 89500,
-    ETH: 2950,
-    GOLD: 2650,
-    SILVER: 31,
+    BTC: 102500,
+    ETH: 3250,
+    GOLD: 2720,
+    SILVER: 30.50,
   });
 
   const asset = ASSETS[selectedAsset];
@@ -120,106 +107,62 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch prices with change tracking - gTrade API for EXACT price matching
-  const fetchPrices = useCallback(async () => {
+  // Fetch ALL prices from gTrade via CORS proxy - EXACT match to gains.trade
+  const fetchAllPrices = useCallback(async () => {
     try {
-      let newPrices = { ...priceRef.current };
-      let usedGtrade = false;
+      const response = await fetch(GTRADE_API);
       
-      // PRIMARY: gTrade Backend API - EXACT prices matching gains.trade UI
-      try {
-        const gtradeRes = await fetch(GTRADE_PRICES_API);
-        const gtradeData = await gtradeRes.json();
-        
-        // gTrade returns array of prices indexed by pair ID
-        if (Array.isArray(gtradeData) && gtradeData.length > 0) {
-          // BTC (pair 0)
-          if (gtradeData[GTRADE_PAIR_IDS.BTC]) {
-            newPrices.BTC = parseFloat(gtradeData[GTRADE_PAIR_IDS.BTC]);
-          }
-          // ETH (pair 1)
-          if (gtradeData[GTRADE_PAIR_IDS.ETH]) {
-            newPrices.ETH = parseFloat(gtradeData[GTRADE_PAIR_IDS.ETH]);
-          }
-          // Gold XAU (pair 52)
-          if (gtradeData[GTRADE_PAIR_IDS.GOLD]) {
-            newPrices.GOLD = parseFloat(gtradeData[GTRADE_PAIR_IDS.GOLD]);
-          }
-          // Silver XAG (pair 53)
-          if (gtradeData[GTRADE_PAIR_IDS.SILVER]) {
-            newPrices.SILVER = parseFloat(gtradeData[GTRADE_PAIR_IDS.SILVER]);
-          }
-          usedGtrade = true;
-          console.log('📊 gTrade prices:', { BTC: newPrices.BTC?.toFixed(2), ETH: newPrices.ETH?.toFixed(2), GOLD: newPrices.GOLD?.toFixed(2), SILVER: newPrices.SILVER?.toFixed(2) });
-        }
-      } catch (gtradeErr) {
-        console.warn('gTrade API failed, using fallbacks:', gtradeErr.message);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
       
-      // FALLBACK: Binance for crypto if gTrade failed
-      if (!usedGtrade) {
-        try {
-          const [btcRes, ethRes] = await Promise.allSettled([
-            fetch(FALLBACK_APIS.binance.btc),
-            fetch(FALLBACK_APIS.binance.eth),
-          ]);
-          
-          if (btcRes.status === 'fulfilled') {
-            const btcData = await btcRes.value.json();
-            if (btcData?.price) newPrices.BTC = parseFloat(btcData.price);
-          }
-          if (ethRes.status === 'fulfilled') {
-            const ethData = await ethRes.value.json();
-            if (ethData?.price) newPrices.ETH = parseFloat(ethData.price);
-          }
-        } catch (e) {
-          console.warn('Binance fallback failed:', e.message);
-        }
+      const data = await response.json();
+      
+      // gTrade returns array indexed by pair ID
+      if (Array.isArray(data) && data.length > 50) {
+        const newPrices = {
+          BTC: parseFloat(data[PAIR_IDS.BTC]) || priceRef.current.BTC,
+          ETH: parseFloat(data[PAIR_IDS.ETH]) || priceRef.current.ETH,
+          GOLD: parseFloat(data[PAIR_IDS.GOLD]) || priceRef.current.GOLD,
+          SILVER: parseFloat(data[PAIR_IDS.SILVER]) || priceRef.current.SILVER,
+        };
         
-        // Metals fallback
-        try {
-          const metalsRes = await fetch(FALLBACK_APIS.metals);
-          const metalsData = await metalsRes.json();
-          if (metalsData?.items?.[0]) {
-            const item = metalsData.items[0];
-            if (item.xauPrice) newPrices.GOLD = parseFloat(item.xauPrice);
-            if (item.xagPrice) newPrices.SILVER = parseFloat(item.xagPrice);
-          }
-        } catch (e) {
-          console.warn('Metals fallback failed:', e.message);
-        }
-      }
-      
-      const oldPrices = priceRef.current;
-      
-      // Calculate price changes
-      const changes = {};
-      const flashes = {};
-      Object.keys(newPrices).forEach(asset => {
-        const oldPrice = oldPrices[asset] || newPrices[asset];
-        const newPrice = newPrices[asset];
-        if (oldPrice && newPrice) {
-          const change = ((newPrice - oldPrice) / oldPrice) * 100;
-          changes[asset] = change;
+        // Calculate changes and flashes
+        const changes = {};
+        const flashes = {};
+        
+        Object.keys(newPrices).forEach(asset => {
+          const oldPrice = priceRef.current[asset];
+          const newPrice = newPrices[asset];
           
-          // Trigger flash animation if price changed
-          if (Math.abs(newPrice - oldPrice) > 0.01) {
+          if (oldPrice && newPrice && Math.abs(newPrice - oldPrice) > 0.01) {
+            const change = ((newPrice - oldPrice) / oldPrice) * 100;
+            changes[asset] = change;
             flashes[asset] = change > 0 ? 'up' : 'down';
           }
-        }
-      });
-      
-      setPrevPrices(oldPrices);
-      setPrices(newPrices);
-      setPriceChanges(changes);
-      setPriceFlash(flashes);
-      priceRef.current = newPrices;
-      setLastUpdate(new Date());
-      
-      // Clear flash after animation
-      setTimeout(() => setPriceFlash({}), 500);
-    } catch (error) {
-      console.error('Failed to fetch prices:', error);
+        });
+        
+        // Update state
+        setPrices(newPrices);
+        setPriceChanges(changes);
+        setPriceFlash(flashes);
+        priceRef.current = newPrices;
+        setLastUpdate(new Date());
+        setPriceSource('gTrade Live');
+        
+        // Clear flashes
+        setTimeout(() => setPriceFlash({}), 400);
+        
+        console.log('📊 gTrade prices:', {
+          BTC: newPrices.BTC.toFixed(2),
+          ETH: newPrices.ETH.toFixed(2),
+          GOLD: newPrices.GOLD.toFixed(2),
+          SILVER: newPrices.SILVER.toFixed(2)
+        });
+      }
+    } catch (err) {
+      console.warn('gTrade fetch failed:', err.message);
+      setPriceSource('Reconnecting...');
     }
   }, []);
 
@@ -287,21 +230,22 @@ export default function MetalPerpsWidget() {
     setLoading(false);
   };
 
-  // Initial fetch and polling
+  // Initial fetch and polling - gTrade prices every 1.5s
   useEffect(() => {
-    fetchPrices();
+    // Initial fetch
+    fetchAllPrices();
     fetchPositions();
     fetchBalance();
     
-    // More frequent price updates for live feel
-    const priceInterval = setInterval(fetchPrices, PRICE_UPDATE_INTERVAL);
+    // Poll gTrade API every 1.5 seconds for live prices
+    const priceInterval = setInterval(fetchAllPrices, PRICE_UPDATE_INTERVAL);
     const positionInterval = setInterval(fetchPositions, 30000);
     
     return () => {
       clearInterval(priceInterval);
       clearInterval(positionInterval);
     };
-  }, [fetchPrices, fetchPositions, fetchBalance]);
+  }, [fetchAllPrices, fetchPositions, fetchBalance]);
 
   // Formatters - Institutional grade precision
   const formatPrice = (price) => {
@@ -650,7 +594,7 @@ export default function MetalPerpsWidget() {
                 </div>
               )}
               <div style={{ fontSize: '9px', color: '#444', marginTop: '4px' }}>
-                🔴 LIVE • gTrade prices • 2s
+                🔴 LIVE • {priceSource}
               </div>
             </div>
 
