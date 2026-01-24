@@ -26,10 +26,10 @@ const CONFIG = {
   MIN_SPREAD_SIGNAL: 4,
   MIN_SPREAD_OPPORTUNITY: 5,
   SIGNAL_COOLDOWN_MS: 120000,
-  PRICE_REFRESH_MS: 10000, // Faster refresh - 10 seconds
+  PRICE_REFRESH_MS: 5000, // 5 second refresh for live feel
   COINGECKO_IDS: {
     weth: 'ethereum',
-    wbtc: 'bitcoin',
+    wbtc: 'wrapped-bitcoin',
     usdc: 'usd-coin',
     dai: 'dai',
     ehex: 'hex',
@@ -212,29 +212,41 @@ class SignalService {
 class PriceService {
   static cache = {};
   static refCache = {}; // CoinGecko reference prices
+  static lastRefFetch = 0;
   
-  // Fetch reference price from CoinGecko (the "true" market price)
-  static async fetchReferencePrice(pairId) {
-    const geckoId = CONFIG.COINGECKO_IDS[pairId];
-    if (!geckoId) return null;
-    
-    const cached = this.refCache[pairId];
-    if (cached && Date.now() - cached.time < 30000) return cached.price;
+  // Fetch ALL reference prices from CoinGecko at once (more efficient)
+  static async fetchAllReferencePrices() {
+    // Only fetch every 10 seconds to avoid rate limits
+    if (Date.now() - this.lastRefFetch < 10000 && Object.keys(this.refCache).length > 0) {
+      return this.refCache;
+    }
     
     try {
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=usd`;
+      const ids = Object.values(CONFIG.COINGECKO_IDS).join(',');
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
       const res = await fetch(url);
       const data = await res.json();
-      const price = data[geckoId]?.usd || null;
       
-      if (price) {
-        this.refCache[pairId] = { price, time: Date.now() };
-      }
-      return price;
+      // Map back to our pair IDs
+      Object.entries(CONFIG.COINGECKO_IDS).forEach(([pairId, geckoId]) => {
+        if (data[geckoId]?.usd) {
+          this.refCache[pairId] = { price: data[geckoId].usd, time: Date.now() };
+        }
+      });
+      
+      this.lastRefFetch = Date.now();
+      console.log('[GEX] CoinGecko prices:', Object.entries(this.refCache).map(([k,v]) => `${k}: $${v.price}`).join(', '));
+      return this.refCache;
     } catch (err) {
-      console.log('[GEX] CoinGecko fallback:', pairId);
-      return this.refCache[pairId]?.price || null;
+      console.log('[GEX] CoinGecko error, using cache:', err.message);
+      return this.refCache;
     }
+  }
+  
+  // Get reference price for a specific pair (from cache)
+  static async fetchReferencePrice(pairId) {
+    await this.fetchAllReferencePrices();
+    return this.refCache[pairId]?.price || null;
   }
   
   static async fetchPrice(address, chain) {
@@ -280,39 +292,49 @@ class PriceService {
   static async fetchAllPairs() {
     const results = await Promise.all(
       BRIDGED_PAIRS.map(async (pair) => {
-        const [ethPrice, plsPrice, refPrice] = await Promise.all([
+        // Fetch all three prices in parallel
+        const [ethDexPrice, plsPrice, refPrice] = await Promise.all([
           this.fetchPrice(pair.ethAddress, 'eth'),
           this.fetchPrice(pair.plsAddress, 'pls'),
           this.fetchReferencePrice(pair.id),
         ]);
         
+        // Use TradingView/CoinGecko reference as the "true" ETH price
+        // Fall back to DexScreener ETH price if no reference available
+        const ethPrice = refPrice || ethDexPrice;
+        
         let spread = 0, absSpread = 0, buyChain = '', sellChain = '';
         let ethDeviation = 0, plsDeviation = 0;
         
         if (ethPrice && plsPrice) {
+          // Spread is now: Reference Price vs PulseChain DEX Price
           spread = ((ethPrice - plsPrice) / plsPrice) * 100;
           absSpread = Math.abs(spread);
           buyChain = spread > 0 ? 'PULSECHAIN' : 'ETHEREUM';
           sellChain = spread > 0 ? 'ETHEREUM' : 'PULSECHAIN';
           
-          // Calculate deviation from reference price (if available)
+          // Calculate deviation from reference (if we have both DEX prices)
+          if (refPrice && ethDexPrice) {
+            ethDeviation = ((ethDexPrice - refPrice) / refPrice) * 100;
+          }
           if (refPrice) {
-            ethDeviation = ((ethPrice - refPrice) / refPrice) * 100;
             plsDeviation = ((plsPrice - refPrice) / refPrice) * 100;
           }
         }
         
         return { 
           ...pair, 
-          ethPrice, 
-          plsPrice, 
-          refPrice, // TradingView/CoinGecko reference
-          ethDeviation, // How far ETH DEX is from true price
-          plsDeviation, // How far PLS DEX is from true price
-          spread, 
+          ethPrice,       // TradingView/CoinGecko reference (or DEX fallback)
+          ethDexPrice,    // Actual ETH DEX price (for comparison)
+          plsPrice,       // PulseChain DEX price
+          refPrice,       // Raw reference price
+          ethDeviation,   // How far ETH DEX is from true price
+          plsDeviation,   // How far PLS DEX is from true price
+          spread,         // Reference vs PLS spread
           absSpread, 
           buyChain, 
-          sellChain 
+          sellChain,
+          usingReference: !!refPrice, // Flag if we're using TV reference
         };
       })
     );
@@ -477,11 +499,11 @@ export const GEXWidgetV3 = ({
                           <span className="pair-icon-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 20, height: 20, borderRadius: '50%' }} /> : p.icon}</span>
                           <span className="pair-name-v3">{p.name}</span>
                           <span className="pair-prices-v3">
-                            <span className="eth" title={`ETH DEX${p.refPrice ? ` (${p.ethDeviation >= 0 ? '+' : ''}${p.ethDeviation.toFixed(2)}% vs ref)` : ''}`}>
-                              {formatPrice(p.ethPrice)}
+                            <span className="eth" style={{ color: p.usingReference ? '#FFD700' : '#888' }} title={p.usingReference ? '📈 CoinGecko/TradingView Live' : 'ETH DEX'}>
+                              {formatPrice(p.ethPrice)}{p.usingReference && <span style={{ fontSize: '8px', marginLeft: '2px' }}>📈</span>}
                             </span>
                             <span className="sep">↔</span>
-                            <span className="pls" title={`PLS DEX${p.refPrice ? ` (${p.plsDeviation >= 0 ? '+' : ''}${p.plsDeviation.toFixed(2)}% vs ref)` : ''}`} style={{ color: '#00ff88' }}>
+                            <span className="pls" title="PulseChain DEX" style={{ color: '#00ff88' }}>
                               {formatPrice(p.plsPrice)}
                             </span>
                           </span>
@@ -530,32 +552,33 @@ export const GEXWidgetV3 = ({
                         </div>
                       )}
 
+                      {/* Price comparison - Reference vs PulseChain */}
                       <div className="price-cards-v3">
-                        <div className="card-v3 eth">
-                          <div className="chain-v3">◆ ETHEREUM</div>
-                          <div className="token-v3">{currentPair.name}(E)</div>
-                          <div className="price-v3">{formatPrice(currentPair.ethPrice)}</div>
-                          {currentPair.refPrice && (
-                            <div style={{ 
-                              fontSize: '10px', 
-                              color: currentPair.ethDeviation >= 0 ? '#00ff88' : '#ff4444',
-                              marginTop: '4px' 
-                            }}>
-                              {currentPair.ethDeviation >= 0 ? '+' : ''}{currentPair.ethDeviation.toFixed(2)}% vs ref
+                        <div className="card-v3 eth" style={{ borderColor: currentPair.usingReference ? '#FFD700' : undefined }}>
+                          <div className="chain-v3" style={{ color: currentPair.usingReference ? '#FFD700' : undefined }}>
+                            {currentPair.usingReference ? '📈 TRADINGVIEW' : '◆ ETHEREUM DEX'}
+                          </div>
+                          <div className="token-v3">{currentPair.name}</div>
+                          <div className="price-v3" style={{ color: currentPair.usingReference ? '#FFD700' : undefined }}>
+                            {formatPrice(currentPair.ethPrice)}
+                          </div>
+                          {currentPair.usingReference && currentPair.ethDexPrice && (
+                            <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
+                              DEX: {formatPrice(currentPair.ethDexPrice)}
                             </div>
                           )}
                         </div>
                         <div className="card-v3 pls">
-                          <div className="chain-v3">💜 PULSECHAIN</div>
-                          <div className="token-v3">{currentPair.name}(P)</div>
-                          <div className="price-v3">{formatPrice(currentPair.plsPrice)}</div>
+                          <div className="chain-v3">💜 PULSECHAIN DEX</div>
+                          <div className="token-v3">{currentPair.name}</div>
+                          <div className="price-v3" style={{ color: '#00ff88' }}>{formatPrice(currentPair.plsPrice)}</div>
                           {currentPair.refPrice && (
                             <div style={{ 
                               fontSize: '10px', 
                               color: currentPair.plsDeviation >= 0 ? '#00ff88' : '#ff4444',
                               marginTop: '4px' 
                             }}>
-                              {currentPair.plsDeviation >= 0 ? '+' : ''}{currentPair.plsDeviation.toFixed(2)}% vs ref
+                              {currentPair.plsDeviation >= 0 ? '+' : ''}{currentPair.plsDeviation.toFixed(2)}% vs TV
                             </div>
                           )}
                         </div>
@@ -622,7 +645,7 @@ export const GEXWidgetV3 = ({
 
               {activeTab === 'live' && (
                 <div className="live-tab-v3">
-                  <div className="live-header-v3"><span className="dot-v3"></span> LIVE • TradingView + DexScreener • 10s</div>
+                  <div className="live-header-v3"><span className="dot-v3"></span> LIVE • CoinGecko + DEX • 5s</div>
                   <div className="live-grid-v3">
                     {pairData.map(p => (
                       <div key={p.id} className="live-card-v3">
