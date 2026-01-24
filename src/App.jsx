@@ -1,5 +1,5 @@
 import { GEXWidgetV3 } from './components/GEXWidgetV3';
-import MetalsWidgetV1 from './components/widgets/MetalsWidgetV1';
+import MetalPerpsWidget from './components/MetalPerpsWidget';
 import './components/widgets/MetalsWidget.css';
 import DapperComponent from './components/DapperComponent';
 import ZapperXChain from './components/ZapperXChain';
@@ -14321,7 +14321,7 @@ export default function App() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* METALS V1 - Precious Metals Perps Trading Widget */}
       {/* ═══════════════════════════════════════════════════════════════ */}
-      <MetalsWidgetV1 />
+      <MetalPerpsWidget />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ZAPP ARB LASER LINK MODAL - One-click arbitrage route calculator */}
