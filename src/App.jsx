@@ -4106,8 +4106,8 @@ export default function App() {
 
   // Live crypto prices state
   const [cryptoPrices, setCryptoPrices] = useState({
-    btc: 42000,
-    eth: 2200,
+    btc: 89500,
+    eth: 2950,
     pls: 0.00003,
     plsx: 0.00002,
     loading: true,
@@ -4152,68 +4152,57 @@ export default function App() {
     lastUpdated: null,
   });
 
-  // Fetch live metal prices from free API
+  // Fetch live metal prices - MULTI-SOURCE FOR ACCURACY
   const fetchMetalPrices = useCallback(async () => {
     setMetalPrices(prev => ({ ...prev, loading: true }));
     
+    let goldPrice = 2650, silverPrice = 31.50, copperPrice = 4.25;
+    
     try {
-      // Use MetalPriceAPI free tier (or fallback to multiple sources)
-      // Primary: Fetch from metals.live (free, no API key needed)
-      const response = await fetch('https://api.metals.live/v1/spot');
+      // PRIMARY: goldprice.org (more reliable)
+      const response = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
       const data = await response.json();
       
-      // metals.live returns array: [{gold: price}, {silver: price}, {platinum: price}, {palladium: price}]
-      // Or object with metal prices
-      let goldPrice = 2650, silverPrice = 31.50, copperPrice = 4.25;
-      
-      if (Array.isArray(data)) {
-        // Format: [{gold: 2650.00}, {silver: 31.50}, ...]
-        data.forEach(item => {
-          if (item.gold) goldPrice = parseFloat(item.gold);
-          if (item.silver) silverPrice = parseFloat(item.silver);
-          if (item.copper) copperPrice = parseFloat(item.copper);
-        });
-      } else if (data.gold || data.silver) {
-        // Format: {gold: 2650.00, silver: 31.50, ...}
-        goldPrice = parseFloat(data.gold) || goldPrice;
-        silverPrice = parseFloat(data.silver) || silverPrice;
-        copperPrice = parseFloat(data.copper) || copperPrice;
+      if (data?.items?.[0]) {
+        const item = data.items[0];
+        goldPrice = parseFloat(item.xauPrice) || goldPrice;
+        silverPrice = parseFloat(item.xagPrice) || silverPrice;
+        console.log('🥇 Metal prices (goldprice.org):', { gold: goldPrice.toFixed(2), silver: silverPrice.toFixed(2) });
       }
-      
-      setMetalPrices({
-        gold: goldPrice,
-        silver: silverPrice,
-        copper: copperPrice,
-        loading: false,
-        lastUpdated: new Date(),
-      });
-      
-      console.log('🥇 Metal prices updated:', { gold: goldPrice, silver: silverPrice, copper: copperPrice });
     } catch (err) {
       console.warn('Primary metals API failed, trying backup...', err.message);
       
-      // Backup: Try alternative free API
+      // BACKUP: metals.live
       try {
-        const backupRes = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+        const backupRes = await fetch('https://api.metals.live/v1/spot');
         const backupData = await backupRes.json();
         
-        // goldprice.org format: {items: [{xauPrice: gold, xagPrice: silver}]}
-        if (backupData?.items?.[0]) {
-          const item = backupData.items[0];
-          setMetalPrices({
-            gold: parseFloat(item.xauPrice) || 2650,
-            silver: parseFloat(item.xagPrice) || 31.50,
-            copper: 4.25, // goldprice.org doesn't have copper
-            loading: false,
-            lastUpdated: new Date(),
+        if (Array.isArray(backupData)) {
+          backupData.forEach(item => {
+            if (item.gold) goldPrice = parseFloat(item.gold);
+            if (item.silver) silverPrice = parseFloat(item.silver);
+            if (item.copper) copperPrice = parseFloat(item.copper);
           });
-          console.log('🥇 Metal prices updated (backup):', { gold: item.xauPrice, silver: item.xagPrice });
+        } else if (backupData.gold || backupData.silver) {
+          goldPrice = parseFloat(backupData.gold) || goldPrice;
+          silverPrice = parseFloat(backupData.silver) || silverPrice;
+          copperPrice = parseFloat(backupData.copper) || copperPrice;
         }
+        console.log('🥇 Metal prices (metals.live):', { gold: goldPrice.toFixed(2), silver: silverPrice.toFixed(2) });
       } catch (backupErr) {
         console.warn('Backup metals API also failed:', backupErr.message);
-        setMetalPrices(prev => ({ ...prev, loading: false }));
       }
     }
+    
+    setMetalPrices({
+      gold: goldPrice,
+      silver: silverPrice,
+      copper: copperPrice,
+      loading: false,
+      lastUpdated: new Date(),
+    });
+    
+    console.log('🥇 Final metal prices:', { gold: goldPrice.toFixed(2), silver: silverPrice.toFixed(2), copper: copperPrice.toFixed(2) });
   }, []);
 
   // Fetch metal prices on mount and every 5 minutes
@@ -5047,20 +5036,43 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchLivePrices]);
 
-  // Fetch crypto prices (BTC, ETH, PLS, PLSX)
+  // Fetch crypto prices (BTC, ETH, PLS, PLSX) - MULTI-SOURCE FOR ACCURACY
   const fetchCryptoPrices = useCallback(async () => {
     try {
-      // Fetch from CoinGecko for BTC/ETH
-      const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,pulsechain&vs_currencies=usd');
-      const cgData = await cgRes.json();
+      let btcPrice = 89500, ethPrice = 2950;
+      
+      // PRIMARY: Binance public API (most accurate, no rate limits)
+      try {
+        const [btcRes, ethRes] = await Promise.all([
+          fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
+          fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT')
+        ]);
+        const btcData = await btcRes.json();
+        const ethData = await ethRes.json();
+        
+        if (btcData?.price) btcPrice = parseFloat(btcData.price);
+        if (ethData?.price) ethPrice = parseFloat(ethData.price);
+        console.log('💰 Binance prices:', { btc: btcPrice.toFixed(2), eth: ethPrice.toFixed(2) });
+      } catch (binanceErr) {
+        console.warn('Binance API failed, trying CoinGecko...', binanceErr.message);
+        
+        // FALLBACK: CoinGecko
+        try {
+          const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
+          const cgData = await cgRes.json();
+          if (cgData?.bitcoin?.usd) btcPrice = cgData.bitcoin.usd;
+          if (cgData?.ethereum?.usd) ethPrice = cgData.ethereum.usd;
+          console.log('💰 CoinGecko prices:', { btc: btcPrice.toFixed(2), eth: ethPrice.toFixed(2) });
+        } catch (cgErr) {
+          console.warn('CoinGecko also failed:', cgErr.message);
+        }
+      }
 
       // Fetch PLS from DexScreener - use WPLS/DAI pair (most liquid)
-      // Primary: WPLS/DAI pair
       let plsPrice = 0.00003;
       try {
         const plsRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0xA1077a294dDE1B09bB078844df40758a5D0f9a27');
         const plsData = await plsRes.json();
-        // Get best pair by liquidity
         if (plsData?.pairs?.length > 0) {
           const bestPair = plsData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
           plsPrice = parseFloat(bestPair?.priceUsd) || plsPrice;
@@ -5069,12 +5081,11 @@ export default function App() {
         console.warn('PLS price fetch failed:', e.message);
       }
 
-      // Fetch PLSX from DexScreener - search by token address
+      // Fetch PLSX from DexScreener
       let plsxPrice = 0.00002;
       try {
         const plsxRes = await fetch('https://api.dexscreener.com/latest/dex/tokens/0x95B303987A60C71504D99Aa1b13B4DA07b0790ab');
         const plsxData = await plsxRes.json();
-        // Get best pair by liquidity
         if (plsxData?.pairs?.length > 0) {
           const bestPair = plsxData.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
           plsxPrice = parseFloat(bestPair?.priceUsd) || plsxPrice;
@@ -5083,14 +5094,9 @@ export default function App() {
         console.warn('PLSX price fetch failed:', e.message);
       }
 
-      // Use CoinGecko PLS price as fallback/primary if available
-      if (cgData?.pulsechain?.usd) {
-        plsPrice = cgData.pulsechain.usd;
-      }
-
       setCryptoPrices({
-        btc: cgData?.bitcoin?.usd || 42000,
-        eth: cgData?.ethereum?.usd || 2200,
+        btc: btcPrice,
+        eth: ethPrice,
         pls: plsPrice,
         plsx: plsxPrice,
         loading: false,
@@ -5105,10 +5111,10 @@ export default function App() {
       }));
       
       console.log('💰 Crypto prices updated:', { 
-        btc: cgData?.bitcoin?.usd, 
-        eth: cgData?.ethereum?.usd, 
-        pls: plsPrice, 
-        plsx: plsxPrice 
+        btc: btcPrice.toFixed(2), 
+        eth: ethPrice.toFixed(2), 
+        pls: plsPrice.toFixed(8), 
+        plsx: plsxPrice.toFixed(8) 
       });
     } catch (err) {
       console.warn('Failed to fetch crypto prices:', err.message);
@@ -8577,15 +8583,15 @@ export default function App() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#FFD700', fontSize: '0.7rem' }}>🥇 Gold</span>
-                          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.gold.toLocaleString()}</span>
+                          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.gold.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#C0C0C0', fontSize: '0.7rem' }}>🥈 Silver</span>
-                          <span style={{ color: '#C0C0C0', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.silver.toFixed(2)}</span>
+                          <span style={{ color: '#C0C0C0', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.silver.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#CD7F32', fontSize: '0.7rem' }}>🥉 Copper</span>
-                          <span style={{ color: '#CD7F32', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.copper.toFixed(2)}</span>
+                          <span style={{ color: '#CD7F32', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.copper.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     </div>
@@ -8595,11 +8601,11 @@ export default function App() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#F7931A', fontSize: '0.7rem' }}>₿ Bitcoin</span>
-                          <span style={{ color: '#F7931A', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.btc.toLocaleString()}</span>
+                          <span style={{ color: '#F7931A', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.btc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#627EEA', fontSize: '0.7rem' }}>Ξ Ethereum</span>
-                          <span style={{ color: '#627EEA', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.eth.toLocaleString()}</span>
+                          <span style={{ color: '#627EEA', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.eth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     </div>

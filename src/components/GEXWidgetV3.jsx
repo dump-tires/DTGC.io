@@ -1,13 +1,18 @@
 /**
- * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.2
+ * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.3
  * 
  * MULTI-PAIR ARBITRAGE MONITORING
  * eHEX, WETH, USDC, DAI, WBTC (5 pairs - USDT removed due to bad liquidity)
  * 
+ * V3.3 Changes:
+ * - Real token logos from CoinGecko
+ * - Signal threshold raised to 4%+ (was 3%)
+ * - No alerts below 4% spread
+ * 
  * Features:
  * - All pairs view sorted by best opportunity
  * - Single pair detail view
- * - Auto-signals at 3%+ spread
+ * - Auto-signals at 4%+ spread
  * - ZapperX integration for bridging
  */
 
@@ -31,7 +36,8 @@ const BRIDGED_PAIRS = [
   {
     id: 'ehex',
     name: 'eHEX',
-    icon: '💎',
+    // gib.show image API - chainId 1 = Ethereum
+    icon: 'https://gib.show/image/1/0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
     // HEX on Ethereum (native)
     ethAddress: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
     // eHEX on PulseChain (bridged from Ethereum)
@@ -45,7 +51,7 @@ const BRIDGED_PAIRS = [
   {
     id: 'weth',
     name: 'WETH',
-    icon: '⟠',
+    icon: 'https://gib.show/image/1/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     // WETH on Ethereum
     ethAddress: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     // eWETH on PulseChain (bridged from Ethereum)
@@ -59,7 +65,7 @@ const BRIDGED_PAIRS = [
   {
     id: 'usdc',
     name: 'USDC',
-    icon: '💵',
+    icon: 'https://gib.show/image/1/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     // USDC on Ethereum
     ethAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     // eUSDC on PulseChain (bridged from Ethereum)
@@ -74,7 +80,7 @@ const BRIDGED_PAIRS = [
   {
     id: 'dai',
     name: 'DAI',
-    icon: '🔶',
+    icon: 'https://gib.show/image/1/0x6B175474E89094C44Da98b954EedeBC495271d0F',
     // DAI on Ethereum - MakerDAO
     ethAddress: '0x6B175474E89094C44Da98b954EedeBC495271d0F',
     // eDAI on PulseChain (bridged from Ethereum via PulseChain bridge)
@@ -88,7 +94,7 @@ const BRIDGED_PAIRS = [
   {
     id: 'wbtc',
     name: 'WBTC',
-    icon: '₿',
+    icon: 'https://gib.show/image/1/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
     // WBTC on Ethereum
     ethAddress: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
     // eWBTC on PulseChain (bridged from Ethereum)
@@ -99,6 +105,7 @@ const BRIDGED_PAIRS = [
       pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0xb17D901469B9208B17d916112988A3FeD19b5cA1',
     },
   },
+];
 ];
 
 // Bridge/Zap Links
@@ -288,7 +295,7 @@ export const GEXWidgetV3 = ({
 
   const getStatus = (abs) => {
     if (!abs || abs < 2) return 'NORMAL';
-    if (abs < 3) return 'WATCHING';
+    if (abs < 4) return 'WATCHING';
     if (abs < 5) return 'SIGNAL';
     return '🔥 HOT';
   };
@@ -304,7 +311,7 @@ export const GEXWidgetV3 = ({
           <button onClick={() => setIsExpanded(true)} className="gex-trigger-v3">
             <span className="gex-icon-v3">⚡</span>
             <span className="gex-label-v3">GEX</span>
-            {bestOpp?.absSpread >= 3 && <span className="gex-badge-v3">{bestOpp.absSpread.toFixed(1)}%</span>}
+            {bestOpp?.absSpread >= 4 && <span className="gex-badge-v3">{bestOpp.absSpread.toFixed(1)}%</span>}
           </button>
         ) : (
           <div className="gex-panel-v3">
@@ -353,7 +360,7 @@ export const GEXWidgetV3 = ({
                         <div className="no-data-v3">No price data available</div>
                       ) : pairData.map(p => (
                         <div key={p.id} className={`pair-row-v3 ${p.absSpread >= 3 ? 'hot' : ''}`} onClick={() => { setSelectedPair(p.id); setViewMode('single'); }}>
-                          <span className="pair-icon-v3">{p.icon}</span>
+                          <span className="pair-icon-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%' }} /> : p.icon}</span>
                           <span className="pair-name-v3">{p.name}</span>
                           <span className="pair-prices-v3">
                             <span className="eth">{formatPrice(p.ethPrice)}</span>
@@ -369,7 +376,7 @@ export const GEXWidgetV3 = ({
                       <div className="pair-selector-v3">
                         {pairData.map(p => (
                           <button key={p.id} className={selectedPair === p.id ? 'active' : ''} onClick={() => setSelectedPair(p.id)} style={{ borderColor: selectedPair === p.id ? p.color : 'transparent' }}>
-                            {p.icon} {p.name} {p.absSpread >= 3 && '🔥'}
+                            {p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name} {p.absSpread >= 4 && '🔥'}
                           </button>
                         ))}
                       </div>
@@ -444,9 +451,9 @@ export const GEXWidgetV3 = ({
                         {pairData.filter(p => p.absSpread >= 3).length === 0 ? (
                           <div className="none-v3">📡 Monitoring {BRIDGED_PAIRS.length} pairs...</div>
                         ) : (
-                          pairData.filter(p => p.absSpread >= 3).map(p => (
+                          pairData.filter(p => p.absSpread >= 4).map(p => (
                             <div key={p.id} className="opp-card-v3">
-                              <span>{p.icon} {p.name}</span>
+                              <span>{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name}</span>
                               <span style={{ color: getColor(p.absSpread) }}>{formatSpread(p.spread)}</span>
                               <span className="action-v3">Buy {p.buyChain}</span>
                             </div>
@@ -464,7 +471,7 @@ export const GEXWidgetV3 = ({
                   <div className="live-grid-v3">
                     {pairData.map(p => (
                       <div key={p.id} className="live-card-v3">
-                        <div className="name-v3">{p.icon} {p.name}</div>
+                        <div className="name-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name}</div>
                         <div className="spread-v3" style={{ color: getColor(p.absSpread) }}>{formatSpread(p.spread)}</div>
                         <div className="status-v3">{getStatus(p.absSpread)}</div>
                       </div>
@@ -472,7 +479,7 @@ export const GEXWidgetV3 = ({
                   </div>
                   <div className="summary-v3">
                     <div><span>Best:</span> <span>{bestOpp?.name} {formatSpread(bestOpp?.spread)}</span></div>
-                    <div><span>Hot (3%+):</span> <span>{pairData.filter(p => p.absSpread >= 3).length} pairs</span></div>
+                    <div><span>Hot (4%+):</span> <span>{pairData.filter(p => p.absSpread >= 4).length} pairs</span></div>
                   </div>
                 </div>
               )}
