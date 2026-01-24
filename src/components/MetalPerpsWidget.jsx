@@ -175,6 +175,13 @@ export default function MetalPerpsWidget() {
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  
+  // Order type and advanced options
+  const [orderType, setOrderType] = useState('MARKET'); // MARKET or LIMIT
+  const [limitPrice, setLimitPrice] = useState('');
+  const [takeProfit, setTakeProfit] = useState('');
+  const [stopLoss, setStopLoss] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const asset = ASSETS[selectedAsset];
   const tvSymbol = TV_SYMBOLS[selectedAsset];
@@ -243,18 +250,49 @@ export default function MetalPerpsWidget() {
       showToast('Market closed for commodities', 'error');
       return;
     }
+    
+    // Validate limit price if limit order
+    if (orderType === 'LIMIT' && !limitPrice) {
+      showToast('Please enter a limit price', 'error');
+      return;
+    }
+    
     setLoading(true);
     try {
-      const result = await apiCall('OPEN_TRADE', {
+      const tradeParams = {
         asset: selectedAsset,
         direction,
         collateral: parseFloat(collateral),
         leverage,
-      });
+        orderType,
+      };
+      
+      // Add limit price if limit order
+      if (orderType === 'LIMIT' && limitPrice) {
+        tradeParams.limitPrice = parseFloat(limitPrice);
+      }
+      
+      // Add TP if set
+      if (takeProfit) {
+        tradeParams.takeProfit = parseFloat(takeProfit);
+      }
+      
+      // Add SL if set
+      if (stopLoss) {
+        tradeParams.stopLoss = parseFloat(stopLoss);
+      }
+      
+      const result = await apiCall('OPEN_TRADE', tradeParams);
+      
       if (result.success) {
-        showToast(`${direction} position opened!`, 'success');
+        const orderTypeLabel = orderType === 'LIMIT' ? 'Limit order placed' : `${direction} position opened`;
+        showToast(`${orderTypeLabel}!`, 'success');
         fetchPositions();
         fetchBalance();
+        // Reset advanced fields after successful trade
+        setTakeProfit('');
+        setStopLoss('');
+        if (orderType === 'LIMIT') setLimitPrice('');
       } else {
         showToast(result.error || 'Failed to open trade', 'error');
       }
@@ -527,6 +565,77 @@ export default function MetalPerpsWidget() {
               </button>
             </div>
 
+            {/* Order Type Selector */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', color: '#888', marginBottom: '6px' }}>Order Type</div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setOrderType('MARKET')}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: orderType === 'MARKET' ? '2px solid #FFD700' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: orderType === 'MARKET' ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                    color: orderType === 'MARKET' ? '#FFD700' : '#666',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  ⚡ MARKET
+                </button>
+                <button
+                  onClick={() => setOrderType('LIMIT')}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: orderType === 'LIMIT' ? '2px solid #00BFFF' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: orderType === 'LIMIT' ? 'rgba(0, 191, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                    color: orderType === 'LIMIT' ? '#00BFFF' : '#666',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  📋 LIMIT
+                </button>
+              </div>
+            </div>
+
+            {/* Limit Price Input (only show for LIMIT orders) */}
+            {orderType === 'LIMIT' && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '11px', color: '#00BFFF', marginBottom: '6px' }}>
+                  Limit Price (USD)
+                </div>
+                <input
+                  type="number"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  placeholder="Enter trigger price..."
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(0, 191, 255, 0.3)',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    color: '#00BFFF',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: '9px', color: '#666', marginTop: '4px' }}>
+                  Order executes when price reaches this level
+                </div>
+              </div>
+            )}
+
             {/* Collateral Input */}
             <div style={{ marginBottom: '12px' }}>
               <div style={{ 
@@ -614,6 +723,123 @@ export default function MetalPerpsWidget() {
               </div>
             </div>
 
+            {/* TP/SL Toggle and Inputs */}
+            <div style={{ marginBottom: '12px' }}>
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 215, 0, 0.2)',
+                  background: showAdvanced ? 'rgba(255, 215, 0, 0.1)' : 'transparent',
+                  color: showAdvanced ? '#FFD700' : '#888',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>🎯 Take Profit / Stop Loss</span>
+                <span style={{ fontSize: '10px' }}>{showAdvanced ? '▲ Hide' : '▼ Show'}</span>
+              </button>
+              
+              {showAdvanced && (
+                <div style={{ 
+                  marginTop: '10px', 
+                  padding: '12px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 215, 0, 0.1)',
+                }}>
+                  {/* Take Profit */}
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      marginBottom: '6px',
+                      fontSize: '11px',
+                    }}>
+                      <span style={{ color: '#00ff88' }}>🎯 Take Profit (USD)</span>
+                      {takeProfit && (
+                        <span style={{ color: '#00ff88' }}>
+                          {direction === 'LONG' ? '+' : '-'}
+                          {(Math.abs((parseFloat(takeProfit) - 100) / 100) * 100).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      value={takeProfit}
+                      onChange={(e) => setTakeProfit(e.target.value)}
+                      placeholder={direction === 'LONG' ? 'Price above entry...' : 'Price below entry...'}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(0, 255, 136, 0.3)',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        color: '#00ff88',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Stop Loss */}
+                  <div>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      marginBottom: '6px',
+                      fontSize: '11px',
+                    }}>
+                      <span style={{ color: '#ff4444' }}>🛑 Stop Loss (USD)</span>
+                      {stopLoss && (
+                        <span style={{ color: '#ff4444' }}>
+                          {direction === 'LONG' ? '-' : '+'}
+                          {(Math.abs((parseFloat(stopLoss) - 100) / 100) * 100).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      value={stopLoss}
+                      onChange={(e) => setStopLoss(e.target.value)}
+                      placeholder={direction === 'LONG' ? 'Price below entry...' : 'Price above entry...'}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255, 68, 68, 0.3)',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        color: '#ff4444',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  
+                  <div style={{ 
+                    marginTop: '10px', 
+                    padding: '8px', 
+                    background: 'rgba(255, 215, 0, 0.05)',
+                    borderRadius: '6px',
+                    fontSize: '9px',
+                    color: '#888',
+                  }}>
+                    💡 TP/SL prices are in USD. Leave empty for no automatic close.
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Position Info */}
             <div style={{
               background: 'rgba(0, 0, 0, 0.3)',
@@ -628,12 +854,30 @@ export default function MetalPerpsWidget() {
                   ${positionSize.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </span>
               </div>
+              {takeProfit && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: '#00ff88' }}>Take Profit</span>
+                  <span style={{ color: '#00ff88', fontWeight: 600 }}>${parseFloat(takeProfit).toLocaleString()}</span>
+                </div>
+              )}
+              {stopLoss && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: '#ff4444' }}>Stop Loss</span>
+                  <span style={{ color: '#ff4444', fontWeight: 600 }}>${parseFloat(stopLoss).toLocaleString()}</span>
+                </div>
+              )}
+              {orderType === 'LIMIT' && limitPrice && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#00BFFF' }}>Limit Price</span>
+                  <span style={{ color: '#00BFFF', fontWeight: 600 }}>${parseFloat(limitPrice).toLocaleString()}</span>
+                </div>
+              )}
             </div>
 
             {/* Open Trade Button */}
             <button
               onClick={openTrade}
-              disabled={loading || !marketOpen || parseFloat(collateral) < 5}
+              disabled={loading || !marketOpen || parseFloat(collateral) < 5 || (orderType === 'LIMIT' && !limitPrice)}
               style={{
                 width: '100%',
                 padding: '14px',
@@ -641,18 +885,22 @@ export default function MetalPerpsWidget() {
                 border: 'none',
                 background: !marketOpen 
                   ? '#333'
-                  : direction === 'LONG'
-                    ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
-                    : 'linear-gradient(135deg, #ff4444, #cc0000)',
-                color: direction === 'LONG' ? '#000' : '#fff',
+                  : orderType === 'LIMIT'
+                    ? 'linear-gradient(135deg, #00BFFF, #0080FF)'
+                    : direction === 'LONG'
+                      ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
+                      : 'linear-gradient(135deg, #ff4444, #cc0000)',
+                color: orderType === 'LIMIT' ? '#fff' : (direction === 'LONG' ? '#000' : '#fff'),
                 fontWeight: 700,
                 fontSize: '14px',
-                cursor: loading || !marketOpen ? 'not-allowed' : 'pointer',
+                cursor: loading || !marketOpen || (orderType === 'LIMIT' && !limitPrice) ? 'not-allowed' : 'pointer',
                 opacity: loading ? 0.7 : 1,
                 transition: 'all 0.2s',
               }}
             >
-              {loading ? '⏳ Processing...' : `Market ${direction}`}
+              {loading ? '⏳ Processing...' : orderType === 'LIMIT' 
+                ? `📋 Place Limit ${direction}` 
+                : `⚡ Market ${direction}`}
             </button>
 
             {/* One-Click Trading Setup */}
@@ -714,6 +962,8 @@ export default function MetalPerpsWidget() {
                   </div>
                   <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>
                     Size: ${pos.size?.toLocaleString()} • Leverage: {pos.leverage}x
+                    {pos.takeProfit && <span style={{ color: '#00ff88' }}> • TP: ${pos.takeProfit.toLocaleString()}</span>}
+                    {pos.stopLoss && <span style={{ color: '#ff4444' }}> • SL: ${pos.stopLoss.toLocaleString()}</span>}
                   </div>
                   <button
                     onClick={() => closeTrade(pos.id)}
