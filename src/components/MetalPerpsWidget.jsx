@@ -319,6 +319,16 @@ export default function MetalPerpsWidget() {
     setLoading(false);
   };
 
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 480);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     fetchPositions();
@@ -334,10 +344,11 @@ export default function MetalPerpsWidget() {
         onClick={() => setIsExpanded(true)}
         style={{
           position: 'fixed',
-          bottom: '100px',
-          left: '20px',
-          width: '56px',
-          height: '56px',
+          bottom: isMobile ? '185px' : '100px',
+          left: isMobile ? 'auto' : '20px',
+          right: isMobile ? '10px' : 'auto',
+          width: isMobile ? '44px' : '56px',
+          height: isMobile ? '44px' : '56px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #FFD700, #FFA500)',
           display: 'flex',
@@ -349,15 +360,19 @@ export default function MetalPerpsWidget() {
           transition: 'all 0.3s ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.1)';
-          e.currentTarget.style.boxShadow = '0 6px 30px rgba(255, 215, 0, 0.6)';
+          if (!isMobile) {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 30px rgba(255, 215, 0, 0.6)';
+          }
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(255, 215, 0, 0.4)';
+          if (!isMobile) {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(255, 215, 0, 0.4)';
+          }
         }}
       >
-        <span style={{ fontSize: '24px' }}>📊</span>
+        <span style={{ fontSize: isMobile ? '18px' : '24px' }}>📊</span>
       </div>
     );
   }
@@ -366,12 +381,14 @@ export default function MetalPerpsWidget() {
   return (
     <div style={{
       position: 'fixed',
-      bottom: '20px',
-      left: '20px',
-      width: '420px',
-      maxHeight: '90vh',
+      bottom: isMobile ? '10px' : '20px',
+      left: isMobile ? '10px' : '20px',
+      right: isMobile ? '10px' : 'auto',
+      width: isMobile ? 'auto' : '420px',
+      maxWidth: '420px',
+      maxHeight: isMobile ? '85vh' : '90vh',
       background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
-      borderRadius: '16px',
+      borderRadius: isMobile ? '12px' : '16px',
       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 215, 0, 0.2)',
       zIndex: 9999,
       fontFamily: "'Inter', -apple-system, sans-serif",

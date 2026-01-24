@@ -685,6 +685,24 @@ const STYLES = `
 
 .gex-panel-v3 { width: 360px; max-height: 580px; background: linear-gradient(180deg, #1a1a2e, #0d0d1a); border: 2px solid rgba(255,215,0,0.4); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); overflow: hidden; }
 
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .gex-widget-v3 { right: 10px !important; bottom: 130px !important; left: auto !important; }
+  .gex-trigger-v3 { width: 44px; height: 44px; }
+  .gex-trigger-v3:hover { transform: none; }
+  .gex-icon-v3 { font-size: 16px; }
+  .gex-label-v3 { font-size: 8px; }
+  .gex-badge-v3 { font-size: 8px; padding: 1px 4px; top: -2px; right: -2px; }
+  .gex-panel-v3 { width: calc(100vw - 20px); max-width: 360px; border-radius: 12px; max-height: 75vh; }
+  .gex-header-v3 { padding: 10px 12px; }
+  .gex-logo-v3 { font-size: 14px; }
+  .gex-content-v3 { padding: 10px; max-height: 300px; }
+  .gex-tabs-v3 button { padding: 8px 2px; font-size: 9px; }
+  .pair-row-v3 { padding: 8px; }
+  .pair-prices-v3 { font-size: 10px; }
+  .live-grid-v3 { grid-template-columns: 1fr; }
+}
+
 .gex-header-v3 { display: flex; align-items: center; padding: 12px 14px; background: rgba(255,215,0,0.1); border-bottom: 1px solid rgba(255,215,0,0.2); }
 .gex-title-v3 { flex: 1; }
 .gex-logo-v3 { color: #FFD700; font-weight: 800; font-size: 16px; }
