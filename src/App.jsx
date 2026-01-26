@@ -3611,7 +3611,7 @@ export default function App() {
   });
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showPricesDropdown, setShowPricesDropdown] = useState(false);
+
 
   // Testnet balances (stored in localStorage for persistence)
   const [testnetBalances, setTestnetBalances] = useState(() => {
@@ -8587,116 +8587,6 @@ export default function App() {
             </nav>
 
             <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {/* Prices Dropdown - Clean & Compact */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setShowPricesDropdown(!showPricesDropdown)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 12px',
-                    background: isDark ? 'rgba(212,175,55,0.15)' : 'rgba(212,175,55,0.1)',
-                    borderRadius: '20px',
-                    border: '1px solid rgba(212,175,55,0.3)',
-                    fontSize: '0.7rem',
-                    color: '#D4AF37',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  💰 ${((cryptoPrices.btc/1000).toFixed(0))}K
-                  <span style={{ fontSize: '0.5rem', opacity: 0.7 }}>▼</span>
-                </button>
-                
-                {/* Prices Dropdown Panel */}
-                {showPricesDropdown && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    marginTop: '8px',
-                    background: isDark ? '#1a1a2e' : '#fff',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(212,175,55,0.3)',
-                    padding: '12px',
-                    minWidth: '200px',
-                    zIndex: 10000,
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-                  }}>
-                    {/* Metals */}
-                    <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '0.6rem', color: '#888', fontWeight: 600 }}>METALS</span>
-                        <span style={{ fontSize: '0.5rem', color: '#666' }}>per oz t</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#FFD700', fontSize: '0.7rem' }}>🥇 Gold</span>
-                          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.gold.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#C0C0C0', fontSize: '0.7rem' }}>🥈 Silver</span>
-                          <span style={{ color: '#C0C0C0', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.silver.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#CD7F32', fontSize: '0.7rem' }}>🥉 Copper <span style={{ fontSize: '0.5rem', color: '#888' }}>/lb</span></span>
-                          <span style={{ color: '#CD7F32', fontWeight: 700, fontSize: '0.75rem' }}>${metalPrices.copper.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Crypto */}
-                    <div style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px solid rgba(212,175,55,0.2)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '0.6rem', color: '#888', fontWeight: 600 }}>CRYPTO</span>
-                        <span style={{ fontSize: '0.5rem', color: '#00ff88' }}>● LIVE</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#F7931A', fontSize: '0.7rem' }}>₿ Bitcoin</span>
-                          <span style={{ color: '#F7931A', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.btc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#627EEA', fontSize: '0.7rem' }}>Ξ Ethereum</span>
-                          <span style={{ color: '#627EEA', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.eth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* PulseChain */}
-                    <div style={{ marginBottom: '8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '0.6rem', color: '#888', fontWeight: 600 }}>PULSECHAIN</span>
-                        <span style={{ fontSize: '0.5rem', color: '#00ff88' }}>● LIVE</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#00D4AA', fontSize: '0.7rem' }}>💜 PLS</span>
-                          <span style={{ color: '#00D4AA', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.pls.toFixed(8)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#9B59B6', fontSize: '0.7rem' }}>💎 PLSX</span>
-                          <span style={{ color: '#9B59B6', fontWeight: 700, fontSize: '0.75rem' }}>${cryptoPrices.plsx.toFixed(8)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ color: '#FFD700', fontSize: '0.7rem' }}>🪙 DTGC</span>
-                          <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '0.75rem' }}>${(livePrices.dtgc || 0).toFixed(7)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Timestamp */}
-                    <div style={{ 
-                      borderTop: '1px solid rgba(212,175,55,0.1)', 
-                      paddingTop: '6px', 
-                      marginTop: '4px',
-                      textAlign: 'center',
-                      fontSize: '0.5rem',
-                      color: '#666',
-                    }}>
-                      Updated: {cryptoPrices.lastUpdated?.toLocaleTimeString() || 'Loading...'}
-                    </div>
-                  </div>
-                )}
-              </div>
               {/* Security & Audit Button */}
               <button
                 onClick={() => setShowSecurityModal(true)}
