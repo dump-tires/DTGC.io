@@ -1,24 +1,17 @@
 /**
- * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.4
+ * GEXWidgetV3.jsx - Growth Engine X-Chain Monitor V3.2
  * 
  * MULTI-PAIR ARBITRAGE MONITORING
- * eHEX, WETH, WBTC (3 pairs - stablecoins removed)
- * 
- * V3.4 Changes:
- * - TradingView live reference prices
- * - CoinGecko reference for programmatic comparison
- * - Shows deviation from "true" market price
- * - More accurate spread calculation
+ * eHEX, WETH, USDC, DAI, WBTC (5 pairs - USDT removed due to bad liquidity)
  * 
  * Features:
  * - All pairs view sorted by best opportunity
  * - Single pair detail view
- * - Auto-signals at 4%+ spread
+ * - Auto-signals at 3%+ spread
  * - ZapperX integration for bridging
- * - TradingView live ticker for reference
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const CONFIG = {
   DTGC_GATE_USD: 200,
@@ -26,63 +19,7 @@ const CONFIG = {
   MIN_SPREAD_SIGNAL: 4,
   MIN_SPREAD_OPPORTUNITY: 5,
   SIGNAL_COOLDOWN_MS: 120000,
-  PRICE_REFRESH_MS: 5000, // 5 second refresh for live feel
-  COINGECKO_IDS: {
-    weth: 'ethereum',
-    wbtc: 'wrapped-bitcoin',
-    ehex: 'hex',
-  },
-};
-
-// TradingView symbols for reference
-const TV_SYMBOLS = {
-  weth: 'BINANCE:ETHUSDT',
-  wbtc: 'BINANCE:BTCUSDT',
-  usdc: 'BITSTAMP:USDCUSD',
-};
-
-// TradingView Ticker Tape Component - Live Reference Prices
-const TradingViewTicker = () => {
-  const containerRef = useRef(null);
-  
-  useEffect(() => {
-    if (!containerRef.current) return;
-    
-    containerRef.current.innerHTML = '';
-    
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
-    script.async = true;
-    script.innerHTML = JSON.stringify({
-      symbols: [
-        { proName: 'BINANCE:ETHUSDT', title: 'ETH' },
-        { proName: 'BINANCE:BTCUSDT', title: 'BTC' },
-        { proName: 'UNISWAP3ETH:HEXWETH', title: 'HEX' },
-      ],
-      showSymbolLogo: true,
-      isTransparent: true,
-      displayMode: 'compact',
-      colorTheme: 'dark',
-      locale: 'en',
-    });
-    
-    const container = document.createElement('div');
-    container.className = 'tradingview-widget-container';
-    const widgetDiv = document.createElement('div');
-    widgetDiv.className = 'tradingview-widget-container__widget';
-    container.appendChild(widgetDiv);
-    container.appendChild(script);
-    
-    containerRef.current.appendChild(container);
-    
-    return () => {
-      if (containerRef.current) {
-        containerRef.current.innerHTML = '';
-      }
-    };
-  }, []);
-  
-  return <div ref={containerRef} style={{ height: '46px', width: '100%', overflow: 'hidden' }} />;
+  PRICE_REFRESH_MS: 60000,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -94,8 +31,7 @@ const BRIDGED_PAIRS = [
   {
     id: 'ehex',
     name: 'eHEX',
-    // gib.show image API - chainId 1 = Ethereum
-    icon: 'https://gib.show/image/1/0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
+    icon: '💎',
     // HEX on Ethereum (native)
     ethAddress: '0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39',
     // eHEX on PulseChain (bridged from Ethereum)
@@ -109,7 +45,7 @@ const BRIDGED_PAIRS = [
   {
     id: 'weth',
     name: 'WETH',
-    icon: 'https://gib.show/image/1/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    icon: '⟠',
     // WETH on Ethereum
     ethAddress: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     // eWETH on PulseChain (bridged from Ethereum)
@@ -120,11 +56,39 @@ const BRIDGED_PAIRS = [
       pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x02DcdD04e3F455D838cd1249292C58f3B79e3C3C',
     },
   },
-  // USDC & DAI REMOVED - stablecoins not useful for arb
+  {
+    id: 'usdc',
+    name: 'USDC',
+    icon: '💵',
+    // USDC on Ethereum
+    ethAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    // eUSDC on PulseChain (bridged from Ethereum)
+    plsAddress: '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07',
+    color: '#2775CA',
+    dexLinks: {
+      eth: 'https://app.uniswap.org/#/swap?outputCurrency=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07',
+    },
+  },
+  // USDT REMOVED - pCopy has bad liquidity data
+  {
+    id: 'dai',
+    name: 'DAI',
+    icon: '🔶',
+    // DAI on Ethereum - MakerDAO
+    ethAddress: '0x6B175474E89094C44Da98b954EedeBC495271d0F',
+    // eDAI on PulseChain (bridged from Ethereum via PulseChain bridge)
+    plsAddress: '0xefD766cCb38EaF1dfd701853BFCe31359239F305',
+    color: '#F5AC37',
+    dexLinks: {
+      eth: 'https://app.uniswap.org/#/swap?outputCurrency=0x6B175474E89094C44Da98b954EedeBC495271d0F',
+      pls: 'https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?outputCurrency=0xefD766cCb38EaF1dfd701853BFCe31359239F305',
+    },
+  },
   {
     id: 'wbtc',
     name: 'WBTC',
-    icon: 'https://gib.show/image/1/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+    icon: '₿',
     // WBTC on Ethereum
     ethAddress: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
     // eWBTC on PulseChain (bridged from Ethereum)
@@ -181,43 +145,6 @@ class SignalService {
 
 class PriceService {
   static cache = {};
-  static refCache = {}; // CoinGecko reference prices
-  static lastRefFetch = 0;
-  
-  // Fetch ALL reference prices from CoinGecko at once (more efficient)
-  static async fetchAllReferencePrices() {
-    // Only fetch every 10 seconds to avoid rate limits
-    if (Date.now() - this.lastRefFetch < 10000 && Object.keys(this.refCache).length > 0) {
-      return this.refCache;
-    }
-    
-    try {
-      const ids = Object.values(CONFIG.COINGECKO_IDS).join(',');
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
-      const res = await fetch(url);
-      const data = await res.json();
-      
-      // Map back to our pair IDs
-      Object.entries(CONFIG.COINGECKO_IDS).forEach(([pairId, geckoId]) => {
-        if (data[geckoId]?.usd) {
-          this.refCache[pairId] = { price: data[geckoId].usd, time: Date.now() };
-        }
-      });
-      
-      this.lastRefFetch = Date.now();
-      console.log('[GEX] CoinGecko prices:', Object.entries(this.refCache).map(([k,v]) => `${k}: $${v.price}`).join(', '));
-      return this.refCache;
-    } catch (err) {
-      console.log('[GEX] CoinGecko error, using cache:', err.message);
-      return this.refCache;
-    }
-  }
-  
-  // Get reference price for a specific pair (from cache)
-  static async fetchReferencePrice(pairId) {
-    await this.fetchAllReferencePrices();
-    return this.refCache[pairId]?.price || null;
-  }
   
   static async fetchPrice(address, chain) {
     const cacheKey = `${chain}-${address}`;
@@ -262,50 +189,20 @@ class PriceService {
   static async fetchAllPairs() {
     const results = await Promise.all(
       BRIDGED_PAIRS.map(async (pair) => {
-        // Fetch all three prices in parallel
-        const [ethDexPrice, plsPrice, refPrice] = await Promise.all([
+        const [ethPrice, plsPrice] = await Promise.all([
           this.fetchPrice(pair.ethAddress, 'eth'),
           this.fetchPrice(pair.plsAddress, 'pls'),
-          this.fetchReferencePrice(pair.id),
         ]);
         
-        // Use TradingView/CoinGecko reference as the "true" ETH price
-        // Fall back to DexScreener ETH price if no reference available
-        const ethPrice = refPrice || ethDexPrice;
-        
         let spread = 0, absSpread = 0, buyChain = '', sellChain = '';
-        let ethDeviation = 0, plsDeviation = 0;
-        
         if (ethPrice && plsPrice) {
-          // Spread is now: Reference Price vs PulseChain DEX Price
           spread = ((ethPrice - plsPrice) / plsPrice) * 100;
           absSpread = Math.abs(spread);
           buyChain = spread > 0 ? 'PULSECHAIN' : 'ETHEREUM';
           sellChain = spread > 0 ? 'ETHEREUM' : 'PULSECHAIN';
-          
-          // Calculate deviation from reference (if we have both DEX prices)
-          if (refPrice && ethDexPrice) {
-            ethDeviation = ((ethDexPrice - refPrice) / refPrice) * 100;
-          }
-          if (refPrice) {
-            plsDeviation = ((plsPrice - refPrice) / refPrice) * 100;
-          }
         }
         
-        return { 
-          ...pair, 
-          ethPrice,       // TradingView/CoinGecko reference (or DEX fallback)
-          ethDexPrice,    // Actual ETH DEX price (for comparison)
-          plsPrice,       // PulseChain DEX price
-          refPrice,       // Raw reference price
-          ethDeviation,   // How far ETH DEX is from true price
-          plsDeviation,   // How far PLS DEX is from true price
-          spread,         // Reference vs PLS spread
-          absSpread, 
-          buyChain, 
-          sellChain,
-          usingReference: !!refPrice, // Flag if we're using TV reference
-        };
+        return { ...pair, ethPrice, plsPrice, spread, absSpread, buyChain, sellChain };
       })
     );
     
@@ -391,7 +288,7 @@ export const GEXWidgetV3 = ({
 
   const getStatus = (abs) => {
     if (!abs || abs < 2) return 'NORMAL';
-    if (abs < 4) return 'WATCHING';
+    if (abs < 3) return 'WATCHING';
     if (abs < 5) return 'SIGNAL';
     return '🔥 HOT';
   };
@@ -407,7 +304,7 @@ export const GEXWidgetV3 = ({
           <button onClick={() => setIsExpanded(true)} className="gex-trigger-v3">
             <span className="gex-icon-v3">⚡</span>
             <span className="gex-label-v3">GEX</span>
-            {bestOpp?.absSpread >= 4 && <span className="gex-badge-v3">{bestOpp.absSpread.toFixed(1)}%</span>}
+            {bestOpp?.absSpread >= 3 && <span className="gex-badge-v3">{bestOpp.absSpread.toFixed(1)}%</span>}
           </button>
         ) : (
           <div className="gex-panel-v3">
@@ -422,23 +319,13 @@ export const GEXWidgetV3 = ({
 
             {showInfo && (
               <div className="gex-info-v3">
-                <p><strong>GEX V3.4</strong> monitors bridged tokens for arbitrage between ETH ↔ PLS.</p>
-                <p>📊 eHEX, WETH, WBTC</p>
-                <p>📈 TradingView live reference prices</p>
-                <p>🎯 Signals at 4%+ spread → Telegram</p>
+                <p><strong>GEX V3</strong> monitors bridged tokens for arbitrage between ETH ↔ PLS.</p>
+                <p>📊 eHEX, WETH, USDC, DAI, WBTC</p>
+                <p>🎯 Signals at 3%+ spread → Telegram</p>
                 <p>🔗 Use ZapperX or PulseRamp to bridge!</p>
                 <button onClick={() => setShowInfo(false)}>Got it!</button>
               </div>
             )}
-
-            {/* TradingView Live Reference Prices */}
-            <div style={{
-              borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
-              background: 'rgba(0, 0, 0, 0.3)',
-              padding: '2px 0',
-            }}>
-              <TradingViewTicker />
-            </div>
 
             <div className="gex-tabs-v3">
               {['spread', 'signals', 'live', 'learn'].map(tab => (
@@ -466,16 +353,12 @@ export const GEXWidgetV3 = ({
                         <div className="no-data-v3">No price data available</div>
                       ) : pairData.map(p => (
                         <div key={p.id} className={`pair-row-v3 ${p.absSpread >= 3 ? 'hot' : ''}`} onClick={() => { setSelectedPair(p.id); setViewMode('single'); }}>
-                          <span className="pair-icon-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 20, height: 20, borderRadius: '50%' }} /> : p.icon}</span>
+                          <span className="pair-icon-v3">{p.icon}</span>
                           <span className="pair-name-v3">{p.name}</span>
                           <span className="pair-prices-v3">
-                            <span className="eth" style={{ color: p.usingReference ? '#FFD700' : '#888' }} title={p.usingReference ? '📈 CoinGecko/TradingView Live' : 'ETH DEX'}>
-                              {formatPrice(p.ethPrice)}{p.usingReference && <span style={{ fontSize: '8px', marginLeft: '2px' }}>📈</span>}
-                            </span>
+                            <span className="eth">{formatPrice(p.ethPrice)}</span>
                             <span className="sep">↔</span>
-                            <span className="pls" title="PulseChain DEX" style={{ color: '#00ff88' }}>
-                              {formatPrice(p.plsPrice)}
-                            </span>
+                            <span className="pls">{formatPrice(p.plsPrice)}</span>
                           </span>
                           <span className="pair-spread-v3" style={{ color: getColor(p.absSpread) }}>{formatSpread(p.spread)}</span>
                         </div>
@@ -486,7 +369,7 @@ export const GEXWidgetV3 = ({
                       <div className="pair-selector-v3">
                         {pairData.map(p => (
                           <button key={p.id} className={selectedPair === p.id ? 'active' : ''} onClick={() => setSelectedPair(p.id)} style={{ borderColor: selectedPair === p.id ? p.color : 'transparent' }}>
-                            {p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name} {p.absSpread >= 4 && '🔥'}
+                            {p.icon} {p.name} {p.absSpread >= 3 && '🔥'}
                           </button>
                         ))}
                       </div>
@@ -503,54 +386,16 @@ export const GEXWidgetV3 = ({
                         </button>
                       )}
 
-                      {/* Reference Price - if available */}
-                      {currentPair.refPrice && (
-                        <div style={{
-                          background: 'rgba(255, 215, 0, 0.1)',
-                          border: '1px solid rgba(255, 215, 0, 0.3)',
-                          borderRadius: '8px',
-                          padding: '8px 12px',
-                          marginBottom: '12px',
-                          textAlign: 'center',
-                        }}>
-                          <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>
-                            📈 TradingView Reference
-                          </div>
-                          <div style={{ fontSize: '16px', color: '#FFD700', fontWeight: 700 }}>
-                            {formatPrice(currentPair.refPrice)}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Price comparison - Reference vs PulseChain */}
                       <div className="price-cards-v3">
-                        <div className="card-v3 eth" style={{ borderColor: currentPair.usingReference ? '#FFD700' : undefined }}>
-                          <div className="chain-v3" style={{ color: currentPair.usingReference ? '#FFD700' : undefined }}>
-                            {currentPair.usingReference ? '📈 TRADINGVIEW' : '◆ ETHEREUM DEX'}
-                          </div>
-                          <div className="token-v3">{currentPair.name}</div>
-                          <div className="price-v3" style={{ color: currentPair.usingReference ? '#FFD700' : undefined }}>
-                            {formatPrice(currentPair.ethPrice)}
-                          </div>
-                          {currentPair.usingReference && currentPair.ethDexPrice && (
-                            <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
-                              DEX: {formatPrice(currentPair.ethDexPrice)}
-                            </div>
-                          )}
+                        <div className="card-v3 eth">
+                          <div className="chain-v3">◆ ETHEREUM</div>
+                          <div className="token-v3">{currentPair.name}(E)</div>
+                          <div className="price-v3">{formatPrice(currentPair.ethPrice)}</div>
                         </div>
                         <div className="card-v3 pls">
-                          <div className="chain-v3">💜 PULSECHAIN DEX</div>
-                          <div className="token-v3">{currentPair.name}</div>
-                          <div className="price-v3" style={{ color: '#00ff88' }}>{formatPrice(currentPair.plsPrice)}</div>
-                          {currentPair.refPrice && (
-                            <div style={{ 
-                              fontSize: '10px', 
-                              color: currentPair.plsDeviation >= 0 ? '#00ff88' : '#ff4444',
-                              marginTop: '4px' 
-                            }}>
-                              {currentPair.plsDeviation >= 0 ? '+' : ''}{currentPair.plsDeviation.toFixed(2)}% vs TV
-                            </div>
-                          )}
+                          <div className="chain-v3">💜 PULSECHAIN</div>
+                          <div className="token-v3">{currentPair.name}(P)</div>
+                          <div className="price-v3">{formatPrice(currentPair.plsPrice)}</div>
                         </div>
                       </div>
 
@@ -599,9 +444,9 @@ export const GEXWidgetV3 = ({
                         {pairData.filter(p => p.absSpread >= 3).length === 0 ? (
                           <div className="none-v3">📡 Monitoring {BRIDGED_PAIRS.length} pairs...</div>
                         ) : (
-                          pairData.filter(p => p.absSpread >= 4).map(p => (
+                          pairData.filter(p => p.absSpread >= 3).map(p => (
                             <div key={p.id} className="opp-card-v3">
-                              <span>{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 16, height: 16, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name}</span>
+                              <span>{p.icon} {p.name}</span>
                               <span style={{ color: getColor(p.absSpread) }}>{formatSpread(p.spread)}</span>
                               <span className="action-v3">Buy {p.buyChain}</span>
                             </div>
@@ -615,24 +460,19 @@ export const GEXWidgetV3 = ({
 
               {activeTab === 'live' && (
                 <div className="live-tab-v3">
-                  <div className="live-header-v3"><span className="dot-v3"></span> LIVE • CoinGecko + DEX • 5s</div>
+                  <div className="live-header-v3"><span className="dot-v3"></span> LIVE • Updates 15s</div>
                   <div className="live-grid-v3">
                     {pairData.map(p => (
                       <div key={p.id} className="live-card-v3">
-                        <div className="name-v3">{p.icon.startsWith('http') ? <img src={p.icon} alt={p.name} style={{ width: 18, height: 18, borderRadius: '50%', marginRight: 6, verticalAlign: 'middle' }} /> : p.icon} {p.name}</div>
+                        <div className="name-v3">{p.icon} {p.name}</div>
                         <div className="spread-v3" style={{ color: getColor(p.absSpread) }}>{formatSpread(p.spread)}</div>
                         <div className="status-v3">{getStatus(p.absSpread)}</div>
-                        {p.refPrice && (
-                          <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>
-                            Ref: {formatPrice(p.refPrice)}
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
                   <div className="summary-v3">
                     <div><span>Best:</span> <span>{bestOpp?.name} {formatSpread(bestOpp?.spread)}</span></div>
-                    <div><span>Hot (4%+):</span> <span>{pairData.filter(p => p.absSpread >= 4).length} pairs</span></div>
+                    <div><span>Hot (3%+):</span> <span>{pairData.filter(p => p.absSpread >= 3).length} pairs</span></div>
                   </div>
                 </div>
               )}
@@ -684,24 +524,6 @@ const STYLES = `
 .gex-badge-v3 { position: absolute; top: -4px; right: -4px; background: #00FF88; color: #000; font-size: 9px; font-weight: bold; padding: 2px 5px; border-radius: 8px; }
 
 .gex-panel-v3 { width: 360px; max-height: 580px; background: linear-gradient(180deg, #1a1a2e, #0d0d1a); border: 2px solid rgba(255,215,0,0.4); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); overflow: hidden; }
-
-/* Mobile responsive */
-@media (max-width: 480px) {
-  .gex-widget-v3 { right: 10px !important; bottom: 130px !important; left: auto !important; }
-  .gex-trigger-v3 { width: 44px; height: 44px; }
-  .gex-trigger-v3:hover { transform: none; }
-  .gex-icon-v3 { font-size: 16px; }
-  .gex-label-v3 { font-size: 8px; }
-  .gex-badge-v3 { font-size: 8px; padding: 1px 4px; top: -2px; right: -2px; }
-  .gex-panel-v3 { width: calc(100vw - 20px); max-width: 360px; border-radius: 12px; max-height: 75vh; }
-  .gex-header-v3 { padding: 10px 12px; }
-  .gex-logo-v3 { font-size: 14px; }
-  .gex-content-v3 { padding: 10px; max-height: 300px; }
-  .gex-tabs-v3 button { padding: 8px 2px; font-size: 9px; }
-  .pair-row-v3 { padding: 8px; }
-  .pair-prices-v3 { font-size: 10px; }
-  .live-grid-v3 { grid-template-columns: 1fr; }
-}
 
 .gex-header-v3 { display: flex; align-items: center; padding: 12px 14px; background: rgba(255,215,0,0.1); border-bottom: 1px solid rgba(255,215,0,0.2); }
 .gex-title-v3 { flex: 1; }
