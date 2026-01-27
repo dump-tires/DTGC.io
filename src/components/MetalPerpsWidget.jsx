@@ -216,6 +216,7 @@ export default function MetalPerpsWidget() {
         leverage,
         takeProfit: parseFloat(takeProfit),
         stopLoss: parseFloat(stopLoss),
+        price: livePrices[selectedAsset],  // Pass UI price to Lambda
       });
       
       if (result.success) {
