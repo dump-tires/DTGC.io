@@ -100,9 +100,9 @@ const TradingViewTickerTape = () => {
         { proName: 'TVC:SILVER', title: 'SILVER' },
       ],
       showSymbolLogo: true,
-      colorTheme: 'dark',
       isTransparent: true,
-      displayMode: 'adaptive',
+      displayMode: 'compact',
+      colorTheme: 'dark',
       locale: 'en',
     });
     
@@ -122,11 +122,11 @@ const TradingViewTickerTape = () => {
     };
   }, []);
   
-  return <div ref={containerRef} style={{ height: '46px', width: '100%' }} />;
+  return <div ref={containerRef} style={{ height: '46px', width: '100%', overflow: 'hidden' }} />;
 };
 
-// TradingView Technical Analysis Widget
-const TradingViewAnalysis = ({ symbol }) => {
+// TradingView Symbol Info - Large price display with change
+const TradingViewSymbolInfo = ({ symbol }) => {
   const containerRef = useRef(null);
   
   useEffect(() => {
@@ -135,18 +135,14 @@ const TradingViewAnalysis = ({ symbol }) => {
     containerRef.current.innerHTML = '';
     
     const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-technical-analysis.js';
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-symbol-info.js';
     script.async = true;
     script.innerHTML = JSON.stringify({
-      interval: '1h',
-      width: '100%',
-      isTransparent: true,
-      height: 110,
       symbol: symbol,
-      showIntervalTabs: false,
-      displayMode: 'single',
+      width: '100%',
       locale: 'en',
       colorTheme: 'dark',
+      isTransparent: true,
     });
     
     const container = document.createElement('div');
@@ -168,57 +164,6 @@ const TradingViewAnalysis = ({ symbol }) => {
   return <div ref={containerRef} style={{ height: '110px', width: '100%' }} />;
 };
 
-// Bot Activity Item Component
-const BotActivityItem = ({ activity }) => {
-  const getIcon = (type) => {
-    switch (type) {
-      case 'OPEN_LONG': return '🟢';
-      case 'OPEN_SHORT': return '🔴';
-      case 'CLOSE': return '⚪';
-      case 'TP_HIT': return '🎯';
-      case 'SL_HIT': return '🛑';
-      case 'SCALP': return '⚡';
-      case 'CYCLE': return '🔄';
-      default: return '📊';
-    }
-  };
-  
-  const getColor = (type) => {
-    switch (type) {
-      case 'OPEN_LONG': case 'TP_HIT': case 'SCALP': return '#00ff88';
-      case 'OPEN_SHORT': case 'SL_HIT': return '#ff4444';
-      default: return '#888';
-    }
-  };
-  
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      padding: '8px 10px',
-      background: 'rgba(0, 0, 0, 0.2)',
-      borderRadius: '6px',
-      marginBottom: '6px',
-      fontSize: '11px',
-    }}>
-      <span style={{ marginRight: '8px', fontSize: '14px' }}>{getIcon(activity.type)}</span>
-      <div style={{ flex: 1 }}>
-        <div style={{ color: getColor(activity.type), fontWeight: 600 }}>
-          {activity.message}
-        </div>
-        {activity.details && (
-          <div style={{ color: '#666', fontSize: '10px', marginTop: '2px' }}>
-            {activity.details}
-          </div>
-        )}
-      </div>
-      <div style={{ color: '#555', fontSize: '9px' }}>
-        {activity.time}
-      </div>
-    </div>
-  );
-};
-
 export default function MetalPerpsWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('trade');
@@ -232,16 +177,11 @@ export default function MetalPerpsWidget() {
   const [toast, setToast] = useState(null);
   
   // Order type and advanced options
-  const [orderType, setOrderType] = useState('MARKET');
+  const [orderType, setOrderType] = useState('MARKET'); // MARKET or LIMIT
   const [limitPrice, setLimitPrice] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
   const [stopLoss, setStopLoss] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  
-  // Bot status and activity
-  const [botStatus, setBotStatus] = useState(null);
-  const [botActivity, setBotActivity] = useState([]);
-  const [lastUpdate, setLastUpdate] = useState(null);
 
   const asset = ASSETS[selectedAsset];
   const tvSymbol = TV_SYMBOLS[selectedAsset];
@@ -304,59 +244,6 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch bot status
-  const fetchBotStatus = async () => {
-    try {
-      const result = await apiCall('STATUS');
-      if (result.success) {
-        setBotStatus({
-          wallet: result.wallet,
-          balance: result.balance,
-          positions: result.positions,
-        });
-        setLastUpdate(new Date().toLocaleTimeString());
-        
-        // Update shared balance and positions
-        if (result.balance !== undefined) setBalance(result.balance);
-        if (result.positions) setPositions(result.positions);
-        
-        // Generate activity from positions
-        const activities = [];
-        if (result.positions && result.positions.length > 0) {
-          result.positions.forEach(pos => {
-            activities.push({
-              type: pos.long ? 'OPEN_LONG' : 'OPEN_SHORT',
-              message: `${pos.asset} ${pos.long ? 'LONG' : 'SHORT'} ${pos.leverage}x`,
-              details: `$${pos.collateral?.toFixed(2)} @ $${pos.openPrice?.toFixed(2)}`,
-              time: 'Active',
-            });
-          });
-        }
-        
-        // Add cycle activity
-        activities.unshift({
-          type: 'CYCLE',
-          message: 'Bot cycle completed',
-          details: `${result.positions?.length || 0} active positions`,
-          time: new Date().toLocaleTimeString(),
-        });
-        
-        setBotActivity(prev => {
-          const newActivity = [...activities, ...prev].slice(0, 20);
-          return newActivity;
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch bot status:', error);
-      setBotActivity(prev => [{
-        type: 'ERROR',
-        message: 'Connection error',
-        details: error.message,
-        time: new Date().toLocaleTimeString(),
-      }, ...prev].slice(0, 20));
-    }
-  };
-
   // Trade functions
   const openTrade = async () => {
     if (!marketOpen) {
@@ -364,6 +251,7 @@ export default function MetalPerpsWidget() {
       return;
     }
     
+    // Validate limit price if limit order
     if (orderType === 'LIMIT' && !limitPrice) {
       showToast('Please enter a limit price', 'error');
       return;
@@ -379,12 +267,17 @@ export default function MetalPerpsWidget() {
         orderType,
       };
       
+      // Add limit price if limit order
       if (orderType === 'LIMIT' && limitPrice) {
         tradeParams.limitPrice = parseFloat(limitPrice);
       }
+      
+      // Add TP if set
       if (takeProfit) {
         tradeParams.takeProfit = parseFloat(takeProfit);
       }
+      
+      // Add SL if set
       if (stopLoss) {
         tradeParams.stopLoss = parseFloat(stopLoss);
       }
@@ -396,17 +289,10 @@ export default function MetalPerpsWidget() {
         showToast(`${orderTypeLabel}!`, 'success');
         fetchPositions();
         fetchBalance();
+        // Reset advanced fields after successful trade
         setTakeProfit('');
         setStopLoss('');
         if (orderType === 'LIMIT') setLimitPrice('');
-        
-        // Add to activity
-        setBotActivity(prev => [{
-          type: direction === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
-          message: `Manual ${selectedAsset} ${direction}`,
-          details: `$${collateral} @ ${leverage}x`,
-          time: new Date().toLocaleTimeString(),
-        }, ...prev].slice(0, 20));
       } else {
         showToast(result.error || 'Failed to open trade', 'error');
       }
@@ -416,126 +302,155 @@ export default function MetalPerpsWidget() {
     setLoading(false);
   };
 
-  const closeTrade = async (tradeIndex) => {
+  const closeTrade = async (positionId) => {
     setLoading(true);
     try {
-      const result = await apiCall('CLOSE_TRADE', { tradeIndex });
+      const result = await apiCall('CLOSE_TRADE', { positionId });
       if (result.success) {
         showToast('Position closed!', 'success');
         fetchPositions();
         fetchBalance();
-        
-        setBotActivity(prev => [{
-          type: 'CLOSE',
-          message: `Closed position #${tradeIndex}`,
-          details: `TX: ${result.txHash?.slice(0, 10)}...`,
-          time: new Date().toLocaleTimeString(),
-        }, ...prev].slice(0, 20));
       } else {
-        showToast(result.error || 'Failed to close trade', 'error');
+        showToast(result.error || 'Failed to close', 'error');
       }
     } catch (error) {
-      showToast('Failed to close trade', 'error');
+      showToast('Failed to close position', 'error');
     }
     setLoading(false);
   };
 
-  // Initial load and polling
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+  
   useEffect(() => {
-    fetchBotStatus();
-    
-    // Poll every 30 seconds
-    const interval = setInterval(fetchBotStatus, 30000);
+    const checkMobile = () => setIsMobile(window.innerWidth < 480);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchPositions();
+    fetchBalance();
+    const interval = setInterval(fetchPositions, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div
-      style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth: '380px',
-        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)',
-        borderRadius: '16px',
-        overflow: 'hidden',
-        boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 215, 0, 0.1)',
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-        border: '1px solid rgba(255, 215, 0, 0.2)',
-      }}
-    >
-      {/* Header */}
+  // Collapsed State - Floating Button
+  if (!isExpanded) {
+    return (
       <div
+        onClick={() => setIsExpanded(true)}
         style={{
-          background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 140, 0, 0.1) 100%)',
-          padding: '14px 16px',
-          borderBottom: '1px solid rgba(255, 215, 0, 0.15)',
+          position: 'fixed',
+          bottom: isMobile ? '185px' : '100px',
+          left: isMobile ? 'auto' : '20px',
+          right: isMobile ? '10px' : 'auto',
+          width: isMobile ? '44px' : '56px',
+          height: isMobile ? '44px' : '56px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #FFD700, #FFA500)',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 4px 20px rgba(255, 215, 0, 0.4)',
+          zIndex: 9999,
+          transition: 'all 0.3s ease',
+        }}
+        onMouseEnter={(e) => {
+          if (!isMobile) {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.boxShadow = '0 6px 30px rgba(255, 215, 0, 0.6)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isMobile) {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(255, 215, 0, 0.4)';
+          }
         }}
       >
+        <span style={{ fontSize: isMobile ? '18px' : '24px' }}>📊</span>
+      </div>
+    );
+  }
+
+  // Expanded State
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: isMobile ? '10px' : '20px',
+      left: isMobile ? '10px' : '20px',
+      right: isMobile ? '10px' : 'auto',
+      width: isMobile ? 'auto' : '420px',
+      maxWidth: '420px',
+      maxHeight: isMobile ? '85vh' : '90vh',
+      background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
+      borderRadius: isMobile ? '12px' : '16px',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 215, 0, 0.2)',
+      zIndex: 9999,
+      fontFamily: "'Inter', -apple-system, sans-serif",
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: '1px solid rgba(255, 215, 0, 0.2)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: 'rgba(0, 0, 0, 0.3)',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #FFD700, #FFA500)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 15px rgba(255, 215, 0, 0.4)',
-            }}
-          >
-            <span style={{ fontSize: '20px' }}>⚡</span>
-          </div>
+          <span style={{ fontSize: '20px' }}>⚔️</span>
           <div>
-            <div style={{ fontWeight: 700, color: '#fff', fontSize: '15px' }}>
+            <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '14px', fontFamily: "'Orbitron', sans-serif" }}>
               METAL PERPS
             </div>
-            <div style={{ 
-              fontSize: '10px', 
-              color: '#FFD700', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '4px',
-              marginTop: '2px',
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#888' }}>
               <ArbitrumLogo size={12} />
-              <span>Arbitrum • gTrade</span>
+              <span style={{ color: '#12AAFF' }}>Arbitrum</span>
+              <span>• TradingView Live</span>
             </div>
           </div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ 
-            color: '#FFD700', 
-            fontWeight: 700, 
-            fontSize: '14px',
-            fontFamily: "'Orbitron', sans-serif",
-          }}>
-            {balance !== null ? `$${balance.toFixed(2)}` : '---'}
-          </div>
-          <div style={{ color: '#888', fontSize: '10px' }}>USDC Balance</div>
-        </div>
+        <button
+          onClick={() => setIsExpanded(false)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#888',
+            cursor: 'pointer',
+            fontSize: '20px',
+            padding: '4px',
+          }}
+        >
+          ×
+        </button>
       </div>
 
-      {/* Live Ticker */}
-      <TradingViewTickerTape />
+      {/* Live Ticker Tape */}
+      <div style={{
+        borderBottom: '1px solid rgba(255, 215, 0, 0.1)',
+        background: 'rgba(0, 0, 0, 0.2)',
+      }}>
+        <TradingViewTickerTape />
+      </div>
 
       {/* Tab Navigation */}
-      <div
-        style={{
-          display: 'flex',
-          borderBottom: '1px solid rgba(255, 215, 0, 0.1)',
-          background: 'rgba(0, 0, 0, 0.2)',
-        }}
-      >
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid rgba(255, 215, 0, 0.1)',
+      }}>
         {[
-          { id: 'trade', label: '📈 Trade' },
-          { id: 'positions', label: '💼 Positions' },
-          { id: 'bot', label: '🤖 Bot' },
-          { id: 'learn', label: '📚 Learn' },
-        ].map((tab) => (
+          { id: 'trade', label: '📈 TRADE' },
+          { id: 'positions', label: `📊 (${positions.length})` },
+          { id: 'learn', label: '🎓 LEARN' },
+        ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -553,38 +468,32 @@ export default function MetalPerpsWidget() {
             }}
           >
             {tab.label}
-            {tab.id === 'positions' && positions.length > 0 && (
-              <span style={{
-                marginLeft: '4px',
-                background: '#FFD700',
-                color: '#000',
-                borderRadius: '4px',
-                padding: '1px 5px',
-                fontSize: '9px',
-              }}>
-                {positions.length}
-              </span>
-            )}
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'trade' && (
-        <div style={{ padding: '12px' }}>
-          {/* Asset Selection */}
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {Object.keys(ASSETS).map((key) => (
+      {/* Scrollable Content */}
+      <div style={{ flex: 1, overflowY: 'auto', maxHeight: 'calc(90vh - 150px)' }}>
+        {activeTab === 'trade' && (
+          <div style={{ padding: '12px' }}>
+            {/* Asset Selection */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '8px',
+              marginBottom: '12px',
+            }}>
+              {Object.keys(ASSETS).map(key => (
                 <button
                   key={key}
                   onClick={() => setSelectedAsset(key)}
                   style={{
-                    flex: 1,
                     padding: '10px 8px',
                     borderRadius: '10px',
                     border: selectedAsset === key ? '2px solid #FFD700' : '1px solid rgba(255, 255, 255, 0.1)',
-                    background: selectedAsset === key ? 'rgba(255, 215, 0, 0.15)' : 'rgba(0, 0, 0, 0.2)',
+                    background: selectedAsset === key 
+                      ? 'linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.1))'
+                      : 'rgba(255, 255, 255, 0.03)',
                     cursor: 'pointer',
                     transition: 'all 0.2s',
                     display: 'flex',
@@ -596,712 +505,539 @@ export default function MetalPerpsWidget() {
                   <img 
                     src={ASSET_IMAGES[key]} 
                     alt={key}
-                    style={{ 
-                      width: '24px', 
-                      height: '24px', 
-                      borderRadius: key === 'GOLD' || key === 'SILVER' ? '4px' : '50%',
-                    }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
+                    style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
                   />
                   <span style={{ 
-                    color: selectedAsset === key ? '#FFD700' : '#888',
-                    fontSize: '10px',
+                    fontSize: '11px', 
                     fontWeight: 600,
+                    color: selectedAsset === key ? '#FFD700' : '#888',
                   }}>
                     {key}
                   </span>
                 </button>
               ))}
             </div>
-          </div>
 
-          {/* Chart */}
-          <div style={{
-            background: 'rgba(0, 0, 0, 0.3)',
-            borderRadius: '12px',
-            overflow: 'hidden',
-            marginBottom: '12px',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-          }}>
-            <TradingViewMiniSymbol symbol={tvSymbol} height={200} />
-          </div>
+            {/* TradingView Mini Symbol Overview - Live Price + Chart */}
+            <div style={{
+              marginBottom: '12px',
+              borderRadius: '10px',
+              overflow: 'hidden',
+              border: '1px solid rgba(255, 215, 0, 0.2)',
+              background: 'rgba(0, 0, 0, 0.3)',
+            }}>
+              <TradingViewMiniSymbol symbol={tvSymbol} height={220} />
+              {isCommodity && (
+                <div style={{
+                  padding: '8px 12px',
+                  fontSize: '10px',
+                  color: marketOpen ? '#00ff88' : '#ff4444',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                }}>
+                  {marketOpen ? '● Market Open' : '● Market Closed (Weekend)'}
+                </div>
+              )}
+            </div>
 
-          {/* Direction Toggle */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '8px', 
-            marginBottom: '12px',
-          }}>
-            <button
-              onClick={() => setDirection('LONG')}
-              style={{
-                flex: 1,
-                padding: '12px',
-                borderRadius: '10px',
-                border: direction === 'LONG' ? '2px solid #00ff88' : '1px solid rgba(0, 255, 136, 0.2)',
-                background: direction === 'LONG' ? 'rgba(0, 255, 136, 0.15)' : 'transparent',
-                color: direction === 'LONG' ? '#00ff88' : '#555',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-              }}
-            >
-              <span>📈</span> LONG
-            </button>
-            <button
-              onClick={() => setDirection('SHORT')}
-              style={{
-                flex: 1,
-                padding: '12px',
-                borderRadius: '10px',
-                border: direction === 'SHORT' ? '2px solid #ff4444' : '1px solid rgba(255, 68, 68, 0.2)',
-                background: direction === 'SHORT' ? 'rgba(255, 68, 68, 0.15)' : 'transparent',
-                color: direction === 'SHORT' ? '#ff4444' : '#555',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-              }}
-            >
-              <span>📉</span> SHORT
-            </button>
-          </div>
-
-          {/* Order Type Toggle */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '6px', 
-            marginBottom: '12px',
-          }}>
-            {['MARKET', 'LIMIT'].map((type) => (
+            {/* Direction Buttons */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
               <button
-                key={type}
-                onClick={() => setOrderType(type)}
+                onClick={() => setDirection('LONG')}
                 style={{
                   flex: 1,
-                  padding: '8px',
+                  padding: '12px',
                   borderRadius: '8px',
-                  border: orderType === type ? '1px solid #FFD700' : '1px solid rgba(255, 255, 255, 0.1)',
-                  background: orderType === type ? 'rgba(255, 215, 0, 0.1)' : 'transparent',
-                  color: orderType === type ? '#FFD700' : '#666',
+                  border: 'none',
+                  background: direction === 'LONG' 
+                    ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
+                    : 'rgba(255, 255, 255, 0.05)',
+                  color: direction === 'LONG' ? '#000' : '#666',
+                  fontWeight: 700,
                   cursor: 'pointer',
-                  fontSize: '11px',
-                  fontWeight: 600,
+                  fontSize: '13px',
+                  transition: 'all 0.2s',
                 }}
               >
-                {type === 'MARKET' ? '⚡ Market' : '📋 Limit'}
+                📈 LONG
               </button>
-            ))}
-          </div>
+              <button
+                onClick={() => setDirection('SHORT')}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: direction === 'SHORT'
+                    ? 'linear-gradient(135deg, #ff4444, #cc0000)'
+                    : 'rgba(255, 255, 255, 0.05)',
+                  color: direction === 'SHORT' ? '#fff' : '#666',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                📉 SHORT
+              </button>
+            </div>
 
-          {/* Limit Price Input (if LIMIT order) */}
-          {orderType === 'LIMIT' && (
+            {/* Order Type Selector */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', color: '#888', marginBottom: '6px' }}>Order Type</div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setOrderType('MARKET')}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: orderType === 'MARKET' ? '2px solid #FFD700' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: orderType === 'MARKET' ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                    color: orderType === 'MARKET' ? '#FFD700' : '#666',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  ⚡ MARKET
+                </button>
+                <button
+                  onClick={() => setOrderType('LIMIT')}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: orderType === 'LIMIT' ? '2px solid #00BFFF' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: orderType === 'LIMIT' ? 'rgba(0, 191, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                    color: orderType === 'LIMIT' ? '#00BFFF' : '#666',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  📋 LIMIT
+                </button>
+              </div>
+            </div>
+
+            {/* Limit Price Input (only show for LIMIT orders) */}
+            {orderType === 'LIMIT' && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '11px', color: '#00BFFF', marginBottom: '6px' }}>
+                  Limit Price (USD)
+                </div>
+                <input
+                  type="number"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  placeholder="Enter trigger price..."
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(0, 191, 255, 0.3)',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    color: '#00BFFF',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: '9px', color: '#666', marginTop: '4px' }}>
+                  Order executes when price reaches this level
+                </div>
+              </div>
+            )}
+
+            {/* Collateral Input */}
             <div style={{ marginBottom: '12px' }}>
               <div style={{ 
                 display: 'flex', 
-                justifyContent: 'space-between',
+                justifyContent: 'space-between', 
                 marginBottom: '6px',
-              }}>
-                <span style={{ color: '#888', fontSize: '11px' }}>Limit Price (USD)</span>
-              </div>
-              <input
-                type="number"
-                value={limitPrice}
-                onChange={(e) => setLimitPrice(e.target.value)}
-                placeholder="Enter limit price..."
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 215, 0, 0.3)',
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  color: '#FFD700',
-                  fontSize: '16px',
-                  fontWeight: 700,
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  fontFamily: "'Orbitron', sans-serif",
-                }}
-              />
-            </div>
-          )}
-
-          {/* Collateral Input */}
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              marginBottom: '6px',
-            }}>
-              <span style={{ color: '#888', fontSize: '11px' }}>Collateral (USDC)</span>
-              <span style={{ 
-                color: '#FFD700', 
                 fontSize: '11px',
-                cursor: 'pointer',
-              }} onClick={() => balance && setCollateral(Math.floor(balance).toString())}>
-                Max: ${balance?.toFixed(2) || '0.00'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+              }}>
+                <span style={{ color: '#888' }}>Collateral (USDC) - Min $5</span>
+                <span style={{ color: '#ff6b6b' }}>• 1% fee applied</span>
+              </div>
               <input
                 type="number"
                 value={collateral}
                 onChange={(e) => setCollateral(e.target.value)}
+                min="5"
                 style={{
-                  flex: 1,
+                  width: '100%',
                   padding: '12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 215, 0, 0.3)',
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  color: '#FFD700',
-                  fontSize: '18px',
-                  fontWeight: 700,
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  color: '#fff',
+                  fontSize: '16px',
+                  fontWeight: 600,
                   outline: 'none',
-                  fontFamily: "'Orbitron', sans-serif",
+                  boxSizing: 'border-box',
                 }}
               />
-              <div style={{
-                padding: '12px 16px',
-                borderRadius: '10px',
-                background: 'rgba(255, 215, 0, 0.1)',
-                color: '#FFD700',
-                fontWeight: 700,
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-              }}>
-                USDC
-              </div>
-            </div>
-            {/* Quick amounts */}
-            <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-              {['25', '50', '100', '250'].map((amt) => (
-                <button
-                  key={amt}
-                  onClick={() => setCollateral(amt)}
-                  style={{
-                    flex: 1,
-                    padding: '6px',
-                    borderRadius: '6px',
-                    border: collateral === amt ? '1px solid #FFD700' : '1px solid rgba(255, 255, 255, 0.1)',
-                    background: collateral === amt ? 'rgba(255, 215, 0, 0.1)' : 'transparent',
-                    color: collateral === amt ? '#FFD700' : '#666',
-                    cursor: 'pointer',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                  }}
-                >
-                  ${amt}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Leverage Slider */}
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              marginBottom: '8px',
-            }}>
-              <span style={{ color: '#888', fontSize: '11px' }}>Leverage</span>
-              <span style={{ 
-                color: '#FFD700', 
-                fontWeight: 700, 
-                fontSize: '14px',
-                fontFamily: "'Orbitron', sans-serif",
-              }}>
-                {leverage}x
-              </span>
-            </div>
-            <input
-              type="range"
-              min={asset.minLev}
-              max={asset.maxLev}
-              step="0.1"
-              value={leverage}
-              onChange={(e) => setLeverage(parseFloat(e.target.value))}
-              style={{
-                width: '100%',
-                height: '6px',
-                borderRadius: '3px',
-                background: `linear-gradient(to right, #FFD700 0%, #FFD700 ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #333 ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #333 100%)`,
-                outline: 'none',
-                cursor: 'pointer',
-                WebkitAppearance: 'none',
-              }}
-            />
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              fontSize: '9px',
-              color: '#555',
-              marginTop: '4px',
-            }}>
-              <span>{asset.minLev}x</span>
-              <span>{asset.maxLev}x</span>
-            </div>
-          </div>
-
-          {/* TP/SL Toggle */}
-          <div style={{ marginBottom: '12px' }}>
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 215, 0, 0.2)',
-                background: showAdvanced ? 'rgba(255, 215, 0, 0.1)' : 'transparent',
-                color: showAdvanced ? '#FFD700' : '#888',
-                cursor: 'pointer',
-                fontSize: '11px',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <span>🎯 Take Profit / Stop Loss</span>
-              <span style={{ fontSize: '10px' }}>{showAdvanced ? '▲ Hide' : '▼ Show'}</span>
-            </button>
-            
-            {showAdvanced && (
               <div style={{ 
-                marginTop: '10px', 
-                padding: '12px',
-                background: 'rgba(0, 0, 0, 0.3)',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 215, 0, 0.1)',
+                display: 'flex', 
+                justifyContent: 'space-between',
+                marginTop: '4px',
+                fontSize: '10px',
+                color: '#666',
               }}>
-                <div style={{ marginBottom: '10px' }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    marginBottom: '6px',
-                    fontSize: '11px',
-                  }}>
-                    <span style={{ color: '#00ff88' }}>🎯 Take Profit (%)</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={takeProfit}
-                    onChange={(e) => setTakeProfit(e.target.value)}
-                    placeholder="e.g. 5 for +5%"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      borderRadius: '6px',
-                      border: '1px solid rgba(0, 255, 136, 0.3)',
-                      background: 'rgba(0, 0, 0, 0.4)',
-                      color: '#00ff88',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-                
-                <div>
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    marginBottom: '6px',
-                    fontSize: '11px',
-                  }}>
-                    <span style={{ color: '#ff4444' }}>🛑 Stop Loss (%)</span>
-                  </div>
-                  <input
-                    type="number"
-                    value={stopLoss}
-                    onChange={(e) => setStopLoss(e.target.value)}
-                    placeholder="e.g. 3 for -3%"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      borderRadius: '6px',
-                      border: '1px solid rgba(255, 68, 68, 0.3)',
-                      background: 'rgba(0, 0, 0, 0.4)',
-                      color: '#ff4444',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
+                <span>Fee: ${(parseFloat(collateral || 0) * 0.01).toFixed(2)}</span>
+                <span>Net: ${(parseFloat(collateral || 0) * 0.99).toFixed(2)}</span>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Position Size Display */}
-          <div style={{
-            background: 'rgba(255, 215, 0, 0.08)',
-            borderRadius: '10px',
-            padding: '12px',
-            marginBottom: '12px',
-            border: '1px solid rgba(255, 215, 0, 0.15)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ color: '#888', fontSize: '11px' }}>Position Size</span>
-              <span style={{ 
-                color: '#FFD700', 
-                fontWeight: 700,
-                fontFamily: "'Orbitron', sans-serif",
+            {/* Leverage Slider */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                marginBottom: '8px',
               }}>
-                ${positionSize.toLocaleString()}
-              </span>
+                <span style={{ color: '#888', fontSize: '11px' }}>Leverage</span>
+                <span style={{ 
+                  color: '#FFD700', 
+                  fontWeight: 700, 
+                  fontSize: '14px',
+                  fontFamily: "'Orbitron', sans-serif",
+                }}>
+                  {leverage}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min={asset.minLev}
+                max={asset.maxLev}
+                step="0.1"
+                value={leverage}
+                onChange={(e) => setLeverage(parseFloat(e.target.value))}
+                style={{
+                  width: '100%',
+                  height: '6px',
+                  borderRadius: '3px',
+                  background: `linear-gradient(to right, #FFD700 0%, #FFD700 ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #333 ${((leverage - asset.minLev) / (asset.maxLev - asset.minLev)) * 100}%, #333 100%)`,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  WebkitAppearance: 'none',
+                }}
+              />
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                fontSize: '9px',
+                color: '#555',
+                marginTop: '4px',
+              }}>
+                <span>{asset.minLev}x</span>
+                <span>{asset.maxLev}x</span>
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#888', fontSize: '11px' }}>Max {asset.maxLev}x</span>
-              <span style={{ color: '#666', fontSize: '10px' }}>
-                Liq. price varies by market
-              </span>
-            </div>
-          </div>
 
-          {/* Market Status Warning */}
-          {isCommodity && !marketOpen && (
+            {/* TP/SL Toggle and Inputs */}
+            <div style={{ marginBottom: '12px' }}>
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 215, 0, 0.2)',
+                  background: showAdvanced ? 'rgba(255, 215, 0, 0.1)' : 'transparent',
+                  color: showAdvanced ? '#FFD700' : '#888',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>🎯 Take Profit / Stop Loss</span>
+                <span style={{ fontSize: '10px' }}>{showAdvanced ? '▲ Hide' : '▼ Show'}</span>
+              </button>
+              
+              {showAdvanced && (
+                <div style={{ 
+                  marginTop: '10px', 
+                  padding: '12px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 215, 0, 0.1)',
+                }}>
+                  {/* Take Profit */}
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      marginBottom: '6px',
+                      fontSize: '11px',
+                    }}>
+                      <span style={{ color: '#00ff88' }}>🎯 Take Profit (USD)</span>
+                      {takeProfit && (
+                        <span style={{ color: '#00ff88' }}>
+                          {direction === 'LONG' ? '+' : '-'}
+                          {(Math.abs((parseFloat(takeProfit) - 100) / 100) * 100).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      value={takeProfit}
+                      onChange={(e) => setTakeProfit(e.target.value)}
+                      placeholder={direction === 'LONG' ? 'Price above entry...' : 'Price below entry...'}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(0, 255, 136, 0.3)',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        color: '#00ff88',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Stop Loss */}
+                  <div>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      marginBottom: '6px',
+                      fontSize: '11px',
+                    }}>
+                      <span style={{ color: '#ff4444' }}>🛑 Stop Loss (USD)</span>
+                      {stopLoss && (
+                        <span style={{ color: '#ff4444' }}>
+                          {direction === 'LONG' ? '-' : '+'}
+                          {(Math.abs((parseFloat(stopLoss) - 100) / 100) * 100).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      value={stopLoss}
+                      onChange={(e) => setStopLoss(e.target.value)}
+                      placeholder={direction === 'LONG' ? 'Price below entry...' : 'Price above entry...'}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255, 68, 68, 0.3)',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        color: '#ff4444',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  
+                  <div style={{ 
+                    marginTop: '10px', 
+                    padding: '8px', 
+                    background: 'rgba(255, 215, 0, 0.05)',
+                    borderRadius: '6px',
+                    fontSize: '9px',
+                    color: '#888',
+                  }}>
+                    💡 TP/SL prices are in USD. Leave empty for no automatic close.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Position Info */}
             <div style={{
-              background: 'rgba(255, 68, 68, 0.1)',
-              border: '1px solid rgba(255, 68, 68, 0.3)',
+              background: 'rgba(0, 0, 0, 0.3)',
               borderRadius: '8px',
               padding: '10px',
               marginBottom: '12px',
-              textAlign: 'center',
+              fontSize: '11px',
             }}>
-              <span style={{ color: '#ff4444', fontSize: '11px' }}>
-                ⚠️ Commodity markets closed (Opens Sun 22:00 UTC)
-              </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: '#888' }}>Position Size</span>
+                <span style={{ color: '#fff', fontWeight: 600 }}>
+                  ${positionSize.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {takeProfit && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: '#00ff88' }}>Take Profit</span>
+                  <span style={{ color: '#00ff88', fontWeight: 600 }}>${parseFloat(takeProfit).toLocaleString()}</span>
+                </div>
+              )}
+              {stopLoss && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ color: '#ff4444' }}>Stop Loss</span>
+                  <span style={{ color: '#ff4444', fontWeight: 600 }}>${parseFloat(stopLoss).toLocaleString()}</span>
+                </div>
+              )}
+              {orderType === 'LIMIT' && limitPrice && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#00BFFF' }}>Limit Price</span>
+                  <span style={{ color: '#00BFFF', fontWeight: 600 }}>${parseFloat(limitPrice).toLocaleString()}</span>
+                </div>
+              )}
             </div>
-          )}
 
-          {/* Submit Button */}
-          <button
-            onClick={openTrade}
-            disabled={loading || !marketOpen || (orderType === 'LIMIT' && !limitPrice)}
-            style={{
-              width: '100%',
-              padding: '14px',
-              borderRadius: '10px',
-              border: 'none',
-              background: !marketOpen 
-                ? '#333'
-                : orderType === 'LIMIT'
-                  ? 'linear-gradient(135deg, #00BFFF, #0080FF)'
-                  : direction === 'LONG'
-                    ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
-                    : 'linear-gradient(135deg, #ff4444, #cc0000)',
-              color: orderType === 'LIMIT' ? '#fff' : (direction === 'LONG' ? '#000' : '#fff'),
-              fontWeight: 700,
-              fontSize: '14px',
-              cursor: loading || !marketOpen || (orderType === 'LIMIT' && !limitPrice) ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.7 : 1,
-              transition: 'all 0.2s',
-            }}
-          >
-            {loading ? '⏳ Processing...' : orderType === 'LIMIT' 
-              ? `📋 Place Limit ${direction}` 
-              : `⚡ Market ${direction}`}
-          </button>
-        </div>
-      )}
-
-      {activeTab === 'positions' && (
-        <div style={{ padding: '12px' }}>
-          {/* Refresh button */}
-          <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+            {/* Open Trade Button */}
             <button
-              onClick={fetchBotStatus}
+              onClick={openTrade}
+              disabled={loading || !marketOpen || parseFloat(collateral) < 5 || (orderType === 'LIMIT' && !limitPrice)}
               style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: '1px solid rgba(255, 215, 0, 0.3)',
-                background: 'transparent',
-                color: '#FFD700',
-                cursor: 'pointer',
-                fontSize: '10px',
-                fontWeight: 600,
+                width: '100%',
+                padding: '14px',
+                borderRadius: '10px',
+                border: 'none',
+                background: !marketOpen 
+                  ? '#333'
+                  : orderType === 'LIMIT'
+                    ? 'linear-gradient(135deg, #00BFFF, #0080FF)'
+                    : direction === 'LONG'
+                      ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
+                      : 'linear-gradient(135deg, #ff4444, #cc0000)',
+                color: orderType === 'LIMIT' ? '#fff' : (direction === 'LONG' ? '#000' : '#fff'),
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: loading || !marketOpen || (orderType === 'LIMIT' && !limitPrice) ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                transition: 'all 0.2s',
               }}
             >
-              🔄 Refresh
+              {loading ? '⏳ Processing...' : orderType === 'LIMIT' 
+                ? `📋 Place Limit ${direction}` 
+                : `⚡ Market ${direction}`}
             </button>
-          </div>
-          
-          {positions.length === 0 ? (
-            <div style={{ 
-              textAlign: 'center', 
-              padding: '40px 20px',
-              color: '#666',
-            }}>
-              <div style={{ fontSize: '32px', marginBottom: '12px' }}>📭</div>
-              <div style={{ fontSize: '13px' }}>No open positions</div>
-              <div style={{ fontSize: '11px', marginTop: '4px' }}>
-                Open a trade to get started
-              </div>
-            </div>
-          ) : (
-            positions.map((pos, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  marginBottom: '8px',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: pos.long ? '#00ff88' : '#ff4444' }}>
-                      {pos.long ? '📈' : '📉'}
-                    </span>
-                    {pos.asset} {pos.long ? 'LONG' : 'SHORT'}
-                  </span>
-                  <span style={{ 
-                    color: '#FFD700',
-                    fontWeight: 600,
-                    fontSize: '12px',
-                  }}>
-                    {pos.leverage}x
-                  </span>
-                </div>
-                <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>
-                  <div>Collateral: ${pos.collateral?.toFixed(2)}</div>
-                  <div>Size: ${pos.positionSize?.toFixed(2)}</div>
-                  <div>Entry: ${pos.openPrice?.toFixed(2)}</div>
-                  {pos.tp > 0 && <span style={{ color: '#00ff88' }}> TP: ${pos.tp.toFixed(2)}</span>}
-                  {pos.sl > 0 && <span style={{ color: '#ff4444' }}> SL: ${pos.sl.toFixed(2)}</span>}
-                </div>
-                <button
-                  onClick={() => closeTrade(pos.index)}
-                  disabled={loading}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '6px',
-                    border: '1px solid #ff4444',
-                    background: 'transparent',
-                    color: '#ff4444',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                  }}
-                >
-                  {loading ? '⏳...' : '✕ Close Position'}
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
 
-      {/* BOT TAB - Live Activity Feed */}
-      {activeTab === 'bot' && (
-        <div style={{ padding: '12px' }}>
-          {/* Bot Status Header */}
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(255, 215, 0, 0.1))',
-            borderRadius: '10px',
-            padding: '12px',
-            marginBottom: '12px',
-            border: '1px solid rgba(0, 255, 136, 0.2)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ 
-                  color: '#00ff88', 
-                  fontWeight: 700, 
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}>
-                  <span style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    background: '#00ff88',
-                    boxShadow: '0 0 10px #00ff88',
-                    animation: 'pulse 2s infinite',
-                  }} />
-                  🤖 PHANTOM EDGE
-                </div>
-                <div style={{ color: '#888', fontSize: '10px', marginTop: '4px' }}>
-                  Auto-trading metals 24/7
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '13px' }}>
-                  {botStatus?.balance ? `$${botStatus.balance.toFixed(2)}` : '---'}
-                </div>
-                <div style={{ color: '#666', fontSize: '9px' }}>
-                  {lastUpdate ? `Updated ${lastUpdate}` : 'Loading...'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Active Positions Summary */}
-          <div style={{
-            display: 'flex',
-            gap: '8px',
-            marginBottom: '12px',
-          }}>
-            <div style={{
-              flex: 1,
-              background: 'rgba(0, 255, 136, 0.1)',
-              borderRadius: '8px',
-              padding: '10px',
-              textAlign: 'center',
-            }}>
-              <div style={{ color: '#00ff88', fontSize: '18px', fontWeight: 700 }}>
-                {botStatus?.positions?.filter(p => p.long).length || 0}
-              </div>
-              <div style={{ color: '#888', fontSize: '9px' }}>LONGS</div>
-            </div>
-            <div style={{
-              flex: 1,
-              background: 'rgba(255, 68, 68, 0.1)',
-              borderRadius: '8px',
-              padding: '10px',
-              textAlign: 'center',
-            }}>
-              <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 700 }}>
-                {botStatus?.positions?.filter(p => !p.long).length || 0}
-              </div>
-              <div style={{ color: '#888', fontSize: '9px' }}>SHORTS</div>
-            </div>
-            <div style={{
-              flex: 1,
-              background: 'rgba(255, 215, 0, 0.1)',
-              borderRadius: '8px',
-              padding: '10px',
-              textAlign: 'center',
-            }}>
-              <div style={{ color: '#FFD700', fontSize: '18px', fontWeight: 700 }}>
-                {botStatus?.positions?.length || 0}
-              </div>
-              <div style={{ color: '#888', fontSize: '9px' }}>TOTAL</div>
-            </div>
-          </div>
-
-          {/* Activity Feed */}
-          <div style={{
-            background: 'rgba(0, 0, 0, 0.2)',
-            borderRadius: '10px',
-            padding: '12px',
-            maxHeight: '300px',
-            overflowY: 'auto',
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              marginBottom: '10px',
-            }}>
-              <span style={{ color: '#888', fontSize: '11px', fontWeight: 600 }}>
-                📊 LIVE ACTIVITY
-              </span>
-              <button
-                onClick={fetchBotStatus}
-                style={{
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  border: '1px solid rgba(255, 215, 0, 0.3)',
-                  background: 'transparent',
-                  color: '#FFD700',
-                  cursor: 'pointer',
-                  fontSize: '9px',
-                }}
-              >
-                🔄 Refresh
-              </button>
-            </div>
-            
-            {botActivity.length === 0 ? (
-              <div style={{ 
-                textAlign: 'center', 
-                padding: '20px',
-                color: '#555',
-                fontSize: '11px',
-              }}>
-                <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔄</div>
-                Loading bot activity...
-              </div>
-            ) : (
-              botActivity.map((activity, idx) => (
-                <BotActivityItem key={idx} activity={activity} />
-              ))
-            )}
-          </div>
-
-          {/* Bot Wallet */}
-          {botStatus?.wallet && (
+            {/* One-Click Trading Setup */}
             <div style={{
               marginTop: '12px',
               padding: '10px',
-              background: 'rgba(0, 0, 0, 0.3)',
+              background: 'rgba(255, 215, 0, 0.05)',
               borderRadius: '8px',
-              fontSize: '10px',
-              color: '#666',
+              border: '1px solid rgba(255, 215, 0, 0.1)',
             }}>
-              <span style={{ color: '#888' }}>Bot Wallet: </span>
-              <span style={{ color: '#FFD700', fontFamily: 'monospace' }}>
-                {botStatus.wallet.slice(0, 6)}...{botStatus.wallet.slice(-4)}
-              </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#FFD700', fontSize: '11px', fontWeight: 600 }}>
+                  ⚡ ONE-CLICK TRADING
+                </span>
+                <span style={{ color: '#00ff88', fontSize: '10px' }}>
+                  SETUP →
+                </span>
+              </div>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {activeTab === 'learn' && (
-        <div style={{ padding: '16px' }}>
-          <div style={{ 
-            background: 'rgba(255, 215, 0, 0.1)',
-            borderRadius: '10px',
-            padding: '16px',
-            marginBottom: '12px',
-          }}>
-            <h3 style={{ color: '#FFD700', margin: '0 0 8px 0', fontSize: '14px' }}>
-              🎓 Trading Guide
-            </h3>
-            <p style={{ color: '#ccc', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
-              Metal Perps lets you trade BTC, ETH, Gold, and Silver with up to 150x leverage 
-              on Arbitrum via gTrade.
-            </p>
+        {activeTab === 'positions' && (
+          <div style={{ padding: '12px' }}>
+            {positions.length === 0 ? (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '40px 20px',
+                color: '#666',
+              }}>
+                <div style={{ fontSize: '32px', marginBottom: '12px' }}>📭</div>
+                <div style={{ fontSize: '13px' }}>No open positions</div>
+                <div style={{ fontSize: '11px', marginTop: '4px' }}>
+                  Open a trade to get started
+                </div>
+              </div>
+            ) : (
+              positions.map((pos, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    marginBottom: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ color: '#fff', fontWeight: 600 }}>
+                      {pos.asset} {pos.direction}
+                    </span>
+                    <span style={{ 
+                      color: pos.pnl >= 0 ? '#00ff88' : '#ff4444',
+                      fontWeight: 600,
+                    }}>
+                      {pos.pnl >= 0 ? '+' : ''}{pos.pnl?.toFixed(2)}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>
+                    Size: ${pos.size?.toLocaleString()} • Leverage: {pos.leverage}x
+                    {pos.takeProfit && <span style={{ color: '#00ff88' }}> • TP: ${pos.takeProfit.toLocaleString()}</span>}
+                    {pos.stopLoss && <span style={{ color: '#ff4444' }}> • SL: ${pos.stopLoss.toLocaleString()}</span>}
+                  </div>
+                  <button
+                    onClick={() => closeTrade(pos.id)}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      border: '1px solid #ff4444',
+                      background: 'transparent',
+                      color: '#ff4444',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Close Position
+                  </button>
+                </div>
+              ))
+            )}
           </div>
-          
-          <div style={{ fontSize: '12px', color: '#888' }}>
-            <div style={{ marginBottom: '12px' }}>
-              <strong style={{ color: '#FFD700' }}>📈 Long</strong>: Profit when price goes up
+        )}
+
+        {activeTab === 'learn' && (
+          <div style={{ padding: '16px' }}>
+            <div style={{ 
+              background: 'rgba(255, 215, 0, 0.1)',
+              borderRadius: '10px',
+              padding: '16px',
+              marginBottom: '12px',
+            }}>
+              <h3 style={{ color: '#FFD700', margin: '0 0 8px 0', fontSize: '14px' }}>
+                🎓 Trading Guide
+              </h3>
+              <p style={{ color: '#ccc', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
+                Metal Perps lets you trade BTC, ETH, Gold, and Silver with up to 150x leverage 
+                on Arbitrum via gTrade.
+              </p>
             </div>
-            <div style={{ marginBottom: '12px' }}>
-              <strong style={{ color: '#FFD700' }}>📉 Short</strong>: Profit when price goes down
-            </div>
-            <div style={{ marginBottom: '12px' }}>
-              <strong style={{ color: '#FFD700' }}>⚡ Leverage</strong>: Multiply your position size
-            </div>
-            <div style={{ marginBottom: '12px' }}>
-              <strong style={{ color: '#00ff88' }}>🤖 Bot</strong>: PHANTOM EDGE trades 24/7 automatically
-            </div>
-            <div>
-              <strong style={{ color: '#ff4444' }}>⚠️ Risk</strong>: Higher leverage = higher liquidation risk
+            
+            <div style={{ fontSize: '12px', color: '#888' }}>
+              <div style={{ marginBottom: '12px' }}>
+                <strong style={{ color: '#FFD700' }}>📈 Long</strong>: Profit when price goes up
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <strong style={{ color: '#FFD700' }}>📉 Short</strong>: Profit when price goes down
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <strong style={{ color: '#FFD700' }}>⚡ Leverage</strong>: Multiply your position size
+              </div>
+              <div>
+                <strong style={{ color: '#ff4444' }}>⚠️ Risk</strong>: Higher leverage = higher liquidation risk
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Toast Notification */}
       {toast && (
@@ -1322,15 +1058,6 @@ export default function MetalPerpsWidget() {
           {toast.message}
         </div>
       )}
-
-      {/* Pulse animation for bot status */}
-      <style>{`
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }
