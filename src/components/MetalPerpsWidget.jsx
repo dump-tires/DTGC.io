@@ -18,12 +18,12 @@ const ASSET_IMAGES = {
   SILVER: '/images/silver_bar.png',
 };
 
-// SYNCED WITH gTrade v10 actual limits
+// SYNCED WITH gTrade v10 actual limits (commodities reduced to 25x)
 const ASSETS = {
   BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2 },
   ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2 },
-  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 100, minLev: 2 },    // gTrade commodities max 100x
-  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 100, minLev: 2 }, // gTrade commodities max 100x
+  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2 },    // gTrade commodities currently 25x
+  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2 }, // gTrade commodities currently 25x
 };
 
 // Arbitrum Logo
@@ -193,43 +193,37 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch live prices from gTrade's pricing API (same source as gTrade oracle)
+  // Fetch live prices - use Lambda STATUS for accurate prices (avoids CORS issues)
   const fetchPrices = async () => {
     const prices = {};
+
     try {
-      // Fetch ALL prices from gTrade's pricing API for perfect congruency
-      // pairIndex: BTC=0, ETH=1, GOLD=90, SILVER=91
-      const gtradeRes = await fetch('https://backend-pricing.eu.gains.trade/charts/prices?from=gTrade&pairs=0,1,90,91');
-      const gtradeData = await gtradeRes.json();
-
-      if (gtradeData) {
-        if (gtradeData[0]?.price) prices.BTC = parseFloat(gtradeData[0].price);
-        if (gtradeData[1]?.price) prices.ETH = parseFloat(gtradeData[1].price);
-        if (gtradeData[90]?.price) prices.GOLD = parseFloat(gtradeData[90].price);
-        if (gtradeData[91]?.price) prices.SILVER = parseFloat(gtradeData[91].price);
-      }
-
-      console.log('📊 gTrade oracle prices:', prices);
+      // Get BTC/ETH from CryptoCompare (CORS-friendly)
+      const cryptoRes = await fetch('https://min-api.cryptocompare.com/data/pricemulti?fsyms=BTC,ETH&tsyms=USD');
+      const cryptoData = await cryptoRes.json();
+      if (cryptoData.BTC?.USD) prices.BTC = cryptoData.BTC.USD;
+      if (cryptoData.ETH?.USD) prices.ETH = cryptoData.ETH.USD;
+      console.log('📊 CryptoCompare prices:', { BTC: prices.BTC, ETH: prices.ETH });
     } catch (e) {
-      console.log('gTrade pricing API error, falling back to Binance:', e);
-      // Fallback to Binance/metals if gTrade API fails
-      try {
-        const [btcRes, ethRes] = await Promise.all([
-          fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
-          fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT'),
-        ]);
-        prices.BTC = parseFloat((await btcRes.json()).price);
-        prices.ETH = parseFloat((await ethRes.json()).price);
-      } catch (binanceErr) {
-        console.log('Binance fallback failed');
-      }
+      console.log('CryptoCompare failed:', e.message);
     }
 
-    // Emergency fallbacks
-    if (!prices.BTC) prices.BTC = 83000;
-    if (!prices.ETH) prices.ETH = 2750;
-    if (!prices.GOLD) prices.GOLD = 5200;
-    if (!prices.SILVER) prices.SILVER = 111;
+    try {
+      // Get GOLD/SILVER from goldprice.org proxy (already works in your app)
+      const metalsRes = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+      const metalsData = await metalsRes.json();
+      if (metalsData.items?.[0]?.xauPrice) prices.GOLD = metalsData.items[0].xauPrice;
+      if (metalsData.items?.[0]?.xagPrice) prices.SILVER = metalsData.items[0].xagPrice;
+      console.log('📊 Metal prices:', { GOLD: prices.GOLD, SILVER: prices.SILVER });
+    } catch (e) {
+      console.log('Metals API failed:', e.message);
+    }
+
+    // Emergency fallbacks (current market values)
+    if (!prices.BTC) prices.BTC = 82600;
+    if (!prices.ETH) prices.ETH = 1800;
+    if (!prices.GOLD) prices.GOLD = 5080;
+    if (!prices.SILVER) prices.SILVER = 99;
 
     setLivePrices(prices);
   };
