@@ -193,50 +193,44 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch live prices for ALL assets including Gold/Silver
+  // Fetch live prices from gTrade's pricing API (same source as gTrade oracle)
   const fetchPrices = async () => {
     const prices = {};
     try {
-      // BTC & ETH from Binance (parallel fetch)
-      const [btcRes, ethRes] = await Promise.all([
-        fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
-        fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT'),
-      ]);
-      const btcData = await btcRes.json();
-      const ethData = await ethRes.json();
-      prices.BTC = parseFloat(btcData.price);
-      prices.ETH = parseFloat(ethData.price);
+      // Fetch ALL prices from gTrade's pricing API for perfect congruency
+      // pairIndex: BTC=0, ETH=1, GOLD=90, SILVER=91
+      const gtradeRes = await fetch('https://backend-pricing.eu.gains.trade/charts/prices?from=gTrade&pairs=0,1,90,91');
+      const gtradeData = await gtradeRes.json();
 
-      // GOLD & SILVER from metals.live API
-      try {
-        const metalsRes = await fetch('https://api.metals.live/v1/spot');
-        const metalsData = await metalsRes.json();
-        if (metalsData && metalsData.length > 0) {
-          const goldSpot = metalsData.find(m => m.metal === 'gold');
-          const silverSpot = metalsData.find(m => m.metal === 'silver');
-          if (goldSpot) prices.GOLD = goldSpot.price;
-          if (silverSpot) prices.SILVER = silverSpot.price;
-        }
-      } catch (metalErr) {
-        console.log('Metals API unavailable, using fallback prices');
-        // Fallback to approximate current prices
-        prices.GOLD = 2650;
-        prices.SILVER = 31;
+      if (gtradeData) {
+        if (gtradeData[0]?.price) prices.BTC = parseFloat(gtradeData[0].price);
+        if (gtradeData[1]?.price) prices.ETH = parseFloat(gtradeData[1].price);
+        if (gtradeData[90]?.price) prices.GOLD = parseFloat(gtradeData[90].price);
+        if (gtradeData[91]?.price) prices.SILVER = parseFloat(gtradeData[91].price);
       }
 
-      // Ensure all prices have fallbacks
-      if (!prices.GOLD) prices.GOLD = 2650;
-      if (!prices.SILVER) prices.SILVER = 31;
-
-      console.log('📊 Live prices:', prices);
+      console.log('📊 gTrade oracle prices:', prices);
     } catch (e) {
-      console.log('Price fetch error:', e);
-      // Emergency fallbacks
-      prices.BTC = prices.BTC || 100000;
-      prices.ETH = prices.ETH || 3500;
-      prices.GOLD = prices.GOLD || 2650;
-      prices.SILVER = prices.SILVER || 31;
+      console.log('gTrade pricing API error, falling back to Binance:', e);
+      // Fallback to Binance/metals if gTrade API fails
+      try {
+        const [btcRes, ethRes] = await Promise.all([
+          fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
+          fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT'),
+        ]);
+        prices.BTC = parseFloat((await btcRes.json()).price);
+        prices.ETH = parseFloat((await ethRes.json()).price);
+      } catch (binanceErr) {
+        console.log('Binance fallback failed');
+      }
     }
+
+    // Emergency fallbacks
+    if (!prices.BTC) prices.BTC = 83000;
+    if (!prices.ETH) prices.ETH = 2750;
+    if (!prices.GOLD) prices.GOLD = 5200;
+    if (!prices.SILVER) prices.SILVER = 111;
+
     setLivePrices(prices);
   };
 
