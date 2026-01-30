@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
+
 const LAMBDA_URL = 'https://mqd4yvwog76amuift2p23du2ma0ehaqp.lambda-url.us-east-2.on.aws/';
 
 const TV_SYMBOLS = {
@@ -20,8 +21,8 @@ const ASSET_IMAGES = {
 const ASSETS = {
   BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 1.1 },
   ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 1.1 },
-  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2 },
-  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2 },
+  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 250, minLev: 2 },
+  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 150, minLev: 2 },
 };
 
 // Arbitrum Logo
@@ -112,6 +113,7 @@ const TradingViewTickerTape = () => {
 };
 
 // ==================== MAIN COMPONENT ====================
+
 export default function MetalPerpsWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('trade');
@@ -130,7 +132,7 @@ export default function MetalPerpsWidget() {
   const [livePrices, setLivePrices] = useState({});
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-
+  
   const asset = ASSETS[selectedAsset];
   const tvSymbol = TV_SYMBOLS[selectedAsset];
   const positionSize = parseFloat(collateral || 0) * leverage;
@@ -191,11 +193,17 @@ export default function MetalPerpsWidget() {
   // Fetch live prices for P&L calculation
   const fetchPrices = async () => {
     const prices = {};
-    for (const [asset, config] of Object.entries({ BTC: 0, ETH: 1, GOLD: 10, SILVER: 11 })) {
-      try {
-        const result = await apiCall('PRICE', { pairIndex: config });
-        if (result.success) prices[asset] = result.price;
-      } catch (e) {}
+    try {
+      // BTC & ETH from Binance
+      const btcRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
+      const btcData = await btcRes.json();
+      prices.BTC = parseFloat(btcData.price);
+      
+      const ethRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT');
+      const ethData = await ethRes.json();
+      prices.ETH = parseFloat(ethData.price);
+    } catch (e) {
+      console.log('Price fetch error:', e);
     }
     setLivePrices(prices);
   };
@@ -216,7 +224,7 @@ export default function MetalPerpsWidget() {
         leverage,
         takeProfit: parseFloat(takeProfit),
         stopLoss: parseFloat(stopLoss),
-        price: livePrices[selectedAsset],  // Pass UI price to Lambda
+        price: livePrices[selectedAsset],
       });
       
       if (result.success) {
@@ -277,8 +285,8 @@ export default function MetalPerpsWidget() {
   useEffect(() => {
     fetchBotStatus();
     fetchPrices();
-    const statusInterval = setInterval(fetchBotStatus, 30000); // 30 sec
-    const priceInterval = setInterval(fetchPrices, 60000); // 60 sec
+    const statusInterval = setInterval(fetchBotStatus, 30000);
+    const priceInterval = setInterval(fetchPrices, 60000);
     return () => {
       clearInterval(statusInterval);
       clearInterval(priceInterval);
@@ -334,6 +342,7 @@ export default function MetalPerpsWidget() {
       display: 'flex',
       flexDirection: 'column',
     }}>
+      
       {/* ===== HEADER ===== */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 140, 0, 0.1) 100%)',
@@ -359,7 +368,7 @@ export default function MetalPerpsWidget() {
               <div style={{ fontSize: '9px', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00ff88', animation: 'pulse 2s infinite' }} />
                 <ArbitrumLogo size={10} />
-                <span>gTrade • Live</span>
+                <span>gTrade v10 • Live</span>
               </div>
             </div>
           </div>
@@ -691,7 +700,7 @@ export default function MetalPerpsWidget() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 2s infinite' }} />
                   <div>
-                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 PHANTOM EDGE</div>
+                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 HANEEF ENGINE</div>
                     <div style={{ color: '#888', fontSize: '9px' }}>Auto-trading 24/7 on Arbitrum</div>
                   </div>
                 </div>
