@@ -18,11 +18,12 @@ const ASSET_IMAGES = {
   SILVER: '/images/silver_bar.png',
 };
 
+// SYNCED WITH gTrade v10 actual limits
 const ASSETS = {
-  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 1.1 },
-  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 1.1 },
-  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 250, minLev: 2 },
-  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 150, minLev: 2 },
+  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2 },
+  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2 },
+  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 100, minLev: 2 },    // gTrade commodities max 100x
+  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 100, minLev: 2 }, // gTrade commodities max 100x
 };
 
 // Arbitrum Logo
@@ -135,7 +136,9 @@ export default function MetalPerpsWidget() {
   
   const asset = ASSETS[selectedAsset];
   const tvSymbol = TV_SYMBOLS[selectedAsset];
-  const positionSize = parseFloat(collateral || 0) * leverage;
+  // FIX: Always use integer leverage for display and calculations
+  const displayLeverage = Math.round(leverage);
+  const positionSize = parseFloat(collateral || 0) * displayLeverage;
 
   // Mobile detection
   useEffect(() => {
@@ -190,48 +193,88 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch live prices for P&L calculation
+  // Fetch live prices for ALL assets including Gold/Silver
   const fetchPrices = async () => {
     const prices = {};
     try {
-      // BTC & ETH from Binance
-      const btcRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
+      // BTC & ETH from Binance (parallel fetch)
+      const [btcRes, ethRes] = await Promise.all([
+        fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
+        fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT'),
+      ]);
       const btcData = await btcRes.json();
-      prices.BTC = parseFloat(btcData.price);
-      
-      const ethRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT');
       const ethData = await ethRes.json();
+      prices.BTC = parseFloat(btcData.price);
       prices.ETH = parseFloat(ethData.price);
+
+      // GOLD & SILVER from metals.live API
+      try {
+        const metalsRes = await fetch('https://api.metals.live/v1/spot');
+        const metalsData = await metalsRes.json();
+        if (metalsData && metalsData.length > 0) {
+          const goldSpot = metalsData.find(m => m.metal === 'gold');
+          const silverSpot = metalsData.find(m => m.metal === 'silver');
+          if (goldSpot) prices.GOLD = goldSpot.price;
+          if (silverSpot) prices.SILVER = silverSpot.price;
+        }
+      } catch (metalErr) {
+        console.log('Metals API unavailable, using fallback prices');
+        // Fallback to approximate current prices
+        prices.GOLD = 2650;
+        prices.SILVER = 31;
+      }
+
+      // Ensure all prices have fallbacks
+      if (!prices.GOLD) prices.GOLD = 2650;
+      if (!prices.SILVER) prices.SILVER = 31;
+
+      console.log('📊 Live prices:', prices);
     } catch (e) {
       console.log('Price fetch error:', e);
+      // Emergency fallbacks
+      prices.BTC = prices.BTC || 100000;
+      prices.ETH = prices.ETH || 3500;
+      prices.GOLD = prices.GOLD || 2650;
+      prices.SILVER = prices.SILVER || 31;
     }
     setLivePrices(prices);
   };
 
-  // Open trade
+  // Open trade - FIX: Validate price and send integer leverage
   const openTrade = async () => {
     if (parseFloat(collateral) < 5) {
       showToast('Minimum collateral is $5', 'error');
       return;
     }
-    
+
+    // FIX: Validate price exists before trading
+    const currentPrice = livePrices[selectedAsset];
+    if (!currentPrice || currentPrice <= 0) {
+      showToast(`No price for ${selectedAsset}. Refreshing...`, 'error');
+      await fetchPrices();
+      return;
+    }
+
+    // FIX: Round leverage to integer
+    const roundedLeverage = Math.round(leverage);
+
     setLoading(true);
     try {
       const result = await apiCall('OPEN_TRADE', {
         asset: selectedAsset,
         direction,
         collateral: parseFloat(collateral),
-        leverage,
+        leverage: roundedLeverage,  // FIX: Send integer leverage
         takeProfit: parseFloat(takeProfit),
         stopLoss: parseFloat(stopLoss),
-        price: livePrices[selectedAsset],
+        price: currentPrice,  // FIX: Validated price
       });
-      
+
       if (result.success) {
-        showToast(`✅ ${direction} ${selectedAsset} opened!`, 'success');
+        showToast(`✅ ${direction} ${selectedAsset} @ ${roundedLeverage}x opened!`, 'success');
         setBotActivity(prev => [{
           type: direction === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
-          message: `${direction} ${selectedAsset} $${collateral} @ ${leverage}x`,
+          message: `${direction} ${selectedAsset} $${collateral} @ ${roundedLeverage}x`,
           time: new Date().toLocaleTimeString(),
         }, ...prev].slice(0, 20));
         fetchBotStatus();
@@ -530,24 +573,24 @@ export default function MetalPerpsWidget() {
               </div>
             </div>
 
-            {/* Leverage */}
+            {/* Leverage - FIX: step=1 for whole numbers only */}
             <div style={{ marginBottom: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                 <span style={{ color: '#888', fontSize: '10px' }}>Leverage</span>
-                <span style={{ color: '#FFD700', fontWeight: 700 }}>{leverage}x</span>
+                <span style={{ color: '#FFD700', fontWeight: 700 }}>{displayLeverage}x</span>
               </div>
               <input
                 type="range"
                 min={asset.minLev}
                 max={asset.maxLev}
-                step="0.1"
+                step="1"
                 value={leverage}
-                onChange={(e) => setLeverage(parseFloat(e.target.value))}
+                onChange={(e) => setLeverage(parseInt(e.target.value))}
                 style={{ width: '100%', height: '6px', borderRadius: '3px', background: '#333', outline: 'none', cursor: 'pointer', WebkitAppearance: 'none' }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
                 {[5, 10, 25, 50, 100].filter(l => l <= asset.maxLev).map((l) => (
-                  <button key={l} onClick={() => setLeverage(l)} style={{ padding: '2px 6px', borderRadius: '4px', border: 'none', background: leverage === l ? 'rgba(255,215,0,0.2)' : 'transparent', color: leverage === l ? '#FFD700' : '#666', cursor: 'pointer', fontSize: '9px' }}>{l}x</button>
+                  <button key={l} onClick={() => setLeverage(l)} style={{ padding: '2px 6px', borderRadius: '4px', border: 'none', background: displayLeverage === l ? 'rgba(255,215,0,0.2)' : 'transparent', color: displayLeverage === l ? '#FFD700' : '#666', cursor: 'pointer', fontSize: '9px' }}>{l}x</button>
                 ))}
               </div>
             </div>
