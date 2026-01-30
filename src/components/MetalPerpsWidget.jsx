@@ -1,3 +1,4 @@
+// Institutional Auto Trade v3.84 - Chainlink Oracle Integration
 import React, { useState, useEffect, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
@@ -18,12 +19,18 @@ const ASSET_IMAGES = {
   SILVER: '/images/silver_bar.png',
 };
 
-// SYNCED WITH gTrade v10 actual limits (commodities reduced to 25x)
+// SYNCED WITH gTrade v10 actual limits + Lambda v3.84 Chainlink oracles
 const ASSETS = {
-  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2 },
-  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2 },
-  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2 },    // gTrade commodities currently 25x
-  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2 }, // gTrade commodities currently 25x
+  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'Chainlink' },
+  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'Chainlink' },
+  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'Chainlink' },
+  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'metals.live' }, // No Chainlink on Arbitrum
+};
+
+// Leverage quick-select buttons per asset type
+const LEVERAGE_PRESETS = {
+  crypto: [10, 25, 50, 100, 150],    // BTC, ETH - high leverage available
+  commodity: [5, 10, 15, 20, 25],     // GOLD, SILVER - max 25x on gTrade
 };
 
 // Arbitrum Logo
@@ -131,6 +138,8 @@ export default function MetalPerpsWidget() {
   const [botStatus, setBotStatus] = useState(null);
   const [botActivity, setBotActivity] = useState([]);
   const [livePrices, setLivePrices] = useState({});
+  const [gtradeVerifyPrices, setGtradeVerifyPrices] = useState({});
+  const [priceSource, setPriceSource] = useState('chainlink-oracle');
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   
@@ -193,39 +202,52 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch live prices - use Lambda STATUS for accurate prices (avoids CORS issues)
+  // Fetch live prices from Lambda v3.84 - Chainlink oracles + gTrade verification
   const fetchPrices = async () => {
-    const prices = {};
-
     try {
-      // Get BTC/ETH from CryptoCompare (CORS-friendly)
+      const result = await apiCall('GET_PRICES');
+      if (result.success && result.prices) {
+        console.log('📊 Chainlink prices:', result.prices);
+        console.log('🔍 gTrade verify:', result.gtradeVerify);
+        console.log('📡 Source:', result.source);
+
+        setLivePrices(result.prices);
+        setPriceSource(result.source || 'chainlink-oracle');
+
+        // Store gTrade verification prices for comparison
+        if (result.gtradeVerify) {
+          setGtradeVerifyPrices(result.gtradeVerify);
+        }
+        return;
+      }
+    } catch (e) {
+      console.log('Lambda price fetch failed:', e.message);
+    }
+
+    // Fallback: fetch directly if Lambda fails
+    const prices = {};
+    try {
       const cryptoRes = await fetch('https://min-api.cryptocompare.com/data/pricemulti?fsyms=BTC,ETH&tsyms=USD');
       const cryptoData = await cryptoRes.json();
       if (cryptoData.BTC?.USD) prices.BTC = cryptoData.BTC.USD;
       if (cryptoData.ETH?.USD) prices.ETH = cryptoData.ETH.USD;
-      console.log('📊 CryptoCompare prices:', { BTC: prices.BTC, ETH: prices.ETH });
-    } catch (e) {
-      console.log('CryptoCompare failed:', e.message);
-    }
+    } catch (e) { console.log('Crypto fallback failed'); }
 
     try {
-      // Get GOLD/SILVER from goldprice.org proxy (already works in your app)
       const metalsRes = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
       const metalsData = await metalsRes.json();
       if (metalsData.items?.[0]?.xauPrice) prices.GOLD = metalsData.items[0].xauPrice;
       if (metalsData.items?.[0]?.xagPrice) prices.SILVER = metalsData.items[0].xagPrice;
-      console.log('📊 Metal prices:', { GOLD: prices.GOLD, SILVER: prices.SILVER });
-    } catch (e) {
-      console.log('Metals API failed:', e.message);
-    }
+    } catch (e) { console.log('Metals fallback failed'); }
 
-    // Emergency fallbacks (current market values)
-    if (!prices.BTC) prices.BTC = 82600;
+    // Emergency fallbacks
+    if (!prices.BTC) prices.BTC = 83000;
     if (!prices.ETH) prices.ETH = 1800;
-    if (!prices.GOLD) prices.GOLD = 5080;
-    if (!prices.SILVER) prices.SILVER = 99;
+    if (!prices.GOLD) prices.GOLD = 3300;
+    if (!prices.SILVER) prices.SILVER = 33;
 
     setLivePrices(prices);
+    setPriceSource('fallback');
   };
 
   // Open trade - FIX: Validate price and send integer leverage
@@ -395,11 +417,14 @@ export default function MetalPerpsWidget() {
               <span style={{ fontSize: '16px' }}>⚡</span>
             </div>
             <div>
-              <div style={{ fontWeight: 700, color: '#fff', fontSize: '13px' }}>PHANTOM EDGE</div>
+              <div style={{ fontWeight: 700, color: '#fff', fontSize: '13px' }}>Institutional Auto Trade</div>
               <div style={{ fontSize: '9px', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00ff88', animation: 'pulse 2s infinite' }} />
                 <ArbitrumLogo size={10} />
-                <span>gTrade v10 • Live</span>
+                <span>gTrade v10</span>
+                <span style={{ color: priceSource === 'chainlink-oracle' ? '#00ff88' : '#ff9900' }}>
+                  • {priceSource === 'chainlink-oracle' ? '🔗 Chainlink' : '📡 Fallback'}
+                </span>
               </div>
             </div>
           </div>
@@ -467,34 +492,95 @@ export default function MetalPerpsWidget() {
         {/* ----- TRADE TAB ----- */}
         {activeTab === 'trade' && (
           <>
-            {/* Asset Selection */}
+            {/* Asset Selection with price source indicator */}
             <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
-              {Object.keys(ASSETS).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedAsset(key)}
-                  style={{
-                    flex: 1,
-                    padding: '8px 4px',
-                    borderRadius: '8px',
-                    border: selectedAsset === key ? '2px solid #FFD700' : '1px solid rgba(255,255,255,0.1)',
-                    background: selectedAsset === key ? 'rgba(255, 215, 0, 0.15)' : 'rgba(0, 0, 0, 0.2)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '3px',
-                  }}
-                >
-                  <img src={ASSET_IMAGES[key]} alt={key} style={{ width: '18px', height: '18px', borderRadius: '4px' }} onError={(e) => e.target.style.display = 'none'} />
-                  <span style={{ color: selectedAsset === key ? '#FFD700' : '#888', fontSize: '9px', fontWeight: 600 }}>{key}</span>
-                </button>
-              ))}
+              {Object.keys(ASSETS).map((key) => {
+                const assetInfo = ASSETS[key];
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSelectedAsset(key);
+                      // Reset leverage to appropriate default when switching asset types
+                      if (assetInfo.type === 'commodity' && leverage > 25) {
+                        setLeverage(25);
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '8px 4px',
+                      borderRadius: '8px',
+                      border: selectedAsset === key ? '2px solid #FFD700' : '1px solid rgba(255,255,255,0.1)',
+                      background: selectedAsset === key ? 'rgba(255, 215, 0, 0.15)' : 'rgba(0, 0, 0, 0.2)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '2px',
+                      position: 'relative',
+                    }}
+                  >
+                    <img src={ASSET_IMAGES[key]} alt={key} style={{ width: '18px', height: '18px', borderRadius: '4px' }} onError={(e) => e.target.style.display = 'none'} />
+                    <span style={{ color: selectedAsset === key ? '#FFD700' : '#888', fontSize: '9px', fontWeight: 600 }}>{key}</span>
+                    {/* Price source indicator */}
+                    <span style={{
+                      fontSize: '6px',
+                      color: assetInfo.priceSource === 'Chainlink' ? '#00ff88' : '#ff9900',
+                      opacity: 0.8,
+                    }}>
+                      {assetInfo.priceSource === 'Chainlink' ? '🔗' : '📡'}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Chart */}
-            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', overflow: 'hidden', marginBottom: '10px' }}>
+            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px' }}>
               <TradingViewMiniSymbol symbol={tvSymbol} height={160} />
+            </div>
+
+            {/* Price Verification Display - matches Lambda v3.84 */}
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.4)',
+              borderRadius: '8px',
+              padding: '8px',
+              marginBottom: '10px',
+              border: '1px solid rgba(255, 215, 0, 0.1)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '10px', color: '#888' }}>🔗 {asset.priceSource}</span>
+                </div>
+                <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '14px' }}>
+                  ${livePrices[selectedAsset]?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
+                </span>
+              </div>
+              {gtradeVerifyPrices[selectedAsset] && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9px', color: '#666' }}>🔍 gTrade Oracle</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#888', fontSize: '11px' }}>
+                      ${gtradeVerifyPrices[selectedAsset]?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    {(() => {
+                      const diff = ((livePrices[selectedAsset] - gtradeVerifyPrices[selectedAsset]) / gtradeVerifyPrices[selectedAsset] * 100);
+                      const absDiff = Math.abs(diff);
+                      return (
+                        <span style={{
+                          fontSize: '9px',
+                          padding: '1px 4px',
+                          borderRadius: '3px',
+                          background: absDiff < 0.1 ? 'rgba(0,255,136,0.2)' : absDiff < 0.5 ? 'rgba(255,215,0,0.2)' : 'rgba(255,68,68,0.2)',
+                          color: absDiff < 0.1 ? '#00ff88' : absDiff < 0.5 ? '#FFD700' : '#ff4444',
+                        }}>
+                          {diff >= 0 ? '+' : ''}{diff.toFixed(3)}%
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Direction */}
@@ -561,10 +647,12 @@ export default function MetalPerpsWidget() {
               </div>
             </div>
 
-            {/* Leverage - FIX: step=1 for whole numbers only */}
+            {/* Leverage - Asset-specific presets (crypto vs commodity) */}
             <div style={{ marginBottom: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ color: '#888', fontSize: '10px' }}>Leverage</span>
+                <span style={{ color: '#888', fontSize: '10px' }}>
+                  Leverage {asset.type === 'commodity' ? '(Commodity Max 25x)' : ''}
+                </span>
                 <span style={{ color: '#FFD700', fontWeight: 700 }}>{displayLeverage}x</span>
               </div>
               <input
@@ -577,7 +665,7 @@ export default function MetalPerpsWidget() {
                 style={{ width: '100%', height: '6px', borderRadius: '3px', background: '#333', outline: 'none', cursor: 'pointer', WebkitAppearance: 'none' }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                {[5, 10, 25, 50, 100].filter(l => l <= asset.maxLev).map((l) => (
+                {LEVERAGE_PRESETS[asset.type].map((l) => (
                   <button key={l} onClick={() => setLeverage(l)} style={{ padding: '2px 6px', borderRadius: '4px', border: 'none', background: displayLeverage === l ? 'rgba(255,215,0,0.2)' : 'transparent', color: displayLeverage === l ? '#FFD700' : '#666', cursor: 'pointer', fontSize: '9px' }}>{l}x</button>
                 ))}
               </div>
@@ -719,7 +807,7 @@ export default function MetalPerpsWidget() {
         {/* ----- BOT TAB ----- */}
         {activeTab === 'bot' && (
           <>
-            {/* Bot Status Card */}
+            {/* Bot Status Card - v3.84 Chainlink Integration */}
             <div style={{
               background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(255, 215, 0, 0.1))',
               borderRadius: '10px',
@@ -731,8 +819,12 @@ export default function MetalPerpsWidget() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 2s infinite' }} />
                   <div>
-                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 HANEEF ENGINE</div>
-                    <div style={{ color: '#888', fontSize: '9px' }}>Auto-trading 24/7 on Arbitrum</div>
+                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v3.84</div>
+                    <div style={{ color: '#888', fontSize: '9px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: priceSource === 'chainlink-oracle' ? '#00ff88' : '#ff9900' }}>
+                        {priceSource === 'chainlink-oracle' ? '🔗 Chainlink Oracles' : '📡 Fallback Mode'}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -742,7 +834,7 @@ export default function MetalPerpsWidget() {
               </div>
               
               {/* Position Counters */}
-              <div style={{ display: 'flex', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
                 <div style={{ flex: 1, background: 'rgba(0,255,136,0.15)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
                   <div style={{ color: '#00ff88', fontSize: '18px', fontWeight: 700 }}>{positions.filter(p => p.long).length}</div>
                   <div style={{ color: '#888', fontSize: '8px' }}>LONGS</div>
@@ -755,6 +847,43 @@ export default function MetalPerpsWidget() {
                   <div style={{ color: '#FFD700', fontSize: '18px', fontWeight: 700 }}>{positions.length}</div>
                   <div style={{ color: '#888', fontSize: '8px' }}>TOTAL</div>
                 </div>
+              </div>
+
+              {/* Oracle Price Status - Full visibility like Telegram */}
+              <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '8px' }}>
+                <div style={{ fontSize: '9px', color: '#666', marginBottom: '6px', fontWeight: 600 }}>📊 ORACLE PRICES (Chainlink vs gTrade)</div>
+                {Object.keys(ASSETS).map(key => {
+                  const chainPrice = livePrices[key];
+                  const gtPrice = gtradeVerifyPrices[key];
+                  const diff = gtPrice ? ((chainPrice - gtPrice) / gtPrice * 100) : null;
+                  const assetInfo = ASSETS[key];
+                  return (
+                    <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '9px', color: assetInfo.priceSource === 'Chainlink' ? '#00ff88' : '#ff9900' }}>
+                          {assetInfo.priceSource === 'Chainlink' ? '🔗' : '📡'}
+                        </span>
+                        <span style={{ color: '#888', fontSize: '9px' }}>{key}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#FFD700', fontSize: '9px', fontWeight: 600 }}>
+                          ${chainPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
+                        </span>
+                        {diff !== null && (
+                          <span style={{
+                            fontSize: '8px',
+                            padding: '1px 3px',
+                            borderRadius: '2px',
+                            background: Math.abs(diff) < 0.1 ? 'rgba(0,255,136,0.2)' : 'rgba(255,215,0,0.2)',
+                            color: Math.abs(diff) < 0.1 ? '#00ff88' : '#FFD700',
+                          }}>
+                            {diff >= 0 ? '+' : ''}{diff.toFixed(2)}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
