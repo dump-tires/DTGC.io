@@ -215,15 +215,42 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch live prices - LAMBDA is PRIMARY (bypasses CORS)
+  // Fetch live prices - gTRADE DIRECT is PRIMARY (matches perps exactly!)
   const fetchPrices = async () => {
-    // PRIMARY: Lambda fetches from gTrade API (no CORS issues!)
+    // PRIMARY: gTrade backend prices DIRECTLY - MATCHES LIVE PERPS EXACTLY!
+    // This returns an array where index = pair ID (0=BTC, 1=ETH, 90=GOLD, 91=SILVER)
+    try {
+      const res = await fetch('/api/gtrade-prices');
+      const data = await res.json();
+
+      if (Array.isArray(data) && data.length > 90) {
+        const prices = {
+          BTC: parseFloat(data[0]),    // Pair 0 = BTC/USD
+          ETH: parseFloat(data[1]),    // Pair 1 = ETH/USD
+          GOLD: parseFloat(data[90]),  // Pair 90 = XAU/USD (Gold)
+          SILVER: parseFloat(data[91]) // Pair 91 = XAG/USD (Silver)
+        };
+
+        // Validate prices are real
+        if (prices.BTC > 50000 && prices.ETH > 1000 && prices.GOLD > 2000) {
+          console.log('🎯 gTrade DIRECT prices (matches perps!):', prices);
+          setLivePrices(prices);
+          setGtradeVerifyPrices(prices);
+          setPriceSource('gtrade-direct');
+          setPriceUpdateTime(new Date());
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('gTrade direct fetch failed:', e.message);
+    }
+
+    // SECONDARY: Try Lambda (if gTrade direct failed)
     try {
       const result = await apiCall('GET_PRICES');
       if (result.success && result.prices) {
-        // Validate prices are real (not fallbacks)
         const p = result.prices;
-        if (p.BTC > 50000 && p.ETH > 1000 && p.GOLD > 3000 && p.SILVER > 20) {
+        if (p.BTC > 50000 && p.ETH > 1000 && p.GOLD > 2000) {
           console.log('🎯 Lambda gTrade prices:', p);
           setLivePrices(p);
           setGtradeVerifyPrices(p);
@@ -236,52 +263,18 @@ export default function MetalPerpsWidget() {
       console.log('Lambda price fetch failed:', e.message);
     }
 
-    // SECONDARY: Use CORS proxy for crypto prices
-    const prices = {};
-    try {
-      const res = await fetch('/api/crypto-prices');
-      const data = await res.json();
-      if (data?.success && data?.prices) {
-        prices.BTC = data.prices.btc;
-        prices.ETH = data.prices.eth;
-        console.log(`📡 Crypto prices (${data.source}):`, { BTC: prices.BTC, ETH: prices.ETH });
-      }
-    } catch (e) {
-      console.log('Crypto proxy fallback failed:', e.message);
-    }
+    // LAST RESORT: Use previous prices if we have them
+    // These should be very close to gTrade since we fetch frequently
+    const prices = {
+      BTC: livePrices.BTC || 104000,
+      ETH: livePrices.ETH || 3200,
+      GOLD: livePrices.GOLD || 2770,
+      SILVER: livePrices.SILVER || 31
+    };
 
-    // TERTIARY: metals.dev API for commodities (CORS-friendly)
-    try {
-      const metalsRes = await fetch('https://api.metals.dev/v1/latest?api_key=demo&currency=USD&unit=toz');
-      const metalsData = await metalsRes.json();
-      if (metalsData.metals?.gold) prices.GOLD = metalsData.metals.gold;
-      if (metalsData.metals?.silver) prices.SILVER = metalsData.metals.silver;
-      console.log('📡 Metals.dev prices:', { GOLD: prices.GOLD, SILVER: prices.SILVER });
-    } catch (e) {
-      // Try goldapi.io as backup
-      try {
-        const goldRes = await fetch('https://www.goldapi.io/api/XAU/USD', {
-          headers: { 'x-access-token': 'goldapi-demo' }
-        });
-        const goldData = await goldRes.json();
-        if (goldData.price) prices.GOLD = goldData.price;
-      } catch (e2) {
-        console.log('Gold API fallback failed');
-      }
-    }
-
-    // LAST RESORT: Use previous prices if we have them, or emergency values
-    // Updated v3.91 - current market values as of Jan 2026
-    if (!prices.BTC) prices.BTC = livePrices.BTC || 82000;
-    if (!prices.ETH) prices.ETH = livePrices.ETH || 2650;
-    if (!prices.GOLD) prices.GOLD = livePrices.GOLD || 4800;
-    if (!prices.SILVER) prices.SILVER = livePrices.SILVER || 32;
-
-    const isUsingFallback = !prices.GOLD || prices.GOLD < 4000;
-    console.log(isUsingFallback ? '⚠️ Fallback prices:' : '✅ Live prices:', prices);
-
+    console.log('⚠️ Using cached/fallback prices:', prices);
     setLivePrices(prices);
-    setPriceSource(isUsingFallback ? 'fallback' : 'mixed-api');
+    setPriceSource('fallback');
     setPriceUpdateTime(new Date());
   };
 

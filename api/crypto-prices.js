@@ -6,10 +6,10 @@
  * Returns: { btc: number, eth: number, timestamp: number }
  */
 
-// Fallback prices (updated periodically)
+// Fallback prices - SYNC WITH gTRADE (updated Jan 2026)
 const FALLBACK_PRICES = {
-  btc: 105000,
-  eth: 3300,
+  btc: 104000,
+  eth: 3200,
 };
 
 export default async function handler(req, res) {
