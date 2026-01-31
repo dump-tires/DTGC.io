@@ -1,4 +1,4 @@
-// Institutional Auto Trade v4.2 - MASTER TP + AUTO-CLAIM
+// Institutional Auto Trade v4.3 - LIVE PRICES (no stale fallbacks)
 // Lambda: gTrade Direct Prices, Auto-Retry, Momentum Detection, Auto-Claim Pending
 import React, { useState, useEffect, useRef } from 'react';
 
@@ -179,7 +179,7 @@ const TradingViewTickerTape = () => {
 
 // ==================== MAIN COMPONENT ====================
 
-export default function MetalPerpsWidget() {
+export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('trade');
   const [selectedAsset, setSelectedAsset] = useState('BTC');
@@ -230,6 +230,21 @@ export default function MetalPerpsWidget() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Sync external prices from App.jsx (CoinGecko/goldprice.org) - always fresh, never stale
+  useEffect(() => {
+    if (externalPrices.BTC || externalPrices.ETH || externalPrices.GOLD || externalPrices.SILVER) {
+      console.log('🔄 Syncing external prices:', externalPrices);
+      setLivePrices(prev => ({
+        BTC: externalPrices.BTC || prev.BTC,
+        ETH: externalPrices.ETH || prev.ETH,
+        GOLD: externalPrices.GOLD || prev.GOLD,
+        SILVER: externalPrices.SILVER || prev.SILVER
+      }));
+      setPriceSource('live');
+      setPriceUpdateTime(new Date());
+    }
+  }, [externalPrices.BTC, externalPrices.ETH, externalPrices.GOLD, externalPrices.SILVER]);
 
   // Toast helper
   const showToast = (message, type = 'info') => {
@@ -449,18 +464,24 @@ export default function MetalPerpsWidget() {
       console.log('Lambda price fetch failed:', e.message);
     }
 
-    // LAST RESORT: Use previous prices if we have them
-    // These should be very close to gTrade since we fetch frequently
+    // LAST RESORT: Use external prices from App.jsx (CoinGecko/goldprice.org)
+    // or previous cached prices - NO stale hardcoded values
     const prices = {
-      BTC: livePrices.BTC || 104000,
-      ETH: livePrices.ETH || 3200,
-      GOLD: livePrices.GOLD || 2770,
-      SILVER: livePrices.SILVER || 31
+      BTC: livePrices.BTC || externalPrices.BTC || null,
+      ETH: livePrices.ETH || externalPrices.ETH || null,
+      GOLD: livePrices.GOLD || externalPrices.GOLD || null,
+      SILVER: livePrices.SILVER || externalPrices.SILVER || null
     };
 
-    console.log('⚠️ Using cached/fallback prices:', prices);
-    setLivePrices(prices);
-    setPriceSource('fallback');
+    // Only update if we have at least some prices
+    if (prices.BTC || prices.ETH || prices.GOLD || prices.SILVER) {
+      console.log('📊 Using external/cached prices:', prices);
+      setLivePrices(prices);
+      setPriceSource(externalPrices.BTC ? 'live' : 'cached');
+    } else {
+      console.log('⚠️ No prices available');
+      setPriceSource('unavailable');
+    }
     setPriceUpdateTime(new Date());
   };
 
@@ -1453,10 +1474,10 @@ export default function MetalPerpsWidget() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 2s infinite' }} />
                   <div>
-                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v4.1</div>
+                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v4.3</div>
                     <div style={{ color: '#888', fontSize: '9px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ color: priceSource === 'gtrade-direct' || priceSource === 'gtrade-api' ? '#00ff88' : '#ff9900' }}>
-                        {priceSource === 'gtrade-direct' ? '🎯 gTrade Direct' : priceSource === 'gtrade-api' ? '🎯 gTrade API' : '📡 Fallback Mode'}
+                      <span style={{ color: priceSource === 'live' || priceSource === 'gtrade-direct' || priceSource === 'gtrade-api' ? '#00ff88' : '#ff9900' }}>
+                        {priceSource === 'live' ? '📈 Live Prices' : priceSource === 'gtrade-direct' ? '🎯 gTrade Direct' : priceSource === 'gtrade-api' ? '🎯 gTrade API' : '📡 Cached'}
                       </span>
                       <span style={{ color: '#ff8c00' }}>| {SCALP_PRESETS[scalpMode].name}</span>
                     </div>
@@ -1640,18 +1661,19 @@ export default function MetalPerpsWidget() {
                 </div>
               </div>
 
-              {/* Oracle Price Status - DIRECT from gTrade */}
+              {/* Oracle Price Status - Live prices from CoinGecko/goldprice.org or gTrade */}
               <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '8px' }}>
                 <div style={{ fontSize: '9px', color: '#666', marginBottom: '6px', fontWeight: 600 }}>
-                  📊 LIVE PRICES ({priceSource.includes('gtrade') ? 'gTrade Direct' : 'Fallback'})
+                  📊 LIVE PRICES ({priceSource === 'live' ? 'Real-Time' : priceSource.includes('gtrade') ? 'gTrade' : 'Cached'})
                 </div>
                 {Object.keys(ASSETS).map(key => {
                   const price = livePrices[key];
+                  const isLive = priceSource === 'live' || priceSource.includes('gtrade');
                   return (
                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontSize: '9px', color: priceSource.includes('gtrade') ? '#00ff88' : '#ff9900' }}>
-                          {priceSource.includes('gtrade') ? '🎯' : '📡'}
+                        <span style={{ fontSize: '9px', color: isLive ? '#00ff88' : '#ff9900' }}>
+                          {isLive ? '📈' : '📡'}
                         </span>
                         <span style={{ color: '#888', fontSize: '9px' }}>{key}</span>
                       </div>
@@ -1663,19 +1685,21 @@ export default function MetalPerpsWidget() {
                           fontSize: '8px',
                           padding: '1px 3px',
                           borderRadius: '2px',
-                          background: priceSource.includes('gtrade') ? 'rgba(0,255,136,0.2)' : 'rgba(255,150,0,0.2)',
-                          color: priceSource.includes('gtrade') ? '#00ff88' : '#ff9900',
+                          background: isLive ? 'rgba(0,255,136,0.2)' : 'rgba(255,150,0,0.2)',
+                          color: isLive ? '#00ff88' : '#ff9900',
                         }}>
-                          {priceSource.includes('gtrade') ? '✓ SYNC' : 'FB'}
+                          {isLive ? '✓' : '~'}
                         </span>
                       </div>
                     </div>
                   );
                 })}
                 <div style={{ marginTop: '6px', fontSize: '8px', color: '#555', textAlign: 'center' }}>
-                  {priceSource.includes('gtrade')
-                    ? '✓ Prices match gTrade UI exactly'
-                    : '⚠️ Using fallback - may differ from gTrade'}
+                  {priceSource === 'live'
+                    ? '✓ Live market prices'
+                    : priceSource.includes('gtrade')
+                    ? '✓ gTrade oracle prices'
+                    : '📊 Using cached prices'}
                 </div>
               </div>
             </div>

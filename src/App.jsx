@@ -14278,7 +14278,7 @@ export default function App() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* METALS V1 - Precious Metals Perps Trading Widget */}
       {/* ═══════════════════════════════════════════════════════════════ */}
-      <MetalPerpsWidget />
+      <MetalPerpsWidget livePrices={{ BTC: cryptoPrices.btc, ETH: cryptoPrices.eth, GOLD: metalPrices.gold, SILVER: metalPrices.silver }} />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ZAPP ARB LASER LINK MODAL - One-click arbitrage route calculator */}
