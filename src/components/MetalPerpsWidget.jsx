@@ -1,4 +1,4 @@
-// Institutional Auto Trade v4.1 - AUTO-CLAIM COLLATERAL
+// Institutional Auto Trade v4.2 - MASTER TP + AUTO-CLAIM
 // Lambda: gTrade Direct Prices, Auto-Retry, Momentum Detection, Auto-Claim Pending
 import React, { useState, useEffect, useRef } from 'react';
 
@@ -86,7 +86,7 @@ const ASSETS = {
 
 // Leverage quick-select buttons per asset type
 const LEVERAGE_PRESETS = {
-  crypto: [10, 25, 50, 100, 150],    // BTC, ETH - high leverage available
+  crypto: [10, 30, 50, 100, 150],    // BTC, ETH - tightened to 30x minimum signal
   commodity: [5, 10, 15, 20, 25],     // GOLD, SILVER - max 25x on gTrade
 };
 
@@ -184,7 +184,7 @@ export default function MetalPerpsWidget() {
   const [activeTab, setActiveTab] = useState('trade');
   const [selectedAsset, setSelectedAsset] = useState('BTC');
   const [direction, setDirection] = useState('LONG');
-  const [collateral, setCollateral] = useState('50');
+  const [collateral, setCollateral] = useState('25');
   const [leverage, setLeverage] = useState(10);
   const [positions, setPositions] = useState([]);
   const [balance, setBalance] = useState(null);
@@ -735,12 +735,30 @@ export default function MetalPerpsWidget() {
 
           // Auto-close the position
           try {
-            await apiCall('CLOSE_TRADE', { tradeIndex: pos.index });
+            const closeResult = await apiCall('CLOSE_TRADE', { tradeIndex: pos.index });
             setBotActivity(prev => [{
               type: 'TP_HIT',
               message: `🎯 TP: ${pos.asset} closed @ +${pnlPercent.toFixed(1)}%`,
               time: new Date().toLocaleTimeString(),
             }, ...prev].slice(0, 20));
+
+            // MASTER TP: After successful close, auto-claim any pending collateral
+            if (closeResult.success) {
+              console.log('💰 TP closed - checking for pending collateral to reclaim...');
+              setTimeout(async () => {
+                try {
+                  const pendingResult = await apiCall('GET_PENDING');
+                  if (pendingResult.success && pendingResult.pendingOrders?.length > 0) {
+                    console.log(`💰 Found ${pendingResult.pendingOrders.length} pending orders - auto-claiming...`);
+                    await apiCall('AUTO_CLAIM_ALL');
+                    showToast(`💰 Auto-claimed collateral after TP`, 'success');
+                  }
+                } catch (claimErr) {
+                  console.log('Auto-claim after TP failed:', claimErr.message);
+                }
+              }, 2000); // Wait 2 seconds for blockchain to settle
+            }
+
             fetchBotStatus(); // Refresh positions
           } catch (e) {
             console.error('Auto-close TP failed:', e);
@@ -793,8 +811,8 @@ export default function MetalPerpsWidget() {
     const priceInterval = setInterval(fetchPrices, 3000);
     // Refresh positions every 10 seconds
     const statusInterval = setInterval(fetchBotStatus, 10000);
-    // Check TP/SL every 5 seconds
-    const tpSlInterval = setInterval(checkAutoClose, 5000);
+    // Check TP/SL every 2 seconds for faster execution
+    const tpSlInterval = setInterval(checkAutoClose, 2000);
     return () => {
       clearInterval(statusInterval);
       clearInterval(priceInterval);
@@ -1223,7 +1241,7 @@ export default function MetalPerpsWidget() {
                 }}
               />
               <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                {['25', '50', '100', '200'].map((amt) => (
+                {['10', '25', '50', '100'].map((amt) => (
                   <button key={amt} onClick={() => setCollateral(amt)} style={{ flex: 1, padding: '4px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#888', cursor: 'pointer', fontSize: '9px' }}>${amt}</button>
                 ))}
               </div>
