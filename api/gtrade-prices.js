@@ -35,8 +35,16 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString()
     });
 
-    // Return the data object
-    res.status(200).json(data);
+    // Convert object to array format that widget expects
+    // Widget uses data[0], data[1], data[90], data[91]
+    const pricesArray = [];
+    pricesArray[0] = data['0'];   // BTC
+    pricesArray[1] = data['1'];   // ETH
+    pricesArray[90] = data['90']; // GOLD
+    pricesArray[91] = data['91']; // SILVER
+
+    // Return as array
+    res.status(200).json(pricesArray);
   } catch (error) {
     console.error('gTrade proxy error:', error);
     res.status(500).json({ error: error.message });
