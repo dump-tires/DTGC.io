@@ -633,7 +633,7 @@ const styles = {
     overflowY: 'auto',
     boxSizing: 'border-box',
   },
-  header: { textAlign: 'center', marginBottom: '10px' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
   title: { fontSize: '1.1rem', fontWeight: 700, background: 'linear-gradient(135deg, #D4AF37, #FFD700)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '2px' },
   subtitle: { color: '#888', fontSize: '0.65rem' },
   tabs: { display: 'flex', gap: '4px', marginBottom: '10px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '10px' },
@@ -757,6 +757,52 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
   // Balances for all tokens
   const [balances, setBalances] = useState({});
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🤖 TELEGRAM BOT VERIFICATION - Link wallet to access Gold Suite features
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [telegramVerifying, setTelegramVerifying] = useState(false);
+  const [telegramVerified, setTelegramVerified] = useState(null);
+
+  const verifyForTelegram = async () => {
+    if (!signer || !userAddress) {
+      setToast({ message: '❌ Connect wallet first', type: 'error' });
+      return;
+    }
+
+    setTelegramVerifying(true);
+    try {
+      // Create message to sign
+      const timestamp = Date.now();
+      const message = `DTGC Gold Suite Verification\n\nWallet: ${userAddress}\nTimestamp: ${timestamp}\n\nSign this message to verify your DTGC holdings and link to Telegram bot.`;
+
+      // Get signature from wallet
+      const signature = await signer.signMessage(message);
+
+      // Call verification API
+      const response = await fetch('/api/verify-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: userAddress, signature, message })
+      });
+
+      const result = await response.json();
+
+      if (result.verified) {
+        setTelegramVerified(result);
+        setToast({ message: `✅ Verified! ${result.balance?.toLocaleString()} DTGC`, type: 'success' });
+        // Open Telegram link
+        window.open(result.telegramLink, '_blank');
+      } else {
+        setToast({ message: result.message || '❌ Insufficient DTGC balance', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Telegram verification error:', error);
+      setToast({ message: '❌ Verification failed: ' + error.message, type: 'error' });
+    } finally {
+      setTelegramVerifying(false);
+    }
+  };
 
   // Live prices - MUST be defined before calculatePnL uses it
   const [livePrices, setLivePrices] = useState({
@@ -1955,6 +2001,26 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     <div style={styles.container} onClick={() => { setShowFromSelect(false); setShowToSelect(false); }}>
       <div style={styles.header}>
         <div style={styles.title}>⚜️ DTGC Gold Suite</div>
+        <button
+          onClick={verifyForTelegram}
+          disabled={telegramVerifying || !userAddress}
+          style={{
+            background: telegramVerified ? 'linear-gradient(135deg, #00C853 0%, #00E676 100%)' : 'linear-gradient(135deg, #0088cc 0%, #0099dd 100%)',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '6px 12px',
+            color: 'white',
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            cursor: telegramVerifying ? 'wait' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            opacity: !userAddress ? 0.5 : 1,
+          }}
+        >
+          {telegramVerifying ? '⏳' : '🤖'} {telegramVerified ? '✓ Bot Linked' : 'Link TG Bot'}
+        </button>
       </div>
 
       <div style={styles.tabs}>

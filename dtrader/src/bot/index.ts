@@ -161,11 +161,109 @@ export class DtraderBot {
     return false;
   }
 
+  /**
+   * Handle web verification deep link from dtgc.io/gold
+   * Token format: base64url_payload.signature
+   */
+  private async handleWebVerification(chatId: string, userId: string, token: string): Promise<void> {
+    try {
+      // Parse the token
+      const [payloadB64, signature] = token.split('.');
+      if (!payloadB64 || !signature) {
+        await this.bot.sendMessage(chatId, '❌ Invalid verification link. Please try again from dtgc.io/gold');
+        return;
+      }
+
+      // Decode payload
+      let payload;
+      try {
+        const payloadStr = Buffer.from(payloadB64, 'base64url').toString();
+        payload = JSON.parse(payloadStr);
+      } catch (e) {
+        await this.bot.sendMessage(chatId, '❌ Invalid verification token. Please get a new link from dtgc.io/gold');
+        return;
+      }
+
+      // Verify token signature (simple HMAC check)
+      const crypto = require('crypto');
+      const VERIFY_SECRET = process.env.VERIFY_SECRET || 'dtgc-gold-suite-verification-2024';
+      const expectedSig = crypto
+        .createHmac('sha256', VERIFY_SECRET)
+        .update(payloadB64)
+        .digest('hex')
+        .substring(0, 16);
+
+      if (signature !== expectedSig) {
+        await this.bot.sendMessage(chatId, '❌ Verification failed - invalid signature. Please try again.');
+        return;
+      }
+
+      // Check expiry
+      if (payload.e && Date.now() > payload.e) {
+        await this.bot.sendMessage(chatId, '❌ Verification link expired. Please get a new link from dtgc.io/gold');
+        return;
+      }
+
+      // Check balance requirement (payload.u = USD value)
+      if (payload.u < config.tokenGate.minHoldUsd) {
+        await this.bot.sendMessage(chatId,
+          `❌ Insufficient balance. You need $${config.tokenGate.minHoldUsd}+ of DTGC.\n\nYour balance: $${payload.u}`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      // SUCCESS! Link the wallet
+      const walletAddress = payload.a;
+      const session = this.getSession(chatId);
+      session.linkedWallet = walletAddress;
+      session.gateVerified = true;
+      session.gateExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hour verification
+
+      // Format balance
+      const formatNumber = (v: number) => {
+        if (v >= 1e9) return (v/1e9).toFixed(2)+'B';
+        if (v >= 1e6) return (v/1e6).toFixed(2)+'M';
+        if (v >= 1e3) return (v/1e3).toFixed(2)+'K';
+        return v.toFixed(0);
+      };
+
+      await this.bot.sendMessage(chatId,
+        `✅ **Wallet Verified!**\n\n` +
+        `🔗 **Linked Wallet:**\n\`${walletAddress}\`\n\n` +
+        `💰 **DTGC Balance:** ${formatNumber(payload.b)} (~$${payload.u})\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🎉 **Gold Suite Unlocked!**\n` +
+        `You now have full access to all PRO features:\n\n` +
+        `🎯 Instabond Sniper\n` +
+        `⚡ New Pair Sniper\n` +
+        `📊 Limit Orders\n` +
+        `💱 DEX Trading\n` +
+        `🛡️ Anti-Rug Protection\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `_Verification valid for 24 hours_`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard }
+      );
+
+    } catch (error) {
+      console.error('Web verification error:', error);
+      await this.bot.sendMessage(chatId, '❌ Verification failed. Please try again from dtgc.io/gold');
+    }
+  }
+
   private setupHandlers(): void {
-    // /start command
-    this.bot.onText(/\/start/, async (msg) => {
+    // /start command - handles both normal start and verification deep links
+    this.bot.onText(/\/start\s*(.*)/, async (msg, match) => {
       const chatId = msg.chat.id.toString();
       const userId = msg.from?.id.toString() || '';
+      const param = match?.[1]?.trim() || '';
+
+      // Check if this is a web verification deep link
+      if (param.startsWith('verify_')) {
+        const token = param.replace('verify_', '');
+        await this.handleWebVerification(chatId, userId, token);
+        return;
+      }
 
       const { wallet, isNew } = await walletManager.getOrCreateWallet(userId);
 
