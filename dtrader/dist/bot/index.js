@@ -307,26 +307,31 @@ class DtraderBot {
                 return;
             }
             const { wallet, isNew } = await wallet_1.walletManager.getOrCreateWallet(userId);
+            // Check if user has linked wallet from persistent storage
+            const persistedLink = jsonStore_1.LinkedWallets.get(userId);
+            const hasLinkedWallet = !!persistedLink;
             // Show compact welcome with menu immediately visible
-            const welcomeMsg = `
-⚜️ **DTG BOND BOT** - PulseChain Sniper
-
-${isNew ? '✨ New wallet created!' : '👋 Welcome back!'}
-
-📋 **Your Bot Wallet:**
-\`${wallet.address}\`
-
-${isNew ? '\n⚠️ Fund this wallet with PLS to start!\n' : ''}
-━━━━━━━━━━━━━━━━━━━━━
-
-💡 **Quick Start:**
-• Send PLS to the address above
-• Link your DTGC wallet via Gold Suite
-• Start sniping with the menu below!
-
-🌐 **Web UI:** dtgc.io/gold
-⚜️ **Gate:** Hold $50+ DTGC
-      `;
+            let welcomeMsg = `⚜️ **DTG BOND BOT**\n`;
+            welcomeMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            if (isNew) {
+                welcomeMsg += `✨ **Welcome!** Your bot wallet:\n`;
+                welcomeMsg += `\`${wallet.address}\`\n\n`;
+                welcomeMsg += `⚠️ **Fund this wallet with PLS to trade!**\n\n`;
+            }
+            else {
+                welcomeMsg += `👋 **Welcome back!**\n\n`;
+            }
+            if (hasLinkedWallet) {
+                welcomeMsg += `✅ **Wallet Linked:** \`${persistedLink.walletAddress.slice(0, 8)}...\`\n`;
+                welcomeMsg += `💰 Balance: ~$${persistedLink.balanceUsd}\n\n`;
+            }
+            else {
+                welcomeMsg += `🔗 **Link your DTGC wallet** to unlock all features\n`;
+                welcomeMsg += `⚜️ Hold $50+ DTGC for PRO access\n\n`;
+            }
+            welcomeMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            welcomeMsg += `📱 **Select an option below:**\n`;
+            welcomeMsg += `ℹ️ Tap **Help** for feature explanations`;
             await this.bot.sendMessage(chatId, welcomeMsg, {
                 parse_mode: 'Markdown',
                 reply_markup: keyboards.mainMenuKeyboard,
@@ -744,6 +749,183 @@ ${isNew ? '\n⚠️ Fund this wallet with PLS to start!\n' : ''}
             await this.bot.sendMessage(chatId, `🐋 **Copy Trade** ⚜️\n\n` +
                 `_This feature is coming soon!_\n\n` +
                 `Copy whale wallets automatically.`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+            return;
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+        // ℹ️ HELP MENU - Feature explanations
+        // ═══════════════════════════════════════════════════════════════════════════
+        if (data === 'help_menu') {
+            await this.bot.sendMessage(chatId, `ℹ️ **DTG BOND BOT - Help Center**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `Select a feature to learn more:\n\n` +
+                `💰 **Buy/Sell** - Instant DEX trading\n` +
+                `🎯 **Sniper** - New pair sniper\n` +
+                `🎓 **InstaBond** - pump.tires graduation sniper\n` +
+                `📊 **Limit Orders** - Set buy/sell targets\n` +
+                `🛡️ **Anti-Rug** - Token safety check\n` +
+                `👛 **Wallets** - Multi-wallet management\n` +
+                `⚜️ **Token Gate** - DTGC holder access\n` +
+                `📈 **Portfolio** - Track your holdings\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_buy_sell') {
+            await this.bot.sendMessage(chatId, `💰 **BUY / SELL**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**How it works:**\n` +
+                `• Paste any token contract address\n` +
+                `• Enter the amount in PLS to spend\n` +
+                `• Swap executes via PulseX DEX\n\n` +
+                `**Features:**\n` +
+                `✅ Best route finding (multi-hop)\n` +
+                `✅ Slippage protection (configurable)\n` +
+                `✅ Gas priority options\n` +
+                `✅ 1% fee (0.5% DTGC burn + 0.5% dev)\n\n` +
+                `**Tips:**\n` +
+                `• Set slippage higher for volatile tokens\n` +
+                `• Use TURBO gas for fast execution\n` +
+                `• Check Anti-Rug before buying!`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_sniper') {
+            await this.bot.sendMessage(chatId, `🎯 **SNIPER**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**New Pair Sniper:**\n` +
+                `• Detects new token launches on PulseX\n` +
+                `• Auto-executes buy on liquidity add\n` +
+                `• Configurable amount and gas priority\n\n` +
+                `**How to use:**\n` +
+                `1. Go to Sniper menu\n` +
+                `2. Select "Snipe New Pair"\n` +
+                `3. Paste token CA\n` +
+                `4. Set amount and gas priority\n` +
+                `5. Bot watches for liquidity\n\n` +
+                `**Tips:**\n` +
+                `• Use high gas (TURBO) to beat others\n` +
+                `• Set stop loss to protect profits\n` +
+                `• DYOR - sniping is risky!`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_instabond') {
+            await this.bot.sendMessage(chatId, `🎓 **INSTABOND SNIPER (pump.tires)**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**What is InstaBond?**\n` +
+                `pump.tires tokens "graduate" when they hit\n` +
+                `200M PLS in their bonding curve. When they\n` +
+                `graduate, liquidity is added to PulseX.\n\n` +
+                `**How InstaBond works:**\n` +
+                `1. Browse "Top 10 Near Graduation"\n` +
+                `2. Select a token close to 200M PLS\n` +
+                `3. Set your snipe amount\n` +
+                `4. Bot watches for graduation event\n` +
+                `5. Auto-buys FIRST on PulseX! 🚀\n\n` +
+                `**Breakeven Math:**\n` +
+                `• Entry at 1x → Sell 100% at 2x to breakeven\n` +
+                `• Entry at 2x → Sell 50% at 2x to breakeven\n\n` +
+                `**Tips:**\n` +
+                `• Set Take Profit right after snipe\n` +
+                `• Higher bonding = safer but less upside`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_orders') {
+            await this.bot.sendMessage(chatId, `📊 **LIMIT ORDERS**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**Order Types:**\n` +
+                `• **Limit Buy** - Buy when price drops to target\n` +
+                `• **Limit Sell** - Sell when price rises to target\n` +
+                `• **Take Profit** - Auto-sell at profit target\n` +
+                `• **Stop Loss** - Auto-sell if price drops\n\n` +
+                `**How it works:**\n` +
+                `1. Set your target price\n` +
+                `2. Bot monitors price continuously\n` +
+                `3. Executes when target is hit\n\n` +
+                `**Tips:**\n` +
+                `• Always set stop loss on risky trades\n` +
+                `• Take Profit secures your gains\n` +
+                `• Orders stay active until executed or cancelled`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_antirug') {
+            await this.bot.sendMessage(chatId, `🛡️ **ANTI-RUG PROTECTION**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**What it checks:**\n` +
+                `✅ Honeypot detection\n` +
+                `✅ Ownership renounced?\n` +
+                `✅ Liquidity locked?\n` +
+                `✅ Contract verified?\n` +
+                `✅ Buy/Sell tax analysis\n` +
+                `✅ Holder distribution\n` +
+                `✅ Top holder concentration\n\n` +
+                `**Risk Levels:**\n` +
+                `🟢 LOW - Generally safe\n` +
+                `🟡 MEDIUM - Proceed with caution\n` +
+                `🔴 HIGH - Likely scam, avoid!\n\n` +
+                `**How to use:**\n` +
+                `1. Tap "🛡️ Anti-Rug Check"\n` +
+                `2. Paste any token CA\n` +
+                `3. Get instant safety report\n\n` +
+                `⚠️ **ALWAYS check before buying!**`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_wallets') {
+            await this.bot.sendMessage(chatId, `👛 **WALLETS**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**Wallet Types:**\n\n` +
+                `🔗 **Linked Wallet (External)**\n` +
+                `• Your main wallet (MetaMask, Rabby, etc.)\n` +
+                `• Holds your DTGC for gate access\n` +
+                `• Verified via dtgc.io/gold\n` +
+                `• Safe - never shares private keys\n\n` +
+                `🤖 **Bot Wallet (Internal)**\n` +
+                `• Auto-generated for trading\n` +
+                `• Fund with PLS for quick trades\n` +
+                `• Can generate up to 6 snipe wallets\n` +
+                `• Export keys anytime\n\n` +
+                `**Best Practice:**\n` +
+                `• Keep DTGC in your main wallet\n` +
+                `• Send only trading PLS to bot wallet\n` +
+                `• Never put large amounts in bot wallet`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_gate') {
+            await this.bot.sendMessage(chatId, `⚜️ **TOKEN GATE**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**What is the Gate?**\n` +
+                `To access PRO features, you need to hold\n` +
+                `at least **$50 worth of DTGC** tokens.\n\n` +
+                `**How to verify:**\n` +
+                `1. Buy DTGC on PulseX\n` +
+                `2. Go to dtgc.io/gold\n` +
+                `3. Connect your wallet\n` +
+                `4. Click "Link TG Bot"\n` +
+                `5. Sign the verification message\n\n` +
+                `**DTGC Contract:**\n` +
+                `\`0xD0676B28a457371D58d47E5247b439114e40Eb0F\`\n\n` +
+                `**Benefits:**\n` +
+                `✅ Access all sniper features\n` +
+                `✅ Limit orders\n` +
+                `✅ InstaBond graduation sniper\n` +
+                `✅ Anti-Rug protection\n` +
+                `✅ Portfolio tracking`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
+            return;
+        }
+        if (data === 'help_portfolio') {
+            await this.bot.sendMessage(chatId, `📈 **PORTFOLIO**\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `**Features:**\n` +
+                `• View all token holdings\n` +
+                `• Real-time USD values\n` +
+                `• P&L tracking per trade\n` +
+                `• Historical performance\n\n` +
+                `**Gold Suite (dtgc.io/gold):**\n` +
+                `• Enhanced portfolio view\n` +
+                `• Interactive charts\n` +
+                `• Trade directly from UI\n` +
+                `• Mobile-optimized\n\n` +
+                `**Tips:**\n` +
+                `• Refresh to update balances\n` +
+                `• Use Trade History for records\n` +
+                `• Gold Suite has more features!`, { parse_mode: 'Markdown', reply_markup: keyboards.helpMenuKeyboard });
             return;
         }
         // ═══════════════════════════════════════════════════════════════════════════

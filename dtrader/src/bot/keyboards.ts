@@ -11,7 +11,7 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '🔄 Refresh', callback_data: 'refresh_balance' },
-      { text: '🔗 Link Wallet', url: 'https://dtgc.io/gold' },
+      { text: 'ℹ️ Help', callback_data: 'help_menu' },
     ],
     [
       { text: '💰 Buy', callback_data: 'action_buy' },
@@ -34,10 +34,37 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
       { text: '⚙️ Settings', callback_data: 'settings' },
     ],
     [
-      { text: '🛡️ Check Token', callback_data: 'check_token' },
+      { text: '🛡️ Anti-Rug Check', callback_data: 'check_token' },
+      { text: '🔗 Link Wallet', url: 'https://dtgc.io/gold' },
     ],
     [
       { text: '⚜️ Gold Suite 📱', url: 'https://dtgc.io/gold' },
+    ],
+  ],
+};
+
+// ==================== HELP MENU ====================
+
+export const helpMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [
+      { text: '💰 Buy/Sell', callback_data: 'help_buy_sell' },
+      { text: '🎯 Sniper', callback_data: 'help_sniper' },
+    ],
+    [
+      { text: '🎓 InstaBond', callback_data: 'help_instabond' },
+      { text: '📊 Limit Orders', callback_data: 'help_orders' },
+    ],
+    [
+      { text: '🛡️ Anti-Rug', callback_data: 'help_antirug' },
+      { text: '👛 Wallets', callback_data: 'help_wallets' },
+    ],
+    [
+      { text: '⚜️ Token Gate', callback_data: 'help_gate' },
+      { text: '📈 Portfolio', callback_data: 'help_portfolio' },
+    ],
+    [
+      { text: '🔙 Main Menu', callback_data: 'main_menu' },
     ],
   ],
 };

@@ -4,6 +4,7 @@ import TelegramBot from 'node-telegram-bot-api';
  * Modeled after Maestro/Solid Trader bot structure
  */
 export declare const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
+export declare const helpMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const walletsMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const walletSelectKeyboard: (wallets: {
     index: number;
