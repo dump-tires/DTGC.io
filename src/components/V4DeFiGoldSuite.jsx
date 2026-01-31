@@ -2484,31 +2484,102 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           {/* Order Type Selection */}
           <div style={styles.card}>
             <span style={styles.label}>📊 Order Type</span>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '8px' }}>
               {[
                 { id: 'market', label: '⚡ Market', desc: 'Instant buy at current price' },
                 { id: 'limit-buy', label: '📈 Limit Buy', desc: 'Buy when price drops to target' },
                 { id: 'limit-sell', label: '📉 Limit Sell', desc: 'Sell when price rises to target' },
+                { id: 'instabond', label: '🔥 InstaBond', desc: 'Snipe at graduation + auto TP' },
               ].map(type => (
                 <button
                   key={type.id}
                   onClick={() => setSniperLimitType(type.id)}
                   style={{
-                    flex: 1,
                     padding: '12px 8px',
-                    background: sniperLimitType === type.id ? 'rgba(212,175,55,0.3)' : 'rgba(255,255,255,0.05)',
-                    border: `1px solid ${sniperLimitType === type.id ? '#D4AF37' : 'rgba(255,255,255,0.1)'}`,
+                    background: sniperLimitType === type.id
+                      ? type.id === 'instabond' ? 'linear-gradient(135deg, rgba(255,87,34,0.4), rgba(255,152,0,0.4))' : 'rgba(212,175,55,0.3)'
+                      : 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${sniperLimitType === type.id ? (type.id === 'instabond' ? '#FF5722' : '#D4AF37') : 'rgba(255,255,255,0.1)'}`,
                     borderRadius: '8px',
                     cursor: 'pointer',
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ color: sniperLimitType === type.id ? '#D4AF37' : '#fff', fontWeight: 600, fontSize: '0.8rem' }}>{type.label}</div>
+                  <div style={{ color: sniperLimitType === type.id ? (type.id === 'instabond' ? '#FF5722' : '#D4AF37') : '#fff', fontWeight: 600, fontSize: '0.8rem' }}>{type.label}</div>
                   <div style={{ color: '#888', fontSize: '0.6rem', marginTop: '4px' }}>{type.desc}</div>
                 </button>
               ))}
             </div>
           </div>
+
+          {/* InstaBond Graduation Snipe Settings */}
+          {sniperLimitType === 'instabond' && (
+            <div style={{ ...styles.card, background: 'linear-gradient(135deg, rgba(255,87,34,0.1), rgba(0,0,0,0.3))', border: '1px solid rgba(255,87,34,0.3)' }}>
+              <div style={{ color: '#FF5722', fontWeight: 700, fontSize: '0.9rem', marginBottom: '12px' }}>
+                🔥 InstaBond Graduation Snipe
+              </div>
+              <div style={{ color: '#aaa', fontSize: '0.75rem', marginBottom: '16px' }}>
+                Auto-buy at pump.tires graduation → Auto-sell at target % gain
+              </div>
+
+              {/* Take Profit % Selection */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>🎯 Take Profit at % Gain:</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                  {[
+                    { pct: 50, mult: '1.5x', sell: '66.7%' },
+                    { pct: 100, mult: '2x', sell: '50%', star: true },
+                    { pct: 150, mult: '2.5x', sell: '40%' },
+                    { pct: 200, mult: '3x', sell: '33.3%' },
+                    { pct: 300, mult: '4x', sell: '25%' },
+                    { pct: 500, mult: '6x', sell: '16.7%' },
+                  ].map(opt => (
+                    <button
+                      key={opt.pct}
+                      onClick={() => setSniperLimitPrice(opt.pct.toString())}
+                      style={{
+                        padding: '10px 6px',
+                        background: sniperLimitPrice === opt.pct.toString() ? 'rgba(255,87,34,0.3)' : 'rgba(0,0,0,0.3)',
+                        border: `1px solid ${sniperLimitPrice === opt.pct.toString() ? '#FF5722' : 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{ color: sniperLimitPrice === opt.pct.toString() ? '#FF5722' : '#fff', fontWeight: 700, fontSize: '0.9rem' }}>
+                        +{opt.pct}%
+                      </div>
+                      <div style={{ color: '#888', fontSize: '0.6rem' }}>{opt.mult}</div>
+                      {opt.star && <div style={{ color: '#4CAF50', fontSize: '0.55rem' }}>⭐ Popular</div>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Breakeven Sell % - Auto-calculated */}
+              <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>Auto-Sell for Breakeven:</div>
+                    <div style={{ color: '#4CAF50', fontWeight: 700, fontSize: '1.2rem' }}>
+                      {sniperLimitPrice ? (100 / (1 + parseInt(sniperLimitPrice) / 100)).toFixed(1) : '50'}% of tokens
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ color: '#888', fontSize: '0.65rem' }}>Recovers:</div>
+                    <div style={{ color: '#FFD700', fontWeight: 600, fontSize: '1rem' }}>100% Initial</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Math Breakdown */}
+              <div style={{ color: '#666', fontSize: '0.65rem', padding: '8px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px' }}>
+                <strong>Math:</strong> At {sniperLimitPrice || 100}% gain ({((100 + parseInt(sniperLimitPrice || '100')) / 100).toFixed(1)}x),
+                selling {sniperLimitPrice ? (100 / (1 + parseInt(sniperLimitPrice) / 100)).toFixed(1) : '50'}% returns your full investment.
+                Remaining tokens = pure profit! 🎉
+              </div>
+            </div>
+          )}
 
           {/* Limit Price Input (only for limit orders) */}
           {sniperLimitType !== 'market' && (
@@ -2568,11 +2639,15 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 }
                 setSniperExecuting(false);
               }}
-              disabled={!sniperToken || !sniperPlsAmount || !userAddress || sniperExecuting}
+              disabled={!sniperToken || !sniperPlsAmount || !userAddress || sniperExecuting || (sniperLimitType === 'instabond' && !sniperLimitPrice)}
               style={{
                 flex: 1,
                 padding: '16px',
-                background: sniperToken && sniperPlsAmount ? 'linear-gradient(135deg, #4CAF50, #2E7D32)' : 'rgba(255,255,255,0.1)',
+                background: sniperToken && sniperPlsAmount
+                  ? sniperLimitType === 'instabond'
+                    ? 'linear-gradient(135deg, #FF5722, #E64A19)'
+                    : 'linear-gradient(135deg, #4CAF50, #2E7D32)'
+                  : 'rgba(255,255,255,0.1)',
                 border: 'none',
                 borderRadius: '12px',
                 color: sniperToken && sniperPlsAmount ? '#fff' : '#666',
@@ -2581,7 +2656,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 cursor: sniperToken && sniperPlsAmount ? 'pointer' : 'not-allowed',
               }}
             >
-              {sniperExecuting ? '⏳ Executing...' : sniperLimitType === 'market' ? '🎯 SNIPE NOW' : '📈 SET LIMIT BUY'}
+              {sniperExecuting ? '⏳ Executing...' : sniperLimitType === 'market' ? '🎯 SNIPE NOW' : sniperLimitType === 'instabond' ? `🔥 ARM INSTABOND (+${sniperLimitPrice || '?'}% TP)` : '📈 SET LIMIT BUY'}
             </button>
 
             {/* SELL Button */}
