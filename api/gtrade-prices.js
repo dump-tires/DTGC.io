@@ -10,9 +10,9 @@ export default async function handler(req, res) {
   res.setHeader('Expires', '0');
 
   try {
-    // Add cache-busting timestamp to gTrade request
+    // Use the correct gTrade pricing endpoint (same as widget uses)
     const timestamp = Date.now();
-    const response = await fetch(`https://backend-arbitrum.gains.trade/prices?t=${timestamp}`, {
+    const response = await fetch(`https://backend-pricing.eu.gains.trade/charts/prices?from=gTrade&pairs=0,1,90,91&t=${timestamp}`, {
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'DTGC-MetalPerps/1.0',
@@ -25,18 +25,17 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    
-    // Log sample data for debugging
-    if (Array.isArray(data) && data.length > 0) {
-      console.log('gTrade prices fetched:', {
-        BTC: data[0],
-        ETH: data[1],
-        count: data.length,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Return the raw array (gTrade format)
+
+    // Log for debugging - data format: {0: price, 1: price, 90: price, 91: price}
+    console.log('gTrade prices fetched:', {
+      BTC: data['0'],
+      ETH: data['1'],
+      GOLD: data['90'],
+      SILVER: data['91'],
+      timestamp: new Date().toISOString()
+    });
+
+    // Return the data object
     res.status(200).json(data);
   } catch (error) {
     console.error('gTrade proxy error:', error);
