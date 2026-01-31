@@ -6,10 +6,11 @@ import { DtraderBot } from './bot';
 console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
-║   ⚜️  DTRADER Mandalorian - PulseChain v2.0      ║
+║   ⚜️  DTG BOND BOT - PulseChain v2.0             ║
+║   @DTGBondBot                                     ║
 ║                                                   ║
 ║   Features:                                       ║
-║   • Instabond Sniper (pump.tires)                ║
+║   • InstaBond Sniper (pump.tires)                ║
 ║   • New Pair Sniper                              ║
 ║   • Limit Orders (Buy/Sell)                      ║
 ║   • Stop Loss & Take Profit                      ║
@@ -21,7 +22,7 @@ console.log(`
 ║   • 0.5% → Dev Wallet (PLS)                      ║
 ║                                                   ║
 ║   Token Gate: $50 DTGC                           ║
-║   Web UI: dtgc.io/gold                     ║
+║   Web UI: dtgc.io/gold                           ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 `);

@@ -26,7 +26,7 @@ const RPC_ENDPOINTS = [
 const VERIFY_SECRET = process.env.VERIFY_SECRET || 'dtgc-gold-suite-verification-2024';
 
 // Bot username for deep links
-const BOT_USERNAME = 'DtraderSniperBot';
+const BOT_USERNAME = 'DTGBondBot';
 
 export default async function handler(req, res) {
   // CORS headers

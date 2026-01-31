@@ -13,13 +13,13 @@ import { antiRug } from '../security/antiRug';
 import * as keyboards from './keyboards';
 
 /**
- * ⚜️ DTRADER Mandalorian - PulseChain Telegram Trading Bot
+ * ⚜️ DTG BOND BOT (@DTGBondBot) - PulseChain Telegram Trading Bot
  *
  * Features:
  * - Token Gate (DTGC $50 minimum)
  * - DEX Buy/Sell via PulseX
  * - Limit Orders (buy/sell)
- * - pump.tires Instabond Sniper
+ * - pump.tires InstaBond Sniper
  * - Normal Token Sniper (new pairs)
  * - Anti-Rug Protection
  * - 1% Fee: 0.5% DTGC Burn + 0.5% Dev Wallet
@@ -313,9 +313,9 @@ export class DtraderBot {
       const { wallet, isNew } = await walletManager.getOrCreateWallet(userId);
 
       const welcomeMsg = `
-⚜️ **DTRADER Mandalorian** - PulseChain Sniper
+⚜️ **DTG BOND BOT** - PulseChain Sniper
 
-${isNew ? '✨ New wallet created!' : '👋 Welcome back, Mandalorian!'}
+${isNew ? '✨ New wallet created!' : '👋 Welcome back!'}
 
 **Your Wallet:**
 \`${wallet.address}\`
@@ -323,7 +323,7 @@ ${isNew ? '✨ New wallet created!' : '👋 Welcome back, Mandalorian!'}
 ━━━━━━━━━━━━━━━━━━━━━
 
 **Features:**
-🎯 Instabond Sniper (pump.tires)
+🎯 InstaBond Sniper (pump.tires)
 ⚡ New Pair Sniper (PulseX)
 📊 Limit Orders (Buy/Sell)
 💱 DEX Trading via PulseX
@@ -2526,7 +2526,7 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
 
   private async showHelp(chatId: string): Promise<void> {
     await this.bot.sendMessage(chatId, `
-⚜️ **DTRADER Mandalorian Help**
+⚜️ **DTG BOND BOT Help**
 
 **Quick Commands:**
 /buy <token> - Buy a token
@@ -2540,7 +2540,7 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
 **Features:**
 
 🎯 **Sniping**
-• Instabond - Auto-buy pump.tires graduations
+• InstaBond - Auto-buy pump.tires graduations
 • New Pair - Snipe new PulseX listings
 
 📊 **Orders**
@@ -2676,7 +2676,7 @@ Hold $50+ of DTGC to trade
    * Start the bot
    */
   async start(): Promise<void> {
-    console.log('🚀 Starting Dtrader bot...');
+    console.log('🚀 Starting @DTGBondBot...');
 
     // Connect snipers
     await graduationSniper.connect();
@@ -2688,14 +2688,14 @@ Hold $50+ of DTGC to trade
     // Start order engine
     await limitOrderEngine.start();
 
-    console.log('✅ Dtrader bot is running!');
+    console.log('✅ @DTGBondBot is running!');
   }
 
   /**
    * Stop the bot
    */
   async stop(): Promise<void> {
-    console.log('🛑 Stopping Dtrader bot...');
+    console.log('🛑 Stopping @DTGBondBot...');
     await graduationSniper.disconnect();
     await mempoolSniper.disconnect();
     limitOrderEngine.stop();

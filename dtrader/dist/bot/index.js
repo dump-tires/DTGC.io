@@ -258,9 +258,9 @@ class DtraderBot {
             }
             const { wallet, isNew } = await wallet_1.walletManager.getOrCreateWallet(userId);
             const welcomeMsg = `
-⚜️ **DTRADER Mandalorian** - PulseChain Sniper
+⚜️ **DTG BOND BOT** - PulseChain Sniper
 
-${isNew ? '✨ New wallet created!' : '👋 Welcome back, Mandalorian!'}
+${isNew ? '✨ New wallet created!' : '👋 Welcome back!'}
 
 **Your Wallet:**
 \`${wallet.address}\`
@@ -268,7 +268,7 @@ ${isNew ? '✨ New wallet created!' : '👋 Welcome back, Mandalorian!'}
 ━━━━━━━━━━━━━━━━━━━━━
 
 **Features:**
-🎯 Instabond Sniper (pump.tires)
+🎯 InstaBond Sniper (pump.tires)
 ⚡ New Pair Sniper (PulseX)
 📊 Limit Orders (Buy/Sell)
 💱 DEX Trading via PulseX
@@ -2040,7 +2040,7 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
     }
     async showHelp(chatId) {
         await this.bot.sendMessage(chatId, `
-⚜️ **DTRADER Mandalorian Help**
+⚜️ **DTG BOND BOT Help**
 
 **Quick Commands:**
 /buy <token> - Buy a token
@@ -2054,7 +2054,7 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
 **Features:**
 
 🎯 **Sniping**
-• Instabond - Auto-buy pump.tires graduations
+• InstaBond - Auto-buy pump.tires graduations
 • New Pair - Snipe new PulseX listings
 
 📊 **Orders**
@@ -2163,7 +2163,7 @@ Hold $50+ of DTGC to trade
      * Start the bot
      */
     async start() {
-        console.log('🚀 Starting Dtrader bot...');
+        console.log('🚀 Starting @DTGBondBot...');
         // Connect snipers
         await graduation_1.graduationSniper.connect();
         await graduation_1.graduationSniper.startListening();
@@ -2171,13 +2171,13 @@ Hold $50+ of DTGC to trade
         await mempool_1.mempoolSniper.start();
         // Start order engine
         await limitOrder_1.limitOrderEngine.start();
-        console.log('✅ Dtrader bot is running!');
+        console.log('✅ @DTGBondBot is running!');
     }
     /**
      * Stop the bot
      */
     async stop() {
-        console.log('🛑 Stopping Dtrader bot...');
+        console.log('🛑 Stopping @DTGBondBot...');
         await graduation_1.graduationSniper.disconnect();
         await mempool_1.mempoolSniper.disconnect();
         limitOrder_1.limitOrderEngine.stop();
