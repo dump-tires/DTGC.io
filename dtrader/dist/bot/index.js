@@ -68,6 +68,7 @@ class DtraderBot {
     getSession(chatId) {
         if (!this.sessions.has(chatId)) {
             this.sessions.set(chatId, {
+                snipeOrders: [],
                 settings: {
                     slippage: 10,
                     gasLimit: 500000,
@@ -467,6 +468,29 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
                 session.pendingAction = undefined;
                 session.pendingToken = undefined;
             }
+            return;
+        }
+        // Snipe list - show all pending snipes
+        if (data === 'snipe_list') {
+            await this.showSnipeOrders(chatId, userId);
+            return;
+        }
+        // Cancel a specific snipe
+        if (data.startsWith('cancel_snipe_')) {
+            const orderId = data.replace('cancel_snipe_', '');
+            await this.cancelSnipe(chatId, orderId);
+            return;
+        }
+        // Quick sell from filled snipe
+        if (data.startsWith('quick_sell_')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const tokenAddress = data.replace('quick_sell_', '');
+            session.pendingToken = tokenAddress;
+            session.pendingAction = 'sell_percent';
+            await this.bot.sendMessage(chatId, '📊 Select percentage to sell:', {
+                reply_markup: keyboards.sellPercentKeyboard,
+            });
             return;
         }
         // Order actions
@@ -1058,6 +1082,24 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
     async setupInstaSnipe(chatId, userId, tokenAddress, plsAmount) {
         const session = this.getSession(chatId);
         try {
+            // Get wallet info
+            const walletId = session.linkedWallet ? userId : `${userId}_snipe_1`;
+            const wallet = await wallet_1.walletManager.getWallet(walletId);
+            const walletAddress = session.linkedWallet || wallet?.address || 'Unknown';
+            const walletLabel = session.linkedWallet ? 'Linked Wallet' : 'Snipe Wallet 1';
+            // Create snipe order ticket
+            const orderId = `SNP-${Date.now().toString(36).toUpperCase()}`;
+            const snipeOrder = {
+                id: orderId,
+                tokenAddress,
+                walletId,
+                walletAddress: walletAddress.slice(0, 10) + '...' + walletAddress.slice(-6),
+                amountPls: plsAmount,
+                status: 'pending',
+                createdAt: Date.now(),
+            };
+            // Store the order
+            session.snipeOrders.push(snipeOrder);
             // Set up graduation snipe using watchToken
             graduation_1.graduationSniper.watchToken(tokenAddress, {
                 amountPls: BigInt(plsAmount) * BigInt(10 ** 18),
@@ -1065,16 +1107,32 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
                 gasLimit: session.settings.gasLimit,
                 gasPriceMultiplier: 1.5,
             });
-            await this.bot.sendMessage(chatId, `✅ **Insta-Snipe Set!**\n\n` +
-                `**Token:** \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n` +
-                `**Amount:** ${(plsAmount / 1_000_000).toFixed(0)}M PLS\n\n` +
-                `🎯 Will auto-buy when token graduates!\n\n` +
-                `_Set and forget - bot will execute automatically._`, {
+            // Format amount display
+            const amountDisplay = plsAmount >= 1_000_000
+                ? `${(plsAmount / 1_000_000).toFixed(0)}M PLS`
+                : `${(plsAmount / 1_000).toFixed(0)}K PLS`;
+            // Send receipt ticket
+            await this.bot.sendMessage(chatId, `🎫 **SNIPE ORDER CONFIRMED**\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `🆔 **Order ID:** \`${orderId}\`\n` +
+                `📊 **Status:** 🟡 PENDING\n\n` +
+                `**Target Token:**\n` +
+                `\`${tokenAddress}\`\n\n` +
+                `**Wallet:** ${walletLabel}\n` +
+                `\`${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}\`\n\n` +
+                `💰 **Bullet Loaded:** ${amountDisplay}\n` +
+                `⚙️ **Slippage:** ${session.settings.slippage}%\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n` +
+                `🎯 **ARMED & WAITING**\n` +
+                `Will auto-execute on graduation!\n\n` +
+                `_View Gold Suite for P&L tracking_`, {
                 parse_mode: 'Markdown',
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: '🔥 View Near Graduation', callback_data: 'pump_near_grad' }],
-                        [{ text: '📋 My Snipes', callback_data: 'snipe_list' }],
+                        [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
+                        [{ text: '❌ Cancel This Snipe', callback_data: `cancel_snipe_${orderId}` }],
+                        [{ text: '🔥 Snipe Another', callback_data: 'pump_near_grad' }],
+                        [{ text: '⚜️ Gold Suite P&L', url: 'https://dtgc.io/gold' }],
                         [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
                     ],
                 },
@@ -1084,6 +1142,98 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             console.error('Failed to setup insta-snipe:', error);
             await this.bot.sendMessage(chatId, `❌ Failed to set up snipe. Try again.`, { reply_markup: keyboards.mainMenuKeyboard });
         }
+    }
+    /**
+     * Show all snipe orders for user
+     */
+    async showSnipeOrders(chatId, userId) {
+        const session = this.getSession(chatId);
+        const orders = session.snipeOrders || [];
+        if (orders.length === 0) {
+            await this.bot.sendMessage(chatId, `📋 **My Snipe Orders**\n\n` +
+                `_No active snipes. Set one up!_`, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🔥 TOP 10 Near Graduation', callback_data: 'pump_near_grad' }],
+                        [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+                    ],
+                },
+            });
+            return;
+        }
+        let msg = `📋 **MY SNIPE ORDERS**\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        const buttons = [];
+        for (const order of orders) {
+            const statusEmoji = order.status === 'pending' ? '🟡' :
+                order.status === 'triggered' ? '🟠' :
+                    order.status === 'filled' ? '🟢' : '🔴';
+            const statusText = order.status.toUpperCase();
+            const amountDisplay = order.amountPls >= 1_000_000
+                ? `${(order.amountPls / 1_000_000).toFixed(0)}M`
+                : `${(order.amountPls / 1_000).toFixed(0)}K`;
+            msg += `${statusEmoji} **${order.id}** - ${statusText}\n`;
+            msg += `Token: \`${order.tokenAddress.slice(0, 8)}...${order.tokenAddress.slice(-6)}\`\n`;
+            msg += `💰 ${amountDisplay} PLS → ${order.walletAddress}\n`;
+            if (order.status === 'filled' && order.tokensReceived) {
+                msg += `✅ Got: ${order.tokensReceived} tokens\n`;
+                // Add quick sell button for filled orders
+                buttons.push([
+                    { text: `💸 Sell ${order.id}`, callback_data: `quick_sell_${order.tokenAddress}` },
+                    { text: `❌ Remove`, callback_data: `cancel_snipe_${order.id}` },
+                ]);
+            }
+            else if (order.status === 'pending') {
+                buttons.push([
+                    { text: `❌ Cancel ${order.id}`, callback_data: `cancel_snipe_${order.id}` },
+                ]);
+            }
+            msg += `\n`;
+        }
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        msg += `_${orders.filter(o => o.status === 'pending').length} pending, `;
+        msg += `${orders.filter(o => o.status === 'filled').length} filled_`;
+        buttons.push([{ text: '🔥 Add New Snipe', callback_data: 'pump_near_grad' }]);
+        buttons.push([{ text: '⚜️ Gold Suite P&L', url: 'https://dtgc.io/gold' }]);
+        buttons.push([{ text: '🔙 Main Menu', callback_data: 'main_menu' }]);
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: buttons },
+        });
+    }
+    /**
+     * Cancel a snipe order
+     */
+    async cancelSnipe(chatId, orderId) {
+        const session = this.getSession(chatId);
+        const orderIndex = session.snipeOrders.findIndex(o => o.id === orderId);
+        if (orderIndex === -1) {
+            await this.bot.sendMessage(chatId, `❌ Order ${orderId} not found.`);
+            return;
+        }
+        const order = session.snipeOrders[orderIndex];
+        // Remove from watchlist
+        try {
+            graduation_1.graduationSniper.unwatchToken(order.tokenAddress);
+        }
+        catch (e) {
+            // May not be watching, that's ok
+        }
+        // Remove from session
+        session.snipeOrders.splice(orderIndex, 1);
+        await this.bot.sendMessage(chatId, `✅ **Order Cancelled**\n\n` +
+            `🆔 ${orderId}\n` +
+            `Token: \`${order.tokenAddress.slice(0, 12)}...${order.tokenAddress.slice(-6)}\`\n\n` +
+            `💰 ${(order.amountPls / 1_000_000).toFixed(0)}M PLS returned to wallet.`, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
+                    [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+                ],
+            },
+        });
     }
     async showFeeStats(chatId) {
         try {

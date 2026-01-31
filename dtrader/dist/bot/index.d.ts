@@ -47,6 +47,14 @@ export declare class DtraderBot {
      * Set up Insta-Snipe for a token (executes on graduation)
      */
     private setupInstaSnipe;
+    /**
+     * Show all snipe orders for user
+     */
+    private showSnipeOrders;
+    /**
+     * Cancel a snipe order
+     */
+    private cancelSnipe;
     private showFeeStats;
     private showHelp;
     private setupSniperEvents;
