@@ -7,8 +7,8 @@ exports.PULSEX_PAIR_ABI = exports.PULSEX_FACTORY_ABI = exports.PULSEX_ROUTER_ABI
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 exports.config = {
-    // Telegram
-    telegramToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    // Telegram - accepts both BOT_TOKEN and TELEGRAM_BOT_TOKEN
+    telegramToken: process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '',
     // PulseChain Network
     rpc: process.env.PULSECHAIN_RPC || 'https://rpc.pulsechain.com',
     wss: process.env.PULSECHAIN_WSS || 'wss://rpc.pulsechain.com',

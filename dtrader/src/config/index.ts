@@ -2,8 +2,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export const config = {
-  // Telegram
-  telegramToken: process.env.TELEGRAM_BOT_TOKEN || '',
+  // Telegram - accepts both BOT_TOKEN and TELEGRAM_BOT_TOKEN
+  telegramToken: process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '',
 
   // PulseChain Network
   rpc: process.env.PULSECHAIN_RPC || 'https://rpc.pulsechain.com',

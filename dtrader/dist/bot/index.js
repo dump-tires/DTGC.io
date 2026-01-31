@@ -54,10 +54,16 @@ class DtraderBot {
     bot;
     sessions = new Map();
     constructor() {
+        // Validate token before starting
+        if (!config_1.config.telegramToken) {
+            throw new Error('❌ BOT_TOKEN environment variable is not set! Please set it in Railway.');
+        }
+        console.log('🔑 Bot token found, initializing...');
         this.bot = new node_telegram_bot_api_1.default(config_1.config.telegramToken, { polling: true });
         this.setupHandlers();
         this.setupSniperEvents();
         this.setupOrderEvents();
+        console.log('✅ Bot handlers initialized');
     }
     getSession(chatId) {
         if (!this.sessions.has(chatId)) {
