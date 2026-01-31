@@ -74,10 +74,10 @@ const mainKeyboard = {
     ],
     [
       { text: '⚡ Swap', callback_data: 'swap' },
-      { text: '🔥 InstaBondSnipe', callback_data: 'bonds' },
+      { text: '🎯 Sniper Tab', callback_data: 'sniper_tab' },
     ],
     [
-      { text: '📈 Limit Orders', callback_data: 'orders' },
+      { text: '🔥 InstaBondSnipe', callback_data: 'bonds' },
       { text: '👛 Portfolio', callback_data: 'portfolio' },
     ],
     [
@@ -198,6 +198,37 @@ bot.onText(/\/dtgc/, async (msg) => {
   );
 });
 
+// /snipe - NEW Sniper Tab features
+bot.onText(/\/snipe/, async (msg) => {
+  const chatId = msg.chat.id;
+  await bot.sendMessage(chatId,
+    `🎯 *MANDALORIAN SNIPER TAB* 🎯\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `*NEW FEATURES:*\n\n` +
+    `📋 *Paste CA* - Any contract address\n` +
+    `💜 *Set PLS Amount* - 25% / 50% / 100%\n` +
+    `📊 *Order Types:*\n` +
+    `   • ⚡ Market (instant buy)\n` +
+    `   • 📈 Limit Buy (buy the dip)\n` +
+    `   • 📉 Limit Sell (take profit)\n\n` +
+    `💎 *Silver Laser P&L Card*\n` +
+    `   • Invested / Current / Realized\n` +
+    `   • % Return tracking\n` +
+    `   • Trade history\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `_"This is the way." - The Mandalorian_`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🎯 OPEN SNIPER TAB', url: config.LINKS.GOLD }],
+          [{ text: '⬅️ Back', callback_data: 'menu' }],
+        ],
+      },
+    }
+  );
+});
+
 // /help
 bot.onText(/\/help/, async (msg) => {
   const chatId = msg.chat.id;
@@ -205,6 +236,7 @@ bot.onText(/\/help/, async (msg) => {
     `📖 *DTRADER Commands*\n\n` +
     `/start - Main menu\n` +
     `/sniper - Open sniper interface\n` +
+    `/snipe - NEW Sniper Tab features\n` +
     `/gold - DTGC Gold web app\n` +
     `/dtgc - Token info\n` +
     `/fees - Fee structure\n` +
@@ -281,6 +313,37 @@ bot.on('callback_query', async (query) => {
             reply_markup: {
               inline_keyboard: [
                 [{ text: '⚡ Open Swap', url: config.LINKS.GOLD }],
+                [{ text: '⬅️ Back', callback_data: 'menu' }],
+              ],
+            },
+          }
+        );
+        break;
+
+      case 'sniper_tab':
+        await bot.editMessageText(
+          `🎯 *MANDALORIAN SNIPER TAB* 🎯\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `*NEW FEATURES:*\n\n` +
+          `📋 *Paste CA* - Any contract address\n` +
+          `💜 *Set PLS Amount* - 25% / 50% / 100%\n` +
+          `📊 *Order Types:*\n` +
+          `   • ⚡ Market (instant buy)\n` +
+          `   • 📈 Limit Buy (buy the dip)\n` +
+          `   • 📉 Limit Sell (take profit)\n\n` +
+          `💎 *Silver Laser P&L Card*\n` +
+          `   • Invested / Current / Realized\n` +
+          `   • % Return tracking\n` +
+          `   • Trade history\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `_"This is the way."_`,
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🎯 OPEN SNIPER TAB', url: config.LINKS.GOLD }],
                 [{ text: '⬅️ Back', callback_data: 'menu' }],
               ],
             },
