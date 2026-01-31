@@ -349,11 +349,26 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
         return;
       }
 
+      // Fetch real current price from PulseX
+      let currentPrice = position.buyPrice; // Default to buy price
+      try {
+        const pairInfo = await pulsex.getPairInfo(input);
+        if (pairInfo && pairInfo.reserve0 > 0n && pairInfo.reserve1 > 0n) {
+          // Calculate price: PLS reserve / token reserve (assuming token1 is WPLS)
+          const priceInPls = Number(pairInfo.reserve1) / Number(pairInfo.reserve0);
+          if (priceInPls > 0) {
+            currentPrice = priceInPls;
+          }
+        }
+      } catch (e) {
+        console.log('Could not fetch current price, using buy price');
+      }
+
       const pnlMsg = generatePnLMessage({
         tokenName: position.tokenName,
         contractAddress: input,
         buyPrice: position.buyPrice,
-        currentPrice: position.buyPrice * 1.5, // TODO: fetch real price
+        currentPrice: currentPrice,
         amount: position.amount,
       });
 
@@ -549,6 +564,78 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
       return;
     }
 
+    // Snipe specific CA from pump.tires
+    if (data === 'pump_snipe_token') {
+      if (!await this.checkGate(chatId, userId)) return;
+      session.pendingAction = 'pump_snipe_ca';
+      await this.bot.sendMessage(chatId,
+        `🎯 **Snipe Specific Token**\n\n` +
+        `Enter the pump.tires token contract address:`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Cancel all snipes
+    if (data === 'snipe_cancel_all') {
+      const cancelled = session.snipeOrders.filter(o => o.status === 'pending').length;
+      session.snipeOrders = session.snipeOrders.filter(o => o.status !== 'pending');
+      await this.bot.sendMessage(chatId,
+        `✅ Cancelled ${cancelled} pending snipes.`,
+        { reply_markup: keyboards.snipeMenuKeyboard }
+      );
+      return;
+    }
+
+    // Portfolio view
+    if (data === 'portfolio') {
+      await this.showPortfolio(chatId, userId);
+      return;
+    }
+
+    // Settings toggles
+    if (data === 'toggle_antirug') {
+      session.settings.antiRug = !session.settings.antiRug;
+      await this.bot.sendMessage(chatId,
+        `🛡️ Anti-Rug Protection: ${session.settings.antiRug ? '**ON** ✅' : '**OFF** ❌'}`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard }
+      );
+      return;
+    }
+
+    if (data === 'toggle_alerts') {
+      session.settings.alerts = !session.settings.alerts;
+      await this.bot.sendMessage(chatId,
+        `🔔 Trade Alerts: ${session.settings.alerts ? '**ON** ✅' : '**OFF** ❌'}`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard }
+      );
+      return;
+    }
+
+    if (data === 'set_slippage') {
+      await this.bot.sendMessage(chatId,
+        `📊 Current slippage: **${session.settings.slippage}%**\n\nSelect new slippage:`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.slippageKeyboard }
+      );
+      return;
+    }
+
+    // Slippage selection
+    if (data.startsWith('slip_')) {
+      const slip = data.replace('slip_', '');
+      if (slip === 'custom') {
+        session.pendingAction = 'set_custom_slippage';
+        await this.bot.sendMessage(chatId, '📝 Enter custom slippage percentage (1-100):');
+      } else {
+        session.settings.slippage = parseInt(slip);
+        await this.bot.sendMessage(chatId,
+          `✅ Slippage set to **${slip}%**`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard }
+        );
+      }
+      return;
+    }
+
     // Top 10 Near Graduation tokens
     if (data === 'pump_near_grad') {
       if (!await this.checkGate(chatId, userId)) return;
@@ -567,6 +654,18 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
         `Token: \`${tokenAddress.slice(0, 10)}...${tokenAddress.slice(-8)}\`\n\n` +
         `Select PLS amount per wallet:`,
         { parse_mode: 'Markdown', reply_markup: keyboards.snipeAmountKeyboard }
+      );
+      return;
+    }
+
+    // Custom snipe amount - prompt user to enter amount
+    if (data === 'snipe_amt_custom' && session.pendingAction === 'instasnipe_amount') {
+      session.pendingAction = 'instasnipe_custom_amount';
+      await this.bot.sendMessage(chatId,
+        `📝 **Enter Custom PLS Amount**\n\n` +
+        `Token: \`${session.pendingToken?.slice(0, 12)}...\`\n\n` +
+        `Enter amount in PLS (e.g., 2500000 for 2.5M):`,
+        { parse_mode: 'Markdown' }
       );
       return;
     }
@@ -811,6 +910,66 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
 
       await this.enableAutoSnipe(chatId, userId, amount);
       session.pendingAction = undefined;
+      return;
+    }
+
+    // Pump.tires snipe specific CA
+    if (session.pendingAction === 'pump_snipe_ca') {
+      if (!ethers.isAddress(text)) {
+        await this.bot.sendMessage(chatId, '❌ Invalid contract address. Try again:');
+        return;
+      }
+      session.pendingToken = text;
+      session.pendingAction = 'instasnipe_amount';
+      await this.bot.sendMessage(chatId,
+        `🎯 **Insta-Snipe Setup**\n\n` +
+        `Token: \`${text.slice(0, 10)}...${text.slice(-8)}\`\n\n` +
+        `Select PLS amount per wallet:`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.snipeAmountKeyboard }
+      );
+      return;
+    }
+
+    // Custom slippage setting
+    if (session.pendingAction === 'set_custom_slippage') {
+      const slippage = parseFloat(text);
+      if (isNaN(slippage) || slippage < 1 || slippage > 100) {
+        await this.bot.sendMessage(chatId, '❌ Invalid slippage. Enter 1-100:');
+        return;
+      }
+      session.settings.slippage = Math.floor(slippage);
+      session.pendingAction = undefined;
+      await this.bot.sendMessage(chatId,
+        `✅ Slippage set to **${session.settings.slippage}%**`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard }
+      );
+      return;
+    }
+
+    // Custom insta-snipe amount -> then gas priority
+    if (session.pendingAction === 'instasnipe_custom_amount') {
+      const amount = parseFloat(text);
+      if (isNaN(amount) || amount <= 0) {
+        await this.bot.sendMessage(chatId, '❌ Invalid amount. Enter a positive number:');
+        return;
+      }
+
+      session.pendingAmount = Math.floor(amount).toString();
+      session.pendingAction = 'instasnipe_gas';
+
+      const amountDisplay = amount >= 1_000_000
+        ? `${(amount / 1_000_000).toFixed(1)}M`
+        : amount >= 1_000
+          ? `${(amount / 1_000).toFixed(0)}K`
+          : amount.toString();
+
+      await this.bot.sendMessage(chatId,
+        `⛽ **Select Gas Priority**\n\n` +
+        `Higher gas = faster execution = first-mover advantage!\n\n` +
+        `💰 Amount: ${amountDisplay} PLS\n` +
+        `🎯 Token: \`${session.pendingToken?.slice(0, 12)}...\``,
+        { parse_mode: 'Markdown', reply_markup: keyboards.gasPriorityKeyboard }
+      );
       return;
     }
 
@@ -1469,6 +1628,66 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
     await this.bot.sendMessage(chatId, msg, {
       parse_mode: 'Markdown',
       reply_markup: keyboards.walletsMenuKeyboard,
+    });
+  }
+
+  /**
+   * Show portfolio with all positions and P&L
+   */
+  private async showPortfolio(chatId: string, userId: string): Promise<void> {
+    await this.bot.sendMessage(chatId, '📊 Loading portfolio...');
+
+    const session = this.getSession(chatId);
+    const positions = positionStore.getPositions(userId);
+
+    if (!positions || positions.length === 0) {
+      await this.bot.sendMessage(chatId,
+        `📈 **Portfolio** ⚜️\n\n` +
+        `_No positions yet. Start trading!_`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboards.mainMenuKeyboard,
+        }
+      );
+      return;
+    }
+
+    let msg = `📈 **PORTFOLIO** ⚜️\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    let totalInvested = 0;
+    let totalValue = 0;
+
+    for (const pos of positions) {
+      // Get current price
+      let currentPrice = pos.buyPrice;
+      try {
+        const pairInfo = await pulsex.getPairInfo(pos.tokenAddress);
+        if (pairInfo && pairInfo.reserve0 > 0n && pairInfo.reserve1 > 0n) {
+          const priceInPls = Number(pairInfo.reserve1) / Number(pairInfo.reserve0);
+          if (priceInPls > 0) currentPrice = priceInPls;
+        }
+      } catch {}
+
+      const invested = pos.amount * pos.buyPrice;
+      const value = pos.amount * currentPrice;
+      const pnlPct = ((currentPrice - pos.buyPrice) / pos.buyPrice) * 100;
+      const pnlEmoji = pnlPct >= 0 ? '🟢' : '🔴';
+
+      totalInvested += invested;
+      totalValue += value;
+
+      msg += `${pnlEmoji} **${pos.tokenName || 'Unknown'}**\n`;
+      msg += `Amt: ${pos.amount.toFixed(2)} | P&L: ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%\n\n`;
+    }
+
+    const totalPnlPct = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `💰 **Total P&L:** ${totalPnlPct >= 0 ? '+' : ''}${totalPnlPct.toFixed(1)}%\n`;
+
+    await this.bot.sendMessage(chatId, msg, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboards.mainMenuKeyboard,
     });
   }
 

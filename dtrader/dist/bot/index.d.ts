@@ -49,6 +49,10 @@ export declare class DtraderBot {
      */
     private showAllWalletAddresses;
     /**
+     * Show portfolio with all positions and P&L
+     */
+    private showPortfolio;
+    /**
      * Show Top 10 tokens closest to graduation from pump.tires
      */
     private showNearGradTokens;

@@ -184,6 +184,9 @@ export default function MetalPerpsWidget() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...params }),
       });
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
       const data = await response.json();
       return data;
     } catch (error) {
@@ -221,6 +224,7 @@ export default function MetalPerpsWidget() {
     // This returns an array where index = pair ID (0=BTC, 1=ETH, 90=GOLD, 91=SILVER)
     try {
       const res = await fetch('/api/gtrade-prices');
+      if (!res.ok) throw new Error(`gTrade API returned ${res.status}`);
       const data = await res.json();
 
       if (Array.isArray(data) && data.length > 90) {
@@ -327,6 +331,10 @@ export default function MetalPerpsWidget() {
 
   // Close trade
   const closeTrade = async (tradeIndex) => {
+    if (tradeIndex === undefined || tradeIndex === null) {
+      showToast('Invalid position index', 'error');
+      return;
+    }
     setLoading(true);
     try {
       const result = await apiCall('CLOSE_TRADE', { tradeIndex });
