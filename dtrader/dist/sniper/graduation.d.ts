@@ -72,6 +72,13 @@ export declare class GraduationSniper extends EventEmitter {
     formatTokenState(state: TokenState): string;
     private createProgressBar;
     /**
+     * Fallback polling mode when WebSocket is unavailable
+     * Checks watched tokens periodically for graduation
+     */
+    private pollingInterval;
+    private startPollingMode;
+    private stopPollingMode;
+    /**
      * Close connections
      */
     disconnect(): Promise<void>;

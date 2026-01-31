@@ -1,6 +1,8 @@
 export declare class DtraderBot {
     private bot;
     private sessions;
+    private pollingErrorCount;
+    private maxPollingErrors;
     constructor();
     private getSession;
     /**

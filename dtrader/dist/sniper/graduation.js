@@ -122,8 +122,14 @@ class GraduationSniper extends events_1.EventEmitter {
      * Start listening for graduation events
      */
     async startListening() {
-        if (!this.wsProvider || !this.pumpTiresContract) {
-            console.error('WebSocket or contract not initialized');
+        if (!this.wsProvider) {
+            console.log('⚠️ WebSocket not connected - graduation sniper will use polling mode');
+            // Start polling mode as fallback
+            this.startPollingMode();
+            return;
+        }
+        if (!this.pumpTiresContract) {
+            console.log('⚠️ pump.tires contract not configured - set PUMP_TIRES_CONTRACT env var');
             return;
         }
         this.isListening = true;
@@ -237,10 +243,49 @@ ${state.pairAddress ? `🔗 Pair: ${state.pairAddress}` : ''}
         return '█'.repeat(filled) + '░'.repeat(empty);
     }
     /**
+     * Fallback polling mode when WebSocket is unavailable
+     * Checks watched tokens periodically for graduation
+     */
+    pollingInterval = null;
+    startPollingMode() {
+        if (this.pollingInterval)
+            return;
+        console.log('📊 Starting graduation sniper in polling mode (every 10s)');
+        this.pollingInterval = setInterval(async () => {
+            for (const [tokenAddress, config] of this.watchedTokens) {
+                try {
+                    const state = await this.getTokenState(tokenAddress);
+                    if (state && state.graduated && state.pairAddress) {
+                        console.log(`🎓 Token graduated (polling): ${state.symbol}`);
+                        this.emit('graduation', {
+                            token: tokenAddress,
+                            pair: state.pairAddress,
+                            liquidity: state.plsRaised,
+                        });
+                        await this.executeSnipe(tokenAddress, config);
+                    }
+                    else if (state && state.percentToGraduation >= 90) {
+                        this.emit('nearGraduation', state);
+                    }
+                }
+                catch (error) {
+                    // Silently continue on individual token errors
+                }
+            }
+        }, 10000);
+    }
+    stopPollingMode() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+    }
+    /**
      * Close connections
      */
     async disconnect() {
         this.stopListening();
+        this.stopPollingMode();
         if (this.wsProvider) {
             await this.wsProvider.destroy();
             this.wsProvider = null;

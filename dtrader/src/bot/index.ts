@@ -90,6 +90,8 @@ interface UserSession {
 export class DtraderBot {
   private bot: TelegramBot;
   private sessions: Map<string, UserSession> = new Map();
+  private pollingErrorCount: number = 0;
+  private maxPollingErrors: number = 10;
 
   constructor() {
     // Validate token before starting
@@ -98,7 +100,41 @@ export class DtraderBot {
     }
 
     console.log('🔑 Bot token found, initializing...');
-    this.bot = new TelegramBot(config.telegramToken, { polling: true });
+    this.bot = new TelegramBot(config.telegramToken, {
+      polling: {
+        interval: 300,
+        autoStart: true,
+        params: {
+          timeout: 10,
+        },
+      },
+    });
+
+    // Handle polling errors (409 conflicts from multiple instances)
+    this.bot.on('polling_error', (error: any) => {
+      this.pollingErrorCount++;
+
+      if (error.code === 'ETELEGRAM' && error.message.includes('409')) {
+        // 409 Conflict - another bot instance is running
+        if (this.pollingErrorCount === 1) {
+          console.log('⚠️ Another bot instance detected. Waiting for it to stop...');
+        }
+
+        // After too many errors, restart polling
+        if (this.pollingErrorCount >= this.maxPollingErrors) {
+          console.log('🔄 Restarting polling after conflict resolution...');
+          this.pollingErrorCount = 0;
+          this.bot.stopPolling().then(() => {
+            setTimeout(() => {
+              this.bot.startPolling();
+            }, 5000);
+          });
+        }
+      } else {
+        console.error('⚠️ Polling error:', error.message);
+      }
+    });
+
     this.setupHandlers();
     this.setupSniperEvents();
     this.setupOrderEvents();

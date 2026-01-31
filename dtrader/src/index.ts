@@ -26,31 +26,47 @@ console.log(`
 ╚═══════════════════════════════════════════════════╝
 `);
 
-const bot = new DtraderBot();
+// Wait for old deployment to release polling lock
+// Railway blue-green deployments can cause 409 conflicts
+const STARTUP_DELAY = parseInt(process.env.STARTUP_DELAY_MS || '5000');
+console.log(`⏳ Waiting ${STARTUP_DELAY/1000}s for clean startup...`);
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down...');
-  await bot.stop();
-  process.exit(0);
-});
+setTimeout(() => {
+  const bot = new DtraderBot();
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('⚠️ Unhandled Rejection:', reason);
-  // Don't exit - keep running
-});
+  // Graceful shutdown
+  process.on('SIGINT', async () => {
+    console.log('\n🛑 Shutting down...');
+    await bot.stop();
+    process.exit(0);
+  });
 
-process.on('uncaughtException', (error) => {
-  console.error('⚠️ Uncaught Exception:', error.message);
-  // Don't exit for WebSocket errors
-  if (!error.message.includes('401') && !error.message.includes('WebSocket')) {
-    process.exit(1);
-  }
-});
+  process.on('SIGTERM', async () => {
+    console.log('\n🛑 SIGTERM received, shutting down...');
+    await bot.stop();
+    process.exit(0);
+  });
 
-bot.start().then(() => {
-  console.log('\n✅ Bot is live! Send /start to your Telegram bot.');
-  console.log('   Press Ctrl+C to stop.\n');
-}).catch((err) => {
-  console.error('❌ Failed to start:', err);
-});
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ Unhandled Rejection:', reason);
+    // Don't exit - keep running
+  });
+
+  process.on('uncaughtException', (error) => {
+    console.error('⚠️ Uncaught Exception:', error.message);
+    // Don't exit for WebSocket or polling errors
+    if (!error.message.includes('401') &&
+        !error.message.includes('WebSocket') &&
+        !error.message.includes('409') &&
+        !error.message.includes('ETELEGRAM')) {
+      process.exit(1);
+    }
+  });
+
+  bot.start().then(() => {
+    console.log('\n✅ Bot is live! Send /start to your Telegram bot.');
+    console.log('   Press Ctrl+C to stop.\n');
+  }).catch((err) => {
+    console.error('❌ Failed to start:', err);
+  });
+}, STARTUP_DELAY);
