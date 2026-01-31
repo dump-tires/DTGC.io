@@ -5090,36 +5090,23 @@ export default function App() {
     return () => clearInterval(interval);
   }, [fetchLivePrices]);
 
-  // Fetch crypto prices (BTC, ETH, PLS, PLSX) - MULTI-SOURCE FOR ACCURACY
+  // Fetch crypto prices (BTC, ETH, PLS, PLSX) - USING OUR CORS PROXY
   const fetchCryptoPrices = useCallback(async () => {
     try {
-      let btcPrice = 89500, ethPrice = 2950;
-      
-      // PRIMARY: Binance public API (most accurate, no rate limits)
+      let btcPrice = 105000, ethPrice = 3300;
+
+      // Use our CORS proxy endpoint to avoid CORS issues
       try {
-        const [btcRes, ethRes] = await Promise.all([
-          fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
-          fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT')
-        ]);
-        const btcData = await btcRes.json();
-        const ethData = await ethRes.json();
-        
-        if (btcData?.price) btcPrice = parseFloat(btcData.price);
-        if (ethData?.price) ethPrice = parseFloat(ethData.price);
-        console.log('💰 Binance prices:', { btc: btcPrice.toFixed(2), eth: ethPrice.toFixed(2) });
-      } catch (binanceErr) {
-        console.warn('Binance API failed, trying CoinGecko...', binanceErr.message);
-        
-        // FALLBACK: CoinGecko
-        try {
-          const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd');
-          const cgData = await cgRes.json();
-          if (cgData?.bitcoin?.usd) btcPrice = cgData.bitcoin.usd;
-          if (cgData?.ethereum?.usd) ethPrice = cgData.ethereum.usd;
-          console.log('💰 CoinGecko prices:', { btc: btcPrice.toFixed(2), eth: ethPrice.toFixed(2) });
-        } catch (cgErr) {
-          console.warn('CoinGecko also failed:', cgErr.message);
+        const res = await fetch('/api/crypto-prices');
+        const data = await res.json();
+
+        if (data?.success && data?.prices) {
+          btcPrice = data.prices.btc || btcPrice;
+          ethPrice = data.prices.eth || ethPrice;
+          console.log(`💰 Crypto prices (${data.source}):`, { btc: btcPrice.toFixed(2), eth: ethPrice.toFixed(2) });
         }
+      } catch (proxyErr) {
+        console.warn('Crypto proxy failed, using fallback prices:', proxyErr.message);
       }
 
       // Fetch PLS from DexScreener - use WPLS/DAI pair (most liquid)

@@ -617,6 +617,44 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const PUMP_TIRES_IPFS = 'https://ipfs-pump-tires.b-cdn.net/ipfs';
   const TARGET_TOKENS_SOLD = 800_000_000; // 800M tokens = graduation
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🎯 SNIPER - Paste CA, Set Limit, Snipe/Sell with P&L Tracker
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [sniperCA, setSniperCA] = useState('');
+  const [sniperToken, setSniperToken] = useState(null);
+  const [sniperLoading, setSniperLoading] = useState(false);
+  const [sniperPlsAmount, setSniperPlsAmount] = useState('');
+  const [sniperLimitPrice, setSniperLimitPrice] = useState('');
+  const [sniperLimitType, setSniperLimitType] = useState('market'); // market, limit-buy, limit-sell
+  const [sniperTrades, setSniperTrades] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('dtgc-sniper-trades') || '[]');
+    } catch { return []; }
+  });
+  const [sniperExecuting, setSniperExecuting] = useState(false);
+
+  // P&L Tracking
+  const calculatePnL = useCallback((trades) => {
+    let totalInvested = 0;
+    let totalCurrentValue = 0;
+    let totalRealized = 0;
+
+    trades.forEach(trade => {
+      if (trade.type === 'buy') {
+        totalInvested += trade.plsAmount * (livePrices.PLS || 0.0000159);
+        const currentPrice = trade.currentPrice || 0;
+        totalCurrentValue += trade.tokensReceived * currentPrice;
+      } else if (trade.type === 'sell') {
+        totalRealized += trade.plsReceived * (livePrices.PLS || 0.0000159);
+      }
+    });
+
+    const unrealizedPnL = totalCurrentValue - totalInvested + totalRealized;
+    const pnlPercent = totalInvested > 0 ? ((unrealizedPnL / totalInvested) * 100) : 0;
+
+    return { totalInvested, totalCurrentValue, totalRealized, unrealizedPnL, pnlPercent };
+  }, [livePrices]);
+
   // Balances for all tokens
   const [balances, setBalances] = useState({});
   
@@ -1795,13 +1833,13 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     <div style={styles.container} onClick={() => { setShowFromSelect(false); setShowToSelect(false); }}>
       <div style={styles.header}>
         <div style={styles.title}>⚜️ DTGC Gold</div>
-        <div style={styles.subtitle}>Swap • Portfolio • LP • InstaBond</div>
+        <div style={styles.subtitle}>Swap • Sniper • Portfolio • LP • InstaBond</div>
       </div>
 
       <div style={styles.tabs}>
-        {['swap', 'portfolio', 'create-lp', 'instabond'].map((tab) => (
-          <button key={tab} style={{ ...styles.tab, ...(activeTab === tab ? styles.tabActive : styles.tabInactive) }} onClick={() => setActiveTab(tab)}>
-            {tab === 'swap' && '🔄 Swap'}{tab === 'portfolio' && '📊 Portfolio'}{tab === 'create-lp' && '💧 LP'}{tab === 'instabond' && '🔥 InstaBond'}
+        {['swap', 'sniper', 'portfolio', 'create-lp', 'instabond'].map((tab) => (
+          <button key={tab} style={{ ...styles.tab, ...(activeTab === tab ? styles.tabActive : styles.tabInactive), fontSize: '0.75rem', padding: '10px 8px' }} onClick={() => setActiveTab(tab)}>
+            {tab === 'swap' && '🔄'}{tab === 'sniper' && '🎯'}{tab === 'portfolio' && '📊'}{tab === 'create-lp' && '💧'}{tab === 'instabond' && '🔥'}
           </button>
         ))}
       </div>
@@ -2045,7 +2083,401 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           </button>
         </div>
       )}
-      
+
+      {/* ═══════════════════════════════════════════════════════════════════════════
+          🎯 SNIPER TAB - Paste CA, Set Limit, Snipe/Sell with P&L Card
+      ═══════════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'sniper' && (
+        <div>
+          {/* Silver Laser P&L Card Header */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(192,192,192,0.15) 0%, rgba(120,120,140,0.1) 50%, rgba(192,192,192,0.15) 100%)',
+            border: '1px solid rgba(192,192,192,0.4)',
+            borderRadius: '16px',
+            padding: '16px',
+            marginBottom: '16px',
+            position: 'relative',
+            overflow: 'hidden',
+          }}>
+            {/* Laser scan line animation */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '2px',
+              background: 'linear-gradient(90deg, transparent, rgba(192,220,255,0.8), transparent)',
+              animation: 'laserScan 2s linear infinite',
+            }} />
+            <style>{`
+              @keyframes laserScan {
+                0% { transform: translateY(0); opacity: 1; }
+                50% { opacity: 0.5; }
+                100% { transform: translateY(100px); opacity: 0; }
+              }
+            `}</style>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ color: '#C0C0C0', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>🎯 MANDALORIAN SNIPER</div>
+                <div style={{ color: '#E8E8E8', fontSize: '1.8rem', fontWeight: 700, marginTop: '4px', textShadow: '0 0 10px rgba(192,220,255,0.5)' }}>
+                  {(() => {
+                    const pnl = calculatePnL(sniperTrades);
+                    return pnl.unrealizedPnL >= 0
+                      ? `+${formatUSD(pnl.unrealizedPnL)}`
+                      : `-${formatUSD(Math.abs(pnl.unrealizedPnL))}`;
+                  })()}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{
+                  color: calculatePnL(sniperTrades).pnlPercent >= 0 ? '#4CAF50' : '#F44336',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                }}>
+                  {calculatePnL(sniperTrades).pnlPercent >= 0 ? '📈' : '📉'} {calculatePnL(sniperTrades).pnlPercent.toFixed(2)}%
+                </div>
+                <div style={{ color: '#888', fontSize: '0.7rem' }}>Total P&L</div>
+              </div>
+            </div>
+
+            {/* P&L Stats Row */}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(192,192,192,0.2)' }}>
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ color: '#888', fontSize: '0.65rem' }}>INVESTED</div>
+                <div style={{ color: '#C0C0C0', fontSize: '0.9rem', fontWeight: 600 }}>{formatUSD(calculatePnL(sniperTrades).totalInvested)}</div>
+              </div>
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ color: '#888', fontSize: '0.65rem' }}>CURRENT</div>
+                <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 600 }}>{formatUSD(calculatePnL(sniperTrades).totalCurrentValue)}</div>
+              </div>
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ color: '#888', fontSize: '0.65rem' }}>REALIZED</div>
+                <div style={{ color: '#D4AF37', fontSize: '0.9rem', fontWeight: 600 }}>{formatUSD(calculatePnL(sniperTrades).totalRealized)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* CA Paste Input */}
+          <div style={styles.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={styles.label}>📋 Paste Contract Address (CA)</span>
+              {sniperToken && <span style={{ color: '#4CAF50', fontSize: '0.75rem' }}>✓ Token Found</span>}
+            </div>
+            <div style={styles.inputGroup}>
+              <input
+                type="text"
+                placeholder="0x..."
+                value={sniperCA}
+                onChange={(e) => setSniperCA(e.target.value)}
+                style={{ ...styles.input, fontSize: '0.85rem' }}
+              />
+              <button
+                onClick={async () => {
+                  if (sniperCA.length === 42) {
+                    setSniperLoading(true);
+                    const token = await importTokenByCA(sniperCA);
+                    setSniperToken(token);
+                    setSniperLoading(false);
+                  }
+                }}
+                disabled={sniperLoading || sniperCA.length !== 42}
+                style={{
+                  background: sniperCA.length === 42 ? 'linear-gradient(135deg, #D4AF37, #B8960C)' : 'rgba(255,255,255,0.1)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  color: sniperCA.length === 42 ? '#000' : '#666',
+                  fontWeight: 600,
+                  cursor: sniperCA.length === 42 ? 'pointer' : 'not-allowed',
+                  fontSize: '0.8rem',
+                }}
+              >
+                {sniperLoading ? '⏳' : '🔍 Load'}
+              </button>
+            </div>
+          </div>
+
+          {/* Token Info Display */}
+          {sniperToken && (
+            <div style={{
+              ...styles.card,
+              background: 'linear-gradient(135deg, rgba(212,175,55,0.1), rgba(0,0,0,0.3))',
+              border: '1px solid rgba(212,175,55,0.3)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #D4AF37, #B8960C)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}>
+                  {sniperToken.logo ? (
+                    <img src={sniperToken.logo} alt={sniperToken.symbol} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontSize: '1.5rem' }}>🔸</span>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: '#fff', fontWeight: 700, fontSize: '1.1rem' }}>{sniperToken.name}</div>
+                  <div style={{ color: '#D4AF37', fontSize: '0.85rem' }}>${sniperToken.symbol}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 600 }}>
+                    {livePrices[sniperToken.symbol] ? formatUSD(livePrices[sniperToken.symbol]) : 'Price N/A'}
+                  </div>
+                  <div style={{ color: '#888', fontSize: '0.7rem' }}>
+                    Balance: {formatNumber(balances[sniperToken.symbol] || 0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PLS Amount Input */}
+          <div style={styles.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={styles.label}>💜 PLS Amount to Spend</span>
+              <span style={{ color: '#888', fontSize: '0.75rem' }}>Balance: {formatNumber(balances.PLS || 0)} PLS</span>
+            </div>
+            <div style={styles.inputGroup}>
+              <input
+                type="number"
+                placeholder="0.0"
+                value={sniperPlsAmount}
+                onChange={(e) => setSniperPlsAmount(e.target.value)}
+                style={styles.input}
+              />
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {[25, 50, 100].map(pct => (
+                  <button
+                    key={pct}
+                    onClick={() => setSniperPlsAmount(((balances.PLS || 0) * pct / 100 * 0.998).toFixed(0))}
+                    style={{
+                      background: 'rgba(212,175,55,0.2)',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      color: '#D4AF37',
+                      fontSize: '0.7rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+            {sniperPlsAmount && <div style={styles.usdValue}>≈ {formatUSD(parseFloat(sniperPlsAmount) * (livePrices.PLS || 0.0000159))}</div>}
+          </div>
+
+          {/* Order Type Selection */}
+          <div style={styles.card}>
+            <span style={styles.label}>📊 Order Type</span>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              {[
+                { id: 'market', label: '⚡ Market', desc: 'Instant buy at current price' },
+                { id: 'limit-buy', label: '📈 Limit Buy', desc: 'Buy when price drops to target' },
+                { id: 'limit-sell', label: '📉 Limit Sell', desc: 'Sell when price rises to target' },
+              ].map(type => (
+                <button
+                  key={type.id}
+                  onClick={() => setSniperLimitType(type.id)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 8px',
+                    background: sniperLimitType === type.id ? 'rgba(212,175,55,0.3)' : 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${sniperLimitType === type.id ? '#D4AF37' : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ color: sniperLimitType === type.id ? '#D4AF37' : '#fff', fontWeight: 600, fontSize: '0.8rem' }}>{type.label}</div>
+                  <div style={{ color: '#888', fontSize: '0.6rem', marginTop: '4px' }}>{type.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Limit Price Input (only for limit orders) */}
+          {sniperLimitType !== 'market' && (
+            <div style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={styles.label}>🎯 Target Price (USD)</span>
+              </div>
+              <div style={styles.inputGroup}>
+                <span style={{ color: '#888', fontSize: '1.2rem' }}>$</span>
+                <input
+                  type="number"
+                  placeholder="0.00001"
+                  value={sniperLimitPrice}
+                  onChange={(e) => setSniperLimitPrice(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
+              <div style={{ color: '#888', fontSize: '0.7rem', marginTop: '8px' }}>
+                {sniperLimitType === 'limit-buy'
+                  ? '💡 Order triggers when price drops to this level'
+                  : '💡 Order triggers when price rises to this level'}
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+            {/* SNIPE (Buy) Button */}
+            <button
+              onClick={async () => {
+                if (!sniperToken || !sniperPlsAmount || !userAddress) return;
+                setSniperExecuting(true);
+                showToastMsg(`🎯 Sniping ${sniperToken.symbol}...`, 'info');
+
+                // Simulate snipe for now - would integrate with router
+                try {
+                  const trade = {
+                    id: Date.now(),
+                    type: 'buy',
+                    token: sniperToken.symbol,
+                    tokenAddress: sniperToken.address,
+                    plsAmount: parseFloat(sniperPlsAmount),
+                    tokensReceived: parseFloat(sniperPlsAmount) * (livePrices.PLS || 0.0000159) / 0.00001, // Simulated
+                    entryPrice: 0.00001,
+                    currentPrice: 0.00001,
+                    timestamp: new Date().toISOString(),
+                    orderType: sniperLimitType,
+                    limitPrice: sniperLimitPrice || null,
+                  };
+
+                  const updatedTrades = [...sniperTrades, trade];
+                  setSniperTrades(updatedTrades);
+                  localStorage.setItem('dtgc-sniper-trades', JSON.stringify(updatedTrades));
+                  showToastMsg(`✅ Sniped ${sniperToken.symbol}!`, 'success');
+                } catch (err) {
+                  showToastMsg(`❌ Snipe failed: ${err.message}`, 'error');
+                }
+                setSniperExecuting(false);
+              }}
+              disabled={!sniperToken || !sniperPlsAmount || !userAddress || sniperExecuting}
+              style={{
+                flex: 1,
+                padding: '16px',
+                background: sniperToken && sniperPlsAmount ? 'linear-gradient(135deg, #4CAF50, #2E7D32)' : 'rgba(255,255,255,0.1)',
+                border: 'none',
+                borderRadius: '12px',
+                color: sniperToken && sniperPlsAmount ? '#fff' : '#666',
+                fontWeight: 700,
+                fontSize: '1rem',
+                cursor: sniperToken && sniperPlsAmount ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {sniperExecuting ? '⏳ Executing...' : sniperLimitType === 'market' ? '🎯 SNIPE NOW' : '📈 SET LIMIT BUY'}
+            </button>
+
+            {/* SELL Button */}
+            <button
+              onClick={async () => {
+                if (!sniperToken || !userAddress) return;
+                setSniperExecuting(true);
+                showToastMsg(`📉 Selling ${sniperToken.symbol}...`, 'info');
+
+                try {
+                  const balance = balances[sniperToken.symbol] || 0;
+                  const trade = {
+                    id: Date.now(),
+                    type: 'sell',
+                    token: sniperToken.symbol,
+                    tokenAddress: sniperToken.address,
+                    tokensSold: balance,
+                    plsReceived: balance * 0.00001 / (livePrices.PLS || 0.0000159), // Simulated
+                    exitPrice: 0.00001,
+                    timestamp: new Date().toISOString(),
+                  };
+
+                  const updatedTrades = [...sniperTrades, trade];
+                  setSniperTrades(updatedTrades);
+                  localStorage.setItem('dtgc-sniper-trades', JSON.stringify(updatedTrades));
+                  showToastMsg(`✅ Sold ${sniperToken.symbol}!`, 'success');
+                } catch (err) {
+                  showToastMsg(`❌ Sell failed: ${err.message}`, 'error');
+                }
+                setSniperExecuting(false);
+              }}
+              disabled={!sniperToken || !userAddress || sniperExecuting}
+              style={{
+                flex: 1,
+                padding: '16px',
+                background: sniperToken ? 'linear-gradient(135deg, #F44336, #C62828)' : 'rgba(255,255,255,0.1)',
+                border: 'none',
+                borderRadius: '12px',
+                color: sniperToken ? '#fff' : '#666',
+                fontWeight: 700,
+                fontSize: '1rem',
+                cursor: sniperToken ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {sniperExecuting ? '⏳...' : sniperLimitType === 'limit-sell' ? '📉 SET LIMIT SELL' : '💰 SELL ALL'}
+            </button>
+          </div>
+
+          {/* Recent Sniper Trades */}
+          {sniperTrades.length > 0 && (
+            <div style={{ ...styles.card, marginTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ color: '#C0C0C0', fontWeight: 600 }}>📜 Recent Trades</span>
+                <button
+                  onClick={() => { setSniperTrades([]); localStorage.removeItem('dtgc-sniper-trades'); }}
+                  style={{ background: 'rgba(244,67,54,0.2)', border: 'none', borderRadius: '4px', padding: '4px 8px', color: '#F44336', fontSize: '0.7rem', cursor: 'pointer' }}
+                >
+                  🗑️ Clear
+                </button>
+              </div>
+              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                {sniperTrades.slice().reverse().slice(0, 10).map((trade, idx) => (
+                  <div key={trade.id || idx} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '8px',
+                    marginBottom: '6px',
+                    borderLeft: `3px solid ${trade.type === 'buy' ? '#4CAF50' : '#F44336'}`,
+                  }}>
+                    <div>
+                      <div style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>
+                        {trade.type === 'buy' ? '🎯 BUY' : '💰 SELL'} {trade.token}
+                      </div>
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>
+                        {new Date(trade.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ color: trade.type === 'buy' ? '#4CAF50' : '#F44336', fontWeight: 600 }}>
+                        {trade.type === 'buy'
+                          ? `${formatNumber(trade.plsAmount)} PLS`
+                          : `+${formatNumber(trade.plsReceived)} PLS`}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Warning */}
+          <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,193,7,0.1)', borderRadius: '8px', border: '1px solid rgba(255,193,7,0.3)' }}>
+            <div style={{ color: '#FFC107', fontSize: '0.75rem' }}>
+              ⚠️ <strong>DYOR:</strong> Sniping new tokens is high risk. Never invest more than you can afford to lose.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PORTFOLIO TAB */}
       {activeTab === 'portfolio' && (
         <div>

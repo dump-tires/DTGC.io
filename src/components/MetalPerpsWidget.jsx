@@ -236,20 +236,18 @@ export default function MetalPerpsWidget() {
       console.log('Lambda price fetch failed:', e.message);
     }
 
-    // SECONDARY: Binance for crypto (CORS-friendly)
+    // SECONDARY: Use CORS proxy for crypto prices
     const prices = {};
     try {
-      const [btcRes, ethRes] = await Promise.all([
-        fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
-        fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT')
-      ]);
-      const btcData = await btcRes.json();
-      const ethData = await ethRes.json();
-      if (btcData.price) prices.BTC = parseFloat(btcData.price);
-      if (ethData.price) prices.ETH = parseFloat(ethData.price);
-      console.log('📡 Binance crypto prices:', { BTC: prices.BTC, ETH: prices.ETH });
+      const res = await fetch('/api/crypto-prices');
+      const data = await res.json();
+      if (data?.success && data?.prices) {
+        prices.BTC = data.prices.btc;
+        prices.ETH = data.prices.eth;
+        console.log(`📡 Crypto prices (${data.source}):`, { BTC: prices.BTC, ETH: prices.ETH });
+      }
     } catch (e) {
-      console.log('Binance fallback failed:', e.message);
+      console.log('Crypto proxy fallback failed:', e.message);
     }
 
     // TERTIARY: metals.dev API for commodities (CORS-friendly)
