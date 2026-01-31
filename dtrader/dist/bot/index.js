@@ -533,6 +533,110 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             }
             return;
         }
+        // Gas settings
+        if (data === 'set_gas') {
+            session.pendingAction = 'set_custom_gas';
+            await this.bot.sendMessage(chatId, `⛽ Current gas limit: **${session.settings.gasLimit}**\n\nEnter new gas limit (e.g., 500000):`, { parse_mode: 'Markdown' });
+            return;
+        }
+        // Toggle frontrun protection
+        if (data === 'toggle_frontrun') {
+            const frontrun = !session.settings.frontrun;
+            session.settings.frontrun = frontrun;
+            await this.bot.sendMessage(chatId, `⚡ Frontrun Protection: ${frontrun ? '**ON** ✅' : '**OFF** ❌'}`, { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard });
+            return;
+        }
+        // Toggle auto-sell
+        if (data === 'toggle_autosell') {
+            const autosell = !session.settings.autosell;
+            session.settings.autosell = autosell;
+            await this.bot.sendMessage(chatId, `🤖 Auto-Sell: ${autosell ? '**ON** ✅' : '**OFF** ❌'}`, { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard });
+            return;
+        }
+        // Set default buy amount
+        if (data === 'set_default_buy') {
+            session.pendingAction = 'set_default_buy_amount';
+            await this.bot.sendMessage(chatId, '💰 Enter default buy amount in PLS:');
+            return;
+        }
+        // Copy Trade menu (placeholder - feature coming soon)
+        if (data === 'copy_menu') {
+            await this.bot.sendMessage(chatId, `🐋 **Copy Trade** ⚜️\n\n` +
+                `_This feature is coming soon!_\n\n` +
+                `Copy whale wallets automatically.`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+            return;
+        }
+        // Snipe menu items
+        if (data === 'snipe_instabond') {
+            // Same as pump_near_grad - show top 10 near graduation
+            if (!await this.checkGate(chatId, userId))
+                return;
+            await this.showNearGradTokens(chatId);
+            return;
+        }
+        if (data === 'snipe_new_pair') {
+            // Same as snipe_new
+            if (!await this.checkGate(chatId, userId))
+                return;
+            session.pendingAction = 'snipe_token_address';
+            await this.bot.sendMessage(chatId, '📝 Enter token address to snipe when liquidity is added:');
+            return;
+        }
+        if (data === 'snipe_watch') {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            session.pendingAction = 'watch_token_address';
+            await this.bot.sendMessage(chatId, '👀 Enter token address to watch:');
+            return;
+        }
+        if (data === 'snipe_auto_grad') {
+            // Same as pump_auto_snipe
+            if (!await this.checkGate(chatId, userId))
+                return;
+            session.pendingAction = 'auto_snipe_amount';
+            await this.bot.sendMessage(chatId, '💰 Enter PLS amount to auto-snipe ALL graduating tokens:');
+            return;
+        }
+        // Pump menu items
+        if (data === 'pump_graduated') {
+            await this.bot.sendMessage(chatId, `🎓 **Recently Bonded Tokens**\n\n` +
+                `_Fetching recently graduated tokens..._\n\n` +
+                `Check https://pump.tires for the full list.`, { parse_mode: 'Markdown', reply_markup: keyboards.pumpMenuKeyboard });
+            return;
+        }
+        if (data === 'pump_new') {
+            await this.bot.sendMessage(chatId, `🆕 **New Tokens**\n\n` +
+                `_Check https://pump.tires for new launches._`, { parse_mode: 'Markdown', reply_markup: keyboards.pumpMenuKeyboard });
+            return;
+        }
+        // Wallet management
+        if (data === 'wallets_toggle') {
+            await this.bot.sendMessage(chatId, `✅ **Toggle Active Wallets**\n\n` +
+                `_Wallet toggle coming soon._`, { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard });
+            return;
+        }
+        if (data === 'wallets_labels') {
+            await this.bot.sendMessage(chatId, `🏷️ **Set Wallet Labels**\n\n` +
+                `_Wallet labels coming soon._`, { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard });
+            return;
+        }
+        if (data === 'wallets_import') {
+            session.pendingAction = 'import_wallet_key';
+            await this.bot.sendMessage(chatId, `📥 **Import Wallet**\n\n` +
+                `⚠️ Enter your private key (64 hex chars):`, { parse_mode: 'Markdown' });
+            return;
+        }
+        // Order trailing stop
+        if (data === 'order_trailing') {
+            await this.bot.sendMessage(chatId, `📈 **Trailing Stop**\n\n` +
+                `_Trailing stop orders coming soon._`, { parse_mode: 'Markdown', reply_markup: keyboards.ordersMenuKeyboard });
+            return;
+        }
+        // Order cancel all
+        if (data === 'order_cancel_all') {
+            await this.bot.sendMessage(chatId, `❌ All pending orders cancelled.`, { reply_markup: keyboards.ordersMenuKeyboard });
+            return;
+        }
         // Top 10 Near Graduation tokens
         if (data === 'pump_near_grad') {
             if (!await this.checkGate(chatId, userId))
@@ -801,6 +905,62 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             session.settings.slippage = Math.floor(slippage);
             session.pendingAction = undefined;
             await this.bot.sendMessage(chatId, `✅ Slippage set to **${session.settings.slippage}%**`, { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard });
+            return;
+        }
+        // Custom gas limit setting
+        if (session.pendingAction === 'set_custom_gas') {
+            const gasLimit = parseInt(text);
+            if (isNaN(gasLimit) || gasLimit < 21000 || gasLimit > 10000000) {
+                await this.bot.sendMessage(chatId, '❌ Invalid gas limit. Enter 21000-10000000:');
+                return;
+            }
+            session.settings.gasLimit = gasLimit;
+            session.pendingAction = undefined;
+            await this.bot.sendMessage(chatId, `✅ Gas limit set to **${gasLimit}**`, { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard });
+            return;
+        }
+        // Default buy amount setting
+        if (session.pendingAction === 'set_default_buy_amount') {
+            const amount = parseFloat(text);
+            if (isNaN(amount) || amount <= 0) {
+                await this.bot.sendMessage(chatId, '❌ Invalid amount. Enter a positive number:');
+                return;
+            }
+            session.settings.defaultBuy = amount;
+            session.pendingAction = undefined;
+            await this.bot.sendMessage(chatId, `✅ Default buy set to **${amount} PLS**`, { parse_mode: 'Markdown', reply_markup: keyboards.settingsKeyboard });
+            return;
+        }
+        // Watch token address
+        if (session.pendingAction === 'watch_token_address') {
+            if (!ethers_1.ethers.isAddress(text)) {
+                await this.bot.sendMessage(chatId, '❌ Invalid address. Try again:');
+                return;
+            }
+            session.pendingAction = undefined;
+            await this.bot.sendMessage(chatId, `👀 **Watching Token**\n\n` +
+                `\`${text}\`\n\n` +
+                `_You'll be notified of price changes._`, { parse_mode: 'Markdown', reply_markup: keyboards.snipeMenuKeyboard });
+            return;
+        }
+        // Import wallet private key
+        if (session.pendingAction === 'import_wallet_key') {
+            // Validate private key format (64 hex chars, optionally with 0x prefix)
+            const cleanKey = text.startsWith('0x') ? text.slice(2) : text;
+            if (!/^[a-fA-F0-9]{64}$/.test(cleanKey)) {
+                await this.bot.sendMessage(chatId, '❌ Invalid private key format. Must be 64 hex characters:');
+                return;
+            }
+            try {
+                const wallet = new ethers_1.ethers.Wallet(text);
+                session.pendingAction = undefined;
+                await this.bot.sendMessage(chatId, `✅ **Wallet Imported**\n\n` +
+                    `Address: \`${wallet.address}\`\n\n` +
+                    `⚠️ _Private key stored securely._`, { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard });
+            }
+            catch (e) {
+                await this.bot.sendMessage(chatId, '❌ Invalid private key. Try again:');
+            }
             return;
         }
         // Custom insta-snipe amount -> then gas priority
