@@ -7,7 +7,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradeHistory = exports.tradeHistoryStore = exports.snipeTargetsStore = exports.tradesStore = exports.ordersStore = exports.walletsStore = exports.usersStore = void 0;
+exports.TradeHistory = exports.tradeHistoryStore = exports.LinkedWallets = exports.linkedWalletsStore = exports.snipeTargetsStore = exports.tradesStore = exports.ordersStore = exports.walletsStore = exports.usersStore = void 0;
 exports.createStore = createStore;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -68,6 +68,59 @@ exports.walletsStore = createStore('wallets');
 exports.ordersStore = createStore('orders');
 exports.tradesStore = createStore('trades');
 exports.snipeTargetsStore = createStore('snipeTargets');
+exports.linkedWalletsStore = createStore('linkedWallets');
+exports.LinkedWallets = {
+    /**
+     * Save a linked wallet
+     */
+    link: (vistoId, chatId, walletAddress, balanceUsd) => {
+        // Remove any existing entry for this user
+        exports.linkedWalletsStore.delete((e) => e.id === vistoId);
+        const entry = {
+            id: vistoId,
+            chatId,
+            walletAddress: walletAddress.toLowerCase(),
+            balanceUsd,
+            verifiedAt: Date.now(),
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+        };
+        exports.linkedWalletsStore.insert(entry);
+        console.log(`🔗 Linked wallet for user ${vistoId}: ${walletAddress.slice(0, 10)}...`);
+        return entry;
+    },
+    /**
+     * Get linked wallet for a user
+     */
+    get: (vistoId) => {
+        const entry = exports.linkedWalletsStore.findOne((e) => e.id === vistoId);
+        if (entry && entry.expiresAt > Date.now()) {
+            return entry;
+        }
+        // Expired or not found
+        return undefined;
+    },
+    /**
+     * Check if a user has a valid linked wallet
+     */
+    hasValidLink: (vistoId) => {
+        const entry = exports.LinkedWallets.get(vistoId);
+        return !!entry;
+    },
+    /**
+     * Remove linked wallet
+     */
+    unlink: (vistoId) => {
+        exports.linkedWalletsStore.delete((e) => e.id === vistoId);
+        console.log(`🔓 Unlinked wallet for user ${vistoId}`);
+    },
+    /**
+     * Get wallet address for a user
+     */
+    getAddress: (vistoId) => {
+        const entry = exports.LinkedWallets.get(vistoId);
+        return entry?.walletAddress;
+    },
+};
 exports.tradeHistoryStore = createStore('tradeHistory');
 // ═══════════════════════════════════════════════════════════════════════════
 // TRADE HISTORY HELPER FUNCTIONS

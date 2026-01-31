@@ -10,7 +10,7 @@ import { graduationSniper } from '../sniper/graduation';
 import { mempoolSniper } from '../sniper/mempool';
 import { limitOrderEngine } from '../orders/limitOrder';
 import { antiRug } from '../security/antiRug';
-import { TradeHistory } from '../db/jsonStore';
+import { TradeHistory, LinkedWallets } from '../db/jsonStore';
 import * as keyboards from './keyboards';
 
 /**
@@ -163,6 +163,7 @@ export class DtraderBot {
   /**
    * Check token gate before allowing actions
    * Uses LINKED WALLET first (external MetaMask/Rabby), falls back to bot wallet
+   * NOW WITH PERSISTENT STORAGE - survives bot restarts!
    */
   private async checkGate(chatId: string, userId: string): Promise<boolean> {
     const session = this.getSession(chatId);
@@ -172,9 +173,20 @@ export class DtraderBot {
       return true;
     }
 
+    // Priority 0: Restore linked wallet from persistent storage if not in session
+    if (!session.linkedWallet) {
+      const persistedLink = LinkedWallets.get(userId);
+      if (persistedLink) {
+        console.log(`🔗 Restored linked wallet from storage for user ${userId}`);
+        session.linkedWallet = persistedLink.walletAddress;
+      }
+    }
+
     // Priority 1: Check linked external wallet (MetaMask/Rabby)
     if (session.linkedWallet) {
+      console.log(`🔍 Checking linked wallet: ${session.linkedWallet.slice(0, 10)}...`);
       const linkedGateResult = await tokenGate.checkAccess(session.linkedWallet);
+      console.log(`💰 Gate result: allowed=${linkedGateResult.allowed}, balance=$${linkedGateResult.balanceUsd.toFixed(2)}`);
       if (linkedGateResult.allowed) {
         session.gateVerified = true;
         session.gateExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
@@ -185,7 +197,9 @@ export class DtraderBot {
     // Priority 2: Check bot wallet
     const wallet = await walletManager.getWallet(userId);
     if (wallet) {
+      console.log(`🔍 Checking bot wallet: ${wallet.address.slice(0, 10)}...`);
       const gateResult = await tokenGate.checkAccess(wallet.address);
+      console.log(`💰 Bot wallet result: allowed=${gateResult.allowed}, balance=$${gateResult.balanceUsd.toFixed(2)}`);
       if (gateResult.allowed) {
         session.gateVerified = true;
         session.gateExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
@@ -274,6 +288,10 @@ export class DtraderBot {
       session.linkedWallet = walletAddress;
       session.gateVerified = true;
       session.gateExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hour verification
+
+      // PERSIST the linked wallet so it survives bot restarts
+      LinkedWallets.link(userId, chatId, walletAddress, payload.u);
+      console.log(`✅ Wallet verified and persisted for user ${userId}: ${walletAddress.slice(0, 10)}...`);
 
       // Format balance
       const formatNumber = (v: number) => {

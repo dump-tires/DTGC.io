@@ -136,6 +136,80 @@ export const snipeTargetsStore = createStore<{
 }>('snipeTargets');
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LINKED WALLETS - Persistent storage for linked external wallets
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface LinkedWalletEntry {
+  id: string;           // vistoId (Telegram user ID)
+  chatId: string;       // Telegram chat ID
+  walletAddress: string; // Linked external wallet address
+  balanceUsd: number;   // USD balance at time of verification
+  verifiedAt: number;   // Timestamp of verification
+  expiresAt: number;    // When verification expires (24 hours)
+}
+
+export const linkedWalletsStore = createStore<LinkedWalletEntry>('linkedWallets');
+
+export const LinkedWallets = {
+  /**
+   * Save a linked wallet
+   */
+  link: (vistoId: string, chatId: string, walletAddress: string, balanceUsd: number): LinkedWalletEntry => {
+    // Remove any existing entry for this user
+    linkedWalletsStore.delete((e) => e.id === vistoId);
+
+    const entry: LinkedWalletEntry = {
+      id: vistoId,
+      chatId,
+      walletAddress: walletAddress.toLowerCase(),
+      balanceUsd,
+      verifiedAt: Date.now(),
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+    };
+
+    linkedWalletsStore.insert(entry);
+    console.log(`🔗 Linked wallet for user ${vistoId}: ${walletAddress.slice(0, 10)}...`);
+    return entry;
+  },
+
+  /**
+   * Get linked wallet for a user
+   */
+  get: (vistoId: string): LinkedWalletEntry | undefined => {
+    const entry = linkedWalletsStore.findOne((e) => e.id === vistoId);
+    if (entry && entry.expiresAt > Date.now()) {
+      return entry;
+    }
+    // Expired or not found
+    return undefined;
+  },
+
+  /**
+   * Check if a user has a valid linked wallet
+   */
+  hasValidLink: (vistoId: string): boolean => {
+    const entry = LinkedWallets.get(vistoId);
+    return !!entry;
+  },
+
+  /**
+   * Remove linked wallet
+   */
+  unlink: (vistoId: string): void => {
+    linkedWalletsStore.delete((e) => e.id === vistoId);
+    console.log(`🔓 Unlinked wallet for user ${vistoId}`);
+  },
+
+  /**
+   * Get wallet address for a user
+   */
+  getAddress: (vistoId: string): string | undefined => {
+    const entry = LinkedWallets.get(vistoId);
+    return entry?.walletAddress;
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // TRADE HISTORY - Complete record of all trades, snipes, and limit orders
 // ═══════════════════════════════════════════════════════════════════════════
 

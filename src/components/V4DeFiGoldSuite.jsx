@@ -2131,6 +2131,60 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             </div>
           </div>
 
+          {/* DTGC Token Info - Copy CA */}
+          <div style={{
+            background: 'rgba(212,175,55,0.1)',
+            borderRadius: '8px',
+            padding: '10px',
+            marginBottom: '10px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.65rem', color: '#D4AF37' }}>⚜️ DTGC Token (Required for Bot Access)</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <button
+                onClick={() => copyToClipboard('0xD0676B28a457371D58d47E5247b439114e40Eb0F', 'DTGC')}
+                style={{
+                  flex: 1,
+                  background: copiedAddress === 'DTGC' ? '#00C853' : 'linear-gradient(135deg, #D4AF37 0%, #FFD700 100%)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '10px',
+                  color: '#000',
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {copiedAddress === 'DTGC' ? '✓ CA Copied!' : '📋 Copy DTGC CA'}
+              </button>
+              <a
+                href="https://dexscreener.com/pulsechain/0xD0676B28a457371D58d47E5247b439114e40Eb0F"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  background: 'rgba(212,175,55,0.3)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '10px',
+                  color: '#D4AF37',
+                  fontSize: '0.7rem',
+                  textDecoration: 'none',
+                }}
+              >
+                📊 Chart
+              </a>
+            </div>
+            <div style={{
+              fontFamily: 'monospace',
+              fontSize: '0.55rem',
+              color: '#888',
+              wordBreak: 'break-all',
+            }}>
+              0xD0676B28a457371D58d47E5247b439114e40Eb0F
+            </div>
+          </div>
+
           {/* Verification Success - Open Telegram */}
           {telegramVerified && telegramVerified.telegramLink && (
             <div style={{

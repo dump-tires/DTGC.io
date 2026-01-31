@@ -71,6 +71,37 @@ export declare const snipeTargetsStore: Store<{
     source: string;
     createdAt: number;
 }>;
+export interface LinkedWalletEntry {
+    id: string;
+    chatId: string;
+    walletAddress: string;
+    balanceUsd: number;
+    verifiedAt: number;
+    expiresAt: number;
+}
+export declare const linkedWalletsStore: Store<LinkedWalletEntry>;
+export declare const LinkedWallets: {
+    /**
+     * Save a linked wallet
+     */
+    link: (vistoId: string, chatId: string, walletAddress: string, balanceUsd: number) => LinkedWalletEntry;
+    /**
+     * Get linked wallet for a user
+     */
+    get: (vistoId: string) => LinkedWalletEntry | undefined;
+    /**
+     * Check if a user has a valid linked wallet
+     */
+    hasValidLink: (vistoId: string) => boolean;
+    /**
+     * Remove linked wallet
+     */
+    unlink: (vistoId: string) => void;
+    /**
+     * Get wallet address for a user
+     */
+    getAddress: (vistoId: string) => string | undefined;
+};
 export type TradeHistoryType = 'instabond_snipe' | 'limit_buy' | 'limit_sell' | 'stop_loss' | 'take_profit' | 'market_buy' | 'market_sell' | 'dca' | 'copy_trade';
 export type TradeHistoryStatus = 'pending' | 'watching' | 'executing' | 'completed' | 'failed' | 'cancelled';
 export interface TradeHistoryEntry {

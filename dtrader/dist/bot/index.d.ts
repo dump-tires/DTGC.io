@@ -8,6 +8,7 @@ export declare class DtraderBot {
     /**
      * Check token gate before allowing actions
      * Uses LINKED WALLET first (external MetaMask/Rabby), falls back to bot wallet
+     * NOW WITH PERSISTENT STORAGE - survives bot restarts!
      */
     private checkGate;
     /**
