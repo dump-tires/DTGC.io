@@ -10,7 +10,7 @@ exports.mainMenuKeyboard = {
     inline_keyboard: [
         [
             { text: '🔄 Refresh', callback_data: 'refresh_balance' },
-            { text: '🔗 Link Wallet', callback_data: 'link_wallet' },
+            { text: '🔗 Link Wallet', url: 'https://dtgc.io/gold' },
         ],
         [
             { text: '💰 Buy', callback_data: 'action_buy' },
@@ -41,7 +41,7 @@ exports.mainMenuKeyboard = {
 exports.walletsMenuKeyboard = {
     inline_keyboard: [
         [
-            { text: '🔗 Link DTGC Wallet', callback_data: 'link_wallet' },
+            { text: '🔗 Link via Gold Suite', url: 'https://dtgc.io/gold' },
         ],
         [
             { text: '🆕 Generate 6 Snipe Wallets', callback_data: 'wallets_generate_6' },

@@ -156,13 +156,22 @@ class DtraderBot {
                 return true;
             }
         }
-        // Neither wallet passed - show helpful message
+        // Neither wallet passed - direct to dtgc.io/gold for verification
         const linkedAddr = session.linkedWallet ? `\n🔗 Linked: \`${session.linkedWallet.slice(0, 8)}...\`` : '';
         const botAddr = wallet ? `\n🤖 Bot: \`${wallet.address.slice(0, 8)}...\`` : '';
         await this.bot.sendMessage(chatId, `❌ **Gate Check Failed**\n\n` +
             `Hold $50+ of DTGC in your wallet to access PRO features.${linkedAddr}${botAddr}\n\n` +
             `⚜️ DTGC: \`${config_1.config.tokenGate.dtgc}\`\n\n` +
-            `💡 _Link your wallet with DTGC using 🔗 Link Wallet_`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+            `🌐 **Verify your wallet at dtgc.io/gold**\n` +
+            `_Connect wallet → Click "Link TG Bot" → Sign & verify_`, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🌐 Open dtgc.io/gold', url: 'https://dtgc.io/gold' }],
+                    [{ text: '🔄 Refresh', callback_data: 'refresh_balance' }],
+                ],
+            },
+        });
         return false;
     }
     /**
@@ -505,12 +514,24 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             await this.showRefreshedBalance(chatId, userId);
             return;
         }
-        // Link external wallet - allows users to track their MetaMask/Rabby wallet
+        // Link external wallet - directs users to dtgc.io/gold for secure wallet verification
         if (data === 'link_wallet') {
-            session.pendingAction = 'link_wallet_address';
-            await this.bot.sendMessage(chatId, `🔗 **Link External Wallet**\n\n` +
-                `Paste your wallet address (from MetaMask, Rabby, etc.) to track your DTGC balance and use the Gold Suite seamlessly.\n\n` +
-                `📝 Enter your wallet address (0x...):`, { parse_mode: 'Markdown' });
+            await this.bot.sendMessage(chatId, `🔗 **Link Your Wallet**\n\n` +
+                `To verify your DTGC holdings, connect your wallet on our web app:\n\n` +
+                `1️⃣ Go to **dtgc.io/gold**\n` +
+                `2️⃣ Connect your wallet (MetaMask, Rabby, etc.)\n` +
+                `3️⃣ Click **"🤖 Link TG Bot"** button\n` +
+                `4️⃣ Sign the verification message\n` +
+                `5️⃣ Click the Telegram link to verify!\n\n` +
+                `✅ This securely proves you own $50+ DTGC`, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🌐 Open dtgc.io/gold', url: 'https://dtgc.io/gold' }],
+                        [{ text: '🔙 Back', callback_data: 'main_menu' }],
+                    ],
+                },
+            });
             return;
         }
         if (data === 'check_token') {
