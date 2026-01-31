@@ -440,6 +440,35 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             await this.bot.sendMessage(chatId, '💰 Enter PLS amount to auto-snipe ALL graduating tokens:');
             return;
         }
+        // Top 10 Near Graduation tokens
+        if (data === 'pump_near_grad') {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            await this.showNearGradTokens(chatId);
+            return;
+        }
+        // Insta-snipe a specific token from the list
+        if (data.startsWith('instasnipe_')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const tokenAddress = data.replace('instasnipe_', '');
+            session.pendingToken = tokenAddress;
+            session.pendingAction = 'instasnipe_amount';
+            await this.bot.sendMessage(chatId, `🎯 **Insta-Snipe Setup**\n\n` +
+                `Token: \`${tokenAddress.slice(0, 10)}...${tokenAddress.slice(-8)}\`\n\n` +
+                `Select PLS amount per wallet:`, { parse_mode: 'Markdown', reply_markup: keyboards.snipeAmountKeyboard });
+            return;
+        }
+        // Snipe amount selection for insta-snipe
+        if (data.startsWith('snipe_amt_') && session.pendingAction === 'instasnipe_amount') {
+            const amount = parseInt(data.replace('snipe_amt_', ''));
+            if (!isNaN(amount) && session.pendingToken) {
+                await this.setupInstaSnipe(chatId, userId, session.pendingToken, amount);
+                session.pendingAction = undefined;
+                session.pendingToken = undefined;
+            }
+            return;
+        }
         // Order actions
         if (data === 'order_limit_buy') {
             if (!await this.checkGate(chatId, userId))
@@ -961,6 +990,102 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             parse_mode: 'Markdown',
             reply_markup: keyboards.multiWalletSnipeKeyboard,
         });
+    }
+    /**
+     * Show Top 10 tokens closest to graduation from pump.tires
+     */
+    async showNearGradTokens(chatId) {
+        await this.bot.sendMessage(chatId, '🔄 Fetching top 10 near-graduation tokens...');
+        try {
+            // Fetch from our API proxy
+            const response = await fetch('https://dtgc.io/api/pump-tokens');
+            const data = await response.json();
+            if (!data.tokens || data.tokens.length === 0) {
+                await this.bot.sendMessage(chatId, '❌ No tokens found. Try again later.');
+                return;
+            }
+            // Sort by progress (closest to 800M)
+            const TARGET = 800_000_000;
+            const sorted = data.tokens
+                .filter((t) => t.tokensSold < TARGET)
+                .sort((a, b) => b.tokensSold - a.tokensSold)
+                .slice(0, 10);
+            if (sorted.length === 0) {
+                await this.bot.sendMessage(chatId, '❌ No tokens approaching graduation right now.');
+                return;
+            }
+            let msg = `🔥 **Top ${sorted.length} Near Graduation**\n\n`;
+            const buttons = [];
+            for (let i = 0; i < sorted.length; i++) {
+                const token = sorted[i];
+                const progress = ((token.tokensSold / TARGET) * 100).toFixed(1);
+                const progressBar = this.makeProgressBar(parseFloat(progress));
+                msg += `**${i + 1}. ${token.name || 'Unknown'}** (${token.symbol || '???'})\n`;
+                msg += `${progressBar} ${progress}%\n`;
+                msg += `📊 ${(token.tokensSold / 1_000_000).toFixed(1)}M / 800M sold\n`;
+                msg += `\`${token.address.slice(0, 12)}...${token.address.slice(-8)}\`\n\n`;
+                // Add snipe button for each token (2 per row)
+                if (i % 2 === 0) {
+                    buttons.push([{ text: `🎯 ${i + 1}. ${token.symbol || 'Snipe'}`, callback_data: `instasnipe_${token.address}` }]);
+                }
+                else {
+                    buttons[buttons.length - 1].push({ text: `🎯 ${i + 1}. ${token.symbol || 'Snipe'}`, callback_data: `instasnipe_${token.address}` });
+                }
+            }
+            buttons.push([{ text: '🔄 Refresh List', callback_data: 'pump_near_grad' }]);
+            buttons.push([{ text: '🔙 Back', callback_data: 'pump_menu' }]);
+            msg += `\n_Tap any token to set up Insta-Snipe!_\n`;
+            msg += `_Snipe executes automatically on graduation._`;
+            await this.bot.sendMessage(chatId, msg, {
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: buttons },
+            });
+        }
+        catch (error) {
+            console.error('Failed to fetch near-grad tokens:', error);
+            await this.bot.sendMessage(chatId, '❌ Failed to fetch tokens. Try again later.');
+        }
+    }
+    /**
+     * Make a text-based progress bar
+     */
+    makeProgressBar(percent) {
+        const filled = Math.round(percent / 10);
+        const empty = 10 - filled;
+        return '█'.repeat(filled) + '░'.repeat(empty);
+    }
+    /**
+     * Set up Insta-Snipe for a token (executes on graduation)
+     */
+    async setupInstaSnipe(chatId, userId, tokenAddress, plsAmount) {
+        const session = this.getSession(chatId);
+        try {
+            // Set up graduation snipe using watchToken
+            graduation_1.graduationSniper.watchToken(tokenAddress, {
+                amountPls: BigInt(plsAmount) * BigInt(10 ** 18),
+                slippage: session.settings.slippage,
+                gasLimit: session.settings.gasLimit,
+                gasPriceMultiplier: 1.5,
+            });
+            await this.bot.sendMessage(chatId, `✅ **Insta-Snipe Set!**\n\n` +
+                `**Token:** \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n` +
+                `**Amount:** ${(plsAmount / 1_000_000).toFixed(0)}M PLS\n\n` +
+                `🎯 Will auto-buy when token graduates!\n\n` +
+                `_Set and forget - bot will execute automatically._`, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🔥 View Near Graduation', callback_data: 'pump_near_grad' }],
+                        [{ text: '📋 My Snipes', callback_data: 'snipe_list' }],
+                        [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+                    ],
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to setup insta-snipe:', error);
+            await this.bot.sendMessage(chatId, `❌ Failed to set up snipe. Try again.`, { reply_markup: keyboards.mainMenuKeyboard });
+        }
     }
     async showFeeStats(chatId) {
         try {

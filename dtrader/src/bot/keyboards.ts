@@ -148,21 +148,20 @@ export const ordersMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
 export const pumpMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
-      { text: '🔥 Trending', callback_data: 'pump_trending' },
+      { text: '🔥 TOP 10 NEAR GRADUATION', callback_data: 'pump_near_grad' },
+    ],
+    [
+      { text: '🎓 Recently Bonded', callback_data: 'pump_graduated' },
       { text: '🆕 New Tokens', callback_data: 'pump_new' },
     ],
     [
-      { text: '📈 Near Graduation', callback_data: 'pump_near_grad' },
-      { text: '🎓 Recently Graduated', callback_data: 'pump_graduated' },
+      { text: '🤖 Auto-Snipe ALL Grads', callback_data: 'pump_auto_snipe' },
     ],
     [
-      { text: '🎯 Snipe Specific Token', callback_data: 'pump_snipe_token' },
+      { text: '🎯 Snipe Specific CA', callback_data: 'pump_snipe_token' },
     ],
     [
-      { text: '🤖 Auto-Snipe Mode', callback_data: 'pump_auto_snipe' },
-    ],
-    [
-      { text: '⚜️ Open InstaBond UI 📱', url: 'https://dtgc.io/gold' },
+      { text: '⚜️ Gold Suite InstaBond 📱', url: 'https://dtgc.io/gold' },
     ],
     [
       { text: '🔙 Back', callback_data: 'main_menu' },

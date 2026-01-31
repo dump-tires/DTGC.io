@@ -35,6 +35,18 @@ export declare class DtraderBot {
      * Generate 6 snipe wallets for multi-wallet sniping
      */
     private generate6Wallets;
+    /**
+     * Show Top 10 tokens closest to graduation from pump.tires
+     */
+    private showNearGradTokens;
+    /**
+     * Make a text-based progress bar
+     */
+    private makeProgressBar;
+    /**
+     * Set up Insta-Snipe for a token (executes on graduation)
+     */
+    private setupInstaSnipe;
     private showFeeStats;
     private showHelp;
     private setupSniperEvents;
