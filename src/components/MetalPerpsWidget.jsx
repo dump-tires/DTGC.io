@@ -1,10 +1,55 @@
-// Institutional Auto Trade v3.91 - HYBRID PRICE SOURCES
-// Lambda: GOLD from Chainlink RPC, BTC/ETH from CoinGecko
+// Institutional Auto Trade v4.1 - AUTO-CLAIM COLLATERAL
+// Lambda: gTrade Direct Prices, Auto-Retry, Momentum Detection, Auto-Claim Pending
 import React, { useState, useEffect, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
 
 const LAMBDA_URL = 'https://mqd4yvwog76amuift2p23du2ma0ehaqp.lambda-url.us-east-2.on.aws/';
+
+// ==================== SCALP MODE PRESETS ====================
+// Optimized for quick in-and-out trades during volatile markets
+const SCALP_PRESETS = {
+  // Conservative scalp - safer margins
+  conservative: {
+    name: '🟢 Safe Scalp',
+    tp: 0.5,       // 0.5% take profit
+    sl: 0.3,       // 0.3% stop loss
+    leverage: 50,  // Lower leverage for safety
+    description: 'Small gains, tight stops',
+  },
+  // Standard scalp - balanced
+  standard: {
+    name: '🟡 Standard',
+    tp: 1.0,       // 1% take profit
+    sl: 0.5,       // 0.5% stop loss
+    leverage: 75,  // Medium leverage
+    description: 'Balanced risk/reward',
+  },
+  // Aggressive scalp - max gains
+  aggressive: {
+    name: '🔴 Aggressive',
+    tp: 1.5,       // 1.5% take profit
+    sl: 0.75,      // 0.75% stop loss
+    leverage: 100, // High leverage
+    description: 'Higher risk, higher reward',
+  },
+  // Sniper mode - very tight for momentum plays
+  sniper: {
+    name: '🎯 Sniper',
+    tp: 0.3,       // 0.3% take profit (quick grab)
+    sl: 0.2,       // 0.2% stop loss (tight)
+    leverage: 125, // Max leverage
+    description: 'Quick in/out, momentum plays',
+  },
+};
+
+// Auto-trade settings
+const AUTO_TRADE_CONFIG = {
+  maxRetries: 3,           // Retry failed trades up to 3 times
+  retryDelayMs: 1000,      // Wait 1 second between retries
+  cooldownMs: 5000,        // 5 second cooldown between auto-trades
+  maxConcurrentTrades: 3,  // Max open positions at once
+};
 
 // gTrade Pricing API - Direct source for real-time prices
 const GTRADE_PRICES_API = 'https://backend-pricing.eu.gains.trade/charts/prices?from=gTrade&pairs=0,1,90,91';
@@ -155,6 +200,22 @@ export default function MetalPerpsWidget() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [priceUpdateTime, setPriceUpdateTime] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+
+  // ===== SCALP MODE STATE =====
+  const [scalpMode, setScalpMode] = useState('aggressive'); // conservative, standard, aggressive, sniper
+  const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
+  const [lastTradeTime, setLastTradeTime] = useState(0);
+  const [tradeStats, setTradeStats] = useState({ wins: 0, losses: 0, totalPnl: 0, attempts: 0, successes: 0 });
+  const [priceHistory, setPriceHistory] = useState({}); // For momentum detection
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [momentum, setMomentum] = useState({ direction: 'neutral', strength: 0 }); // bearish, neutral, bullish
+
+  // ===== PENDING ORDERS / COLLATERAL CLAIM STATE =====
+  const [pendingOrders, setPendingOrders] = useState([]);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [autoClaimEnabled, setAutoClaimEnabled] = useState(true); // Auto-claim on by default
+  const [claimResults, setClaimResults] = useState([]);
   
   const asset = ASSETS[selectedAsset];
   const tvSymbol = TV_SYMBOLS[selectedAsset];
@@ -232,10 +293,103 @@ export default function MetalPerpsWidget() {
           time: new Date().toLocaleTimeString(),
         };
         setBotActivity(prev => [newActivity, ...prev].slice(0, 20));
+
+        // Also fetch pending orders for auto-claim
+        if (result.pendingOrders) {
+          setPendingOrders(result.pendingOrders);
+          // Auto-claim if enabled and there are pending orders
+          if (autoClaimEnabled && result.pendingOrders.length > 0) {
+            console.log(`💰 Auto-claiming ${result.pendingOrders.length} pending orders...`);
+            autoClaimAllCollateral();
+          }
+        } else {
+          // Fetch pending orders separately if not in STATUS response
+          fetchPendingOrders();
+        }
       }
     } catch (error) {
       console.error('Failed to fetch bot status:', error);
     }
+  };
+
+  // ===== PENDING ORDERS / COLLATERAL CLAIM FUNCTIONS =====
+
+  // Fetch pending orders (timed out market orders)
+  const fetchPendingOrders = async () => {
+    try {
+      const result = await apiCall('GET_PENDING');
+      if (result.success && result.pendingOrders) {
+        setPendingOrders(result.pendingOrders);
+        console.log('📋 Pending orders:', result.pendingOrders.length);
+
+        // Auto-claim if enabled
+        if (autoClaimEnabled && result.pendingOrders.length > 0) {
+          console.log(`💰 Auto-claiming ${result.pendingOrders.length} pending orders...`);
+          autoClaimAllCollateral();
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch pending orders:', error);
+    }
+  };
+
+  // Claim collateral from a single order
+  const claimCollateral = async (orderId, isLimitOrder = false) => {
+    setIsClaiming(true);
+    try {
+      const result = await apiCall('CLAIM_COLLATERAL', { orderId, isLimitOrder });
+
+      if (result.success) {
+        showToast(`💰 Collateral claimed from order #${orderId}!`, 'success');
+        setBotActivity(prev => [{
+          type: 'CLAIM',
+          message: `💰 Claimed collateral #${orderId}`,
+          time: new Date().toLocaleTimeString(),
+        }, ...prev].slice(0, 20));
+
+        // Refresh status
+        fetchBotStatus();
+      } else {
+        showToast(result.error || 'Claim failed', 'error');
+      }
+    } catch (error) {
+      showToast('Claim failed: ' + error.message, 'error');
+    }
+    setIsClaiming(false);
+  };
+
+  // Auto-claim ALL pending collateral
+  const autoClaimAllCollateral = async () => {
+    if (isClaiming) return; // Prevent double-claiming
+
+    setIsClaiming(true);
+    showToast('💰 Auto-claiming all pending collateral...', 'info');
+
+    try {
+      const result = await apiCall('AUTO_CLAIM_ALL');
+
+      if (result.success) {
+        const msg = `💰 Claimed ${result.claimed} orders ($${result.totalClaimed?.toFixed(2) || '0'})`;
+        showToast(msg, 'success');
+
+        setBotActivity(prev => [{
+          type: 'AUTO_CLAIM',
+          message: msg,
+          time: new Date().toLocaleTimeString(),
+        }, ...prev].slice(0, 20));
+
+        setClaimResults(result.results || []);
+
+        // Refresh status to update balance
+        setTimeout(fetchBotStatus, 2000);
+      } else {
+        showToast(result.error || result.message || 'No orders to claim', 'info');
+      }
+    } catch (error) {
+      showToast('Auto-claim failed: ' + error.message, 'error');
+    }
+
+    setIsClaiming(false);
   };
 
   // Helper to map gTrade pair indices to asset symbols
@@ -268,6 +422,8 @@ export default function MetalPerpsWidget() {
           setGtradeVerifyPrices(prices);
           setPriceSource('gtrade-direct');
           setPriceUpdateTime(new Date());
+          // Update momentum for selected asset
+          updateMomentum(selectedAsset, prices[selectedAsset]);
           return;
         }
       }
@@ -308,14 +464,47 @@ export default function MetalPerpsWidget() {
     setPriceUpdateTime(new Date());
   };
 
-  // Open trade - FIX: Validate price and send integer leverage
-  const openTrade = async () => {
+  // ===== MOMENTUM DETECTION =====
+  // Tracks price changes to determine trend direction
+  const updateMomentum = (asset, currentPrice) => {
+    setPriceHistory(prev => {
+      const history = prev[asset] || [];
+      const newHistory = [...history, { price: currentPrice, time: Date.now() }].slice(-10); // Keep last 10 samples
+
+      // Calculate momentum from price changes
+      if (newHistory.length >= 3) {
+        const recent = newHistory.slice(-3);
+        const priceChange = (recent[2].price - recent[0].price) / recent[0].price * 100;
+        const strength = Math.min(100, Math.abs(priceChange) * 50); // Scale to 0-100
+
+        setMomentum({
+          direction: priceChange > 0.05 ? 'bullish' : priceChange < -0.05 ? 'bearish' : 'neutral',
+          strength: strength,
+          change: priceChange,
+        });
+      }
+
+      return { ...prev, [asset]: newHistory };
+    });
+  };
+
+  // ===== AGGRESSIVE SCALP TRADE EXECUTION =====
+  // Retry logic + quick execution for volatile markets
+  const openTrade = async (retryAttempt = 0) => {
     if (parseFloat(collateral) < 5) {
       showToast('Minimum collateral is $5', 'error');
       return;
     }
 
-    // FIX: Validate price exists before trading
+    // Cooldown check for auto-trades
+    const now = Date.now();
+    if (autoTradeEnabled && now - lastTradeTime < AUTO_TRADE_CONFIG.cooldownMs) {
+      const remaining = Math.ceil((AUTO_TRADE_CONFIG.cooldownMs - (now - lastTradeTime)) / 1000);
+      showToast(`⏳ Cooldown: ${remaining}s`, 'info');
+      return;
+    }
+
+    // Validate price exists before trading
     const currentPrice = livePrices[selectedAsset];
     if (!currentPrice || currentPrice <= 0) {
       showToast(`No price for ${selectedAsset}. Refreshing...`, 'error');
@@ -323,36 +512,122 @@ export default function MetalPerpsWidget() {
       return;
     }
 
-    // FIX: Round leverage to integer
+    // Apply SCALP PRESET settings for quick trades
+    const preset = SCALP_PRESETS[scalpMode];
+    const scalpTp = parseFloat(takeProfit) || preset.tp;
+    const scalpSl = parseFloat(stopLoss) || preset.sl;
     const roundedLeverage = Math.round(leverage);
 
+    // Track attempt
+    setTradeStats(prev => ({ ...prev, attempts: prev.attempts + 1 }));
     setLoading(true);
+    setRetryCount(retryAttempt);
+
+    if (retryAttempt > 0) {
+      setIsRetrying(true);
+      showToast(`🔄 Retry ${retryAttempt}/${AUTO_TRADE_CONFIG.maxRetries}...`, 'info');
+    }
+
     try {
+      console.log(`⚡ Opening ${direction} ${selectedAsset} @ ${roundedLeverage}x (attempt ${retryAttempt + 1})`);
+
       const result = await apiCall('OPEN_TRADE', {
         asset: selectedAsset,
         direction,
         collateral: parseFloat(collateral),
-        leverage: roundedLeverage,  // FIX: Send integer leverage
-        takeProfit: parseFloat(takeProfit),
-        stopLoss: parseFloat(stopLoss),
-        price: currentPrice,  // FIX: Validated price
+        leverage: roundedLeverage,
+        takeProfit: scalpTp,  // Use scalp preset TP
+        stopLoss: scalpSl,     // Use scalp preset SL
+        price: currentPrice,
+        // Extra params for aggressive execution
+        slippage: 2,           // Higher slippage tolerance
+        urgent: true,          // Priority execution flag
       });
 
       if (result.success) {
-        showToast(`✅ ${direction} ${selectedAsset} @ ${roundedLeverage}x opened!`, 'success');
+        // SUCCESS - Update stats and state
+        setLastTradeTime(Date.now());
+        setTradeStats(prev => ({ ...prev, successes: prev.successes + 1 }));
+        setIsRetrying(false);
+        setRetryCount(0);
+
+        showToast(`✅ ${direction} ${selectedAsset} @ ${roundedLeverage}x FILLED!`, 'success');
+
         setBotActivity(prev => [{
           type: direction === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
-          message: `${direction} ${selectedAsset} $${collateral} @ ${roundedLeverage}x`,
+          message: `⚡ ${direction} ${selectedAsset} $${collateral} @ ${roundedLeverage}x (${preset.name})`,
           time: new Date().toLocaleTimeString(),
         }, ...prev].slice(0, 20));
+
         fetchBotStatus();
       } else {
-        showToast(result.error || 'Failed to open trade', 'error');
+        // FAILED - Retry if under limit
+        const errorMsg = result.error || 'Execution failed';
+        console.warn(`❌ Trade failed (attempt ${retryAttempt + 1}): ${errorMsg}`);
+
+        if (retryAttempt < AUTO_TRADE_CONFIG.maxRetries) {
+          // Wait and retry
+          showToast(`⚠️ Failed, retrying... (${retryAttempt + 1}/${AUTO_TRADE_CONFIG.maxRetries})`, 'error');
+
+          setBotActivity(prev => [{
+            type: 'RETRY',
+            message: `🔄 Retry ${retryAttempt + 1}: ${errorMsg}`,
+            time: new Date().toLocaleTimeString(),
+          }, ...prev].slice(0, 20));
+
+          // Exponential backoff: 500ms, 1000ms, 2000ms
+          const delay = AUTO_TRADE_CONFIG.retryDelayMs * Math.pow(2, retryAttempt);
+          setTimeout(() => openTrade(retryAttempt + 1), delay);
+          return; // Don't setLoading(false) yet
+        } else {
+          // Max retries reached
+          showToast(`❌ Failed after ${AUTO_TRADE_CONFIG.maxRetries} attempts: ${errorMsg}`, 'error');
+          setIsRetrying(false);
+          setRetryCount(0);
+
+          setBotActivity(prev => [{
+            type: 'FAILED',
+            message: `❌ FAILED ${direction} ${selectedAsset} after ${AUTO_TRADE_CONFIG.maxRetries} retries`,
+            time: new Date().toLocaleTimeString(),
+          }, ...prev].slice(0, 20));
+        }
       }
     } catch (error) {
+      console.error('Trade error:', error);
+
+      // Network/connection errors - always retry
+      if (retryAttempt < AUTO_TRADE_CONFIG.maxRetries) {
+        showToast(`🔄 Connection error, retrying...`, 'error');
+        const delay = AUTO_TRADE_CONFIG.retryDelayMs * Math.pow(2, retryAttempt);
+        setTimeout(() => openTrade(retryAttempt + 1), delay);
+        return;
+      }
+
       showToast('Trade failed: ' + error.message, 'error');
+      setIsRetrying(false);
+      setRetryCount(0);
     }
+
     setLoading(false);
+  };
+
+  // ===== QUICK SCALP TRADE =====
+  // One-click trade with current scalp settings
+  const quickScalpTrade = async (dir) => {
+    setDirection(dir);
+
+    // Apply scalp preset immediately
+    const preset = SCALP_PRESETS[scalpMode];
+    setTakeProfit(preset.tp.toString());
+    setStopLoss(preset.sl.toString());
+
+    // Adjust leverage for asset type
+    const maxLev = ASSETS[selectedAsset].maxLev;
+    const targetLev = Math.min(preset.leverage, maxLev);
+    setLeverage(targetLev);
+
+    // Execute immediately
+    await openTrade(0);
   };
 
   // Close trade - handles multiple index formats from gTrade
@@ -779,34 +1054,145 @@ export default function MetalPerpsWidget() {
               </div>
             </div>
 
-            {/* Direction */}
+            {/* ===== SCALP MODE SELECTOR ===== */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255, 140, 0, 0.1), rgba(255, 68, 68, 0.1))',
+              borderRadius: '8px',
+              padding: '8px',
+              marginBottom: '10px',
+              border: '1px solid rgba(255, 140, 0, 0.2)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ color: '#ff8c00', fontSize: '10px', fontWeight: 600 }}>⚡ SCALP MODE</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {momentum.direction !== 'neutral' && (
+                    <span style={{
+                      fontSize: '8px',
+                      padding: '2px 4px',
+                      borderRadius: '3px',
+                      background: momentum.direction === 'bullish' ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)',
+                      color: momentum.direction === 'bullish' ? '#00ff88' : '#ff4444',
+                    }}>
+                      {momentum.direction === 'bullish' ? '📈' : '📉'} {momentum.change?.toFixed(3)}%
+                    </span>
+                  )}
+                  <span style={{ color: '#888', fontSize: '8px' }}>
+                    {tradeStats.successes}/{tradeStats.attempts} trades
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {Object.entries(SCALP_PRESETS).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setScalpMode(key);
+                      setTakeProfit(preset.tp.toString());
+                      setStopLoss(preset.sl.toString());
+                      // Adjust leverage for asset type
+                      const maxLev = ASSETS[selectedAsset].maxLev;
+                      setLeverage(Math.min(preset.leverage, maxLev));
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '6px 4px',
+                      borderRadius: '4px',
+                      border: scalpMode === key ? '2px solid #ff8c00' : '1px solid rgba(255,255,255,0.1)',
+                      background: scalpMode === key ? 'rgba(255, 140, 0, 0.2)' : 'transparent',
+                      cursor: 'pointer',
+                      fontSize: '8px',
+                    }}
+                  >
+                    <div style={{ color: scalpMode === key ? '#ff8c00' : '#888', fontWeight: 600 }}>{preset.name}</div>
+                    <div style={{ color: '#666', fontSize: '7px' }}>TP:{preset.tp}% SL:{preset.sl}%</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ===== QUICK SCALP BUTTONS ===== */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+              <button
+                onClick={() => quickScalpTrade('LONG')}
+                disabled={loading || isRetrying}
+                style={{
+                  flex: 1,
+                  padding: '12px 8px',
+                  borderRadius: '8px',
+                  border: '2px solid #00ff88',
+                  background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '14px' }}>📈 LONG</div>
+                <div style={{ color: '#00cc6a', fontSize: '9px' }}>Quick {SCALP_PRESETS[scalpMode].name}</div>
+              </button>
+              <button
+                onClick={() => quickScalpTrade('SHORT')}
+                disabled={loading || isRetrying}
+                style={{
+                  flex: 1,
+                  padding: '12px 8px',
+                  borderRadius: '8px',
+                  border: '2px solid #ff4444',
+                  background: 'linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(200, 50, 50, 0.1))',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                <div style={{ color: '#ff4444', fontWeight: 700, fontSize: '14px' }}>📉 SHORT</div>
+                <div style={{ color: '#cc3333', fontSize: '9px' }}>Quick {SCALP_PRESETS[scalpMode].name}</div>
+              </button>
+            </div>
+
+            {/* Retry Status Indicator */}
+            {isRetrying && (
+              <div style={{
+                background: 'rgba(255, 140, 0, 0.15)',
+                borderRadius: '6px',
+                padding: '8px',
+                marginBottom: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}>
+                <span style={{ animation: 'pulse 1s infinite' }}>🔄</span>
+                <span style={{ color: '#ff8c00', fontSize: '11px', fontWeight: 600 }}>
+                  Retrying trade... ({retryCount}/{AUTO_TRADE_CONFIG.maxRetries})
+                </span>
+              </div>
+            )}
+
+            {/* Direction (smaller, secondary option) */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
               <button
                 onClick={() => setDirection('LONG')}
                 style={{
                   flex: 1,
-                  padding: '10px',
-                  borderRadius: '8px',
+                  padding: '8px',
+                  borderRadius: '6px',
                   border: direction === 'LONG' ? '2px solid #00ff88' : '1px solid rgba(0, 255, 136, 0.2)',
                   background: direction === 'LONG' ? 'rgba(0, 255, 136, 0.15)' : 'transparent',
                   color: direction === 'LONG' ? '#00ff88' : '#555',
                   cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontSize: '10px',
                 }}
               >📈 LONG</button>
               <button
                 onClick={() => setDirection('SHORT')}
                 style={{
                   flex: 1,
-                  padding: '10px',
-                  borderRadius: '8px',
+                  padding: '8px',
+                  borderRadius: '6px',
                   border: direction === 'SHORT' ? '2px solid #ff4444' : '1px solid rgba(255, 68, 68, 0.2)',
                   background: direction === 'SHORT' ? 'rgba(255, 68, 68, 0.15)' : 'transparent',
                   color: direction === 'SHORT' ? '#ff4444' : '#555',
                   cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '12px',
+                  fontWeight: 600,
+                  fontSize: '10px',
                 }}
               >📉 SHORT</button>
             </div>
@@ -887,24 +1273,29 @@ export default function MetalPerpsWidget() {
               </div>
             </div>
 
-            {/* Submit */}
+            {/* Submit - Manual Trade with Current Settings */}
             <button
-              onClick={openTrade}
-              disabled={loading}
+              onClick={() => openTrade(0)}
+              disabled={loading || isRetrying}
               style={{
                 width: '100%',
                 padding: '12px',
                 borderRadius: '8px',
                 border: 'none',
-                background: direction === 'LONG' ? 'linear-gradient(135deg, #00ff88, #00cc6a)' : 'linear-gradient(135deg, #ff4444, #cc0000)',
-                color: direction === 'LONG' ? '#000' : '#fff',
+                background: isRetrying
+                  ? 'linear-gradient(135deg, #ff8c00, #cc6600)'
+                  : direction === 'LONG'
+                    ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
+                    : 'linear-gradient(135deg, #ff4444, #cc0000)',
+                color: direction === 'LONG' && !isRetrying ? '#000' : '#fff',
                 fontWeight: 700,
                 fontSize: '13px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
+                cursor: (loading || isRetrying) ? 'not-allowed' : 'pointer',
+                opacity: (loading || isRetrying) ? 0.7 : 1,
               }}
             >
-              {loading ? '⏳ Opening...' : `⚡ ${direction} ${selectedAsset}`}
+              {isRetrying ? `🔄 Retrying (${retryCount}/${AUTO_TRADE_CONFIG.maxRetries})...` :
+               loading ? '⏳ Opening...' : `⚡ ${direction} ${selectedAsset} @ ${displayLeverage}x`}
             </button>
           </>
         )}
@@ -1032,7 +1423,7 @@ export default function MetalPerpsWidget() {
         {/* ----- BOT TAB ----- */}
         {activeTab === 'bot' && (
           <>
-            {/* Bot Status Card - v3.84 Chainlink Integration */}
+            {/* Bot Status Card - v4.0 Aggressive Scalp Execution */}
             <div style={{
               background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(255, 215, 0, 0.1))',
               borderRadius: '10px',
@@ -1044,11 +1435,12 @@ export default function MetalPerpsWidget() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 2s infinite' }} />
                   <div>
-                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v3.87</div>
+                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v4.1</div>
                     <div style={{ color: '#888', fontSize: '9px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span style={{ color: priceSource === 'gtrade-direct' || priceSource === 'gtrade-api' ? '#00ff88' : '#ff9900' }}>
                         {priceSource === 'gtrade-direct' ? '🎯 gTrade Direct' : priceSource === 'gtrade-api' ? '🎯 gTrade API' : '📡 Fallback Mode'}
                       </span>
+                      <span style={{ color: '#ff8c00' }}>| {SCALP_PRESETS[scalpMode].name}</span>
                     </div>
                   </div>
                 </div>
@@ -1057,7 +1449,163 @@ export default function MetalPerpsWidget() {
                   <div style={{ color: '#888', fontSize: '9px' }}>Available</div>
                 </div>
               </div>
-              
+
+              {/* Trade Stats - Session Performance */}
+              <div style={{
+                background: 'rgba(255, 140, 0, 0.1)',
+                borderRadius: '6px',
+                padding: '8px',
+                marginBottom: '10px',
+                border: '1px solid rgba(255, 140, 0, 0.2)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ color: '#ff8c00', fontSize: '9px', fontWeight: 600 }}>⚡ SESSION STATS</span>
+                  <span style={{ color: '#888', fontSize: '8px' }}>
+                    Success Rate: {tradeStats.attempts > 0 ? ((tradeStats.successes / tradeStats.attempts) * 100).toFixed(0) : 0}%
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ flex: 1, background: 'rgba(0,255,136,0.1)', borderRadius: '4px', padding: '6px', textAlign: 'center' }}>
+                    <div style={{ color: '#00ff88', fontSize: '14px', fontWeight: 700 }}>{tradeStats.successes}</div>
+                    <div style={{ color: '#888', fontSize: '7px' }}>FILLED</div>
+                  </div>
+                  <div style={{ flex: 1, background: 'rgba(255,68,68,0.1)', borderRadius: '4px', padding: '6px', textAlign: 'center' }}>
+                    <div style={{ color: '#ff4444', fontSize: '14px', fontWeight: 700 }}>{tradeStats.attempts - tradeStats.successes}</div>
+                    <div style={{ color: '#888', fontSize: '7px' }}>FAILED</div>
+                  </div>
+                  <div style={{ flex: 1, background: 'rgba(255,215,0,0.1)', borderRadius: '4px', padding: '6px', textAlign: 'center' }}>
+                    <div style={{ color: '#FFD700', fontSize: '14px', fontWeight: 700 }}>{tradeStats.attempts}</div>
+                    <div style={{ color: '#888', fontSize: '7px' }}>ATTEMPTS</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== PENDING COLLATERAL / AUTO-CLAIM ===== */}
+              {pendingOrders.length > 0 && (
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(255, 68, 68, 0.15), rgba(255, 140, 0, 0.1))',
+                  borderRadius: '6px',
+                  padding: '10px',
+                  marginBottom: '10px',
+                  border: '1px solid rgba(255, 68, 68, 0.3)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '16px' }}>⚠️</span>
+                      <div>
+                        <div style={{ color: '#ff4444', fontSize: '11px', fontWeight: 700 }}>
+                          {pendingOrders.length} PENDING CLAIMS
+                        </div>
+                        <div style={{ color: '#888', fontSize: '8px' }}>
+                          ${pendingOrders.reduce((sum, o) => sum + (o.collateral || 0), 0).toFixed(2)} stuck collateral
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={autoClaimAllCollateral}
+                      disabled={isClaiming}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: isClaiming ? '#666' : 'linear-gradient(135deg, #FFD700, #ff8c00)',
+                        color: '#000',
+                        fontWeight: 700,
+                        fontSize: '10px',
+                        cursor: isClaiming ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {isClaiming ? '⏳ Claiming...' : '💰 CLAIM ALL'}
+                    </button>
+                  </div>
+
+                  {/* List of pending orders */}
+                  <div style={{ maxHeight: '80px', overflowY: 'auto' }}>
+                    {pendingOrders.map((order, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '4px 6px',
+                        background: 'rgba(0,0,0,0.2)',
+                        borderRadius: '4px',
+                        marginBottom: '3px',
+                        fontSize: '9px',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ color: order.long ? '#00ff88' : '#ff4444' }}>
+                            {order.long ? '📈' : '📉'}
+                          </span>
+                          <span style={{ color: '#fff' }}>{order.asset}</span>
+                          <span style={{ color: '#888' }}>#{order.orderId}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ color: '#FFD700' }}>${order.collateral?.toFixed(2)}</span>
+                          <button
+                            onClick={() => claimCollateral(order.orderId, order.isLimitOrder)}
+                            disabled={isClaiming}
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              border: '1px solid #FFD700',
+                              background: 'transparent',
+                              color: '#FFD700',
+                              fontSize: '8px',
+                              cursor: isClaiming ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            Claim
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Auto-claim toggle */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '8px',
+                    paddingTop: '8px',
+                    borderTop: '1px solid rgba(255,255,255,0.1)',
+                  }}>
+                    <span style={{ color: '#888', fontSize: '9px' }}>Auto-claim on startup</span>
+                    <button
+                      onClick={() => setAutoClaimEnabled(!autoClaimEnabled)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: autoClaimEnabled ? 'rgba(0,255,136,0.2)' : 'rgba(255,255,255,0.1)',
+                        color: autoClaimEnabled ? '#00ff88' : '#888',
+                        fontSize: '8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {autoClaimEnabled ? '✓ ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* No pending claims - show status */}
+              {pendingOrders.length === 0 && (
+                <div style={{
+                  background: 'rgba(0, 255, 136, 0.08)',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  marginBottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}>
+                  <span style={{ color: '#00ff88', fontSize: '10px' }}>✓</span>
+                  <span style={{ color: '#888', fontSize: '9px' }}>No pending collateral claims</span>
+                </div>
+              )}
+
               {/* Position Counters */}
               <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
                 <div style={{ flex: 1, background: 'rgba(0,255,136,0.15)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
