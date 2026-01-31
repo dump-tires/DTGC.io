@@ -1038,12 +1038,6 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     setSwapRoute(routeInfo);
     return routeInfo;
   };
-  
-  // Copy to clipboard helper
-  const copyToClipboard = (text, label = 'Address') => {
-    navigator.clipboard.writeText(text);
-    showToastMsg(`📋 ${label} copied!`, 'success');
-  };
 
   // Fetch live prices - Multi-source with sanity checks
   const fetchLivePrices = useCallback(async () => {
