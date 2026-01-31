@@ -8,6 +8,11 @@ export declare class DtraderBot {
      * Uses LINKED WALLET first (external MetaMask/Rabby), falls back to bot wallet
      */
     private checkGate;
+    /**
+     * Handle web verification deep link from dtgc.io/gold
+     * Token format: base64url_payload.signature
+     */
+    private handleWebVerification;
     private setupHandlers;
     private handleCallback;
     private handleTextInput;
@@ -73,6 +78,11 @@ export declare class DtraderBot {
      * Cancel a snipe order
      */
     private cancelSnipe;
+    /**
+     * Set up Limit Bond Sell (Take Profit) for a snipe order
+     * Automatically sells a percentage of tokens when price increases by target %
+     */
+    private setupLimitBondSell;
     private showFeeStats;
     private showHelp;
     private setupSniperEvents;
