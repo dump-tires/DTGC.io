@@ -2,13 +2,10 @@
  * pump.tires / dump.tires Token Proxy API
  * Proxies requests to bonding curve token APIs to handle CORS
  *
- * Primary: pump.tires (Richard Heart's official pump.fun fork)
- * Fallback: dump.tires (your API if available)
+ * Primary: dump.tires (Ponder indexer)
+ * Fallback: pump.tires (Richard Heart's pump.fun fork)
  *
  * Usage: /api/pump-tokens?filter=activity&page=1
- *
- * pump.tires API returns tokens sorted by filter, we filter for pre-bonded
- * (tokens_sold < 800M = not yet graduated to PulseX)
  */
 
 export default async function handler(req, res) {
@@ -33,27 +30,46 @@ export default async function handler(req, res) {
   const safeFilter = validFilters.includes(filter) ? filter : 'activity';
   const safePage = parseInt(page) || 1;
 
+  // Common headers to avoid 403 errors
+  const commonHeaders = {
+    'Accept': 'application/json',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Origin': 'https://pump.tires',
+    'Referer': 'https://pump.tires/',
+  };
+
   // Try multiple API sources with fallbacks
   const apiSources = [
-    // Primary: pump.tires official API
+    // Primary: Hetzner Ponder indexer (your dedicated server)
     {
-      name: 'pump.tires',
-      url: `https://pump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
+      name: 'hetzner-ponder',
+      url: `http://65.109.68.172:42069/tokens?limit=100&offset=${(safePage - 1) * 100}`,
+      transform: (data) => data.items || data.tokens || data || [],
     },
-    // Fallback 1: pump.tires with activity filter (most active tokens)
+    // Fallback 1: dump.tires Ponder indexer
     {
-      name: 'pump.tires-activity',
-      url: `https://pump.tires/api/tokens?filter=activity&page=${safePage}`,
+      name: 'dump.tires-ponder',
+      url: `https://dump.tires/tokens?limit=100&offset=${(safePage - 1) * 100}`,
+      transform: (data) => data.items || data.tokens || data || [],
     },
-    // Fallback 2: dump.tires (user's API)
+    // Fallback 2: dump.tires with filter
     {
       name: 'dump.tires',
       url: `https://dump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
+      transform: (data) => data.tokens || data.data || data || [],
     },
-    // Fallback 3: Try pump.tires root tokens endpoint
+    // Fallback 3: pump.tires official API
     {
-      name: 'pump.tires-root',
-      url: `https://pump.tires/api/tokens`,
+      name: 'pump.tires',
+      url: `https://pump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
+      transform: (data) => data.tokens || data.data || data || [],
+    },
+    // Fallback 4: pump.tires activity endpoint
+    {
+      name: 'pump.tires-activity',
+      url: `https://pump.tires/api/tokens?filter=activity&page=1`,
+      transform: (data) => data.tokens || data.data || data || [],
     },
   ];
 
@@ -65,14 +81,10 @@ export default async function handler(req, res) {
       console.log(`[pump-tokens] Trying ${source.name}: ${source.url}`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 second timeout
 
       const response = await fetch(source.url, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; DTGC.io/1.0)',
-          'Referer': 'https://dtgc.io/',
-        },
+        headers: commonHeaders,
         signal: controller.signal,
       });
 
@@ -84,8 +96,9 @@ export default async function handler(req, res) {
 
       const data = await response.json();
 
-      // Handle different response formats
-      let tokens = data.tokens || data.data || data || [];
+      // Transform response based on source
+      let tokens = source.transform(data);
+
       if (!Array.isArray(tokens)) {
         console.log(`[pump-tokens] ${source.name} returned non-array:`, typeof tokens);
         throw new Error('Invalid response format - expected array');
@@ -103,6 +116,8 @@ export default async function handler(req, res) {
       const preBondedTokens = tokens.filter(t => {
         // is_launched = true means already graduated to PulseX
         if (t.is_launched === true) return false;
+        // For Ponder format: check launchedTransactionHash
+        if (t.launchedTransactionHash) return false;
         // tokens_sold >= 800M means graduated
         if (t.tokens_sold && t.tokens_sold >= 800000000) return false;
         return true;
@@ -153,6 +168,6 @@ export default async function handler(req, res) {
     error: 'All API sources unavailable',
     errors: allErrors,
     timestamp: Date.now(),
-    help: 'pump.tires API may be down. Try again in a few minutes.',
+    help: 'APIs may be down. Try visiting pump.tires directly.',
   });
 }
