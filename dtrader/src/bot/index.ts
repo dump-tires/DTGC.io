@@ -42,7 +42,7 @@ const GAS_LABELS: Record<GasPriority, string> = {
   max: '💎 MAX SPEED',
 };
 
-// Snipe order tracking
+// Snipe order tracking with Limit Bond Sell (Take Profit)
 interface SnipeOrder {
   id: string;
   tokenAddress: string;
@@ -58,6 +58,15 @@ interface SnipeOrder {
   filledAt?: number;
   txHash?: string;
   tokensReceived?: string;
+  entryPrice?: number; // Price at which we bought
+  // ===== LIMIT BOND SELL (Take Profit) =====
+  takeProfitEnabled?: boolean;
+  takeProfitPercent?: number;    // Price increase % to trigger sell (e.g., 100 = 2x)
+  sellPercent?: number;          // % of tokens to sell (e.g., 50 = sell half, "breakeven initials")
+  takeProfitStatus?: 'active' | 'triggered' | 'filled' | 'cancelled';
+  sellTxHash?: string;
+  tokensSold?: string;
+  sellProfitPls?: number;
 }
 
 interface UserSession {
@@ -958,6 +967,110 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
     if (data.startsWith('cancel_snipe_')) {
       const orderId = data.replace('cancel_snipe_', '');
       await this.cancelSnipe(chatId, orderId);
+      return;
+    }
+
+    // ===== LIMIT BOND SELL (Take Profit) Setup =====
+    if (data.startsWith('set_tp_')) {
+      const orderId = data.replace('set_tp_', '');
+      session.pendingAction = 'limit_bond_sell_percent';
+      session.pendingToken = orderId; // Store orderId temporarily
+      await this.bot.sendMessage(chatId,
+        `📈 **LIMIT BOND SELL - Breakeven Initials**\n\n` +
+        `Set auto-sell after price increase.\n\n` +
+        `📊 **Select price increase % to trigger:**\n\n` +
+        `_Example: 100% = 2x, 50% = 1.5x, 200% = 3x_`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '50% (1.5x)', callback_data: `tp_percent_50_${orderId}` },
+                { text: '100% (2x)', callback_data: `tp_percent_100_${orderId}` },
+              ],
+              [
+                { text: '150% (2.5x)', callback_data: `tp_percent_150_${orderId}` },
+                { text: '200% (3x)', callback_data: `tp_percent_200_${orderId}` },
+              ],
+              [
+                { text: '300% (4x)', callback_data: `tp_percent_300_${orderId}` },
+                { text: '500% (6x)', callback_data: `tp_percent_500_${orderId}` },
+              ],
+              [{ text: '✏️ Custom %', callback_data: `tp_custom_${orderId}` }],
+              [{ text: '🔙 Cancel', callback_data: 'snipe_list' }],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    // Handle take profit percent selection
+    if (data.startsWith('tp_percent_')) {
+      const parts = data.replace('tp_percent_', '').split('_');
+      const percent = parseInt(parts[0]);
+      const orderId = parts.slice(1).join('_');
+      session.pendingAction = 'limit_bond_sell_amount';
+      session.pendingToken = orderId;
+      session.pendingAmount = percent.toString();
+      await this.bot.sendMessage(chatId,
+        `📊 **Sell % of Tokens at ${percent}% Gain:**\n\n` +
+        `How much of your position to sell when target is hit?\n\n` +
+        `💡 _50% = "Breakeven Initials" (recover investment)_`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '25%', callback_data: `tp_sell_25_${percent}_${orderId}` },
+                { text: '50% ⭐', callback_data: `tp_sell_50_${percent}_${orderId}` },
+              ],
+              [
+                { text: '75%', callback_data: `tp_sell_75_${percent}_${orderId}` },
+                { text: '100%', callback_data: `tp_sell_100_${percent}_${orderId}` },
+              ],
+              [{ text: '🔙 Back', callback_data: `set_tp_${orderId}` }],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    // Handle custom TP percent input
+    if (data.startsWith('tp_custom_')) {
+      const orderId = data.replace('tp_custom_', '');
+      session.pendingAction = 'limit_bond_custom_percent';
+      session.pendingToken = orderId;
+      await this.bot.sendMessage(chatId,
+        `✏️ Enter custom price increase % (e.g., 75 for 75%):`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Final confirmation - set up the limit bond sell
+    if (data.startsWith('tp_sell_')) {
+      const parts = data.replace('tp_sell_', '').split('_');
+      const sellPercent = parseInt(parts[0]);
+      const tpPercent = parseInt(parts[1]);
+      const orderId = parts.slice(2).join('_');
+      await this.setupLimitBondSell(chatId, orderId, tpPercent, sellPercent);
+      return;
+    }
+
+    // Cancel take profit
+    if (data.startsWith('cancel_tp_')) {
+      const orderId = data.replace('cancel_tp_', '');
+      const order = session.snipeOrders.find(o => o.id === orderId);
+      if (order) {
+        order.takeProfitEnabled = false;
+        order.takeProfitStatus = 'cancelled';
+        await this.bot.sendMessage(chatId,
+          `✅ **Take Profit Cancelled**\n\nOrder: ${orderId}`,
+          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '📋 My Orders', callback_data: 'snipe_list' }]] } }
+        );
+      }
       return;
     }
 
@@ -2165,6 +2278,7 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
+            [{ text: '📈 Set Limit Bond Sell', callback_data: `set_tp_${orderId}` }],
             [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
             [{ text: '❌ Cancel This Snipe', callback_data: `cancel_snipe_${orderId}` }],
             [{ text: '🔥 Snipe Another', callback_data: 'pump_near_grad' }],
@@ -2225,17 +2339,31 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
       msg += `Token: \`${order.tokenAddress.slice(0, 8)}...${order.tokenAddress.slice(-6)}\`\n`;
       msg += `💰 ${amountDisplay} PLS → ${order.walletAddress}\n`;
 
+      // Show take profit status if enabled
+      if (order.takeProfitEnabled && order.takeProfitPercent && order.sellPercent) {
+        const tpEmoji = order.takeProfitStatus === 'filled' ? '✅' :
+                        order.takeProfitStatus === 'active' ? '🎯' : '⏸️';
+        msg += `${tpEmoji} TP: ${order.takeProfitPercent}% → Sell ${order.sellPercent}%\n`;
+      }
+
       if (order.status === 'filled' && order.tokensReceived) {
         msg += `✅ Got: ${order.tokensReceived} tokens\n`;
-        // Add quick sell button for filled orders
-        buttons.push([
-          { text: `💸 Sell ${order.id}`, callback_data: `quick_sell_${order.tokenAddress}` },
-          { text: `❌ Remove`, callback_data: `cancel_snipe_${order.id}` },
-        ]);
+        // Add buttons for filled orders
+        const filledButtons: any[] = [
+          { text: `💸 Sell`, callback_data: `quick_sell_${order.tokenAddress}` },
+        ];
+        if (!order.takeProfitEnabled) {
+          filledButtons.push({ text: `📈 Set TP`, callback_data: `set_tp_${order.id}` });
+        }
+        filledButtons.push({ text: `❌`, callback_data: `cancel_snipe_${order.id}` });
+        buttons.push(filledButtons);
       } else if (order.status === 'pending') {
-        buttons.push([
-          { text: `❌ Cancel ${order.id}`, callback_data: `cancel_snipe_${order.id}` },
-        ]);
+        const pendingButtons: any[] = [];
+        if (!order.takeProfitEnabled) {
+          pendingButtons.push({ text: `📈 Set TP`, callback_data: `set_tp_${order.id}` });
+        }
+        pendingButtons.push({ text: `❌ Cancel`, callback_data: `cancel_snipe_${order.id}` });
+        buttons.push(pendingButtons);
       }
 
       msg += `\n`;
@@ -2289,6 +2417,50 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
         reply_markup: {
           inline_keyboard: [
             [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
+            [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+          ],
+        },
+      }
+    );
+  }
+
+  /**
+   * Set up Limit Bond Sell (Take Profit) for a snipe order
+   * Automatically sells a percentage of tokens when price increases by target %
+   */
+  private async setupLimitBondSell(chatId: string, orderId: string, tpPercent: number, sellPercent: number): Promise<void> {
+    const session = this.getSession(chatId);
+    const order = session.snipeOrders.find(o => o.id === orderId);
+
+    if (!order) {
+      await this.bot.sendMessage(chatId, `❌ Order ${orderId} not found.`);
+      return;
+    }
+
+    // Set take profit params on the order
+    order.takeProfitEnabled = true;
+    order.takeProfitPercent = tpPercent;
+    order.sellPercent = sellPercent;
+    order.takeProfitStatus = 'active';
+
+    const multiplier = (100 + tpPercent) / 100;
+
+    await this.bot.sendMessage(chatId,
+      `✅ **LIMIT BOND SELL ARMED**\n\n` +
+      `━━━ ORDER: ${orderId} ━━━\n\n` +
+      `🎯 **Trigger:** ${tpPercent}% price increase (${multiplier}x)\n` +
+      `📊 **Sell:** ${sellPercent}% of tokens\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `💡 **Breakeven Strategy:**\n` +
+      `At ${multiplier}x, selling ${sellPercent}% recovers ` +
+      `${Math.floor((sellPercent * multiplier / 100) * 100)}% of initial!\n\n` +
+      `⚜️ *Auto-executes when target is hit*`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
+            [{ text: '❌ Cancel TP', callback_data: `cancel_tp_${orderId}` }],
             [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
           ],
         },

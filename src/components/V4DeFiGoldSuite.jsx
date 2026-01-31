@@ -3048,6 +3048,55 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               💡 <strong>Tip:</strong> Tokens at 80%+ are close to graduation. When they hit 100%, LP is created on PulseX!
             </div>
           </div>
+
+          {/* LIMIT BOND SELL - Take Profit Feature */}
+          <div style={{ marginTop: '16px', padding: '16px', background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(0,0,0,0.3))', borderRadius: '12px', border: '1px solid rgba(212,175,55,0.4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ color: '#D4AF37', fontWeight: 700, fontSize: '1rem' }}>📈 Limit Bond Sell</div>
+              <span style={{ background: 'rgba(212,175,55,0.3)', padding: '2px 8px', borderRadius: '4px', color: '#D4AF37', fontSize: '0.65rem' }}>BREAKEVEN INITIALS</span>
+            </div>
+
+            <div style={{ color: '#ccc', fontSize: '0.8rem', marginBottom: '12px', lineHeight: 1.5 }}>
+              Automatically sell a % of tokens when price increases by your target %. Perfect for recovering your initial investment!
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ color: '#4CAF50', fontSize: '1.1rem', fontWeight: 700 }}>2x → 50%</div>
+                <div style={{ color: '#888', fontSize: '0.65rem' }}>Recovers 100% initial</div>
+              </div>
+              <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ color: '#FFB300', fontSize: '1.1rem', fontWeight: 700 }}>3x → 33%</div>
+                <div style={{ color: '#888', fontSize: '0.65rem' }}>Recovers 100% initial</div>
+              </div>
+            </div>
+
+            <a
+              href="https://t.me/DtraderSniperBot"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                background: 'linear-gradient(135deg, #0088cc, #0099dd)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '12px',
+                color: 'white',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textDecoration: 'none',
+              }}
+            >
+              🤖 Set Up in Telegram Bot →
+            </a>
+            <div style={{ color: '#666', fontSize: '0.65rem', textAlign: 'center', marginTop: '8px' }}>
+              Sniper → Set TP → Auto-executes on target
+            </div>
+          </div>
         </div>
       )}
 
