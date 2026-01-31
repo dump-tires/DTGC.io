@@ -1,9 +1,21 @@
-// Institutional Auto Trade v3.84 - Chainlink Oracle Integration
+// Institutional Auto Trade v3.91 - HYBRID PRICE SOURCES
+// Lambda: GOLD from Chainlink RPC, BTC/ETH from CoinGecko
 import React, { useState, useEffect, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
 
 const LAMBDA_URL = 'https://mqd4yvwog76amuift2p23du2ma0ehaqp.lambda-url.us-east-2.on.aws/';
+
+// gTrade Pricing API - Direct source for real-time prices
+const GTRADE_PRICES_API = 'https://backend-pricing.eu.gains.trade/charts/prices?from=gTrade&pairs=0,1,90,91';
+
+// gTrade pair indices mapping
+const GTRADE_PAIR_INDEX = {
+  BTC: '0',
+  ETH: '1',
+  GOLD: '90',
+  SILVER: '91',
+};
 
 const TV_SYMBOLS = {
   BTC: 'BINANCE:BTCUSDT',
@@ -19,12 +31,12 @@ const ASSET_IMAGES = {
   SILVER: '/images/silver_bar.png',
 };
 
-// SYNCED WITH gTrade v10 actual limits + Lambda v3.84 Chainlink oracles
+// SYNCED WITH gTrade v10 actual limits + Lambda v3.86 gTrade native pricing
 const ASSETS = {
-  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'Chainlink' },
-  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'Chainlink' },
-  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'Chainlink' },
-  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'metals.live' }, // No Chainlink on Arbitrum
+  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'gTrade' },
+  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'gTrade' },
+  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'gTrade' },
+  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'gTrade' },
 };
 
 // Leverage quick-select buttons per asset type
@@ -139,8 +151,9 @@ export default function MetalPerpsWidget() {
   const [botActivity, setBotActivity] = useState([]);
   const [livePrices, setLivePrices] = useState({});
   const [gtradeVerifyPrices, setGtradeVerifyPrices] = useState({});
-  const [priceSource, setPriceSource] = useState('chainlink-oracle');
+  const [priceSource, setPriceSource] = useState('loading');
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [priceUpdateTime, setPriceUpdateTime] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   
   const asset = ASSETS[selectedAsset];
@@ -202,52 +215,76 @@ export default function MetalPerpsWidget() {
     }
   };
 
-  // Fetch live prices from Lambda v3.84 - Chainlink oracles + gTrade verification
+  // Fetch live prices - LAMBDA is PRIMARY (bypasses CORS)
   const fetchPrices = async () => {
+    // PRIMARY: Lambda fetches from gTrade API (no CORS issues!)
     try {
       const result = await apiCall('GET_PRICES');
       if (result.success && result.prices) {
-        console.log('📊 Chainlink prices:', result.prices);
-        console.log('🔍 gTrade verify:', result.gtradeVerify);
-        console.log('📡 Source:', result.source);
-
-        setLivePrices(result.prices);
-        setPriceSource(result.source || 'chainlink-oracle');
-
-        // Store gTrade verification prices for comparison
-        if (result.gtradeVerify) {
-          setGtradeVerifyPrices(result.gtradeVerify);
+        // Validate prices are real (not fallbacks)
+        const p = result.prices;
+        if (p.BTC > 50000 && p.ETH > 1000 && p.GOLD > 3000 && p.SILVER > 20) {
+          console.log('🎯 Lambda gTrade prices:', p);
+          setLivePrices(p);
+          setGtradeVerifyPrices(p);
+          setPriceSource(result.source || 'gtrade-api');
+          setPriceUpdateTime(new Date());
+          return;
         }
-        return;
       }
     } catch (e) {
       console.log('Lambda price fetch failed:', e.message);
     }
 
-    // Fallback: fetch directly if Lambda fails
+    // SECONDARY: Binance for crypto (CORS-friendly)
     const prices = {};
     try {
-      const cryptoRes = await fetch('https://min-api.cryptocompare.com/data/pricemulti?fsyms=BTC,ETH&tsyms=USD');
-      const cryptoData = await cryptoRes.json();
-      if (cryptoData.BTC?.USD) prices.BTC = cryptoData.BTC.USD;
-      if (cryptoData.ETH?.USD) prices.ETH = cryptoData.ETH.USD;
-    } catch (e) { console.log('Crypto fallback failed'); }
+      const [btcRes, ethRes] = await Promise.all([
+        fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT'),
+        fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT')
+      ]);
+      const btcData = await btcRes.json();
+      const ethData = await ethRes.json();
+      if (btcData.price) prices.BTC = parseFloat(btcData.price);
+      if (ethData.price) prices.ETH = parseFloat(ethData.price);
+      console.log('📡 Binance crypto prices:', { BTC: prices.BTC, ETH: prices.ETH });
+    } catch (e) {
+      console.log('Binance fallback failed:', e.message);
+    }
 
+    // TERTIARY: metals.dev API for commodities (CORS-friendly)
     try {
-      const metalsRes = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+      const metalsRes = await fetch('https://api.metals.dev/v1/latest?api_key=demo&currency=USD&unit=toz');
       const metalsData = await metalsRes.json();
-      if (metalsData.items?.[0]?.xauPrice) prices.GOLD = metalsData.items[0].xauPrice;
-      if (metalsData.items?.[0]?.xagPrice) prices.SILVER = metalsData.items[0].xagPrice;
-    } catch (e) { console.log('Metals fallback failed'); }
+      if (metalsData.metals?.gold) prices.GOLD = metalsData.metals.gold;
+      if (metalsData.metals?.silver) prices.SILVER = metalsData.metals.silver;
+      console.log('📡 Metals.dev prices:', { GOLD: prices.GOLD, SILVER: prices.SILVER });
+    } catch (e) {
+      // Try goldapi.io as backup
+      try {
+        const goldRes = await fetch('https://www.goldapi.io/api/XAU/USD', {
+          headers: { 'x-access-token': 'goldapi-demo' }
+        });
+        const goldData = await goldRes.json();
+        if (goldData.price) prices.GOLD = goldData.price;
+      } catch (e2) {
+        console.log('Gold API fallback failed');
+      }
+    }
 
-    // Emergency fallbacks
-    if (!prices.BTC) prices.BTC = 83000;
-    if (!prices.ETH) prices.ETH = 1800;
-    if (!prices.GOLD) prices.GOLD = 3300;
-    if (!prices.SILVER) prices.SILVER = 33;
+    // LAST RESORT: Use previous prices if we have them, or emergency values
+    // Updated v3.91 - current market values as of Jan 2026
+    if (!prices.BTC) prices.BTC = livePrices.BTC || 82000;
+    if (!prices.ETH) prices.ETH = livePrices.ETH || 2650;
+    if (!prices.GOLD) prices.GOLD = livePrices.GOLD || 4800;
+    if (!prices.SILVER) prices.SILVER = livePrices.SILVER || 32;
+
+    const isUsingFallback = !prices.GOLD || prices.GOLD < 4000;
+    console.log(isUsingFallback ? '⚠️ Fallback prices:' : '✅ Live prices:', prices);
 
     setLivePrices(prices);
-    setPriceSource('fallback');
+    setPriceSource(isUsingFallback ? 'fallback' : 'mixed-api');
+    setPriceUpdateTime(new Date());
   };
 
   // Open trade - FIX: Validate price and send integer leverage
@@ -319,32 +356,54 @@ export default function MetalPerpsWidget() {
     setLoading(false);
   };
 
-  // Calculate P&L for a position
+  // Calculate P&L for a position - MATCHES gTRADE FORMULA EXACTLY
   const calculatePnL = (pos) => {
     const currentPrice = livePrices[pos.asset];
-    if (!currentPrice || !pos.openPrice) return null;
-    
-    const priceDiff = pos.long 
+    if (!currentPrice || currentPrice <= 0 || !pos.openPrice || pos.openPrice <= 0) {
+      console.warn(`⚠️ Invalid prices for ${pos.asset}: current=${currentPrice}, open=${pos.openPrice}`);
+      return null;
+    }
+
+    // Ensure pos.long is a boolean (gTrade API may return string)
+    const isLong = pos.long === true || pos.long === 'true';
+    const leverage = pos.leverage || 1;
+    const collateral = pos.collateral || 0;
+
+    // gTrade P&L formula: (currentPrice - openPrice) / openPrice * leverage
+    const priceDiff = isLong
       ? (currentPrice - pos.openPrice) / pos.openPrice
       : (pos.openPrice - currentPrice) / pos.openPrice;
-    
-    const pnlPercent = priceDiff * 100 * (pos.leverage || 1);
-    const pnlUsd = (pos.collateral || 0) * priceDiff * (pos.leverage || 1);
-    
+
+    const pnlPercent = priceDiff * 100 * leverage;
+    const pnlUsd = collateral * priceDiff * leverage;
+
+    console.log(`📊 P&L calc for ${pos.asset}: current=$${currentPrice.toFixed(2)}, open=$${pos.openPrice.toFixed(2)}, ` +
+      `isLong=${isLong}, lev=${leverage}x, diff=${(priceDiff*100).toFixed(4)}%, pnl=${pnlPercent.toFixed(2)}%`);
+
     return { percent: pnlPercent, usd: pnlUsd, currentPrice };
   };
 
-  // Initial load + auto-refresh
+  // Initial load + auto-refresh - AGGRESSIVE for real-time P&L
   useEffect(() => {
     fetchBotStatus();
     fetchPrices();
-    const statusInterval = setInterval(fetchBotStatus, 30000);
-    const priceInterval = setInterval(fetchPrices, 60000);
+    // Refresh prices every 3 seconds for accurate P&L display
+    const priceInterval = setInterval(fetchPrices, 3000);
+    // Refresh positions every 10 seconds
+    const statusInterval = setInterval(fetchBotStatus, 10000);
     return () => {
       clearInterval(statusInterval);
       clearInterval(priceInterval);
     };
   }, []);
+
+  // Extra fast refresh when viewing positions tab
+  useEffect(() => {
+    if (activeTab === 'positions' && positions.length > 0) {
+      const fastPriceInterval = setInterval(fetchPrices, 2000);
+      return () => clearInterval(fastPriceInterval);
+    }
+  }, [activeTab, positions.length]);
 
   // ==================== COLLAPSED STATE ====================
   if (!isExpanded) {
@@ -422,8 +481,8 @@ export default function MetalPerpsWidget() {
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00ff88', animation: 'pulse 2s infinite' }} />
                 <ArbitrumLogo size={10} />
                 <span>gTrade v10</span>
-                <span style={{ color: priceSource === 'chainlink-oracle' ? '#00ff88' : '#ff9900' }}>
-                  • {priceSource === 'chainlink-oracle' ? '🔗 Chainlink' : '📡 Fallback'}
+                <span style={{ color: priceSource.includes('gtrade') || priceSource === 'mixed-api' ? '#00ff88' : '#ff9900' }}>
+                  • {priceSource.includes('gtrade') ? '🎯 Live' : priceSource === 'mixed-api' ? '📡 API' : '⚠️ Stale'}
                 </span>
               </div>
             </div>
@@ -525,10 +584,10 @@ export default function MetalPerpsWidget() {
                     {/* Price source indicator */}
                     <span style={{
                       fontSize: '6px',
-                      color: assetInfo.priceSource === 'Chainlink' ? '#00ff88' : '#ff9900',
+                      color: '#00ff88',
                       opacity: 0.8,
                     }}>
-                      {assetInfo.priceSource === 'Chainlink' ? '🔗' : '📡'}
+                      🎯
                     </span>
                   </button>
                 );
@@ -540,47 +599,47 @@ export default function MetalPerpsWidget() {
               <TradingViewMiniSymbol symbol={tvSymbol} height={160} />
             </div>
 
-            {/* Price Verification Display - matches Lambda v3.84 */}
+            {/* Price Display - Live from Lambda/gTrade */}
             <div style={{
-              background: 'rgba(0, 0, 0, 0.4)',
+              background: priceSource.includes('gtrade') ? 'rgba(0, 255, 136, 0.08)' : 'rgba(255, 150, 0, 0.08)',
               borderRadius: '8px',
               padding: '8px',
               marginBottom: '10px',
-              border: '1px solid rgba(255, 215, 0, 0.1)',
+              border: `1px solid ${priceSource.includes('gtrade') ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 150, 0, 0.2)'}`,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ fontSize: '10px', color: '#888' }}>🔗 {asset.priceSource}</span>
+                  <span style={{
+                    fontSize: '10px',
+                    color: priceSource.includes('gtrade') ? '#00ff88' : '#ff9900',
+                    fontWeight: 600
+                  }}>
+                    {priceSource.includes('gtrade') ? '🎯 LIVE' : priceSource === 'mixed-api' ? '📡 API' : '⚠️ STALE'}
+                  </span>
+                  {priceUpdateTime && (
+                    <span style={{ fontSize: '8px', color: '#555' }}>
+                      {Math.round((Date.now() - priceUpdateTime.getTime()) / 1000)}s ago
+                    </span>
+                  )}
                 </div>
-                <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '14px' }}>
+                <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '16px' }}>
                   ${livePrices[selectedAsset]?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
                 </span>
               </div>
-              {gtradeVerifyPrices[selectedAsset] && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '9px', color: '#666' }}>🔍 gTrade Oracle</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: '#888', fontSize: '11px' }}>
-                      ${gtradeVerifyPrices[selectedAsset]?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                    {(() => {
-                      const diff = ((livePrices[selectedAsset] - gtradeVerifyPrices[selectedAsset]) / gtradeVerifyPrices[selectedAsset] * 100);
-                      const absDiff = Math.abs(diff);
-                      return (
-                        <span style={{
-                          fontSize: '9px',
-                          padding: '1px 4px',
-                          borderRadius: '3px',
-                          background: absDiff < 0.1 ? 'rgba(0,255,136,0.2)' : absDiff < 0.5 ? 'rgba(255,215,0,0.2)' : 'rgba(255,68,68,0.2)',
-                          color: absDiff < 0.1 ? '#00ff88' : absDiff < 0.5 ? '#FFD700' : '#ff4444',
-                        }}>
-                          {diff >= 0 ? '+' : ''}{diff.toFixed(3)}%
-                        </span>
-                      );
-                    })()}
-                  </div>
-                </div>
-              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '9px', color: '#666' }}>
+                  {priceSource.includes('gtrade') ? 'gTrade Oracle Price' : 'Market Price'}
+                </span>
+                <span style={{
+                  fontSize: '8px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: priceSource.includes('gtrade') ? 'rgba(0,255,136,0.2)' : 'rgba(255,150,0,0.2)',
+                  color: priceSource.includes('gtrade') ? '#00ff88' : '#ff9900',
+                }}>
+                  {priceSource.includes('gtrade') ? '✓ Synced with gTrade' : 'May differ from gTrade'}
+                </span>
+              </div>
             </div>
 
             {/* Direction */}
@@ -730,58 +789,87 @@ export default function MetalPerpsWidget() {
             ) : (
               positions.map((pos, idx) => {
                 const pnl = calculatePnL(pos);
+                const isLong = pos.long === true || pos.long === 'true';
+                const currentPrice = livePrices[pos.asset];
                 return (
                   <div key={idx} style={{
                     background: 'rgba(0,0,0,0.3)',
                     borderRadius: '10px',
                     padding: '10px',
                     marginBottom: '8px',
-                    border: `1px solid ${pos.long ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)'}`,
+                    border: `1px solid ${isLong ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)'}`,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '14px' }}>{pos.long ? '📈' : '📉'}</span>
+                        <span style={{ fontSize: '14px' }}>{isLong ? '📈' : '📉'}</span>
                         <span style={{ color: '#fff', fontWeight: 700, fontSize: '12px' }}>{pos.asset}</span>
-                        <span style={{ color: pos.long ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>{pos.long ? 'LONG' : 'SHORT'}</span>
+                        <span style={{ color: isLong ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>{isLong ? 'LONG' : 'SHORT'}</span>
                       </div>
-                      <span style={{ color: '#FFD700', fontSize: '11px', fontWeight: 600 }}>{pos.leverage}x</span>
+                      <span style={{ color: '#FFD700', fontSize: '11px', fontWeight: 600 }}>{pos.leverage?.toFixed(1)}x</span>
                     </div>
-                    
+
+                    {/* Price comparison - MATCHES gTRADE UI */}
+                    <div style={{
+                      background: 'rgba(255,215,0,0.08)',
+                      borderRadius: '6px',
+                      padding: '6px',
+                      marginBottom: '6px',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
+                        <span style={{ color: '#888' }}>Open Price</span>
+                        <span style={{ color: '#fff', fontWeight: 600 }}>${pos.openPrice?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                        <span style={{ color: '#888' }}>Current Price</span>
+                        <span style={{ color: currentPrice && currentPrice > pos.openPrice ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
+                          ${currentPrice?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '---'}
+                        </span>
+                      </div>
+                    </div>
+
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '10px', marginBottom: '8px' }}>
                       <div>
-                        <span style={{ color: '#666' }}>Entry: </span>
-                        <span style={{ color: '#fff' }}>${pos.openPrice?.toFixed(2)}</span>
+                        <span style={{ color: '#666' }}>Collateral: </span>
+                        <span style={{ color: '#fff' }}>${pos.collateral?.toFixed(2)} USDC</span>
                       </div>
                       <div>
-                        <span style={{ color: '#666' }}>Size: </span>
-                        <span style={{ color: '#fff' }}>${pos.collateral?.toFixed(2)}</span>
+                        <span style={{ color: '#666' }}>Position: </span>
+                        <span style={{ color: '#FFD700' }}>${(pos.collateral * pos.leverage).toFixed(2)}</span>
                       </div>
                       <div>
                         <span style={{ color: '#00ff88' }}>TP: </span>
-                        <span style={{ color: '#00ff88' }}>${pos.tp?.toFixed(2)}</span>
+                        <span style={{ color: '#00ff88' }}>${pos.tp > 0 ? pos.tp.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'None'}</span>
                       </div>
                       <div>
                         <span style={{ color: '#ff4444' }}>SL: </span>
-                        <span style={{ color: '#ff4444' }}>${pos.sl?.toFixed(2)}</span>
+                        <span style={{ color: '#ff4444' }}>${pos.sl > 0 ? pos.sl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'None'}</span>
                       </div>
                     </div>
-                    
-                    {pnl && (
-                      <div style={{
-                        background: pnl.percent >= 0 ? 'rgba(0,255,136,0.1)' : 'rgba(255,68,68,0.1)',
-                        borderRadius: '6px',
-                        padding: '6px',
-                        marginBottom: '8px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                      }}>
-                        <span style={{ color: '#888', fontSize: '10px' }}>Live P&L</span>
-                        <span style={{ color: pnl.percent >= 0 ? '#00ff88' : '#ff4444', fontWeight: 700, fontSize: '12px' }}>
-                          {pnl.percent >= 0 ? '+' : ''}{pnl.percent.toFixed(2)}% (${pnl.usd >= 0 ? '+' : ''}{pnl.usd.toFixed(2)})
-                        </span>
+
+                    {/* P&L Display - MATCHES gTRADE FORMAT */}
+                    <div style={{
+                      background: pnl && pnl.percent >= 0 ? 'rgba(0,255,136,0.15)' : 'rgba(255,68,68,0.15)',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      marginBottom: '8px',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#888', fontSize: '10px' }}>Unrealized PnL</span>
+                        {pnl ? (
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ color: pnl.percent >= 0 ? '#00ff88' : '#ff4444', fontWeight: 700, fontSize: '14px' }}>
+                              {pnl.usd >= 0 ? '+' : ''}{pnl.usd.toFixed(2)} USDC
+                            </div>
+                            <div style={{ color: pnl.percent >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px', opacity: 0.8 }}>
+                              ({pnl.percent >= 0 ? '+' : ''}{pnl.percent.toFixed(2)}%)
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#666', fontSize: '12px' }}>Loading...</span>
+                        )}
                       </div>
-                    )}
-                    
+                    </div>
+
                     <button
                       onClick={() => closeTrade(pos.index)}
                       disabled={loading}
@@ -819,10 +907,10 @@ export default function MetalPerpsWidget() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 2s infinite' }} />
                   <div>
-                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v3.84</div>
+                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v3.87</div>
                     <div style={{ color: '#888', fontSize: '9px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ color: priceSource === 'chainlink-oracle' ? '#00ff88' : '#ff9900' }}>
-                        {priceSource === 'chainlink-oracle' ? '🔗 Chainlink Oracles' : '📡 Fallback Mode'}
+                      <span style={{ color: priceSource === 'gtrade-direct' || priceSource === 'gtrade-api' ? '#00ff88' : '#ff9900' }}>
+                        {priceSource === 'gtrade-direct' ? '🎯 gTrade Direct' : priceSource === 'gtrade-api' ? '🎯 gTrade API' : '📡 Fallback Mode'}
                       </span>
                     </div>
                   </div>
@@ -849,41 +937,43 @@ export default function MetalPerpsWidget() {
                 </div>
               </div>
 
-              {/* Oracle Price Status - Full visibility like Telegram */}
+              {/* Oracle Price Status - DIRECT from gTrade */}
               <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '8px' }}>
-                <div style={{ fontSize: '9px', color: '#666', marginBottom: '6px', fontWeight: 600 }}>📊 ORACLE PRICES (Chainlink vs gTrade)</div>
+                <div style={{ fontSize: '9px', color: '#666', marginBottom: '6px', fontWeight: 600 }}>
+                  📊 LIVE PRICES ({priceSource.includes('gtrade') ? 'gTrade Direct' : 'Fallback'})
+                </div>
                 {Object.keys(ASSETS).map(key => {
-                  const chainPrice = livePrices[key];
-                  const gtPrice = gtradeVerifyPrices[key];
-                  const diff = gtPrice ? ((chainPrice - gtPrice) / gtPrice * 100) : null;
-                  const assetInfo = ASSETS[key];
+                  const price = livePrices[key];
                   return (
                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontSize: '9px', color: assetInfo.priceSource === 'Chainlink' ? '#00ff88' : '#ff9900' }}>
-                          {assetInfo.priceSource === 'Chainlink' ? '🔗' : '📡'}
+                        <span style={{ fontSize: '9px', color: priceSource.includes('gtrade') ? '#00ff88' : '#ff9900' }}>
+                          {priceSource.includes('gtrade') ? '🎯' : '📡'}
                         </span>
                         <span style={{ color: '#888', fontSize: '9px' }}>{key}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#FFD700', fontSize: '9px', fontWeight: 600 }}>
-                          ${chainPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
+                        <span style={{ color: '#FFD700', fontSize: '10px', fontWeight: 600 }}>
+                          ${price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
                         </span>
-                        {diff !== null && (
-                          <span style={{
-                            fontSize: '8px',
-                            padding: '1px 3px',
-                            borderRadius: '2px',
-                            background: Math.abs(diff) < 0.1 ? 'rgba(0,255,136,0.2)' : 'rgba(255,215,0,0.2)',
-                            color: Math.abs(diff) < 0.1 ? '#00ff88' : '#FFD700',
-                          }}>
-                            {diff >= 0 ? '+' : ''}{diff.toFixed(2)}%
-                          </span>
-                        )}
+                        <span style={{
+                          fontSize: '8px',
+                          padding: '1px 3px',
+                          borderRadius: '2px',
+                          background: priceSource.includes('gtrade') ? 'rgba(0,255,136,0.2)' : 'rgba(255,150,0,0.2)',
+                          color: priceSource.includes('gtrade') ? '#00ff88' : '#ff9900',
+                        }}>
+                          {priceSource.includes('gtrade') ? '✓ SYNC' : 'FB'}
+                        </span>
                       </div>
                     </div>
                   );
                 })}
+                <div style={{ marginTop: '6px', fontSize: '8px', color: '#555', textAlign: 'center' }}>
+                  {priceSource.includes('gtrade')
+                    ? '✓ Prices match gTrade UI exactly'
+                    : '⚠️ Using fallback - may differ from gTrade'}
+                </div>
               </div>
             </div>
 

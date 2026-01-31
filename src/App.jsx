@@ -5,6 +5,7 @@ import DapperComponent from './components/DapperComponent';
 import ZapperXChain from './components/ZapperXChain';
 import PricingPage from './pages/PricingPage';
 import V4DeFiGoldSuite from './components/V4DeFiGoldSuite';
+import PulseXGold from './components/PulseXGold';
 import WhiteDiamondStaking from './components/WhiteDiamondStaking';
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext, useRef } from 'react';
 import { ethers } from 'ethers';
@@ -13763,10 +13764,10 @@ export default function App() {
             </section>
           )}
 
-          {/* PULSEX GOLD TAB - PulseX Tools */}
+          {/* PULSEX GOLD TAB - DTRADER Edition */}
           {activeTab === 'gold' && (
             <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
-              <V4DeFiGoldSuite 
+              <PulseXGold
                 provider={provider}
                 signer={signer}
                 userAddress={account}

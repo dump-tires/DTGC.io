@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseX Gold - DTRADER Edition | DTGC.io</title>
+  <meta name="description" content="The most advanced PulseChain DeFi interface. Swap, Snipe, Track P&L. Powered by DTGC.">
+  <link rel="icon" type="image/png" href="/Favicon.png">
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+
+  <!-- React & Ethers -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+
+  <style>
+    :root {
+      --gold-primary: #D4AF37;
+      --gold-secondary: #B8960C;
+      --gold-light: #FFD700;
+      --gold-dark: #8B7500;
+      --gold-glow: rgba(212, 175, 55, 0.4);
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: rgba(18, 18, 26, 0.95);
+      --text-primary: #ffffff;
+      --text-secondary: #888888;
+      --text-muted: #666666;
+      --profit: #4CAF50;
+      --loss: #FF4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Starlight background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: radial-gradient(2px 2px at 20px 30px, white, transparent),
+                        radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+                        radial-gradient(1px 1px at 90px 40px, white, transparent),
+                        radial-gradient(2px 2px at 160px 120px, rgba(255,255,255,0.6), transparent);
+      background-repeat: repeat;
+      background-size: 200px 200px;
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    #root {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Animations */
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 20px var(--gold-glow); }
+      50% { box-shadow: 0 0 40px var(--gold-glow), 0 0 60px var(--gold-glow); }
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-in {
+      animation: slideIn 0.3s ease-out;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--gold-primary);
+      border-radius: 4px;
+    }
+
+    /* Toast animations */
+    .toast-enter {
+      animation: slideIn 0.3s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONFIGURATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const CONFIG = {
+      RPC_URL: 'https://pulsechain.publicnode.com',
+      CHAIN_ID: 369,
+      ROUTER: '0x165C3410fC91EF562C50559f7d2289fEbed552d9',
+      WPLS: '0xa1077a294dde1b09bb078844df40758a5d0f9a27',
+      DTGC_ADDRESS: '0xd0676b28a457371d58d47e5247b439114e40eb0f',
+      DTGC_MIN_USD: 50,
+      DEV_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
+      TELEGRAM_BOT: 'https://t.me/dtrader_bot',
+      DTGC_WEBSITE: 'https://dtgc.io',
+    };
+
+    const TOKENS = {
+      PLS: { address: CONFIG.WPLS, symbol: 'PLS', decimals: 18, emoji: '💜', isNative: true },
+      DTGC: { address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', symbol: 'DTGC', decimals: 18, emoji: '🏆' },
+      URMOM: { address: '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0', symbol: 'URMOM', decimals: 18, emoji: '🔥' },
+      PLSX: { address: '0x95b303987a60c71504d99aa1b13b4da07b0790ab', symbol: 'PLSX', decimals: 18, emoji: '🔷' },
+      HEX: { address: '0x2b591e99afe9f32eaa6214f7b7629768c40eeb39', symbol: 'HEX', decimals: 8, emoji: '⬡' },
+      INC: { address: '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d', symbol: 'INC', decimals: 18, emoji: '💎' },
+      DAI: { address: '0xefd766ccb38eaf1dfd701853bfce31359239f305', symbol: 'DAI', decimals: 18, emoji: '📀' },
+      USDC: { address: '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07', symbol: 'USDC', decimals: 6, emoji: '💵' },
+    };
+
+    const ERC20_ABI = [
+      'function balanceOf(address) view returns (uint256)',
+      'function approve(address, uint256) returns (bool)',
+      'function allowance(address, address) view returns (uint256)',
+      'function symbol() view returns (string)',
+      'function decimals() view returns (uint8)',
+    ];
+
+    const ROUTER_ABI = [
+      'function getAmountsOut(uint, address[]) view returns (uint[])',
+      'function swapExactETHForTokensSupportingFeeOnTransferTokens(uint, address[], address, uint) payable',
+      'function swapExactTokensForETHSupportingFeeOnTransferTokens(uint, uint, address[], address, uint)',
+      'function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint, uint, address[], address, uint)',
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HELPERS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const formatNumber = (num, decimals = 4) => {
+      if (!num || isNaN(num)) return '0';
+      const n = parseFloat(num);
+      if (n === 0) return '0';
+      if (Math.abs(n) < 0.000001) return '<0.000001';
+      if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+      if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+      if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+      return n.toFixed(decimals);
+    };
+
+    const formatUSD = (num) => {
+      if (!num || isNaN(num) || num === 0) return '$0.00';
+      if (num < 0.01) return '$' + num.toFixed(4);
+      return '$' + formatNumber(num, 2);
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // COMPONENTS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Toast component
+    const Toast = ({ message, type }) => (
+      <div className="toast-enter" style={{
+        position: 'fixed',
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        padding: '12px 24px',
+        borderRadius: '12px',
+        color: '#fff',
+        fontWeight: 500,
+        zIndex: 10000,
+        maxWidth: '90%',
+        textAlign: 'center',
+        background: type === 'success' ? 'rgba(76,175,80,0.95)' :
+                   type === 'error' ? 'rgba(244,67,54,0.95)' :
+                   'rgba(33,150,243,0.95)',
+      }}>
+        {message}
+      </div>
+    );
+
+    // Token Gate component
+    const TokenGate = ({ balance, requiredUsd, dtgcPrice, onBuy }) => {
+      const valueUsd = balance * dtgcPrice;
+      const progress = Math.min((valueUsd / requiredUsd) * 100, 100);
+      const isUnlocked = valueUsd >= requiredUsd;
+
+      return (
+        <div className="animate-in" style={{
+          background: 'linear-gradient(135deg, rgba(212,175,55,0.1), rgba(212,175,55,0.05))',
+          border: '2px solid var(--gold-glow)',
+          borderRadius: '20px',
+          padding: '24px',
+          textAlign: 'center',
+          maxWidth: '400px',
+          margin: '0 auto',
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>
+            {isUnlocked ? '🔓' : '🔐'}
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--gold-primary)', marginBottom: '8px' }}>
+            {isUnlocked ? 'Access Granted!' : 'Token Gate'}
+          </div>
+          <div style={{ color: 'var(--text-secondary)', marginBottom: '16px' }}>
+            {isUnlocked ? 'Welcome to DTRADER Premium' : `Hold $${requiredUsd} DTGC to unlock`}
+          </div>
+
+          {/* Progress bar */}
+          <div style={{
+            height: '8px',
+            background: 'rgba(0,0,0,0.4)',
+            borderRadius: '4px',
+            overflow: 'hidden',
+            margin: '16px 0',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              background: 'linear-gradient(90deg, var(--gold-primary), var(--gold-light))',
+              borderRadius: '4px',
+              transition: 'width 0.5s ease',
+            }} />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '16px' }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Your DTGC</span>
+            <span style={{ fontWeight: 600 }}>
+              {formatNumber(balance)} <span style={{ color: 'var(--text-muted)' }}>({formatUSD(valueUsd)})</span>
+            </span>
+          </div>
+
+          {!isUnlocked && (
+            <>
+              <div style={{
+                padding: '12px',
+                background: 'rgba(255,255,255,0.05)',
+                borderRadius: '12px',
+                marginBottom: '16px',
+                fontSize: '0.85rem',
+              }}>
+                <span style={{ color: 'var(--text-muted)' }}>Need:</span>{' '}
+                <span style={{ color: 'var(--gold-primary)', fontWeight: 600 }}>
+                  {formatUSD(requiredUsd - valueUsd)} more DTGC
+                </span>
+              </div>
+              <button onClick={onBuy} style={{
+                width: '100%',
+                padding: '16px',
+                background: 'linear-gradient(135deg, var(--gold-primary), var(--gold-secondary))',
+                border: 'none',
+                borderRadius: '12px',
+                color: '#000',
+                fontWeight: 700,
+                fontSize: '1rem',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}>
+                ⚜️ Buy DTGC
+              </button>
+            </>
+          )}
+
+          {isUnlocked && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '12px',
+              marginTop: '16px',
+            }}>
+              {[
+                { icon: '🎯', label: 'Sniper' },
+                { icon: '📈', label: 'Limit Orders' },
+                { icon: '🤖', label: 'Copy Trade' },
+                { icon: '🛡️', label: 'Anti-Rug' },
+              ].map((item, i) => (
+                <div key={i} style={{
+                  padding: '16px',
+                  background: 'rgba(212,175,55,0.1)',
+                  borderRadius: '12px',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '1.5rem' }}>{item.icon}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // Sniper Panel
+    const SniperPanel = ({ isUnlocked, showToast }) => {
+      const [tokenAddress, setTokenAddress] = useState('');
+      const [amount, setAmount] = useState('');
+      const [slippage, setSlippage] = useState('10');
+      const [sniperType, setSniperType] = useState('instabond');
+
+      if (!isUnlocked) {
+        return (
+          <div className="animate-in" style={{
+            background: 'var(--bg-card)',
+            borderRadius: '20px',
+            padding: '24px',
+            border: '1px solid var(--gold-glow)',
+            maxWidth: '500px',
+            margin: '0 auto',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🔒</div>
+            <div style={{ color: 'var(--text-secondary)' }}>Hold $50 DTGC to unlock Sniper</div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="animate-in" style={{
+          background: 'var(--bg-card)',
+          borderRadius: '20px',
+          padding: '24px',
+          border: '1px solid var(--gold-glow)',
+          maxWidth: '500px',
+          margin: '0 auto',
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            color: 'var(--gold-primary)',
+            fontWeight: 700,
+            marginBottom: '16px',
+          }}>
+            🎯 DTRADER Sniper
+            <span style={{
+              marginLeft: 'auto',
+              fontSize: '0.7rem',
+              background: 'var(--gold-glow)',
+              padding: '4px 8px',
+              borderRadius: '6px',
+            }}>PRO</span>
+          </div>
+
+          {/* Type toggle */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '16px',
+            background: 'rgba(0,0,0,0.3)',
+            padding: '4px',
+            borderRadius: '10px',
+          }}>
+            {['instabond', 'newpair'].map(type => (
+              <button
+                key={type}
+                onClick={() => setSniperType(type)}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontFamily: 'inherit',
+                  background: sniperType === type
+                    ? 'linear-gradient(135deg, var(--gold-primary), var(--gold-secondary))'
+                    : 'transparent',
+                  color: sniperType === type ? '#000' : 'var(--text-secondary)',
+                }}
+              >
+                {type === 'instabond' ? '⚡ Instabond' : '🆕 New Pair'}
+              </button>
+            ))}
+          </div>
+
+          <div style={{
+            padding: '12px',
+            background: 'rgba(212,175,55,0.1)',
+            borderRadius: '10px',
+            marginBottom: '16px',
+            fontSize: '0.8rem',
+          }}>
+            {sniperType === 'instabond'
+              ? '🎯 Snipe pump.tires tokens at graduation'
+              : '🆕 Snipe new PulseX listings instantly'}
+          </div>
+
+          {/* Token Address */}
+          <div style={{
+            background: 'rgba(0,0,0,0.4)',
+            borderRadius: '16px',
+            padding: '16px',
+            marginBottom: '12px',
+          }}>
+            <label style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', display: 'block', marginBottom: '8px' }}>
+              Token Address
+            </label>
+            <input
+              value={tokenAddress}
+              onChange={(e) => setTokenAddress(e.target.value)}
+              placeholder="0x..."
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-primary)',
+                fontSize: '1rem',
+                width: '100%',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          {/* Amount & Slippage */}
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{
+              flex: 2,
+              background: 'rgba(0,0,0,0.4)',
+              borderRadius: '16px',
+              padding: '16px',
+            }}>
+              <label style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', display: 'block', marginBottom: '8px' }}>
+                Amount (PLS)
+              </label>
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.0"
+                type="number"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '1.2rem',
+                  width: '100%',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+            <div style={{
+              flex: 1,
+              background: 'rgba(0,0,0,0.4)',
+              borderRadius: '16px',
+              padding: '16px',
+            }}>
+              <label style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', display: 'block', marginBottom: '8px' }}>
+                Slippage %
+              </label>
+              <input
+                value={slippage}
+                onChange={(e) => setSlippage(e.target.value)}
+                placeholder="10"
+                type="number"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '1.2rem',
+                  width: '100%',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={() => showToast(`🎯 Sniper armed for ${tokenAddress.slice(0,10)}...`, 'success')}
+            style={{
+              width: '100%',
+              marginTop: '16px',
+              padding: '16px',
+              background: 'linear-gradient(135deg, var(--gold-primary), var(--gold-secondary))',
+              border: 'none',
+              borderRadius: '12px',
+              color: '#000',
+              fontWeight: 700,
+              fontSize: '1rem',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            🎯 Arm Sniper
+          </button>
+
+          <div style={{ marginTop: '16px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+            Also available on{' '}
+            <a href={CONFIG.TELEGRAM_BOT} target="_blank" style={{ color: 'var(--gold-primary)' }}>
+              Telegram Bot
+            </a>
+          </div>
+        </div>
+      );
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MAIN APP
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function App() {
+      const [connected, setConnected] = useState(false);
+      const [userAddress, setUserAddress] = useState(null);
+      const [provider, setProvider] = useState(null);
+      const [signer, setSigner] = useState(null);
+      const [activeTab, setActiveTab] = useState('swap');
+      const [toast, setToast] = useState(null);
+
+      // Balances
+      const [plsBalance, setPlsBalance] = useState(0);
+      const [dtgcBalance, setDtgcBalance] = useState(0);
+      const [dtgcPrice, setDtgcPrice] = useState(0.0007);
+
+      // Swap
+      const [fromToken, setFromToken] = useState('PLS');
+      const [toToken, setToToken] = useState('DTGC');
+      const [fromAmount, setFromAmount] = useState('');
+      const [toAmount, setToAmount] = useState('');
+      const [swapLoading, setSwapLoading] = useState(false);
+      const [showFromSelect, setShowFromSelect] = useState(false);
+      const [showToSelect, setShowToSelect] = useState(false);
+
+      const isUnlocked = (dtgcBalance * dtgcPrice) >= CONFIG.DTGC_MIN_USD;
+
+      const showToast = useCallback((message, type = 'info') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 5000);
+      }, []);
+
+      // Connect wallet
+      const connectWallet = async () => {
+        if (!window.ethereum) {
+          showToast('Please install MetaMask or a Web3 wallet', 'error');
+          return;
+        }
+
+        try {
+          const browserProvider = new ethers.BrowserProvider(window.ethereum);
+          await browserProvider.send('eth_requestAccounts', []);
+          const signerInstance = await browserProvider.getSigner();
+          const address = await signerInstance.getAddress();
+          const network = await browserProvider.getNetwork();
+
+          if (Number(network.chainId) !== CONFIG.CHAIN_ID) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x' + CONFIG.CHAIN_ID.toString(16) }],
+              });
+            } catch (switchError) {
+              if (switchError.code === 4902) {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: '0x' + CONFIG.CHAIN_ID.toString(16),
+                    chainName: 'PulseChain',
+                    nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                    rpcUrls: [CONFIG.RPC_URL],
+                    blockExplorerUrls: ['https://scan.pulsechain.com'],
+                  }],
+                });
+              }
+            }
+          }
+
+          setProvider(browserProvider);
+          setSigner(signerInstance);
+          setUserAddress(address);
+          setConnected(true);
+          showToast('Wallet connected!', 'success');
+        } catch (err) {
+          console.error('Connect error:', err);
+          showToast(err.message || 'Failed to connect', 'error');
+        }
+      };
+
+      // Fetch balances
+      const fetchBalances = useCallback(async () => {
+        if (!provider || !userAddress) return;
+
+        try {
+          const plsBal = await provider.getBalance(userAddress);
+          setPlsBalance(parseFloat(ethers.formatEther(plsBal)));
+
+          const dtgcContract = new ethers.Contract(CONFIG.DTGC_ADDRESS, ERC20_ABI, provider);
+          const dtgcBal = await dtgcContract.balanceOf(userAddress);
+          setDtgcBalance(parseFloat(ethers.formatEther(dtgcBal)));
+        } catch (err) {
+          console.error('Balance error:', err);
+        }
+      }, [provider, userAddress]);
+
+      // Fetch DTGC price
+      const fetchDtgcPrice = useCallback(async () => {
+        try {
+          const res = await fetch('https://api.dexscreener.com/latest/dex/pairs/pulsechain/0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7');
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.pair?.priceUsd) {
+              setDtgcPrice(parseFloat(data.pair.priceUsd));
+            }
+          }
+        } catch {}
+      }, []);
+
+      useEffect(() => {
+        if (connected) {
+          fetchBalances();
+          fetchDtgcPrice();
+          const interval = setInterval(() => {
+            fetchBalances();
+            fetchDtgcPrice();
+          }, 30000);
+          return () => clearInterval(interval);
+        }
+      }, [connected, fetchBalances, fetchDtgcPrice]);
+
+      // Get quote
+      const getQuote = useCallback(async (amount, from, to) => {
+        if (!amount || parseFloat(amount) <= 0) {
+          setToAmount('');
+          return;
+        }
+
+        try {
+          const fromData = TOKENS[from];
+          const toData = TOKENS[to];
+          if (!fromData || !toData) return;
+
+          const rpcProvider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
+          const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, rpcProvider);
+
+          const amountIn = ethers.parseUnits(amount, fromData.decimals);
+          const path = from === 'PLS' || fromData.isNative
+            ? [CONFIG.WPLS, toData.address]
+            : to === 'PLS' || toData.isNative
+              ? [fromData.address, CONFIG.WPLS]
+              : [fromData.address, CONFIG.WPLS, toData.address];
+
+          const amounts = await router.getAmountsOut(amountIn, path);
+          setToAmount(parseFloat(ethers.formatUnits(amounts[amounts.length - 1], toData.decimals)).toFixed(6));
+        } catch (err) {
+          console.error('Quote error:', err);
+          setToAmount('');
+        }
+      }, []);
+
+      useEffect(() => {
+        const timer = setTimeout(() => {
+          if (fromAmount && fromToken && toToken) {
+            getQuote(fromAmount, fromToken, toToken);
+          }
+        }, 500);
+        return () => clearTimeout(timer);
+      }, [fromAmount, fromToken, toToken, getQuote]);
+
+      // Execute swap
+      const executeSwap = async () => {
+        if (!signer || !fromAmount || !toAmount) return;
+        setSwapLoading(true);
+        showToast('Preparing swap...', 'info');
+
+        try {
+          const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, signer);
+          const fromData = TOKENS[fromToken];
+          const toData = TOKENS[toToken];
+
+          const amountIn = ethers.parseUnits(fromAmount, fromData.decimals);
+          const amountOutMin = ethers.parseUnits(toAmount, toData.decimals) * 97n / 100n; // 3% slippage
+          const deadline = Math.floor(Date.now() / 1000) + 1200;
+
+          const path = fromToken === 'PLS' || fromData.isNative
+            ? [CONFIG.WPLS, toData.address]
+            : toToken === 'PLS' || toData.isNative
+              ? [fromData.address, CONFIG.WPLS]
+              : [fromData.address, CONFIG.WPLS, toData.address];
+
+          // 1% fee
+          const fee = amountIn / 100n;
+          const swapAmount = amountIn - fee;
+
+          if (fromToken === 'PLS' || fromData.isNative) {
+            showToast('🌱 Processing fee...', 'info');
+            const feeTx = await signer.sendTransaction({ to: CONFIG.DEV_WALLET, value: fee });
+            await feeTx.wait();
+
+            showToast('Swapping via PulseX...', 'info');
+            const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(
+              amountOutMin, path, userAddress, deadline, { value: swapAmount }
+            );
+            await tx.wait();
+          } else if (toToken === 'PLS' || toData.isNative) {
+            const tokenContract = new ethers.Contract(fromData.address, ERC20_ABI, signer);
+            const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
+            if (allowance < amountIn) {
+              showToast(`Approving ${fromToken}...`, 'info');
+              const approveTx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
+              await approveTx.wait();
+            }
+
+            showToast('Swapping via PulseX...', 'info');
+            const tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+              amountIn, amountOutMin, path, userAddress, deadline
+            );
+            await tx.wait();
+          } else {
+            const tokenContract = new ethers.Contract(fromData.address, ERC20_ABI, signer);
+            const allowance = await tokenContract.allowance(userAddress, CONFIG.ROUTER);
+            if (allowance < amountIn) {
+              showToast(`Approving ${fromToken}...`, 'info');
+              const approveTx = await tokenContract.approve(CONFIG.ROUTER, ethers.MaxUint256);
+              await approveTx.wait();
+            }
+
+            showToast('Swapping via PulseX...', 'info');
+            const tx = await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+              amountIn, amountOutMin, path, userAddress, deadline
+            );
+            await tx.wait();
+          }
+
+          showToast(`✅ Swapped ${fromAmount} ${fromToken} for ${toToken}!`, 'success');
+          setFromAmount('');
+          setToAmount('');
+          fetchBalances();
+        } catch (err) {
+          console.error('Swap error:', err);
+          showToast(err.reason || err.message || 'Swap failed', 'error');
+        }
+        setSwapLoading(false);
+      };
+
+      const flipTokens = () => {
+        setFromToken(toToken);
+        setToToken(fromToken);
+        setFromAmount(toAmount);
+        setToAmount(fromAmount);
+      };
+
+      const tabs = [
+        { id: 'swap', label: '⚡ Swap' },
+        { id: 'sniper', label: '🎯 Sniper' },
+        { id: 'gate', label: '🔐 Gate' },
+      ];
+
+      // Token selector dropdown
+      const TokenDropdown = ({ show, onSelect, exclude, onClose }) => {
+        if (!show) return null;
+
+        return (
+          <div
+            onClick={onClose}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.5)',
+              zIndex: 1000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--gold-glow)',
+                borderRadius: '16px',
+                padding: '16px',
+                maxHeight: '400px',
+                overflow: 'auto',
+                width: '300px',
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: '12px', color: 'var(--gold-primary)' }}>
+                Select Token
+              </div>
+              {Object.entries(TOKENS)
+                .filter(([symbol]) => symbol !== exclude)
+                .map(([symbol, token]) => (
+                  <div
+                    key={symbol}
+                    onClick={() => { onSelect(symbol); onClose(); }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      marginBottom: '4px',
+                      background: 'rgba(0,0,0,0.3)',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.5rem' }}>{token.emoji}</span>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{symbol}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {token.address.slice(0, 6)}...{token.address.slice(-4)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <div style={{ padding: '20px', minHeight: '100vh' }}>
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+            <div style={{
+              fontSize: '2rem',
+              fontWeight: 900,
+              background: 'linear-gradient(135deg, var(--gold-primary), var(--gold-light))',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              letterSpacing: '3px',
+              marginBottom: '8px',
+            }}>
+              ⚜️ PULSEX GOLD
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', letterSpacing: '2px' }}>
+              DTRADER EDITION • POWERED BY DTGC.IO
+            </div>
+
+            {/* Wallet */}
+            {connected ? (
+              <div style={{
+                marginTop: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                fontSize: '0.85rem',
+              }}>
+                <span style={{
+                  background: 'rgba(0,0,0,0.4)',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontFamily: 'monospace',
+                }}>
+                  {userAddress?.slice(0, 6)}...{userAddress?.slice(-4)}
+                </span>
+                <span style={{ color: 'var(--gold-primary)' }}>
+                  {formatNumber(plsBalance)} PLS
+                </span>
+                <span style={{
+                  background: isUnlocked ? 'rgba(76,175,80,0.2)' : 'rgba(255,68,68,0.2)',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  color: isUnlocked ? 'var(--profit)' : 'var(--loss)',
+                }}>
+                  {isUnlocked ? '🔓 PRO' : '🔒 BASIC'}
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={connectWallet}
+                style={{
+                  marginTop: '16px',
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, var(--gold-primary), var(--gold-secondary))',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: '#000',
+                  fontWeight: 700,
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                Connect Wallet
+              </button>
+            )}
+          </div>
+
+          {/* Navigation */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            background: 'rgba(0,0,0,0.4)',
+            padding: '8px',
+            borderRadius: '16px',
+            marginBottom: '24px',
+            maxWidth: '400px',
+            margin: '0 auto 24px',
+            justifyContent: 'center',
+          }}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  fontFamily: 'inherit',
+                  background: activeTab === tab.id
+                    ? 'linear-gradient(135deg, var(--gold-primary), var(--gold-secondary))'
+                    : 'transparent',
+                  color: activeTab === tab.id ? '#000' : 'var(--text-secondary)',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Content */}
+          {activeTab === 'swap' && (
+            <div className="animate-in" style={{
+              background: 'var(--bg-card)',
+              borderRadius: '20px',
+              padding: '24px',
+              border: '1px solid var(--gold-glow)',
+              maxWidth: '500px',
+              margin: '0 auto',
+            }}>
+              <div style={{ color: 'var(--gold-primary)', fontWeight: 700, marginBottom: '16px' }}>
+                ⚡ Swap
+              </div>
+
+              {/* From */}
+              <div style={{
+                background: 'rgba(0,0,0,0.4)',
+                borderRadius: '16px',
+                padding: '16px',
+                marginBottom: '8px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>From</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Balance: {formatNumber(fromToken === 'PLS' ? plsBalance : (fromToken === 'DTGC' ? dtgcBalance : 0))}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <input
+                    value={fromAmount}
+                    onChange={(e) => setFromAmount(e.target.value)}
+                    placeholder="0.0"
+                    type="number"
+                    style={{
+                      flex: 1,
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-primary)',
+                      fontSize: '1.5rem',
+                      fontWeight: 600,
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                  <button
+                    onClick={() => setShowFromSelect(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'rgba(212,175,55,0.2)',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#fff',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>{TOKENS[fromToken]?.emoji}</span>
+                    <span>{fromToken}</span>
+                    <span>▼</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Flip */}
+              <div style={{ textAlign: 'center', margin: '-4px 0' }}>
+                <button
+                  onClick={flipTokens}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, var(--gold-primary), var(--gold-secondary))',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '1.2rem',
+                  }}
+                >
+                  ⇅
+                </button>
+              </div>
+
+              {/* To */}
+              <div style={{
+                background: 'rgba(0,0,0,0.4)',
+                borderRadius: '16px',
+                padding: '16px',
+                marginBottom: '16px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>To</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Balance: {formatNumber(toToken === 'PLS' ? plsBalance : (toToken === 'DTGC' ? dtgcBalance : 0))}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <input
+                    value={toAmount}
+                    placeholder="0.0"
+                    readOnly
+                    style={{
+                      flex: 1,
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-secondary)',
+                      fontSize: '1.5rem',
+                      fontWeight: 600,
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                  <button
+                    onClick={() => setShowToSelect(true)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'rgba(212,175,55,0.2)',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#fff',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>{TOKENS[toToken]?.emoji}</span>
+                    <span>{toToken}</span>
+                    <span>▼</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Fee info */}
+              <div style={{
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)',
+                textAlign: 'center',
+                marginBottom: '16px',
+              }}>
+                1% fee (0.5% buy & burn DTGC + 0.5% to dev)
+              </div>
+
+              <button
+                onClick={connected ? executeSwap : connectWallet}
+                disabled={connected && (!fromAmount || !toAmount || swapLoading)}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: connected && (!fromAmount || !toAmount || swapLoading)
+                    ? 'rgba(255,255,255,0.1)'
+                    : 'linear-gradient(135deg, var(--gold-primary), var(--gold-secondary))',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: connected && (!fromAmount || !toAmount || swapLoading) ? '#666' : '#000',
+                  fontWeight: 700,
+                  fontSize: '1rem',
+                  cursor: connected && (!fromAmount || !toAmount || swapLoading) ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {!connected ? 'Connect Wallet' : swapLoading ? '⏳ Swapping...' : '⚡ Swap'}
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'sniper' && (
+            <SniperPanel isUnlocked={isUnlocked} showToast={showToast} />
+          )}
+
+          {activeTab === 'gate' && (
+            <TokenGate
+              balance={dtgcBalance}
+              requiredUsd={CONFIG.DTGC_MIN_USD}
+              dtgcPrice={dtgcPrice}
+              onBuy={() => {
+                setActiveTab('swap');
+                setFromToken('PLS');
+                setToToken('DTGC');
+              }}
+            />
+          )}
+
+          {/* Telegram Bot Link */}
+          <div style={{
+            textAlign: 'center',
+            marginTop: '24px',
+            padding: '16px',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '16px',
+            maxWidth: '400px',
+            margin: '24px auto 0',
+          }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+              Use DTRADER on Telegram for more features
+            </div>
+            <a
+              href={CONFIG.TELEGRAM_BOT}
+              target="_blank"
+              style={{
+                display: 'inline-block',
+                padding: '12px 24px',
+                background: 'rgba(212,175,55,0.2)',
+                border: '1px solid var(--gold-glow)',
+                borderRadius: '12px',
+                color: 'var(--gold-primary)',
+                fontWeight: 700,
+                textDecoration: 'none',
+              }}
+            >
+              🤖 Open Telegram Bot
+            </a>
+          </div>
+
+          {/* Footer */}
+          <div style={{
+            textAlign: 'center',
+            marginTop: '24px',
+            fontSize: '0.75rem',
+            color: 'var(--text-muted)',
+          }}>
+            <div style={{ marginBottom: '8px' }}>
+              Powered by{' '}
+              <a href={CONFIG.DTGC_WEBSITE} target="_blank" style={{ color: 'var(--gold-primary)' }}>DTGC.io</a>
+              {' '}•{' '}
+              <a href="https://dtgc.io/pulsexgold" target="_blank" style={{ color: 'var(--gold-primary)' }}>dtgc.io/pulsexgold</a>
+            </div>
+            <div>⚜️ DTRADER Mandalorian Edition</div>
+          </div>
+
+          {/* Token Selector Modals */}
+          <TokenDropdown
+            show={showFromSelect}
+            onSelect={setFromToken}
+            exclude={toToken}
+            onClose={() => setShowFromSelect(false)}
+          />
+          <TokenDropdown
+            show={showToSelect}
+            onSelect={setToToken}
+            exclude={fromToken}
+            onClose={() => setShowToSelect(false)}
+          />
+
+          {/* Toast */}
+          {toast && <Toast message={toast.message} type={toast.type} />}
+        </div>
+      );
+    }
+
+    // Render
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
