@@ -265,38 +265,50 @@ class DtraderBot {
                 await this.handleWebVerification(chatId, userId, token);
                 return;
             }
+            // Handle get_wallet deep link - show wallet address for funding
+            if (param === 'get_wallet') {
+                const wallet = await wallet_1.walletManager.getWallet(userId);
+                if (wallet) {
+                    await this.bot.sendMessage(chatId, `👛 **Your Bot Wallet**\n\n` +
+                        `📋 **Address (tap to copy):**\n\`${wallet.address}\`\n\n` +
+                        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                        `💡 **To fund your bot:**\n` +
+                        `1. Copy the address above\n` +
+                        `2. Send PLS from your main wallet\n` +
+                        `3. Start trading!\n\n` +
+                        `_Your DTGC-holding wallet stays safe_`, {
+                        parse_mode: 'Markdown',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '💰 Check Balance', callback_data: 'wallet_balance' }],
+                                [{ text: '🔑 Export Private Key', callback_data: 'wallet_export' }],
+                                [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+                            ],
+                        },
+                    });
+                }
+                return;
+            }
             const { wallet, isNew } = await wallet_1.walletManager.getOrCreateWallet(userId);
+            // Show compact welcome with menu immediately visible
             const welcomeMsg = `
 ⚜️ **DTG BOND BOT** - PulseChain Sniper
 
 ${isNew ? '✨ New wallet created!' : '👋 Welcome back!'}
 
-**Your Wallet:**
+📋 **Your Bot Wallet:**
 \`${wallet.address}\`
 
+${isNew ? '\n⚠️ Fund this wallet with PLS to start!\n' : ''}
 ━━━━━━━━━━━━━━━━━━━━━
 
-**Features:**
-🎯 InstaBond Sniper (pump.tires)
-⚡ New Pair Sniper (PulseX)
-📊 Limit Orders (Buy/Sell)
-💱 DEX Trading via PulseX
-🛡️ Anti-Rug Protection
-🔥 Auto Buy & Burn DTGC
+💡 **Quick Start:**
+• Send PLS to the address above
+• Link your DTGC wallet via Gold Suite
+• Start sniping with the menu below!
 
-━━━━━━━━━━━━━━━━━━━━━
-
-**Fee Structure (1% Total):**
-🔥 0.5% → Buy & Burn DTGC
-💰 0.5% → Dev Wallet (PLS)
-
-**Token Gate Required:**
-Hold $50+ of DTGC
-⚜️ DTGC: \`${config_1.config.tokenGate.dtgc}\`
-
-🌐 Web UI: dtgc.io/gold
-
-${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
+🌐 **Web UI:** dtgc.io/gold
+⚜️ **Gate:** Hold $50+ DTGC
       `;
             await this.bot.sendMessage(chatId, welcomeMsg, {
                 parse_mode: 'Markdown',
@@ -568,12 +580,23 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             await this.generate6Wallets(chatId, userId);
             return;
         }
-        // Wallets menu
+        // Wallets menu - show wallet info with copy-friendly display
         if (data === 'wallets_menu') {
-            await this.bot.editMessageReplyMarkup(keyboards.walletsMenuKeyboard, {
-                chat_id: parseInt(chatId),
-                message_id: messageId,
-            });
+            const wallet = await wallet_1.walletManager.getWallet(userId);
+            if (wallet) {
+                await this.bot.sendMessage(chatId, `👛 **Your Bot Wallet**\n\n` +
+                    `📋 **Address (tap to copy):**\n\`${wallet.address}\`\n\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                    `💡 **How to use:**\n` +
+                    `1. Copy address above\n` +
+                    `2. Send PLS from your main wallet\n` +
+                    `3. Link DTGC wallet via Gold Suite\n` +
+                    `4. Start trading!\n\n` +
+                    `🔗 **Link your DTGC wallet:** dtgc.io/gold`, {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboards.walletsMenuKeyboard,
+                });
+            }
             return;
         }
         // Export all wallet keys

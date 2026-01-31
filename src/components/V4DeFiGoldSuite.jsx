@@ -763,6 +763,28 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   // ═══════════════════════════════════════════════════════════════════════════
   const [telegramVerifying, setTelegramVerifying] = useState(false);
   const [telegramVerified, setTelegramVerified] = useState(null);
+  const [showWalletPanel, setShowWalletPanel] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState(null);
+
+  // Bot wallets from Telegram (stored in localStorage after linking)
+  const [botWallets, setBotWallets] = useState(() => {
+    try {
+      const stored = localStorage.getItem('dtgc_bot_wallets');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+
+  // Copy address to clipboard
+  const copyToClipboard = async (text, label) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAddress(label);
+      setToast({ message: `✅ ${label} copied!`, type: 'success' });
+      setTimeout(() => setCopiedAddress(null), 2000);
+    } catch (err) {
+      setToast({ message: '❌ Failed to copy', type: 'error' });
+    }
+  };
 
   const verifyForTelegram = async () => {
     if (!signer || !userAddress) {
@@ -2001,27 +2023,175 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     <div style={styles.container} onClick={() => { setShowFromSelect(false); setShowToSelect(false); }}>
       <div style={styles.header}>
         <div style={styles.title}>⚜️ DTGC Gold Suite</div>
-        <button
-          onClick={verifyForTelegram}
-          disabled={telegramVerifying || !userAddress}
-          style={{
-            background: telegramVerified ? 'linear-gradient(135deg, #00C853 0%, #00E676 100%)' : 'linear-gradient(135deg, #0088cc 0%, #0099dd 100%)',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '6px 12px',
-            color: 'white',
-            fontSize: '0.7rem',
-            fontWeight: 600,
-            cursor: telegramVerifying ? 'wait' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            opacity: !userAddress ? 0.5 : 1,
-          }}
-        >
-          {telegramVerifying ? '⏳' : '🤖'} {telegramVerified ? '✓ Bot Linked' : 'Link TG Bot'}
-        </button>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          {/* Wallet Info Button */}
+          {userAddress && (
+            <button
+              onClick={() => setShowWalletPanel(!showWalletPanel)}
+              style={{
+                background: showWalletPanel ? 'linear-gradient(135deg, #D4AF37 0%, #C5A028 100%)' : 'rgba(212,175,55,0.2)',
+                border: '1px solid #D4AF37',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                color: showWalletPanel ? '#000' : '#D4AF37',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              👛 {userAddress.slice(0,4)}...{userAddress.slice(-4)}
+            </button>
+          )}
+          {/* Link TG Bot Button */}
+          <button
+            onClick={verifyForTelegram}
+            disabled={telegramVerifying || !userAddress}
+            style={{
+              background: telegramVerified ? 'linear-gradient(135deg, #00C853 0%, #00E676 100%)' : 'linear-gradient(135deg, #0088cc 0%, #0099dd 100%)',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              color: 'white',
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              cursor: telegramVerifying ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              opacity: !userAddress ? 0.5 : 1,
+            }}
+          >
+            {telegramVerifying ? '⏳' : '🤖'} {telegramVerified ? '✓ Bot Linked' : 'Link TG Bot'}
+          </button>
+        </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          WALLET INFO PANEL - Shows addresses & allows copying
+      ═══════════════════════════════════════════════════════════════════ */}
+      {showWalletPanel && userAddress && (
+        <div style={{
+          background: 'rgba(0,0,0,0.3)',
+          borderRadius: '12px',
+          padding: '12px',
+          marginBottom: '12px',
+          border: '1px solid rgba(212,175,55,0.3)',
+        }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#D4AF37', marginBottom: '10px' }}>
+            👛 Your Wallet
+          </div>
+
+          {/* Connected Wallet Address */}
+          <div style={{
+            background: 'rgba(212,175,55,0.1)',
+            borderRadius: '8px',
+            padding: '10px',
+            marginBottom: '10px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <span style={{ fontSize: '0.65rem', color: '#888' }}>Connected (DTGC Holder)</span>
+              <button
+                onClick={() => copyToClipboard(userAddress, 'Wallet')}
+                style={{
+                  background: copiedAddress === 'Wallet' ? '#00C853' : 'rgba(212,175,55,0.3)',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '4px 8px',
+                  color: copiedAddress === 'Wallet' ? '#fff' : '#D4AF37',
+                  fontSize: '0.6rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {copiedAddress === 'Wallet' ? '✓ Copied' : '📋 Copy'}
+              </button>
+            </div>
+            <div style={{
+              fontFamily: 'monospace',
+              fontSize: '0.7rem',
+              color: '#D4AF37',
+              wordBreak: 'break-all',
+            }}>
+              {userAddress}
+            </div>
+          </div>
+
+          {/* Bot Wallet (from Telegram) */}
+          {telegramVerified && (
+            <div style={{
+              background: 'rgba(0,136,204,0.1)',
+              borderRadius: '8px',
+              padding: '10px',
+              marginBottom: '10px',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '0.65rem', color: '#0088cc' }}>🤖 Bot Wallet (Fund with PLS to trade)</span>
+              </div>
+              <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '8px' }}>
+                Send PLS from your main wallet to this address to use the sniper bot
+              </div>
+              <a
+                href="https://t.me/DTGBondBot?start=get_wallet"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block',
+                  background: 'linear-gradient(135deg, #0088cc 0%, #0099dd 100%)',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  color: '#fff',
+                  fontSize: '0.65rem',
+                  textAlign: 'center',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                }}
+              >
+                📱 Open Bot → Get Wallet Address
+              </a>
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <a
+              href="https://t.me/DTGBondBot"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                flex: 1,
+                background: 'linear-gradient(135deg, #0088cc 0%, #0099dd 100%)',
+                borderRadius: '6px',
+                padding: '8px',
+                color: '#fff',
+                fontSize: '0.6rem',
+                textAlign: 'center',
+                textDecoration: 'none',
+                fontWeight: 600,
+              }}
+            >
+              🤖 Open TG Bot
+            </a>
+            <button
+              onClick={() => window.open(`https://scan.pulsechain.com/address/${userAddress}`, '_blank')}
+              style={{
+                flex: 1,
+                background: 'rgba(255,255,255,0.1)',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '8px',
+                color: '#fff',
+                fontSize: '0.6rem',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              🔍 View on Scanner
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={styles.tabs}>
         {[
