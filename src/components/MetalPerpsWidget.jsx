@@ -202,13 +202,33 @@ export default function MetalPerpsWidget() {
       if (result.success) {
         setBotStatus(result);
         setBalance(result.balance);
-        setPositions(result.positions || []);
+
+        // Normalize positions to ensure consistent structure
+        const normalizedPositions = (result.positions || []).map((pos, idx) => ({
+          ...pos,
+          // Ensure index is set (gTrade uses different field names)
+          index: pos.index ?? pos.tradeIndex ?? pos.pairIndex ?? idx,
+          // Normalize long/short (gTrade uses 'buy' sometimes)
+          long: pos.long ?? pos.buy ?? pos.direction === 'LONG',
+          // Ensure asset is mapped correctly
+          asset: pos.asset || pos.pair || mapPairToAsset(pos.pairIndex),
+          // Ensure numeric values
+          openPrice: parseFloat(pos.openPrice || pos.entryPrice || 0),
+          collateral: parseFloat(pos.collateral || pos.initialPosToken || 0),
+          leverage: parseFloat(pos.leverage || 1),
+          tp: parseFloat(pos.tp || pos.takeProfit || 0),
+          sl: parseFloat(pos.sl || pos.stopLoss || 0),
+        }));
+
+        setPositions(normalizedPositions);
         setLastUpdate(new Date());
-        
+
+        console.log('📊 Positions loaded:', normalizedPositions.length, normalizedPositions);
+
         // Update activity feed
         const newActivity = {
           type: 'STATUS',
-          message: `Updated: $${result.balance?.toFixed(2)} | ${result.positions?.length || 0} positions`,
+          message: `Updated: $${result.balance?.toFixed(2)} | ${normalizedPositions.length} positions`,
           time: new Date().toLocaleTimeString(),
         };
         setBotActivity(prev => [newActivity, ...prev].slice(0, 20));
@@ -216,6 +236,12 @@ export default function MetalPerpsWidget() {
     } catch (error) {
       console.error('Failed to fetch bot status:', error);
     }
+  };
+
+  // Helper to map gTrade pair indices to asset symbols
+  const mapPairToAsset = (pairIndex) => {
+    const pairMap = { 0: 'BTC', 1: 'ETH', 90: 'GOLD', 91: 'SILVER' };
+    return pairMap[pairIndex] || 'BTC';
   };
 
   // Fetch live prices - gTRADE DIRECT is PRIMARY (matches perps exactly!)
@@ -329,28 +355,52 @@ export default function MetalPerpsWidget() {
     setLoading(false);
   };
 
-  // Close trade
-  const closeTrade = async (tradeIndex) => {
+  // Close trade - handles multiple index formats from gTrade
+  const closeTrade = async (tradeIndex, position = null) => {
     if (tradeIndex === undefined || tradeIndex === null) {
       showToast('Invalid position index', 'error');
       return;
     }
     setLoading(true);
     try {
-      const result = await apiCall('CLOSE_TRADE', { tradeIndex });
+      // Try with the provided index first
+      let result = await apiCall('CLOSE_TRADE', { tradeIndex });
+
+      // If that fails and we have position info, try alternative methods
+      if (!result.success && position) {
+        console.log('Trying alternative close methods...');
+
+        // Try with pairIndex + index combo (gTrade v10 format)
+        if (position.pairIndex !== undefined) {
+          result = await apiCall('CLOSE_TRADE', {
+            pairIndex: position.pairIndex,
+            index: position.index,
+          });
+        }
+
+        // Try with full position object
+        if (!result.success) {
+          result = await apiCall('CLOSE_TRADE', { position });
+        }
+      }
+
       if (result.success) {
-        showToast('Position closed!', 'success');
+        const pnl = position ? calculatePnL(position) : null;
+        const pnlMsg = pnl ? ` @ ${pnl.percent >= 0 ? '+' : ''}${pnl.percent.toFixed(1)}%` : '';
+        showToast(`Position closed!${pnlMsg}`, 'success');
         setBotActivity(prev => [{
           type: 'CLOSE',
-          message: `Closed position #${tradeIndex}`,
+          message: `Closed ${position?.asset || 'position'} #${tradeIndex}${pnlMsg}`,
           time: new Date().toLocaleTimeString(),
         }, ...prev].slice(0, 20));
         fetchBotStatus();
       } else {
         showToast(result.error || 'Failed to close', 'error');
+        console.error('Close trade failed:', result);
       }
     } catch (error) {
-      showToast('Close failed', 'error');
+      showToast('Close failed: ' + error.message, 'error');
+      console.error('Close trade error:', error);
     }
     setLoading(false);
   };
@@ -382,6 +432,84 @@ export default function MetalPerpsWidget() {
     return { percent: pnlPercent, usd: pnlUsd, currentPrice };
   };
 
+  // AUTO TP/SL MONITORING - Check if any position hits TP or SL and auto-close
+  const checkAutoClose = async () => {
+    if (positions.length === 0 || Object.keys(livePrices).length === 0) return;
+
+    for (const pos of positions) {
+      const currentPrice = livePrices[pos.asset];
+      if (!currentPrice || !pos.openPrice) continue;
+
+      const isLong = pos.long === true || pos.long === 'true';
+      const priceDiff = isLong
+        ? (currentPrice - pos.openPrice) / pos.openPrice
+        : (pos.openPrice - currentPrice) / pos.openPrice;
+      const pnlPercent = priceDiff * 100 * (pos.leverage || 1);
+
+      // Check Take Profit
+      if (pos.tp > 0) {
+        const tpPrice = isLong
+          ? pos.openPrice * (1 + pos.tp / 100 / (pos.leverage || 1))
+          : pos.openPrice * (1 - pos.tp / 100 / (pos.leverage || 1));
+
+        const tpHit = isLong ? currentPrice >= tpPrice : currentPrice <= tpPrice;
+
+        if (tpHit) {
+          console.log(`🎯 TP HIT for ${pos.asset}! Current: $${currentPrice}, TP: $${tpPrice}, PnL: ${pnlPercent.toFixed(2)}%`);
+          showToast(`🎯 TP HIT! Closing ${pos.asset} @ +${pnlPercent.toFixed(1)}%`, 'success');
+
+          // Auto-close the position
+          try {
+            await apiCall('CLOSE_TRADE', { tradeIndex: pos.index });
+            setBotActivity(prev => [{
+              type: 'TP_HIT',
+              message: `🎯 TP: ${pos.asset} closed @ +${pnlPercent.toFixed(1)}%`,
+              time: new Date().toLocaleTimeString(),
+            }, ...prev].slice(0, 20));
+            fetchBotStatus(); // Refresh positions
+          } catch (e) {
+            console.error('Auto-close TP failed:', e);
+          }
+          return; // Process one at a time
+        }
+      }
+
+      // Check Stop Loss
+      if (pos.sl > 0) {
+        const slPrice = isLong
+          ? pos.openPrice * (1 - pos.sl / 100 / (pos.leverage || 1))
+          : pos.openPrice * (1 + pos.sl / 100 / (pos.leverage || 1));
+
+        const slHit = isLong ? currentPrice <= slPrice : currentPrice >= slPrice;
+
+        if (slHit) {
+          console.log(`🛑 SL HIT for ${pos.asset}! Current: $${currentPrice}, SL: $${slPrice}, PnL: ${pnlPercent.toFixed(2)}%`);
+          showToast(`🛑 SL HIT! Closing ${pos.asset} @ ${pnlPercent.toFixed(1)}%`, 'error');
+
+          // Auto-close the position
+          try {
+            await apiCall('CLOSE_TRADE', { tradeIndex: pos.index });
+            setBotActivity(prev => [{
+              type: 'SL_HIT',
+              message: `🛑 SL: ${pos.asset} closed @ ${pnlPercent.toFixed(1)}%`,
+              time: new Date().toLocaleTimeString(),
+            }, ...prev].slice(0, 20));
+            fetchBotStatus(); // Refresh positions
+          } catch (e) {
+            console.error('Auto-close SL failed:', e);
+          }
+          return; // Process one at a time
+        }
+      }
+
+      // Check for liquidation risk (90% loss)
+      if (pnlPercent <= -90) {
+        console.log(`⚠️ LIQUIDATION RISK for ${pos.asset}! PnL: ${pnlPercent.toFixed(2)}%`);
+        showToast(`⚠️ ${pos.asset} near liquidation! ${pnlPercent.toFixed(1)}%`, 'error');
+      }
+    }
+  };
+
   // Initial load + auto-refresh - AGGRESSIVE for real-time P&L
   useEffect(() => {
     fetchBotStatus();
@@ -390,9 +518,12 @@ export default function MetalPerpsWidget() {
     const priceInterval = setInterval(fetchPrices, 3000);
     // Refresh positions every 10 seconds
     const statusInterval = setInterval(fetchBotStatus, 10000);
+    // Check TP/SL every 5 seconds
+    const tpSlInterval = setInterval(checkAutoClose, 5000);
     return () => {
       clearInterval(statusInterval);
       clearInterval(priceInterval);
+      clearInterval(tpSlInterval);
     };
   }, []);
 
@@ -403,6 +534,13 @@ export default function MetalPerpsWidget() {
       return () => clearInterval(fastPriceInterval);
     }
   }, [activeTab, positions.length]);
+
+  // Run auto-close check whenever prices or positions update
+  useEffect(() => {
+    if (positions.length > 0 && Object.keys(livePrices).length > 0) {
+      checkAutoClose();
+    }
+  }, [livePrices, positions]);
 
   // ==================== COLLAPSED STATE ====================
   if (!isExpanded) {
@@ -870,7 +1008,7 @@ export default function MetalPerpsWidget() {
                     </div>
 
                     <button
-                      onClick={() => closeTrade(pos.index)}
+                      onClick={() => closeTrade(pos.index, pos)}
                       disabled={loading}
                       style={{
                         width: '100%',
