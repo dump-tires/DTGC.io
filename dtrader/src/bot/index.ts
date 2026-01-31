@@ -31,6 +31,7 @@ interface UserSession {
   pendingAction?: string;
   pendingToken?: string;
   pendingAmount?: string;
+  linkedWallet?: string; // External wallet address (MetaMask, Rabby, etc.)
   settings: {
     slippage: number;
     gasLimit: number;
@@ -372,6 +373,24 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
       return;
     }
 
+    // Refresh balance - rescan wallet and show updated DTGC balance
+    if (data === 'refresh_balance') {
+      await this.showRefreshedBalance(chatId, userId);
+      return;
+    }
+
+    // Link external wallet - allows users to track their MetaMask/Rabby wallet
+    if (data === 'link_wallet') {
+      session.pendingAction = 'link_wallet_address';
+      await this.bot.sendMessage(chatId,
+        `🔗 **Link External Wallet**\n\n` +
+        `Paste your wallet address (from MetaMask, Rabby, etc.) to track your DTGC balance and use the Gold Suite seamlessly.\n\n` +
+        `📝 Enter your wallet address (0x...):`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
     if (data === 'check_token') {
       session.pendingAction = 'check_token_address';
       await this.bot.sendMessage(chatId, '📝 Enter the token address to check:');
@@ -540,6 +559,17 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
       }
       session.pendingAction = undefined;
       await this.checkTokenSafety(chatId, text);
+      return;
+    }
+
+    // Link external wallet
+    if (session.pendingAction === 'link_wallet_address') {
+      if (!ethers.isAddress(text)) {
+        await this.bot.sendMessage(chatId, '❌ Invalid wallet address. Try again:');
+        return;
+      }
+      session.pendingAction = undefined;
+      await this.linkExternalWallet(chatId, userId, text);
       return;
     }
 
@@ -977,6 +1007,90 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
       `**Gate Status:**\n${gateCheck.message}`,
       { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
     );
+  }
+
+  /**
+   * Show refreshed balance for both bot wallet and linked external wallet
+   */
+  private async showRefreshedBalance(chatId: string, userId: string): Promise<void> {
+    const session = this.getSession(chatId.toString());
+    const wallet = await walletManager.getWallet(userId);
+
+    let msg = `🔄 **Balance Refreshed**\n\n`;
+
+    // Bot wallet balance
+    if (wallet) {
+      const plsBalance = await walletManager.getPlsBalance(wallet.address);
+      const gateCheck = await tokenGate.checkAccess(wallet.address);
+      msg += `**🤖 Bot Wallet:**\n`;
+      msg += `\`${wallet.address.slice(0, 8)}...${wallet.address.slice(-6)}\`\n`;
+      msg += `💎 ${Number(plsBalance.formatted).toLocaleString()} PLS\n`;
+      msg += `${gateCheck.allowed ? '✅' : '❌'} Gate: ${gateCheck.allowed ? 'PASS' : 'Need $50 DTGC'}\n\n`;
+    }
+
+    // Linked external wallet balance
+    if (session.linkedWallet) {
+      try {
+        const extPlsBalance = await walletManager.getPlsBalance(session.linkedWallet);
+        const extGateCheck = await tokenGate.checkAccess(session.linkedWallet);
+        const dtgcBalance = await walletManager.getTokenBalance(session.linkedWallet, config.tokenGate.dtgc);
+
+        msg += `**🔗 Linked Wallet:**\n`;
+        msg += `\`${session.linkedWallet.slice(0, 8)}...${session.linkedWallet.slice(-6)}\`\n`;
+        msg += `💎 ${Number(extPlsBalance.formatted).toLocaleString()} PLS\n`;
+        msg += `⚜️ ${Number(dtgcBalance.balanceFormatted).toLocaleString()} DTGC\n`;
+        msg += `${extGateCheck.allowed ? '✅' : '❌'} Gate: ${extGateCheck.allowed ? 'PASS' : 'Need $50 DTGC'}\n\n`;
+      } catch (err) {
+        msg += `**🔗 Linked Wallet:** Error fetching\n\n`;
+      }
+    } else {
+      msg += `💡 _Tip: Link your MetaMask/Rabby wallet for seamless tracking!_\n`;
+    }
+
+    msg += `_Last updated: ${new Date().toLocaleTimeString()}_`;
+
+    await this.bot.sendMessage(chatId, msg, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboards.mainMenuKeyboard,
+    });
+  }
+
+  /**
+   * Link an external wallet address for balance tracking
+   */
+  private async linkExternalWallet(chatId: string, userId: string, address: string): Promise<void> {
+    const session = this.getSession(chatId.toString());
+    session.linkedWallet = address;
+
+    try {
+      const plsBalance = await walletManager.getPlsBalance(address);
+      const gateCheck = await tokenGate.checkAccess(address);
+      const dtgcBalance = await walletManager.getTokenBalance(address, config.tokenGate.dtgc);
+
+      await this.bot.sendMessage(chatId,
+        `✅ **Wallet Linked Successfully!**\n\n` +
+        `**Address:**\n\`${address}\`\n\n` +
+        `**Balances:**\n` +
+        `💎 ${Number(plsBalance.formatted).toLocaleString()} PLS\n` +
+        `⚜️ ${Number(dtgcBalance.balanceFormatted).toLocaleString()} DTGC\n\n` +
+        `**Gate Status:**\n${gateCheck.message}\n\n` +
+        `_Use 🔄 Refresh to update balances anytime!_\n` +
+        `_Open Gold Suite with same wallet to trade!_`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboards.mainMenuKeyboard,
+        }
+      );
+    } catch (err) {
+      await this.bot.sendMessage(chatId,
+        `✅ **Wallet Linked:** \`${address}\`\n\n` +
+        `⚠️ Could not fetch balance. Will retry on refresh.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboards.mainMenuKeyboard,
+        }
+      );
+    }
   }
 
   private async showFeeStats(chatId: string): Promise<void> {

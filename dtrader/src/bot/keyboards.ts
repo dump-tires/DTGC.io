@@ -10,6 +10,10 @@ import TelegramBot from 'node-telegram-bot-api';
 export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
+      { text: '🔄 Refresh', callback_data: 'refresh_balance' },
+      { text: '🔗 Link Wallet', callback_data: 'link_wallet' },
+    ],
+    [
       { text: '💰 Buy', callback_data: 'action_buy' },
       { text: '💸 Sell', callback_data: 'action_sell' },
     ],
@@ -22,7 +26,7 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
       { text: '🐋 Copy Trade', callback_data: 'copy_menu' },
     ],
     [
-      { text: '👛 Wallets (6)', callback_data: 'wallets_menu' },
+      { text: '👛 Wallets', callback_data: 'wallets_menu' },
       { text: '📈 Portfolio', callback_data: 'portfolio' },
     ],
     [
@@ -30,11 +34,7 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
       { text: '⚙️ Settings', callback_data: 'settings' },
     ],
     [
-      { text: '🔥 Fee Stats', callback_data: 'fee_stats' },
-      { text: '❓ Help', callback_data: 'help' },
-    ],
-    [
-      { text: '⚜️ Gold Suite (Wallet Connect)', url: 'https://dtgc.io/gold' },
+      { text: '⚜️ Gold Suite 📱', url: 'https://dtgc.io/gold' },
     ],
   ],
 };
@@ -44,7 +44,10 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
 export const walletsMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
-      { text: '🆕 Generate 6 Wallets', callback_data: 'wallets_generate' },
+      { text: '🔗 Link External Wallet', callback_data: 'link_wallet' },
+    ],
+    [
+      { text: '🆕 Generate New Wallet', callback_data: 'wallets_generate' },
     ],
     [
       { text: '💰 View Balances', callback_data: 'wallets_balance' },

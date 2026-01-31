@@ -22,6 +22,14 @@ export declare class DtraderBot {
     private showUserOrders;
     private checkTokenSafety;
     private showBalance;
+    /**
+     * Show refreshed balance for both bot wallet and linked external wallet
+     */
+    private showRefreshedBalance;
+    /**
+     * Link an external wallet address for balance tracking
+     */
+    private linkExternalWallet;
     private showFeeStats;
     private showHelp;
     private setupSniperEvents;
