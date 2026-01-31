@@ -1429,56 +1429,66 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   // ═══════════════════════════════════════════════════════════════════════════
   // INSTABOND: Fetch top 10 tokens closest to bonding from pump.tires
   // ═══════════════════════════════════════════════════════════════════════════
+  const [instabondError, setInstabondError] = useState(null);
+
   const fetchPreBondedTokens = useCallback(async () => {
     setInstabondLoading(true);
-    try {
-      // Try multiple API endpoints
-      let data = null;
-      const endpoints = [
-        '/api/pump-tokens?filter=latest&page=1',
-        'https://pump.tires/api/tokens?filter=latest&page=1',
-      ];
+    setInstabondError(null);
 
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint);
-          if (response.ok) {
-            data = await response.json();
-            break;
-          }
-        } catch (e) {
-          continue;
-        }
+    try {
+      // Use our API proxy which handles CORS and fallbacks
+      // filter=activity gives us the most active tokens (more likely to graduate soon)
+      const response = await fetch('/api/pump-tokens?filter=activity&page=1');
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
       }
 
-      if (!data?.tokens) {
-        console.log('pump.tires API unavailable');
+      const data = await response.json();
+
+      // Check for API error
+      if (!data.success) {
+        throw new Error(data.error || 'API unavailable');
+      }
+
+      // Check if we got tokens
+      if (!data.tokens || data.tokens.length === 0) {
+        setInstabondError('No tokens found. pump.tires may be down.');
+        setPreBondedTokens([]);
         return;
       }
 
-      // Filter for pre-bonded tokens and calculate progress
-      const preBonded = (data.tokens || [])
-        .filter(t => !t.is_launched) // Only pre-bonded
-        .map(t => ({
-          address: t.address,
-          name: t.name,
-          symbol: t.symbol,
-          creator: t.creator?.username || 'Anonymous',
-          progress: (parseFloat(t.tokens_sold || 0) / TARGET_TOKENS_SOLD) * 100,
-          tokensSold: t.tokens_sold,
-          price: t.price || '0',
-          marketValue: t.market_value || '0',
-          logo: t.image_cid ? `${PUMP_TIRES_IPFS}/${t.image_cid}` : null,
-          createdAt: parseInt(t.created_timestamp || 0) * 1000,
-        }))
-        .sort((a, b) => b.progress - a.progress) // Sort by highest progress (closest to graduation)
+      // Log source for debugging
+      console.log(`InstaBond: Loaded ${data.tokens.length} tokens from ${data.source}`);
+
+      // Map tokens to our format with progress calculation
+      const preBonded = data.tokens.map(t => ({
+        address: t.address,
+        name: t.name || 'Unknown',
+        symbol: t.symbol || '???',
+        creator: t.creator?.username || 'Anonymous',
+        progress: (parseFloat(t.tokens_sold || 0) / TARGET_TOKENS_SOLD) * 100,
+        tokensSold: t.tokens_sold || 0,
+        price: t.price || '0',
+        marketValue: t.market_value || '0',
+        logo: t.image_cid ? `${PUMP_TIRES_IPFS}/${t.image_cid}` : null,
+        createdAt: parseInt(t.created_timestamp || 0) * 1000,
+      }))
+        .sort((a, b) => b.progress - a.progress) // Highest progress first
         .slice(0, 10); // Top 10
 
       setPreBondedTokens(preBonded);
-      showToastMsg(`🔥 Loaded ${preBonded.length} tokens near graduation`, 'success');
+
+      if (preBonded.length > 0) {
+        const nearGrad = preBonded.filter(t => t.progress >= 80).length;
+        showToastMsg(`🔥 ${preBonded.length} tokens loaded (${nearGrad} near graduation!)`, 'success');
+      }
     } catch (err) {
       console.error('InstaBond fetch error:', err);
+      setInstabondError(`Failed to load: ${err.message}`);
+      showToastMsg(`❌ Could not load pump.tires data`, 'error');
     }
+
     setInstabondLoading(false);
   }, [showToastMsg]);
 
@@ -3280,9 +3290,61 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               <div style={{ textAlign: 'center', color: '#888', padding: '40px' }}>
                 ⏳ Loading tokens from pump.tires...
               </div>
+            ) : instabondError ? (
+              <div style={{ textAlign: 'center', padding: '30px', background: 'rgba(255,87,34,0.1)', borderRadius: '12px', border: '1px solid rgba(255,87,34,0.3)' }}>
+                <div style={{ color: '#FF5722', marginBottom: '12px', fontSize: '0.9rem' }}>
+                  ⚠️ {instabondError}
+                </div>
+                <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '16px' }}>
+                  The pump.tires API may be temporarily unavailable.
+                </div>
+                <button
+                  onClick={fetchPreBondedTokens}
+                  style={{
+                    background: 'rgba(255,87,34,0.2)',
+                    border: '1px solid rgba(255,87,34,0.5)',
+                    borderRadius: '8px',
+                    padding: '10px 24px',
+                    color: '#FF5722',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  🔄 Try Again
+                </button>
+                <a
+                  href="https://pump.tires"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'block',
+                    marginTop: '12px',
+                    color: '#D4AF37',
+                    fontSize: '0.75rem',
+                    textDecoration: 'none',
+                  }}
+                >
+                  🌐 Visit pump.tires directly →
+                </a>
+              </div>
             ) : preBondedTokens.length === 0 ? (
               <div style={{ textAlign: 'center', color: '#888', padding: '40px' }}>
-                No pre-bonded tokens found. Click Refresh to load.
+                <div style={{ marginBottom: '16px' }}>No tokens loaded yet.</div>
+                <button
+                  onClick={fetchPreBondedTokens}
+                  style={{
+                    background: 'rgba(212,175,55,0.2)',
+                    border: '1px solid rgba(212,175,55,0.5)',
+                    borderRadius: '8px',
+                    padding: '10px 24px',
+                    color: '#D4AF37',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  🔄 Load Tokens
+                </button>
               </div>
             ) : (
               preBondedTokens.map((token, idx) => (
