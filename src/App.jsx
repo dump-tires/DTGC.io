@@ -3591,16 +3591,22 @@ export default function App() {
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState(null);
   
-  // URL-based tab routing - supports /stake, /burn, /vote, /whitepaper, /links, /analytics
+  // URL-based tab routing - supports /stake, /burn, /vote, /whitepaper, /links, /analytics, /gold
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
-      const path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
+      let path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
       const hash = window.location.hash.toLowerCase().replace('#', '');
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      
+
+      // Redirect pulsexgold → gold
+      if (path === 'pulsexgold') {
+        window.history.replaceState(null, '', '/gold');
+        path = 'gold';
+      }
+
       const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'gold', 'whitediamond', 'zapperx'];
-      
+
       // Check URL param first: ?tab=stake
       if (tabParam && validTabs.includes(tabParam)) return tabParam;
       // Check path: /stake
@@ -13764,10 +13770,10 @@ export default function App() {
             </section>
           )}
 
-          {/* PULSEX GOLD TAB - DTRADER Edition */}
+          {/* DTGC GOLD TAB - Full DeFi Suite (Swap + Portfolio + LP) */}
           {activeTab === 'gold' && (
             <section className="section-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
-              <PulseXGold
+              <V4DeFiGoldSuite
                 provider={provider}
                 signer={signer}
                 userAddress={account}

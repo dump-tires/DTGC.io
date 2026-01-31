@@ -51,7 +51,7 @@ const CONFIG = {
   EXPLORER: 'https://scan.pulsechain.com',
 };
 
-// Helper to get token logo - DTGC uses official gold trading coin, LP uses gold bar
+// Helper to get token logo - DTGC uses official gold trading coin logo
 const getTokenLogo = (address) => {
   const addr = address?.toLowerCase();
   // DTGC - Official Gold Trading Coin logo (bar chart + gavel)
@@ -60,7 +60,7 @@ const getTokenLogo = (address) => {
   }
   // DTGC/URMOM LP - Gold bar icon
   if (addr === '0x670c972bb5388e087a2934a063064d97278e01f3') {
-    return '/LPfavicon.png';
+    return '/gold_bar.png';
   }
   // Default: gib.show
   return `${CONFIG.GIB_SHOW_BASE}/${address}`;
@@ -608,7 +608,15 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const [pairReserves, setPairReserves] = useState(null);
   const [showLpToken0Select, setShowLpToken0Select] = useState(false);
   const [showLpToken1Select, setShowLpToken1Select] = useState(false);
-  
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INSTABOND SNIPE - pump.tires Top 10 Closest to Bonding
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [preBondedTokens, setPreBondedTokens] = useState([]);
+  const [instabondLoading, setInstabondLoading] = useState(false);
+  const PUMP_TIRES_IPFS = 'https://ipfs-pump-tires.b-cdn.net/ipfs';
+  const TARGET_TOKENS_SOLD = 800_000_000; // 800M tokens = graduation
+
   // Balances for all tokens
   const [balances, setBalances] = useState({});
   
@@ -1165,9 +1173,80 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     }
   }, [provider, userAddress]);
 
+  // AUTO-SCAN: Trigger wallet scan immediately when wallet connects (any tab)
+  useEffect(() => {
+    if (userAddress && walletTokens.length === 0) {
+      scanWalletTokens();
+    }
+  }, [userAddress, scanWalletTokens]);
+
+  // Also refresh on portfolio tab if manually needed
   useEffect(() => {
     if (activeTab === 'portfolio' && userAddress && walletTokens.length === 0) scanWalletTokens();
   }, [activeTab, userAddress, walletTokens.length, scanWalletTokens]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INSTABOND: Fetch top 10 tokens closest to bonding from pump.tires
+  // ═══════════════════════════════════════════════════════════════════════════
+  const fetchPreBondedTokens = useCallback(async () => {
+    setInstabondLoading(true);
+    try {
+      // Try multiple API endpoints
+      let data = null;
+      const endpoints = [
+        '/api/pump-tokens?filter=latest&page=1',
+        'https://pump.tires/api/tokens?filter=latest&page=1',
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (response.ok) {
+            data = await response.json();
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      if (!data?.tokens) {
+        console.log('pump.tires API unavailable');
+        return;
+      }
+
+      // Filter for pre-bonded tokens and calculate progress
+      const preBonded = (data.tokens || [])
+        .filter(t => !t.is_launched) // Only pre-bonded
+        .map(t => ({
+          address: t.address,
+          name: t.name,
+          symbol: t.symbol,
+          creator: t.creator?.username || 'Anonymous',
+          progress: (parseFloat(t.tokens_sold || 0) / TARGET_TOKENS_SOLD) * 100,
+          tokensSold: t.tokens_sold,
+          price: t.price || '0',
+          marketValue: t.market_value || '0',
+          logo: t.image_cid ? `${PUMP_TIRES_IPFS}/${t.image_cid}` : null,
+          createdAt: parseInt(t.created_timestamp || 0) * 1000,
+        }))
+        .sort((a, b) => b.progress - a.progress) // Sort by highest progress (closest to graduation)
+        .slice(0, 10); // Top 10
+
+      setPreBondedTokens(preBonded);
+      showToastMsg(`🔥 Loaded ${preBonded.length} tokens near graduation`, 'success');
+    } catch (err) {
+      console.error('InstaBond fetch error:', err);
+    }
+    setInstabondLoading(false);
+  }, [showToastMsg]);
+
+  // Auto-fetch when InstaBond tab is active
+  useEffect(() => {
+    if (activeTab === 'instabond' && preBondedTokens.length === 0) {
+      fetchPreBondedTokens();
+    }
+  }, [activeTab, preBondedTokens.length, fetchPreBondedTokens]);
 
   // Get quote
   const getQuote = useCallback(async (inputAmount, from, to) => {
@@ -1715,14 +1794,14 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   return (
     <div style={styles.container} onClick={() => { setShowFromSelect(false); setShowToSelect(false); }}>
       <div style={styles.header}>
-        <div style={styles.title}>🏆 DeFi Gold Suite</div>
-        <div style={styles.subtitle}>Swap • Portfolio • Create LP</div>
+        <div style={styles.title}>⚜️ DTGC Gold</div>
+        <div style={styles.subtitle}>Swap • Portfolio • LP • InstaBond</div>
       </div>
-      
+
       <div style={styles.tabs}>
-        {['swap', 'portfolio', 'create-lp'].map((tab) => (
+        {['swap', 'portfolio', 'create-lp', 'instabond'].map((tab) => (
           <button key={tab} style={{ ...styles.tab, ...(activeTab === tab ? styles.tabActive : styles.tabInactive) }} onClick={() => setActiveTab(tab)}>
-            {tab === 'swap' && '🔄 Swap'}{tab === 'portfolio' && '📊 Portfolio'}{tab === 'create-lp' && '💧 LP'}
+            {tab === 'swap' && '🔄 Swap'}{tab === 'portfolio' && '📊 Portfolio'}{tab === 'create-lp' && '💧 LP'}{tab === 'instabond' && '🔥 InstaBond'}
           </button>
         ))}
       </div>
@@ -2173,7 +2252,167 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           </div>
         </div>
       )}
-      
+
+      {/* INSTABOND SNIPE TAB - Top 10 Closest to Bonding */}
+      {activeTab === 'instabond' && (
+        <div style={styles.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ color: '#D4AF37', fontWeight: 700, fontSize: '1.1rem' }}>🔥 InstaBond Snipe</div>
+            <button
+              onClick={fetchPreBondedTokens}
+              disabled={instabondLoading}
+              style={{
+                background: 'rgba(212,175,55,0.2)',
+                border: '1px solid rgba(212,175,55,0.5)',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                color: '#D4AF37',
+                cursor: instabondLoading ? 'wait' : 'pointer',
+                fontSize: '0.8rem',
+              }}
+            >
+              {instabondLoading ? '⏳ Loading...' : '🔄 Refresh'}
+            </button>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+            <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '8px' }}>
+              Top 10 tokens closest to graduation (800M = 100%)
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <a href="https://pump.tires" target="_blank" rel="noopener noreferrer" style={{ color: '#4CAF50', fontSize: '0.75rem' }}>🌐 pump.tires →</a>
+            </div>
+          </div>
+
+          {/* Scrollable token list */}
+          <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+            {instabondLoading ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '40px' }}>
+                ⏳ Loading tokens from pump.tires...
+              </div>
+            ) : preBondedTokens.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '40px' }}>
+                No pre-bonded tokens found. Click Refresh to load.
+              </div>
+            ) : (
+              preBondedTokens.map((token, idx) => (
+                <div
+                  key={token.address}
+                  style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    marginBottom: '8px',
+                    border: token.progress >= 80 ? '1px solid rgba(76,175,80,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: `linear-gradient(135deg, hsl(${(idx * 36) % 360}, 70%, 50%), hsl(${(idx * 36 + 60) % 360}, 70%, 40%))`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        overflow: 'hidden',
+                      }}>
+                        {token.logo ? (
+                          <img src={token.logo} alt={token.symbol} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                        ) : (
+                          token.symbol?.charAt(0) || '?'
+                        )}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#fff' }}>{token.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#888' }}>${token.symbol}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        color: token.progress >= 80 ? '#4CAF50' : token.progress >= 50 ? '#FFB300' : '#888',
+                        fontWeight: 700,
+                        fontSize: '1.1rem',
+                      }}>
+                        {token.progress.toFixed(2)}%
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#888' }}>
+                        {token.progress >= 80 ? '🔥 Almost bonded!' : token.progress >= 50 ? '📈 Halfway' : '⏳ Early'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ marginTop: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${Math.min(token.progress, 100)}%`,
+                      height: '100%',
+                      background: token.progress >= 80
+                        ? 'linear-gradient(90deg, #4CAF50, #81C784)'
+                        : token.progress >= 50
+                        ? 'linear-gradient(90deg, #FFB300, #FFD54F)'
+                        : 'linear-gradient(90deg, #D4AF37, #FFD700)',
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(token.address);
+                        showToastMsg(`📋 ${token.symbol} address copied!`, 'success');
+                      }}
+                      style={{
+                        flex: 1,
+                        background: 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px',
+                        color: '#888',
+                        cursor: 'pointer',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      📋 Copy CA
+                    </button>
+                    <a
+                      href={`https://pump.tires/token/${token.address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        flex: 1,
+                        background: 'rgba(212,175,55,0.2)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px',
+                        color: '#D4AF37',
+                        cursor: 'pointer',
+                        fontSize: '0.7rem',
+                        textAlign: 'center',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      🔥 View on pump.tires
+                    </a>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(76,175,80,0.1)', borderRadius: '8px', border: '1px solid rgba(76,175,80,0.3)' }}>
+            <div style={{ color: '#4CAF50', fontSize: '0.8rem' }}>
+              💡 <strong>Tip:</strong> Tokens at 80%+ are close to graduation. When they hit 100%, LP is created on PulseX!
+            </div>
+          </div>
+        </div>
+      )}
+
       {onClose && <button onClick={onClose} style={{ width: '100%', marginTop: '16px', padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', color: '#888', cursor: 'pointer' }}>← Back to Staking</button>}
       {toast && <div style={{ ...styles.toast, ...(toast.type === 'success' ? styles.toastSuccess : toast.type === 'error' ? styles.toastError : styles.toastInfo) }}>{toast.message}</div>}
     </div>
