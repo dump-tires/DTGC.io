@@ -3,19 +3,36 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.tokenGate = void 0;
 const ethers_1 = require("ethers");
 const config_1 = require("../config");
+const rpc_1 = require("../config/rpc");
 // Stablecoin addresses on PulseChain for PLS/USD price
 const DAI_ADDRESS = '0xefD766cCb38EaF1dfd701853BFCe31359239F305'; // DAI on PulseChain
 const USDC_ADDRESS = '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07'; // USDC on PulseChain
 class TokenGate {
-    provider;
-    dtgcContract;
-    router;
-    factory;
+    provider = null;
+    dtgcContract = null;
+    router = null;
+    factory = null;
     cachedDtgcPrice = 0;
     cacheTimestamp = 0;
     CACHE_DURATION = 60000; // 1 minute cache
-    constructor() {
-        this.provider = new ethers_1.ethers.JsonRpcProvider(config_1.config.rpc);
+    /**
+     * Get provider with automatic Hetzner/public fallback
+     */
+    async getProvider() {
+        if (!this.provider) {
+            this.provider = await rpc_1.rpcManager.getProvider();
+            this.dtgcContract = new ethers_1.ethers.Contract(config_1.config.tokenGate.dtgc, config_1.ERC20_ABI, this.provider);
+            this.router = new ethers_1.ethers.Contract(config_1.config.pulsexRouter, config_1.PULSEX_ROUTER_ABI, this.provider);
+            this.factory = new ethers_1.ethers.Contract(config_1.config.pulsexFactory, config_1.PULSEX_FACTORY_ABI, this.provider);
+        }
+        return this.provider;
+    }
+    /**
+     * Refresh provider (call after RPC failure)
+     */
+    async refreshProvider() {
+        await rpc_1.rpcManager.refreshHealth();
+        this.provider = await rpc_1.rpcManager.getProvider();
         this.dtgcContract = new ethers_1.ethers.Contract(config_1.config.tokenGate.dtgc, config_1.ERC20_ABI, this.provider);
         this.router = new ethers_1.ethers.Contract(config_1.config.pulsexRouter, config_1.PULSEX_ROUTER_ABI, this.provider);
         this.factory = new ethers_1.ethers.Contract(config_1.config.pulsexFactory, config_1.PULSEX_FACTORY_ABI, this.provider);
@@ -30,6 +47,8 @@ class TokenGate {
             return this.cachedDtgcPrice;
         }
         try {
+            // Ensure we have a provider
+            await this.getProvider();
             // Get DTGC price in PLS first
             const oneDtgc = ethers_1.ethers.parseUnits('1', 18); // 1 DTGC
             // Try to get DTGC -> WPLS quote
@@ -92,6 +111,8 @@ class TokenGate {
     }
     async checkAccess(walletAddress) {
         try {
+            // Ensure we have a provider (Hetzner primary, public fallback)
+            await this.getProvider();
             const balance = await this.dtgcContract.balanceOf(walletAddress);
             const decimals = await this.dtgcContract.decimals();
             const balanceNum = parseFloat(ethers_1.ethers.formatUnits(balance, decimals));

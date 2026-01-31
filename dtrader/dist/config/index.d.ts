@@ -1,7 +1,13 @@
 export declare const config: {
     telegramToken: string;
     rpc: string;
+    rpcFallbacks: string[];
     wss: string;
+    wssFallbacks: string[];
+    hetzner: {
+        rpc: string;
+        wss: string;
+    };
     chainId: number;
     nativeSymbol: string;
     explorerUrl: string;

@@ -3,11 +3,57 @@
 //                         DTGC.io
 // ═══════════════════════════════════════════════════════════════
 
-// Network
+// Network - Hetzner dedicated node PRIMARY with public fallbacks
 export const CHAIN_ID = 369;
 export const CHAIN_NAME = 'PulseChain';
-export const RPC_URL = 'https://rpc.pulsechain.com';
+
+// Hetzner Dedicated RPC (faster, no rate limits when synced)
+export const HETZNER_RPC = 'http://65.109.68.172:8545';
+export const HETZNER_WSS = 'ws://65.109.68.172:8546';
+
+// Public fallback RPCs
+export const RPC_FALLBACKS = [
+  'https://rpc.pulsechain.com',
+  'https://rpc-pulsechain.g4mm4.io',
+  'https://pulsechain.publicnode.com',
+];
+
+// Default RPC (Hetzner primary, auto-fallback handled by getRpcUrl())
+export const RPC_URL = 'https://rpc.pulsechain.com'; // Fallback for static imports
 export const EXPLORER = 'https://scan.pulsechain.com';
+
+/**
+ * Get best available RPC URL with automatic fallback
+ * Tries Hetzner first, falls back to public if unavailable
+ */
+export async function getRpcUrl() {
+  // Try Hetzner first
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const response = await fetch(HETZNER_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const data = await response.json();
+
+    // Check if synced (block > 1M)
+    if (data.result && parseInt(data.result, 16) > 1000000) {
+      console.log('🚀 Using Hetzner dedicated RPC');
+      return HETZNER_RPC;
+    }
+  } catch (e) {
+    console.log('⚠️ Hetzner RPC unavailable, using public fallback');
+  }
+
+  // Fallback to first public RPC
+  return RPC_FALLBACKS[0];
+}
 
 // Contracts
 export const CONTRACTS = {

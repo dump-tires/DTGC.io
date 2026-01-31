@@ -12,7 +12,14 @@ declare class TokenGate {
     private cachedDtgcPrice;
     private cacheTimestamp;
     private readonly CACHE_DURATION;
-    constructor();
+    /**
+     * Get provider with automatic Hetzner/public fallback
+     */
+    private getProvider;
+    /**
+     * Refresh provider (call after RPC failure)
+     */
+    refreshProvider(): Promise<void>;
     /**
      * Get DTGC price in USD by checking PulseX pair
      * Uses: DTGC -> WPLS -> DAI/USDC path

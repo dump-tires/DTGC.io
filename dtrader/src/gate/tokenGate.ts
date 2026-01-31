@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { config, ERC20_ABI, PULSEX_ROUTER_ABI, PULSEX_FACTORY_ABI, PULSEX_PAIR_ABI } from '../config';
+import { rpcManager } from '../config/rpc';
 
 interface GateResult {
   allowed: boolean;
@@ -13,16 +14,33 @@ const DAI_ADDRESS = '0xefD766cCb38EaF1dfd701853BFCe31359239F305'; // DAI on Puls
 const USDC_ADDRESS = '0x15D38573d2feeb82e7ad5187aB8c1D52810B1f07'; // USDC on PulseChain
 
 class TokenGate {
-  private provider: ethers.JsonRpcProvider;
-  private dtgcContract: ethers.Contract;
-  private router: ethers.Contract;
-  private factory: ethers.Contract;
+  private provider: ethers.JsonRpcProvider | null = null;
+  private dtgcContract: ethers.Contract | null = null;
+  private router: ethers.Contract | null = null;
+  private factory: ethers.Contract | null = null;
   private cachedDtgcPrice: number = 0;
   private cacheTimestamp: number = 0;
   private readonly CACHE_DURATION = 60000; // 1 minute cache
 
-  constructor() {
-    this.provider = new ethers.JsonRpcProvider(config.rpc);
+  /**
+   * Get provider with automatic Hetzner/public fallback
+   */
+  private async getProvider(): Promise<ethers.JsonRpcProvider> {
+    if (!this.provider) {
+      this.provider = await rpcManager.getProvider();
+      this.dtgcContract = new ethers.Contract(config.tokenGate.dtgc, ERC20_ABI, this.provider);
+      this.router = new ethers.Contract(config.pulsexRouter, PULSEX_ROUTER_ABI, this.provider);
+      this.factory = new ethers.Contract(config.pulsexFactory, PULSEX_FACTORY_ABI, this.provider);
+    }
+    return this.provider;
+  }
+
+  /**
+   * Refresh provider (call after RPC failure)
+   */
+  async refreshProvider(): Promise<void> {
+    await rpcManager.refreshHealth();
+    this.provider = await rpcManager.getProvider();
     this.dtgcContract = new ethers.Contract(config.tokenGate.dtgc, ERC20_ABI, this.provider);
     this.router = new ethers.Contract(config.pulsexRouter, PULSEX_ROUTER_ABI, this.provider);
     this.factory = new ethers.Contract(config.pulsexFactory, PULSEX_FACTORY_ABI, this.provider);
@@ -39,6 +57,9 @@ class TokenGate {
     }
 
     try {
+      // Ensure we have a provider
+      await this.getProvider();
+
       // Get DTGC price in PLS first
       const oneDtgc = ethers.parseUnits('1', 18); // 1 DTGC
 
@@ -46,14 +67,14 @@ class TokenGate {
       let dtgcPriceInPls = 0;
       try {
         const dtgcToPlsPath = [config.tokenGate.dtgc, config.wpls];
-        const amounts = await this.router.getAmountsOut(oneDtgc, dtgcToPlsPath);
+        const amounts = await this.router!.getAmountsOut(oneDtgc, dtgcToPlsPath);
         dtgcPriceInPls = parseFloat(ethers.formatEther(amounts[1]));
       } catch (e) {
         console.log('DTGC->PLS direct path failed, trying pair reserves...');
         // Fallback: Use pair reserves
-        const pairAddress = await this.factory.getPair(config.tokenGate.dtgc, config.wpls);
+        const pairAddress = await this.factory!.getPair(config.tokenGate.dtgc, config.wpls);
         if (pairAddress && pairAddress !== ethers.ZeroAddress) {
-          const pair = new ethers.Contract(pairAddress, PULSEX_PAIR_ABI, this.provider);
+          const pair = new ethers.Contract(pairAddress, PULSEX_PAIR_ABI, this.provider!);
           const [token0, reserves] = await Promise.all([pair.token0(), pair.getReserves()]);
           const isDtgcToken0 = token0.toLowerCase() === config.tokenGate.dtgc.toLowerCase();
           const dtgcReserve = isDtgcToken0 ? reserves[0] : reserves[1];
@@ -74,13 +95,13 @@ class TokenGate {
       // Try DAI first
       try {
         const plsToDaiPath = [config.wpls, DAI_ADDRESS];
-        const daiAmounts = await this.router.getAmountsOut(onePls, plsToDaiPath);
+        const daiAmounts = await this.router!.getAmountsOut(onePls, plsToDaiPath);
         plsPriceUsd = parseFloat(ethers.formatUnits(daiAmounts[1], 18)) / 1000000; // Price per 1 PLS
       } catch (e) {
         // Try USDC
         try {
           const plsToUsdcPath = [config.wpls, USDC_ADDRESS];
-          const usdcAmounts = await this.router.getAmountsOut(onePls, plsToUsdcPath);
+          const usdcAmounts = await this.router!.getAmountsOut(onePls, plsToUsdcPath);
           plsPriceUsd = parseFloat(ethers.formatUnits(usdcAmounts[1], 6)) / 1000000; // USDC has 6 decimals
         } catch (e2) {
           console.log('Could not get PLS/USD price, using fallback');
@@ -106,8 +127,11 @@ class TokenGate {
 
   async checkAccess(walletAddress: string): Promise<GateResult> {
     try {
-      const balance = await this.dtgcContract.balanceOf(walletAddress);
-      const decimals = await this.dtgcContract.decimals();
+      // Ensure we have a provider (Hetzner primary, public fallback)
+      await this.getProvider();
+
+      const balance = await this.dtgcContract!.balanceOf(walletAddress);
+      const decimals = await this.dtgcContract!.decimals();
       const balanceNum = parseFloat(ethers.formatUnits(balance, decimals));
 
       // Fetch REAL price from PulseX instead of hardcoded

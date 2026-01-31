@@ -1,13 +1,30 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Hetzner dedicated node (PRIMARY) + public fallbacks
+const HETZNER_RPC = 'http://65.109.68.172:8545';
+const HETZNER_WSS = 'ws://65.109.68.172:8546';
+
 export const config = {
   // Telegram - accepts both BOT_TOKEN and TELEGRAM_BOT_TOKEN
   telegramToken: process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '',
 
-  // PulseChain Network
-  rpc: process.env.PULSECHAIN_RPC || 'https://rpc.pulsechain.com',
-  wss: process.env.PULSECHAIN_WSS || 'wss://rpc.pulsechain.com',
+  // PulseChain Network - Hetzner primary with public fallback
+  rpc: process.env.PULSECHAIN_RPC || HETZNER_RPC,
+  rpcFallbacks: [
+    'https://rpc.pulsechain.com',
+    'https://rpc-pulsechain.g4mm4.io',
+    'https://pulsechain.publicnode.com',
+  ],
+  wss: process.env.PULSECHAIN_WSS || HETZNER_WSS,
+  wssFallbacks: [
+    'wss://rpc.pulsechain.com',
+    'wss://rpc-pulsechain.g4mm4.io',
+  ],
+  hetzner: {
+    rpc: HETZNER_RPC,
+    wss: HETZNER_WSS,
+  },
   chainId: 369,
   nativeSymbol: 'PLS',
   explorerUrl: 'https://scan.pulsechain.com',
