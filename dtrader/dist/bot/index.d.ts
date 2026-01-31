@@ -5,6 +5,7 @@ export declare class DtraderBot {
     private getSession;
     /**
      * Check token gate before allowing actions
+     * Uses LINKED WALLET first (external MetaMask/Rabby), falls back to bot wallet
      */
     private checkGate;
     private setupHandlers;
@@ -30,6 +31,10 @@ export declare class DtraderBot {
      * Link an external wallet address for balance tracking
      */
     private linkExternalWallet;
+    /**
+     * Generate 6 snipe wallets for multi-wallet sniping
+     */
+    private generate6Wallets;
     private showFeeStats;
     private showHelp;
     private setupSniperEvents;

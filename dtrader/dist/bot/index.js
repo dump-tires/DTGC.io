@@ -82,6 +82,7 @@ class DtraderBot {
     }
     /**
      * Check token gate before allowing actions
+     * Uses LINKED WALLET first (external MetaMask/Rabby), falls back to bot wallet
      */
     async checkGate(chatId, userId) {
         const session = this.getSession(chatId);
@@ -89,18 +90,32 @@ class DtraderBot {
         if (session.gateVerified && Date.now() < session.gateExpiry) {
             return true;
         }
+        // Priority 1: Check linked external wallet (MetaMask/Rabby)
+        if (session.linkedWallet) {
+            const linkedGateResult = await tokenGate_1.tokenGate.checkAccess(session.linkedWallet);
+            if (linkedGateResult.allowed) {
+                session.gateVerified = true;
+                session.gateExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
+                return true;
+            }
+        }
+        // Priority 2: Check bot wallet
         const wallet = await wallet_1.walletManager.getWallet(userId);
-        if (!wallet) {
-            await this.bot.sendMessage(chatId, '❌ No wallet found. Use /start to create one first.');
-            return false;
+        if (wallet) {
+            const gateResult = await tokenGate_1.tokenGate.checkAccess(wallet.address);
+            if (gateResult.allowed) {
+                session.gateVerified = true;
+                session.gateExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
+                return true;
+            }
         }
-        const gateResult = await tokenGate_1.tokenGate.checkAccess(wallet.address);
-        if (gateResult.allowed) {
-            session.gateVerified = true;
-            session.gateExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
-            return true;
-        }
-        await this.bot.sendMessage(chatId, gateResult.message);
+        // Neither wallet passed - show helpful message
+        const linkedAddr = session.linkedWallet ? `\n🔗 Linked: \`${session.linkedWallet.slice(0, 8)}...\`` : '';
+        const botAddr = wallet ? `\n🤖 Bot: \`${wallet.address.slice(0, 8)}...\`` : '';
+        await this.bot.sendMessage(chatId, `❌ **Gate Check Failed**\n\n` +
+            `Hold $50+ of DTGC in your wallet to access PRO features.${linkedAddr}${botAddr}\n\n` +
+            `⚜️ DTGC: \`${config_1.config.tokenGate.dtgc}\`\n\n` +
+            `💡 _Link your wallet with DTGC using 🔗 Link Wallet_`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
         return false;
     }
     setupHandlers() {
@@ -375,6 +390,32 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
                 const pk = await wallet_1.walletManager.exportPrivateKey(userId);
                 await this.bot.sendMessage(chatId, `⚠️ **NEVER SHARE THIS!**\n\n🔑 Private Key:\n\`${pk}\`\n\n_Delete this message after saving!_`, { parse_mode: 'Markdown' });
             }
+            return;
+        }
+        // Generate 6 snipe wallets
+        if (data === 'wallets_generate_6') {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            await this.generate6Wallets(chatId, userId);
+            return;
+        }
+        // Wallets menu
+        if (data === 'wallets_menu') {
+            await this.bot.editMessageReplyMarkup(keyboards.walletsMenuKeyboard, {
+                chat_id: parseInt(chatId),
+                message_id: messageId,
+            });
+            return;
+        }
+        // Multi-wallet snipe selection
+        if (data.startsWith('snipe_wallets_')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const numWallets = parseInt(data.replace('snipe_wallets_', ''));
+            session.pendingAction = `snipe_multi_${numWallets}`;
+            await this.bot.sendMessage(chatId, `🎯 **Multi-Wallet Snipe Setup**\n\n` +
+                `Sniping with **${numWallets} wallet${numWallets > 1 ? 's' : ''}**\n\n` +
+                `Select PLS amount **per wallet**:`, { parse_mode: 'Markdown', reply_markup: keyboards.snipeAmountKeyboard });
             return;
         }
         // Snipe actions
@@ -897,6 +938,29 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
                 reply_markup: keyboards.mainMenuKeyboard,
             });
         }
+    }
+    /**
+     * Generate 6 snipe wallets for multi-wallet sniping
+     */
+    async generate6Wallets(chatId, userId) {
+        await this.bot.sendMessage(chatId, '🔄 Generating 6 snipe wallets...');
+        const wallets = [];
+        for (let i = 1; i <= 6; i++) {
+            const walletId = `${userId}_snipe_${i}`;
+            const { wallet, isNew } = await wallet_1.walletManager.getOrCreateWallet(walletId);
+            wallets.push({ index: i, address: wallet.address });
+        }
+        let msg = `✅ **6 Snipe Wallets Ready!**\n\n`;
+        msg += `Fund these wallets with PLS to snipe:\n\n`;
+        for (const w of wallets) {
+            msg += `**Wallet ${w.index}:**\n\`${w.address}\`\n\n`;
+        }
+        msg += `💡 _Tip: Send PLS to each wallet you want to snipe with._\n`;
+        msg += `_Use 🎯 Sniper to multi-wallet snipe!_`;
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.multiWalletSnipeKeyboard,
+        });
     }
     async showFeeStats(chatId) {
         try {

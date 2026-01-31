@@ -22,5 +22,6 @@ export declare const confirmKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const confirmWithDetailsKeyboard: (action: string) => TelegramBot.InlineKeyboardMarkup;
 export declare const tokenActionKeyboard: (tokenAddress: string) => TelegramBot.InlineKeyboardMarkup;
 export declare const multiWalletSnipeKeyboard: TelegramBot.InlineKeyboardMarkup;
+export declare const snipeAmountKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const quickActionsKeyboard: (tokenAddress: string) => TelegramBot.InlineKeyboardMarkup;
 //# sourceMappingURL=keyboards.d.ts.map

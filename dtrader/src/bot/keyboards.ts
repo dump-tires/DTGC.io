@@ -44,10 +44,10 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
 export const walletsMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
-      { text: '🔗 Link External Wallet', callback_data: 'link_wallet' },
+      { text: '🔗 Link DTGC Wallet', callback_data: 'link_wallet' },
     ],
     [
-      { text: '🆕 Generate New Wallet', callback_data: 'wallets_generate' },
+      { text: '🆕 Generate 6 Snipe Wallets', callback_data: 'wallets_generate_6' },
     ],
     [
       { text: '💰 View Balances', callback_data: 'wallets_balance' },
@@ -220,14 +220,14 @@ export const settingsKeyboard: TelegramBot.InlineKeyboardMarkup = {
 export const buyAmountKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
-      { text: '100k PLS', callback_data: 'buy_100000' },
-      { text: '500k PLS', callback_data: 'buy_500000' },
       { text: '1M PLS', callback_data: 'buy_1000000' },
-    ],
-    [
-      { text: '2M PLS', callback_data: 'buy_2000000' },
       { text: '5M PLS', callback_data: 'buy_5000000' },
       { text: '10M PLS', callback_data: 'buy_10000000' },
+    ],
+    [
+      { text: '20M PLS', callback_data: 'buy_20000000' },
+      { text: '50M PLS', callback_data: 'buy_50000000' },
+      { text: '100M PLS', callback_data: 'buy_100000000' },
     ],
     [
       { text: '📝 Custom Amount', callback_data: 'buy_custom' },
@@ -325,20 +325,38 @@ export const tokenActionKeyboard = (tokenAddress: string): TelegramBot.InlineKey
 export const multiWalletSnipeKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
-      { text: '🎯 Snipe with ALL Active', callback_data: 'snipe_all_wallets' },
+      { text: '🎯 ALL 6 Wallets', callback_data: 'snipe_wallets_6' },
     ],
     [
-      { text: '1️⃣ Wallet 1', callback_data: 'snipe_wallet_1' },
-      { text: '2️⃣ Wallet 2', callback_data: 'snipe_wallet_2' },
-      { text: '3️⃣ Wallet 3', callback_data: 'snipe_wallet_3' },
+      { text: '1 Wallet', callback_data: 'snipe_wallets_1' },
+      { text: '2 Wallets', callback_data: 'snipe_wallets_2' },
+      { text: '3 Wallets', callback_data: 'snipe_wallets_3' },
     ],
     [
-      { text: '4️⃣ Wallet 4', callback_data: 'snipe_wallet_4' },
-      { text: '5️⃣ Wallet 5', callback_data: 'snipe_wallet_5' },
-      { text: '6️⃣ Wallet 6', callback_data: 'snipe_wallet_6' },
+      { text: '4 Wallets', callback_data: 'snipe_wallets_4' },
+      { text: '5 Wallets', callback_data: 'snipe_wallets_5' },
     ],
     [
-      { text: '⚙️ Select Specific', callback_data: 'snipe_select_wallets' },
+      { text: '❌ Cancel', callback_data: 'main_menu' },
+    ],
+  ],
+};
+
+// Snipe amount keyboard (per wallet)
+export const snipeAmountKeyboard: TelegramBot.InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [
+      { text: '1M PLS', callback_data: 'snipe_amt_1000000' },
+      { text: '5M PLS', callback_data: 'snipe_amt_5000000' },
+      { text: '10M PLS', callback_data: 'snipe_amt_10000000' },
+    ],
+    [
+      { text: '20M PLS', callback_data: 'snipe_amt_20000000' },
+      { text: '50M PLS', callback_data: 'snipe_amt_50000000' },
+      { text: '100M PLS', callback_data: 'snipe_amt_100000000' },
+    ],
+    [
+      { text: '📝 Custom', callback_data: 'snipe_amt_custom' },
     ],
     [
       { text: '❌ Cancel', callback_data: 'main_menu' },
