@@ -1,32 +1,32 @@
 {
   "name": "dtrader-mandalorian",
-  "version": "1.0.0",
-  "description": "DTRADER Mandalorian - PulseChain Sniper Bot powered by DTGC",
-  "main": "src/index.js",
+  "version": "2.0.0",
+  "description": "PulseChain Trading Bot - Telegram Sniper for DTGC",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "build": "npx tsc",
+    "start": "node dist/index.js",
+    "start:bot": "node dist/bot/index.js",
+    "dev": "npx ts-node src/index.ts"
   },
   "dependencies": {
-    "dotenv": "^16.3.1",
-    "ethers": "^6.9.0",
-    "node-telegram-bot-api": "^0.64.0"
+    "ethers": "^6.11.1",
+    "node-telegram-bot-api": "^0.66.0",
+    "dotenv": "^16.4.5",
+    "axios": "^1.6.7",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "socket.io": "^4.7.4"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "@types/node": "^20.11.0",
+    "@types/node-telegram-bot-api": "^0.64.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
   },
-  "author": "DTGC.io",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/dump-tires/DTGC.io"
-  },
-  "keywords": [
-    "pulsechain",
-    "defi",
-    "sniper",
-    "telegram",
-    "dtgc",
-    "pulsex"
-  ]
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }

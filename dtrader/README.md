@@ -23,7 +23,7 @@
 
 ## 🌐 Web Interface
 
-Full trading suite available at: **[dtgc.io/pulsexgold](https://dtgc.io/pulsexgold)**
+Full trading suite available at: **[dtgc.io/gold](https://dtgc.io/gold)**
 
 The Telegram bot and web interface are fully congruent - same features, same fees!
 
@@ -55,7 +55,7 @@ npm start
 | Command | Description |
 |---------|-------------|
 | `/start` | Main menu |
-| `/pulsexgold` | Web interface link |
+| `/gold` | Web interface link |
 | `/dtgc` | DTGC token info |
 | `/fees` | Fee structure |
 | `/bonds` | pump.tires tracker |
@@ -96,7 +96,7 @@ pm2 save
 ## 📊 Links
 
 - **Website:** [dtgc.io](https://dtgc.io)
-- **PulseX Gold:** [dtgc.io/pulsexgold](https://dtgc.io/pulsexgold)
+- **PulseX Gold:** [dtgc.io/gold](https://dtgc.io/gold)
 - **DTGC Token:** [DexScreener](https://dexscreener.com/pulsechain/0xd0676b28a457371d58d47e5247b439114e40eb0f)
 - **pump.tires:** [pump.tires](https://pump.tires)
 

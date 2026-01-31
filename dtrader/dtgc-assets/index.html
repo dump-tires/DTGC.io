@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTRADER | PulseChain Sniper Bot</title>
+
+    <!-- DTGC Favicon - Gold Trading Logo -->
+    <link rel="icon" type="image/png" href="./dtgc-logo.png">
+    <link rel="apple-touch-icon" href="./dtgc-logo.png">
+
+    <style>
+        :root {
+            --dtgc-gold: #D4AF37;
+            --dtgc-gold-light: #F4D03F;
+            --dtgc-black: #0a0a0a;
+            --dtgc-dark: #111111;
+            --beskar-silver: #8B9DC3;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--dtgc-black);
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            background: linear-gradient(180deg, rgba(212,175,55,0.1) 0%, transparent 100%);
+            border-bottom: 1px solid rgba(212,175,55,0.3);
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 2px solid var(--dtgc-gold);
+            box-shadow: 0 0 20px rgba(212,175,55,0.4);
+        }
+
+        .brand-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--dtgc-gold-light), var(--dtgc-gold));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: radial-gradient(ellipse at center top, rgba(212,175,55,0.15) 0%, transparent 60%);
+        }
+
+        .hero-logo {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 2rem;
+            border-radius: 50%;
+            border: 3px solid var(--dtgc-gold);
+            box-shadow: 0 0 40px rgba(212,175,55,0.5);
+            animation: pulse-gold 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-gold {
+            0%, 100% { box-shadow: 0 0 40px rgba(212,175,55,0.5); }
+            50% { box-shadow: 0 0 60px rgba(212,175,55,0.8); }
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--dtgc-gold-light), var(--dtgc-gold));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: #aaa;
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--dtgc-gold), var(--dtgc-gold-light));
+            color: #000;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(212,175,55,0.4);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--dtgc-gold);
+            border: 2px solid var(--dtgc-gold);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(212,175,55,0.1);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: var(--dtgc-dark);
+            border: 1px solid rgba(212,175,55,0.2);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            border-color: var(--dtgc-gold);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h3 {
+            color: var(--dtgc-gold);
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-card p {
+            color: #888;
+            line-height: 1.6;
+        }
+
+        .token-gate {
+            text-align: center;
+            padding: 3rem 2rem;
+            background: linear-gradient(180deg, transparent, rgba(212,175,55,0.05));
+            border-top: 1px solid rgba(212,175,55,0.2);
+        }
+
+        .token-gate h2 {
+            color: var(--dtgc-gold);
+            margin-bottom: 1rem;
+        }
+
+        .token-address {
+            font-family: monospace;
+            background: var(--dtgc-dark);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid rgba(212,175,55,0.3);
+            display: inline-block;
+            color: var(--dtgc-gold-light);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            border-top: 1px solid rgba(212,175,55,0.2);
+            color: #666;
+        }
+
+        .footer img {
+            width: 32px;
+            height: 32px;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo-container">
+            <img src="./dtgc-logo.png" alt="DTGC" class="logo">
+            <span class="brand-name">DTRADER</span>
+        </div>
+        <nav>
+            <a href="https://t.me/YourBotHere" class="btn btn-primary">Launch Bot</a>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <img src="./dtgc-logo.png" alt="DTGC Logo" class="hero-logo">
+        <h1>DTRADER</h1>
+        <p>The ultimate PulseChain sniper bot. Instabond sniping, limit orders, anti-rug protection, and more.</p>
+        <div class="cta-buttons">
+            <a href="https://t.me/YourBotHere" class="btn btn-primary">Open Telegram Bot</a>
+            <a href="#features" class="btn btn-secondary">Learn More</a>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <div class="feature-card">
+            <div class="feature-icon">🎯</div>
+            <h3>Instabond Sniper</h3>
+            <p>Automatically snipe pump.tires tokens the moment they graduate to PulseX. Be first, every time.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>New Pair Sniper</h3>
+            <p>Detect and buy new PulseX listings instantly. Set your targets and let the bot do the work.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <h3>Limit Orders</h3>
+            <p>Set buy/sell orders at your target price. Stop loss, take profit, and DCA all supported.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <h3>Anti-Rug Protection</h3>
+            <p>Automatic honeypot detection, tax analysis, and liquidity checks before every trade.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">👛</div>
+            <h3>6-Wallet System</h3>
+            <p>Manage up to 6 wallets for distributed sniping. Maximize your chances on hot launches.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🐋</div>
+            <h3>Copy Trading</h3>
+            <p>Track whale wallets and automatically copy their trades. Follow the smart money.</p>
+        </div>
+    </section>
+
+    <section class="token-gate">
+        <h2>🔐 Token Gate Access</h2>
+        <p>Hold $50+ of DTGC to unlock all features</p>
+        <div class="token-address">
+            0xD0676B28a457371D58d47E5247b439114e40Eb0F
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>
+            <img src="./dtgc-logo.png" alt="DTGC">
+            DTRADER by DTGC.io | PulseChain
+        </p>
+    </footer>
+</body>
+</html>
