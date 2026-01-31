@@ -618,34 +618,46 @@ const getAddr = (addr) => {
   }
 };
 
-// Styles
+// Styles - Mobile-optimized for single screen fit
 const styles = {
-  container: { background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)', borderRadius: '20px', border: '1px solid rgba(212, 175, 55, 0.3)', padding: '24px', maxWidth: '520px', width: '100%', margin: '0 auto', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', maxHeight: '90vh', overflowY: 'auto' },
-  header: { textAlign: 'center', marginBottom: '24px' },
-  title: { fontSize: '1.5rem', fontWeight: 700, background: 'linear-gradient(135deg, #D4AF37, #FFD700)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '8px' },
-  subtitle: { color: '#888', fontSize: '0.85rem' },
-  tabs: { display: 'flex', gap: '8px', marginBottom: '24px', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '12px' },
-  tab: { flex: 1, padding: '12px 16px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s ease' },
+  container: {
+    background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)',
+    borderRadius: '16px',
+    border: '1px solid rgba(212, 175, 55, 0.3)',
+    padding: '12px',
+    maxWidth: '400px',
+    width: '100%',
+    margin: '0 auto',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    maxHeight: '100vh',
+    overflowY: 'auto',
+    boxSizing: 'border-box',
+  },
+  header: { textAlign: 'center', marginBottom: '10px' },
+  title: { fontSize: '1.1rem', fontWeight: 700, background: 'linear-gradient(135deg, #D4AF37, #FFD700)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '2px' },
+  subtitle: { color: '#888', fontSize: '0.65rem' },
+  tabs: { display: 'flex', gap: '4px', marginBottom: '10px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '10px' },
+  tab: { flex: 1, padding: '8px 4px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '1rem', transition: 'all 0.2s ease', textAlign: 'center' },
   tabActive: { background: 'linear-gradient(135deg, #D4AF37, #B8960C)', color: '#000' },
   tabInactive: { background: 'transparent', color: '#888' },
-  card: { background: 'rgba(0,0,0,0.3)', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.05)' },
-  label: { color: '#888', fontSize: '0.8rem', marginBottom: '8px', display: 'block' },
-  inputGroup: { display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.4)', borderRadius: '12px', padding: '12px 16px', border: '1px solid rgba(255,255,255,0.1)', gap: '12px' },
-  input: { flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', fontWeight: 600, outline: 'none', width: '100%', minWidth: 0 },
-  tokenSelect: { display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(212, 175, 55, 0.2)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', border: 'none', color: '#fff', fontWeight: 600, minWidth: '130px', flexShrink: 0 },
-  swapButton: { width: '100%', padding: '16px', background: 'linear-gradient(135deg, #D4AF37, #B8960C)', border: 'none', borderRadius: '12px', color: '#000', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', marginTop: '16px', transition: 'all 0.2s ease' },
+  card: { background: 'rgba(0,0,0,0.3)', borderRadius: '12px', padding: '10px 12px', marginBottom: '8px', border: '1px solid rgba(255,255,255,0.05)' },
+  label: { color: '#888', fontSize: '0.7rem', marginBottom: '4px', display: 'block' },
+  inputGroup: { display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.4)', borderRadius: '10px', padding: '8px 10px', border: '1px solid rgba(255,255,255,0.1)', gap: '8px' },
+  input: { flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: '1rem', fontWeight: 600, outline: 'none', width: '100%', minWidth: 0 },
+  tokenSelect: { display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(212, 175, 55, 0.2)', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', border: 'none', color: '#fff', fontWeight: 600, minWidth: '100px', flexShrink: 0, fontSize: '0.85rem' },
+  swapButton: { width: '100%', padding: '12px', background: 'linear-gradient(135deg, #D4AF37, #B8960C)', border: 'none', borderRadius: '10px', color: '#000', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', marginTop: '8px', transition: 'all 0.2s ease' },
   swapButtonDisabled: { background: 'rgba(255,255,255,0.1)', color: '#666', cursor: 'not-allowed' },
-  flipButton: { width: '40px', height: '40px', background: 'linear-gradient(135deg, #D4AF37, #B8960C)', border: 'none', borderRadius: '50%', color: '#000', fontSize: '1.2rem', cursor: 'pointer', margin: '-12px auto', display: 'block', position: 'relative', zIndex: 10 },
-  balanceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', marginBottom: '8px', border: '1px solid rgba(255,255,255,0.05)' },
-  selectDropdown: { position: 'absolute', top: '100%', right: 0, background: '#1a1a2e', border: '1px solid rgba(212, 175, 55, 0.3)', borderRadius: '12px', marginTop: '8px', overflow: 'hidden', zIndex: 1000, maxHeight: '300px', overflowY: 'auto', minWidth: '280px', width: 'max-content' },
-  selectOption: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', cursor: 'pointer', color: '#fff', transition: 'background 0.2s', borderBottom: '1px solid rgba(255,255,255,0.05)' },
-  infoRow: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.85rem' },
-  toast: { position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', padding: '12px 24px', borderRadius: '8px', color: '#fff', fontWeight: 500, zIndex: 10000, maxWidth: '90%', textAlign: 'center' },
+  flipButton: { width: '32px', height: '32px', background: 'linear-gradient(135deg, #D4AF37, #B8960C)', border: 'none', borderRadius: '50%', color: '#000', fontSize: '1rem', cursor: 'pointer', margin: '-8px auto', display: 'block', position: 'relative', zIndex: 10 },
+  balanceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', marginBottom: '4px', border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem' },
+  selectDropdown: { position: 'absolute', top: '100%', right: 0, background: '#1a1a2e', border: '1px solid rgba(212, 175, 55, 0.3)', borderRadius: '10px', marginTop: '4px', overflow: 'hidden', zIndex: 1000, maxHeight: '250px', overflowY: 'auto', minWidth: '220px', width: 'max-content' },
+  selectOption: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', cursor: 'pointer', color: '#fff', transition: 'background 0.2s', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem' },
+  infoRow: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', fontSize: '0.7rem' },
+  toast: { position: 'fixed', bottom: '10px', left: '50%', transform: 'translateX(-50%)', padding: '8px 16px', borderRadius: '6px', color: '#fff', fontWeight: 500, zIndex: 10000, maxWidth: '90%', textAlign: 'center', fontSize: '0.8rem' },
   toastSuccess: { background: 'rgba(76, 175, 80, 0.95)' },
   toastError: { background: 'rgba(244, 67, 54, 0.95)' },
   toastInfo: { background: 'rgba(33, 150, 243, 0.95)' },
-  totalPortfolio: { background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.1))', border: '1px solid rgba(212,175,55,0.4)', borderRadius: '16px', padding: '20px', marginBottom: '20px', textAlign: 'center' },
-  usdValue: { color: '#4CAF50', fontSize: '0.75rem', marginTop: '2px' },
+  totalPortfolio: { background: 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.1))', border: '1px solid rgba(212,175,55,0.4)', borderRadius: '12px', padding: '12px', marginBottom: '10px', textAlign: 'center' },
+  usdValue: { color: '#4CAF50', fontSize: '0.65rem', marginTop: '1px' },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1942,14 +1954,32 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   return (
     <div style={styles.container} onClick={() => { setShowFromSelect(false); setShowToSelect(false); }}>
       <div style={styles.header}>
-        <div style={styles.title}>⚜️ DTGC Gold</div>
-        <div style={styles.subtitle}>Swap • Sniper • Portfolio • LP • InstaBond</div>
+        <div style={styles.title}>⚜️ DTGC Gold Suite</div>
       </div>
 
       <div style={styles.tabs}>
-        {['swap', 'sniper', 'portfolio', 'create-lp', 'instabond'].map((tab) => (
-          <button key={tab} style={{ ...styles.tab, ...(activeTab === tab ? styles.tabActive : styles.tabInactive), fontSize: '0.75rem', padding: '10px 8px' }} onClick={() => setActiveTab(tab)}>
-            {tab === 'swap' && '🔄'}{tab === 'sniper' && '🎯'}{tab === 'portfolio' && '📊'}{tab === 'create-lp' && '💧'}{tab === 'instabond' && '🔥'}
+        {[
+          { id: 'swap', icon: '🔄', label: 'Swap' },
+          { id: 'sniper', icon: '🎯', label: 'Snipe' },
+          { id: 'portfolio', icon: '📊', label: 'Port' },
+          { id: 'create-lp', icon: '💧', label: 'LP' },
+          { id: 'instabond', icon: '🔥', label: 'Bond' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            style={{
+              ...styles.tab,
+              ...(activeTab === tab.id ? styles.tabActive : styles.tabInactive),
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '2px',
+              padding: '6px 2px',
+            }}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <span style={{ fontSize: '1.1rem' }}>{tab.icon}</span>
+            <span style={{ fontSize: '0.55rem', fontWeight: 500 }}>{tab.label}</span>
           </button>
         ))}
       </div>
@@ -1958,24 +1988,24 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       {activeTab === 'swap' && (
         <div>
           <div style={styles.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
               <span style={styles.label}>From</span>
-              <span style={{ color: '#888', fontSize: '0.75rem' }}>Balance: {formatNumber(balances[fromToken] || 0)} <span style={{ color: '#4CAF50' }}>({formatUSD((balances[fromToken] || 0) * (livePrices[fromToken] || 0))})</span></span>
+              <span style={{ color: '#888', fontSize: '0.6rem' }}>Bal: {formatNumber(balances[fromToken] || 0)} <span style={{ color: '#4CAF50' }}>({formatUSD((balances[fromToken] || 0) * (livePrices[fromToken] || 0))})</span></span>
             </div>
             <div style={styles.inputGroup}>
               <input type="number" placeholder="0.0" value={fromAmount} onChange={(e) => setFromAmount(e.target.value)} style={styles.input} />
-              <button onClick={() => setFromAmount(((balances[fromToken] || 0) * 0.998).toFixed(6))} style={{ background: 'rgba(212,175,55,0.3)', border: 'none', borderRadius: '6px', padding: '4px 8px', color: '#D4AF37', fontSize: '0.7rem', cursor: 'pointer', marginRight: '8px' }}>MAX</button>
+              <button onClick={() => setFromAmount(((balances[fromToken] || 0) * 0.998).toFixed(6))} style={{ background: 'rgba(212,175,55,0.3)', border: 'none', borderRadius: '4px', padding: '3px 6px', color: '#D4AF37', fontSize: '0.6rem', cursor: 'pointer', marginRight: '4px' }}>MAX</button>
               <TokenSelector value={fromToken} onChange={setFromToken} show={showFromSelect} setShow={setShowFromSelect} excludeToken={toToken} />
             </div>
             {fromAmount && livePrices[fromToken] && <div style={styles.usdValue}>≈ {formatUSD(parseFloat(fromAmount) * livePrices[fromToken])}</div>}
           </div>
-          
+
           <button style={styles.flipButton} onClick={flipTokens}>↕</button>
-          
+
           <div style={styles.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={styles.label}>To {quoteLoading && '(fetching...)'}</span>
-              <span style={{ color: '#888', fontSize: '0.75rem' }}>Balance: {formatNumber(balances[toToken] || 0)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={styles.label}>To {quoteLoading && '⏳'}</span>
+              <span style={{ color: '#888', fontSize: '0.6rem' }}>Bal: {formatNumber(balances[toToken] || 0)}</span>
             </div>
             <div style={styles.inputGroup}>
               <input type="text" placeholder="0.0" value={toAmount} readOnly style={{ ...styles.input, color: '#D4AF37' }} />

@@ -228,28 +228,27 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
       await this.showBalance(chatId, userId);
     });
 
-    // /gold command - Open web UI
+    // /gold command - Open web UI (mobile-friendly)
     this.bot.onText(/\/gold/, async (msg) => {
       const chatId = msg.chat.id.toString();
 
       await this.bot.sendMessage(chatId,
-        `⚜️ **PulseX Gold Web Interface**\n\n` +
-        `Access the full trading suite:\n\n` +
-        `🔗 **dtgc.io/gold**\n\n` +
-        `**Features:**\n` +
-        `• Advanced Swap Interface\n` +
-        `• pump.tires Bond Sniper\n` +
-        `• Multi-Wallet Management\n` +
-        `• Real-time Charts\n` +
-        `• Position Tracking\n\n` +
-        `_Connect your wallet to start!_`,
+        `⚜️ **DTGC Gold Suite**\n\n` +
+        `📱 **Mobile-Optimized Trading**\n\n` +
+        `Tap below to open in your browser and connect your wallet:\n\n` +
+        `• 🔄 Swap any PulseChain token\n` +
+        `• 🎯 Snipe with limit orders\n` +
+        `• 🔥 InstaBond graduation sniper\n` +
+        `• 📊 Portfolio tracker\n` +
+        `• 💧 Create LP positions\n\n` +
+        `_Opens in mobile browser for wallet connect!_`,
         {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [[
-              { text: '🌐 Open PulseX Gold', url: 'https://dtgc.io/gold' }
+              { text: '📱 Open Gold Suite', url: 'https://dtgc.io/gold' }
             ], [
-              { text: '🔙 Back', callback_data: 'main_menu' }
+              { text: '🔙 Main Menu', callback_data: 'main_menu' }
             ]]
           }
         }

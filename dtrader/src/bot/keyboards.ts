@@ -34,7 +34,7 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
       { text: '❓ Help', callback_data: 'help' },
     ],
     [
-      { text: '⚜️ Open PulseX Gold', url: 'https://dtgc.io/gold' },
+      { text: '⚜️ Gold Suite (Wallet Connect)', url: 'https://dtgc.io/gold' },
     ],
   ],
 };
@@ -159,7 +159,7 @@ export const pumpMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
       { text: '🤖 Auto-Snipe Mode', callback_data: 'pump_auto_snipe' },
     ],
     [
-      { text: '⚜️ Bonds UI (Web)', url: 'https://dtgc.io/gold#bonds' },
+      { text: '⚜️ Open InstaBond UI 📱', url: 'https://dtgc.io/gold' },
     ],
     [
       { text: '🔙 Back', callback_data: 'main_menu' },
