@@ -145,21 +145,48 @@ async function getDtgcBalance(address) {
   return { success: false, error: 'All RPC endpoints failed' };
 }
 
-// Get DTGC price in USD
+// DTGC/WPLS pair on PulseX V2
+const DTGC_WPLS_PAIR = '0x48B837C6AA847D5147f4A44c71108f60dEa0f180';
+const PLS_PRICE_USD = 0.00002; // ~$0.00002 per PLS
+
+const PAIR_ABI = [
+  'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+  'function token0() external view returns (address)',
+];
+
+// Get DTGC price in USD from PulseX
 async function getDtgcPrice() {
-  try {
-    // Try to fetch from our own price API first
-    const response = await fetch('https://dtgc.io/api/gtrade-prices');
-    if (response.ok) {
-      // If we have live prices, calculate from them
-      // For now, use a reasonable estimate based on PulseX
+  for (const rpc of RPC_ENDPOINTS) {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpc);
+      const pair = new ethers.Contract(DTGC_WPLS_PAIR, PAIR_ABI, provider);
+
+      const [reserves, token0] = await Promise.all([
+        pair.getReserves(),
+        pair.token0(),
+      ]);
+
+      const [reserve0, reserve1] = reserves;
+      const isDtgcToken0 = token0.toLowerCase() === DTGC_ADDRESS.toLowerCase();
+
+      const dtgcReserve = isDtgcToken0 ? reserve0 : reserve1;
+      const plsReserve = isDtgcToken0 ? reserve1 : reserve0;
+
+      // Price = PLS per DTGC * PLS price
+      const dtgcPriceInPls = Number(plsReserve) / Number(dtgcReserve);
+      const dtgcPriceUsd = dtgcPriceInPls * PLS_PRICE_USD;
+
+      console.log(`💵 DTGC Price from DEX: $${dtgcPriceUsd.toFixed(8)}`);
+      return dtgcPriceUsd;
+    } catch (e) {
+      console.log(`Price fetch failed from ${rpc}:`, e.message);
+      continue;
     }
-  } catch (e) {
-    console.log('Price fetch failed, using fallback');
   }
 
-  // Fallback price - update this periodically or fetch from PulseX
-  return 0.0004; // ~$0.0004 per DTGC
+  // Fallback price if all RPCs fail
+  console.log('Using fallback DTGC price');
+  return 0.00001; // Conservative fallback
 }
 
 function formatNumber(v) {

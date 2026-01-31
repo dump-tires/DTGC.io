@@ -6,7 +6,13 @@ interface GateResult {
 }
 declare class TokenGate {
     private cachedBalance;
+    private cachedPrice;
     private readonly CACHE_DURATION;
+    private readonly PRICE_CACHE_DURATION;
+    /**
+     * Get DTGC price in USD from PulseX pair
+     */
+    private getDtgcPriceUsd;
     /**
      * Try to get balance using multiple RPC endpoints
      */

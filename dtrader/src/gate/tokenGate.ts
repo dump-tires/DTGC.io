@@ -16,12 +16,76 @@ const RPC_ENDPOINTS = [
   'http://65.109.68.172:8545', // Hetzner
 ];
 
-// DTGC price estimate - updated periodically via dtgc.io
-const DTGC_PRICE_USD = 0.0004; // ~$0.0004 per DTGC
+// DTGC/WPLS pair on PulseX V2
+const DTGC_WPLS_PAIR = '0x48B837C6AA847D5147f4A44c71108f60dEa0f180';
+// PLS price estimate (updated from external source or use DEX)
+const PLS_PRICE_USD = 0.00002; // ~$0.00002 per PLS (fallback)
+
+// Fallback DTGC price if we can't fetch from DEX
+const FALLBACK_DTGC_PRICE_USD = 0.00001; // Conservative fallback
+
+// PulseX Pair ABI for getting reserves
+const PAIR_ABI = [
+  'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+  'function token0() external view returns (address)',
+  'function token1() external view returns (address)',
+];
 
 class TokenGate {
   private cachedBalance: Map<string, { balance: number; timestamp: number }> = new Map();
+  private cachedPrice: { price: number; timestamp: number } | null = null;
   private readonly CACHE_DURATION = 60000; // 1 minute cache
+  private readonly PRICE_CACHE_DURATION = 300000; // 5 minute price cache
+
+  /**
+   * Get DTGC price in USD from PulseX pair
+   */
+  private async getDtgcPriceUsd(): Promise<number> {
+    // Check price cache
+    if (this.cachedPrice && Date.now() - this.cachedPrice.timestamp < this.PRICE_CACHE_DURATION) {
+      return this.cachedPrice.price;
+    }
+
+    for (const rpcUrl of RPC_ENDPOINTS) {
+      try {
+        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
+
+        const pair = new ethers.Contract(DTGC_WPLS_PAIR, PAIR_ABI, provider);
+
+        const [reserves, token0] = await Promise.all([
+          pair.getReserves(),
+          pair.token0(),
+        ]);
+
+        const [reserve0, reserve1] = reserves;
+
+        // Figure out which reserve is DTGC and which is WPLS
+        const dtgcAddress = config.tokenGate.dtgc.toLowerCase();
+        const isDtgcToken0 = token0.toLowerCase() === dtgcAddress;
+
+        const dtgcReserve = isDtgcToken0 ? reserve0 : reserve1;
+        const plsReserve = isDtgcToken0 ? reserve1 : reserve0;
+
+        // Price = PLS per DTGC
+        const dtgcPriceInPls = Number(plsReserve) / Number(dtgcReserve);
+        const dtgcPriceUsd = dtgcPriceInPls * PLS_PRICE_USD;
+
+        console.log(`💵 DTGC Price: ${dtgcPriceInPls.toFixed(4)} PLS (~$${dtgcPriceUsd.toFixed(8)})`);
+
+        // Cache the price
+        this.cachedPrice = { price: dtgcPriceUsd, timestamp: Date.now() };
+
+        return dtgcPriceUsd;
+      } catch (e: any) {
+        console.log(`⚠️ Price fetch failed from ${rpcUrl}: ${e.message}`);
+        continue;
+      }
+    }
+
+    // All failed - use fallback
+    console.log(`⚠️ Using fallback DTGC price: $${FALLBACK_DTGC_PRICE_USD}`);
+    return FALLBACK_DTGC_PRICE_USD;
+  }
 
   /**
    * Try to get balance using multiple RPC endpoints
@@ -89,8 +153,9 @@ class TokenGate {
         });
       }
 
-      // Calculate USD value
-      const balanceUsd = balanceNum * DTGC_PRICE_USD;
+      // Get live DTGC price and calculate USD value
+      const dtgcPrice = await this.getDtgcPriceUsd();
+      const balanceUsd = balanceNum * dtgcPrice;
       const required = config.tokenGate.minHoldUsd;
 
       console.log(`💰 Wallet ${walletAddress.slice(0, 8)}...: ${balanceNum.toLocaleString()} DTGC (~$${balanceUsd.toFixed(2)})`);
