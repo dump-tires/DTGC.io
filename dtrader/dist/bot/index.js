@@ -997,19 +997,16 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
     async showNearGradTokens(chatId) {
         await this.bot.sendMessage(chatId, '🔄 Fetching top 10 near-graduation tokens...');
         try {
-            // Fetch from our API proxy
+            // Fetch from our API proxy (same as UI uses)
             const response = await fetch('https://dtgc.io/api/pump-tokens');
             const data = await response.json();
             if (!data.tokens || data.tokens.length === 0) {
                 await this.bot.sendMessage(chatId, '❌ No tokens found. Try again later.');
                 return;
             }
-            // Sort by progress (closest to 800M)
+            // API already returns sorted by closest to graduation, just take top 10
             const TARGET = 800_000_000;
-            const sorted = data.tokens
-                .filter((t) => t.tokensSold < TARGET)
-                .sort((a, b) => b.tokensSold - a.tokensSold)
-                .slice(0, 10);
+            const sorted = data.tokens.slice(0, 10);
             if (sorted.length === 0) {
                 await this.bot.sendMessage(chatId, '❌ No tokens approaching graduation right now.');
                 return;
@@ -1018,11 +1015,12 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             const buttons = [];
             for (let i = 0; i < sorted.length; i++) {
                 const token = sorted[i];
-                const progress = ((token.tokensSold / TARGET) * 100).toFixed(1);
+                const tokensSold = token.tokens_sold || 0;
+                const progress = ((tokensSold / TARGET) * 100).toFixed(1);
                 const progressBar = this.makeProgressBar(parseFloat(progress));
                 msg += `**${i + 1}. ${token.name || 'Unknown'}** (${token.symbol || '???'})\n`;
                 msg += `${progressBar} ${progress}%\n`;
-                msg += `📊 ${(token.tokensSold / 1_000_000).toFixed(1)}M / 800M sold\n`;
+                msg += `📊 ${(tokensSold / 1_000_000).toFixed(1)}M / 800M sold\n`;
                 msg += `\`${token.address.slice(0, 12)}...${token.address.slice(-8)}\`\n\n`;
                 // Add snipe button for each token (2 per row)
                 if (i % 2 === 0) {
