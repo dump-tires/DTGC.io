@@ -633,7 +633,24 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   });
   const [sniperExecuting, setSniperExecuting] = useState(false);
 
-  // P&L Tracking
+  // Balances for all tokens
+  const [balances, setBalances] = useState({});
+
+  // Live prices - MUST be defined before calculatePnL uses it
+  const [livePrices, setLivePrices] = useState({
+    // Core tokens
+    PLS: 0.0000159, WPLS: 0.0000159, DTGC: 0.0007, URMOM: 0.0002, PLSX: 0.000042, HEX: 0.0026, INC: 0.60,
+    // Stablecoins
+    DAI: 1, USDC: 1, USDT: 1, LUSD: 1, USDL: 1,
+    // Bridged ETH assets
+    WETH: 3300, WBTC: 100000, eHEX: 0.00083, LINK: 15, UNI: 8, AAVE: 200, MKR: 1800, SHIB: 0.00002, PEPE: 0.00001,
+    // PulseChain native tokens
+    LOAN: 0.0001, MINT: 0.00001, SPARK: 0.00001, TEDDY: 0.00001, '9MM': 0.00001, HDRN: 0.000001, ICSA: 0.00001,
+    PHIAT: 0.00001, CST: 0.00001, PLSB: 0.00001, ASIC: 0.00001, TSFi: 0.00001, BEAR: 0.00001, TONI: 0.00001,
+    BBC: 0.00001, MAXI: 0.001, TRIO: 0.001, DECI: 0.001, LUCKY: 0.001,
+  });
+
+  // P&L Tracking - NOW livePrices is defined above
   const calculatePnL = useCallback((trades) => {
     let totalInvested = 0;
     let totalCurrentValue = 0;
@@ -654,23 +671,6 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
     return { totalInvested, totalCurrentValue, totalRealized, unrealizedPnL, pnlPercent };
   }, [livePrices]);
-
-  // Balances for all tokens
-  const [balances, setBalances] = useState({});
-  
-  // Live prices
-  const [livePrices, setLivePrices] = useState({
-    // Core tokens
-    PLS: 0.0000159, WPLS: 0.0000159, DTGC: 0.0007, URMOM: 0.0002, PLSX: 0.000042, HEX: 0.0026, INC: 0.60, 
-    // Stablecoins
-    DAI: 1, USDC: 1, USDT: 1, LUSD: 1, USDL: 1,
-    // Bridged ETH assets
-    WETH: 3300, WBTC: 100000, eHEX: 0.00083, LINK: 15, UNI: 8, AAVE: 200, MKR: 1800, SHIB: 0.00002, PEPE: 0.00001,
-    // PulseChain native tokens  
-    LOAN: 0.0001, MINT: 0.00001, SPARK: 0.00001, TEDDY: 0.00001, '9MM': 0.00001, HDRN: 0.000001, ICSA: 0.00001,
-    PHIAT: 0.00001, CST: 0.00001, PLSB: 0.00001, ASIC: 0.00001, TSFi: 0.00001, BEAR: 0.00001, TONI: 0.00001,
-    BBC: 0.00001, MAXI: 0.001, TRIO: 0.001, DECI: 0.001, LUCKY: 0.001,
-  });
 
   const showToastMsg = useCallback((message, type = 'info') => {
     setToast({ message, type });
