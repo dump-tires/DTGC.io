@@ -363,6 +363,27 @@ export const snipeAmountKeyboard: TelegramBot.InlineKeyboardMarkup = {
   ],
 };
 
+// Gas priority for first-mover advantage
+export const gasPriorityKeyboard: TelegramBot.InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [
+      { text: '🐢 Normal (0.01 Gwei)', callback_data: 'gas_normal' },
+    ],
+    [
+      { text: '⚡ Fast (0.1 Gwei)', callback_data: 'gas_fast' },
+    ],
+    [
+      { text: '🚀 TURBO (1 Gwei)', callback_data: 'gas_turbo' },
+    ],
+    [
+      { text: '💎 MAX SPEED (10 Gwei)', callback_data: 'gas_max' },
+    ],
+    [
+      { text: '🔙 Back', callback_data: 'main_menu' },
+    ],
+  ],
+};
+
 // ==================== QUICK ACTIONS ====================
 
 export const quickActionsKeyboard = (tokenAddress: string): TelegramBot.InlineKeyboardMarkup => ({

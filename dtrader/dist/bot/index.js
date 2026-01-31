@@ -50,6 +50,18 @@ const mempool_1 = require("../sniper/mempool");
 const limitOrder_1 = require("../orders/limitOrder");
 const antiRug_1 = require("../security/antiRug");
 const keyboards = __importStar(require("./keyboards"));
+const GAS_GWEI = {
+    normal: 0.01,
+    fast: 0.1,
+    turbo: 1,
+    max: 10,
+};
+const GAS_LABELS = {
+    normal: '🐢 Normal',
+    fast: '⚡ Fast',
+    turbo: '🚀 TURBO',
+    max: '💎 MAX SPEED',
+};
 class DtraderBot {
     bot;
     sessions = new Map();
@@ -72,6 +84,7 @@ class DtraderBot {
                 settings: {
                     slippage: 10,
                     gasLimit: 500000,
+                    gasPriority: 'turbo', // Default to TURBO for speed
                     antiRug: true,
                     alerts: true,
                 },
@@ -460,13 +473,29 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
                 `Select PLS amount per wallet:`, { parse_mode: 'Markdown', reply_markup: keyboards.snipeAmountKeyboard });
             return;
         }
-        // Snipe amount selection for insta-snipe
+        // Snipe amount selection for insta-snipe -> then gas priority
         if (data.startsWith('snipe_amt_') && session.pendingAction === 'instasnipe_amount') {
             const amount = parseInt(data.replace('snipe_amt_', ''));
             if (!isNaN(amount) && session.pendingToken) {
-                await this.setupInstaSnipe(chatId, userId, session.pendingToken, amount);
+                session.pendingAmount = amount.toString();
+                session.pendingAction = 'instasnipe_gas';
+                await this.bot.sendMessage(chatId, `⛽ **Select Gas Priority**\n\n` +
+                    `Higher gas = faster execution = first-mover advantage!\n\n` +
+                    `💰 Amount: ${(amount / 1_000_000).toFixed(0)}M PLS\n` +
+                    `🎯 Token: \`${session.pendingToken.slice(0, 12)}...\``, { parse_mode: 'Markdown', reply_markup: keyboards.gasPriorityKeyboard });
+            }
+            return;
+        }
+        // Gas priority selection for insta-snipe
+        if (data.startsWith('gas_') && session.pendingAction === 'instasnipe_gas') {
+            const gasPriority = data.replace('gas_', '');
+            if (session.pendingToken && session.pendingAmount) {
+                session.pendingGas = gasPriority;
+                await this.setupInstaSnipe(chatId, userId, session.pendingToken, parseInt(session.pendingAmount), gasPriority);
                 session.pendingAction = undefined;
                 session.pendingToken = undefined;
+                session.pendingAmount = undefined;
+                session.pendingGas = undefined;
             }
             return;
         }
@@ -1078,15 +1107,20 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
     }
     /**
      * Set up Insta-Snipe for a token (executes on graduation)
+     * Mandalorian-style alpha receipt with gas priority for first-mover advantage
      */
-    async setupInstaSnipe(chatId, userId, tokenAddress, plsAmount) {
+    async setupInstaSnipe(chatId, userId, tokenAddress, plsAmount, gasPriority = 'turbo') {
         const session = this.getSession(chatId);
         try {
             // Get wallet info
             const walletId = session.linkedWallet ? userId : `${userId}_snipe_1`;
             const wallet = await wallet_1.walletManager.getWallet(walletId);
             const walletAddress = session.linkedWallet || wallet?.address || 'Unknown';
-            const walletLabel = session.linkedWallet ? 'Linked Wallet' : 'Snipe Wallet 1';
+            const walletLabel = session.linkedWallet ? 'Linked' : 'Snipe W1';
+            // Gas settings for speed
+            const gasGwei = GAS_GWEI[gasPriority];
+            const gasLabel = GAS_LABELS[gasPriority];
+            const gasPriceWei = BigInt(Math.floor(gasGwei * 1e9)); // Convert Gwei to Wei
             // Create snipe order ticket
             const orderId = `SNP-${Date.now().toString(36).toUpperCase()}`;
             const snipeOrder = {
@@ -1095,37 +1129,46 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
                 walletId,
                 walletAddress: walletAddress.slice(0, 10) + '...' + walletAddress.slice(-6),
                 amountPls: plsAmount,
+                gasPriority,
+                gasGwei,
                 status: 'pending',
                 createdAt: Date.now(),
             };
             // Store the order
             session.snipeOrders.push(snipeOrder);
-            // Set up graduation snipe using watchToken
+            // Set up graduation snipe using watchToken with gas priority
             graduation_1.graduationSniper.watchToken(tokenAddress, {
                 amountPls: BigInt(plsAmount) * BigInt(10 ** 18),
                 slippage: session.settings.slippage,
                 gasLimit: session.settings.gasLimit,
-                gasPriceMultiplier: 1.5,
+                gasPriceMultiplier: gasGwei >= 1 ? 10 : gasGwei >= 0.1 ? 5 : 2, // Higher multiplier for speed
             });
             // Format amount display
             const amountDisplay = plsAmount >= 1_000_000
                 ? `${(plsAmount / 1_000_000).toFixed(0)}M PLS`
                 : `${(plsAmount / 1_000).toFixed(0)}K PLS`;
-            // Send receipt ticket
-            await this.bot.sendMessage(chatId, `🎫 **SNIPE ORDER CONFIRMED**\n` +
-                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `🆔 **Order ID:** \`${orderId}\`\n` +
-                `📊 **Status:** 🟡 PENDING\n\n` +
-                `**Target Token:**\n` +
+            // Mandalorian Alpha Receipt
+            await this.bot.sendMessage(chatId, `⚜️ **MANDALORIAN ALPHA RECEIPT** ⚜️\n` +
+                `╔══════════════════════════╗\n` +
+                `║  🎯 SNIPE ORDER ARMED    ║\n` +
+                `╚══════════════════════════╝\n\n` +
+                `🆔 \`${orderId}\`\n` +
+                `📊 Status: 🟡 **ARMED & WAITING**\n\n` +
+                `**━━━ TARGET ━━━**\n` +
                 `\`${tokenAddress}\`\n\n` +
-                `**Wallet:** ${walletLabel}\n` +
-                `\`${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}\`\n\n` +
-                `💰 **Bullet Loaded:** ${amountDisplay}\n` +
-                `⚙️ **Slippage:** ${session.settings.slippage}%\n\n` +
-                `━━━━━━━━━━━━━━━━━━━━━\n` +
-                `🎯 **ARMED & WAITING**\n` +
-                `Will auto-execute on graduation!\n\n` +
-                `_View Gold Suite for P&L tracking_`, {
+                `**━━━ PAYLOAD ━━━**\n` +
+                `💰 **Bullet:** ${amountDisplay}\n` +
+                `👛 **Wallet:** ${walletLabel}\n` +
+                `   \`${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}\`\n\n` +
+                `**━━━ SPEED CONFIG ━━━**\n` +
+                `⛽ **Gas:** ${gasLabel}\n` +
+                `⚡ **Gwei:** ${gasGwei}\n` +
+                `🔧 **Slippage:** ${session.settings.slippage}%\n\n` +
+                `╔══════════════════════════╗\n` +
+                `║  THIS IS THE WAY  ⚜️     ║\n` +
+                `╚══════════════════════════╝\n\n` +
+                `_Auto-executes on graduation._\n` +
+                `_First-mover advantage enabled._`, {
                 parse_mode: 'Markdown',
                 reply_markup: {
                     inline_keyboard: [

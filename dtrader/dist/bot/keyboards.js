@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.quickActionsKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.mainMenuKeyboard = void 0;
+exports.quickActionsKeyboard = exports.gasPriorityKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.mainMenuKeyboard = void 0;
 /**
  * Enhanced Telegram Keyboard Layouts
  * Modeled after Maestro/Solid Trader bot structure
@@ -332,6 +332,26 @@ exports.snipeAmountKeyboard = {
         ],
         [
             { text: '❌ Cancel', callback_data: 'main_menu' },
+        ],
+    ],
+};
+// Gas priority for first-mover advantage
+exports.gasPriorityKeyboard = {
+    inline_keyboard: [
+        [
+            { text: '🐢 Normal (0.01 Gwei)', callback_data: 'gas_normal' },
+        ],
+        [
+            { text: '⚡ Fast (0.1 Gwei)', callback_data: 'gas_fast' },
+        ],
+        [
+            { text: '🚀 TURBO (1 Gwei)', callback_data: 'gas_turbo' },
+        ],
+        [
+            { text: '💎 MAX SPEED (10 Gwei)', callback_data: 'gas_max' },
+        ],
+        [
+            { text: '🔙 Back', callback_data: 'main_menu' },
         ],
     ],
 };

@@ -45,6 +45,7 @@ export declare class DtraderBot {
     private makeProgressBar;
     /**
      * Set up Insta-Snipe for a token (executes on graduation)
+     * Mandalorian-style alpha receipt with gas priority for first-mover advantage
      */
     private setupInstaSnipe;
     /**
