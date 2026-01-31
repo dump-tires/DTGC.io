@@ -5,27 +5,20 @@ interface GateResult {
     balanceUsd: number;
 }
 declare class TokenGate {
-    private provider;
-    private dtgcContract;
-    private router;
-    private factory;
-    private cachedDtgcPrice;
-    private cacheTimestamp;
+    private cachedBalance;
     private readonly CACHE_DURATION;
     /**
-     * Get provider with automatic Hetzner/public fallback
+     * Try to get balance using multiple RPC endpoints
      */
-    private getProvider;
+    private getBalanceWithFallback;
     /**
-     * Refresh provider (call after RPC failure)
+     * Check if wallet has enough DTGC for access
      */
-    refreshProvider(): Promise<void>;
-    /**
-     * Get DTGC price in USD by checking PulseX pair
-     * Uses: DTGC -> WPLS -> DAI/USDC path
-     */
-    getDtgcPriceUsd(): Promise<number>;
     checkAccess(walletAddress: string): Promise<GateResult>;
+    /**
+     * Force refresh balance for a wallet
+     */
+    refreshBalance(walletAddress: string): Promise<GateResult>;
     private fmt;
     getGateKeyboard(): {
         inline_keyboard: ({
