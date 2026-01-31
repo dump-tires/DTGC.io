@@ -125,16 +125,23 @@ class WalletManager {
     async getOrCreateWallet(telegramId) {
         const existing = this.store.findByTelegramId(telegramId);
         if (existing) {
-            const privateKey = this.decrypt(existing.encryptedKey);
-            const wallet = new ethers_1.ethers.Wallet(privateKey, this.provider);
-            return { wallet, isNew: false };
+            try {
+                const privateKey = this.decrypt(existing.encryptedKey);
+                const wallet = new ethers_1.ethers.Wallet(privateKey, this.provider);
+                return { wallet, isNew: false };
+            }
+            catch (err) {
+                // Decryption failed - encryption key changed or data corrupted
+                // Create new wallet for this user
+                console.log(`⚠️ Wallet decryption failed for user ${telegramId}, creating new wallet`);
+            }
         }
         // Create new wallet
         const hdWallet = ethers_1.ethers.Wallet.createRandom();
         const wallet = new ethers_1.ethers.Wallet(hdWallet.privateKey, this.provider);
         const encryptedKey = this.encrypt(hdWallet.privateKey);
-        this.store.insert({
-            telegramId,
+        // Use upsert to replace old wallet if it exists
+        this.store.upsert(telegramId, {
             address: wallet.address,
             encryptedKey,
             createdAt: Date.now()
@@ -161,8 +168,14 @@ class WalletManager {
         const existing = this.store.findByTelegramId(telegramId);
         if (!existing)
             return null;
-        const privateKey = this.decrypt(existing.encryptedKey);
-        return new ethers_1.ethers.Wallet(privateKey, this.provider);
+        try {
+            const privateKey = this.decrypt(existing.encryptedKey);
+            return new ethers_1.ethers.Wallet(privateKey, this.provider);
+        }
+        catch (err) {
+            console.log(`⚠️ Wallet decryption failed for user ${telegramId}`);
+            return null;
+        }
     }
     /**
      * Export private key (user must confirm)
