@@ -129,12 +129,12 @@ const processTradingFees = async ({ amountPLS, signer, router, showToast }) => {
 
 const GIB_SHOW_BASE = 'https://gib.show/image/369'; // PulseChain chainId = 369
 
-// Get token logo - DTGC uses our custom favicon, everything else uses gib.show
+// Get token logo - DTGC uses official gold trading coin logo, everything else uses gib.show
 const getTokenLogo = (address, symbol) => {
   const addr = address?.toLowerCase();
-  // DTGC - Use our custom gold coin favicon
+  // DTGC - Official Gold Trading Coin logo (bar chart + gavel)
   if (addr === '0xd0676b28a457371d58d47e5247b439114e40eb0f' || symbol === 'DTGC') {
-    return '/Favicon.png';
+    return '/dtgc-coin.png';
   }
   // All other tokens - use gib.show API
   return `${GIB_SHOW_BASE}/${address}`;
@@ -198,9 +198,9 @@ const TOKENS = {
     symbol: 'DTGC',
     name: 'DT Gold Coin',
     decimals: 18,
-    emoji: '🏆',
+    emoji: '⚜️',
     isGold: true,
-    useCustomLogo: true, // Uses /Favicon.png
+    useCustomLogo: true, // Uses /dtgc-coin.png (official gold trading coin logo)
   },
   URMOM: {
     address: '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0',

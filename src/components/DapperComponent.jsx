@@ -11,7 +11,7 @@ import { ethers } from 'ethers';
 // TOKEN LOGO CONFIGURATION
 // ============================================
 const TOKEN_LOGOS = {
-  '0xd0676b28a457371d58d47e5247b439114e40eb0f': '/Favicon.png',
+  '0xd0676b28a457371d58d47e5247b439114e40eb0f': '/dtgc-coin.png', // Official DTGC Gold Trading Coin logo
   '0x670c972bb5388e087a2934a063064d97278e01f3': '/LPfavicon.png',
   '0xe43b3cee3554e120213b8b69caf690b6c04a7ec0': 'https://gib.show/image/369/0xe43b3cee3554e120213b8b69caf690b6c04a7ec0',
   '0xa1077a294dde1b09bb074bec877f05b634579687': 'https://tokens.app.pulsex.com/images/tokens/0xA1077a294dDE1B09bB074Bec877f05b634579687.png',
@@ -773,7 +773,7 @@ const DapperComponent = ({ provider, account, livePrices = {} }) => {
 
       <div style={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-          <img src="/Favicon.png" alt="DTGC" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+          <img src="/dtgc-coin.png" alt="DTGC" style={{ width: 40, height: 40, borderRadius: '50%' }} />
           <h2 style={styles.title}>💎 DAPPER FLEX</h2>
         </div>
         <p style={styles.subtitle}>Flex Tier LP Zapper • 10% APR • No Lockup</p>
@@ -929,7 +929,7 @@ const DapperComponent = ({ provider, account, livePrices = {} }) => {
       {/* Info Footer */}
       <div style={styles.footer}>
         <div style={styles.footerItem}>
-          <img src="/Favicon.png" alt="DTGC" style={{ width: 16, height: 16, borderRadius: '50%' }} />
+          <img src="/dtgc-coin.png" alt="DTGC" style={{ width: 16, height: 16, borderRadius: '50%' }} />
           <span>DTGC Ecosystem</span>
         </div>
         <div style={styles.footerItem}>

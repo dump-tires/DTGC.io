@@ -51,12 +51,12 @@ const CONFIG = {
   EXPLORER: 'https://scan.pulsechain.com',
 };
 
-// Helper to get token logo - DTGC uses favicon, LP uses gold bar
+// Helper to get token logo - DTGC uses official gold trading coin, LP uses gold bar
 const getTokenLogo = (address) => {
   const addr = address?.toLowerCase();
-  // DTGC - Gold coin favicon (trophy icon)
+  // DTGC - Official Gold Trading Coin logo (bar chart + gavel)
   if (addr === '0xd0676b28a457371d58d47e5247b439114e40eb0f') {
-    return '/Favicon.png';
+    return '/dtgc-coin.png';
   }
   // DTGC/URMOM LP - Gold bar icon
   if (addr === '0x670c972bb5388e087a2934a063064d97278e01f3') {
@@ -112,13 +112,13 @@ const TOKENS = {
     emoji: '💜',
     isNative: false,
   },
-  DTGC: { 
-    address: '0xd0676b28a457371d58d47e5247b439114e40eb0f', 
-    symbol: 'DTGC', 
-    name: 'DT Gold Coin', 
-    decimals: 18, 
-    logo: '/Favicon.png', // Use our gold coin favicon
-    emoji: '🏆',
+  DTGC: {
+    address: '0xd0676b28a457371d58d47e5247b439114e40eb0f',
+    symbol: 'DTGC',
+    name: 'DT Gold Coin',
+    decimals: 18,
+    logo: '/dtgc-coin.png', // Official DTGC Gold Trading Coin logo
+    emoji: '⚜️',
     isNative: false,
   },
   URMOM: { 
