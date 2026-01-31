@@ -16,20 +16,11 @@ const RPC_ENDPOINTS = [
   'http://65.109.68.172:8545', // Hetzner
 ];
 
-// DTGC/WPLS pair on PulseX V2
-const DTGC_WPLS_PAIR = '0x48B837C6AA847D5147f4A44c71108f60dEa0f180';
-// PLS price estimate (updated from external source or use DEX)
-const PLS_PRICE_USD = 0.00002; // ~$0.00002 per PLS (fallback)
+// DexScreener API for accurate price
+const DEXSCREENER_API = 'https://api.dexscreener.com/latest/dex/tokens/0xD0676B28a457371D58d47E5247b439114e40Eb0F';
 
-// Fallback DTGC price if we can't fetch from DEX
-const FALLBACK_DTGC_PRICE_USD = 0.00001; // Conservative fallback
-
-// PulseX Pair ABI for getting reserves
-const PAIR_ABI = [
-  'function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
-  'function token0() external view returns (address)',
-  'function token1() external view returns (address)',
-];
+// Fallback DTGC price if API fails
+const FALLBACK_DTGC_PRICE_USD = 0.0004; // ~$0.0004 per DTGC (conservative)
 
 class TokenGate {
   private cachedBalance: Map<string, { balance: number; timestamp: number }> = new Map();
@@ -38,51 +29,46 @@ class TokenGate {
   private readonly PRICE_CACHE_DURATION = 300000; // 5 minute price cache
 
   /**
-   * Get DTGC price in USD from PulseX pair
+   * Get DTGC price in USD from DexScreener API
    */
   private async getDtgcPriceUsd(): Promise<number> {
     // Check price cache
     if (this.cachedPrice && Date.now() - this.cachedPrice.timestamp < this.PRICE_CACHE_DURATION) {
+      console.log(`📦 Using cached DTGC price: $${this.cachedPrice.price.toFixed(6)}`);
       return this.cachedPrice.price;
     }
 
-    for (const rpcUrl of RPC_ENDPOINTS) {
-      try {
-        const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
+    try {
+      // Fetch from DexScreener API
+      const response = await fetch(DEXSCREENER_API);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        const pair = new ethers.Contract(DTGC_WPLS_PAIR, PAIR_ABI, provider);
+      const data: any = await response.json();
 
-        const [reserves, token0] = await Promise.all([
-          pair.getReserves(),
-          pair.token0(),
-        ]);
+      // Find the best pair (highest liquidity)
+      if (data.pairs && data.pairs.length > 0) {
+        // Sort by liquidity and get the best price
+        const bestPair = data.pairs.sort((a: any, b: any) =>
+          (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
+        )[0];
 
-        const [reserve0, reserve1] = reserves;
+        const priceUsd = parseFloat(bestPair.priceUsd || '0');
 
-        // Figure out which reserve is DTGC and which is WPLS
-        const dtgcAddress = config.tokenGate.dtgc.toLowerCase();
-        const isDtgcToken0 = token0.toLowerCase() === dtgcAddress;
+        if (priceUsd > 0) {
+          console.log(`💵 DTGC Price from DexScreener: $${priceUsd.toFixed(6)} (${bestPair.pairAddress?.slice(0,10)}...)`);
 
-        const dtgcReserve = isDtgcToken0 ? reserve0 : reserve1;
-        const plsReserve = isDtgcToken0 ? reserve1 : reserve0;
-
-        // Price = PLS per DTGC
-        const dtgcPriceInPls = Number(plsReserve) / Number(dtgcReserve);
-        const dtgcPriceUsd = dtgcPriceInPls * PLS_PRICE_USD;
-
-        console.log(`💵 DTGC Price: ${dtgcPriceInPls.toFixed(4)} PLS (~$${dtgcPriceUsd.toFixed(8)})`);
-
-        // Cache the price
-        this.cachedPrice = { price: dtgcPriceUsd, timestamp: Date.now() };
-
-        return dtgcPriceUsd;
-      } catch (e: any) {
-        console.log(`⚠️ Price fetch failed from ${rpcUrl}: ${e.message}`);
-        continue;
+          // Cache the price
+          this.cachedPrice = { price: priceUsd, timestamp: Date.now() };
+          return priceUsd;
+        }
       }
+
+      throw new Error('No valid price data');
+    } catch (e: any) {
+      console.log(`⚠️ DexScreener price fetch failed: ${e.message}`);
     }
 
-    // All failed - use fallback
+    // Fallback
     console.log(`⚠️ Using fallback DTGC price: $${FALLBACK_DTGC_PRICE_USD}`);
     return FALLBACK_DTGC_PRICE_USD;
   }

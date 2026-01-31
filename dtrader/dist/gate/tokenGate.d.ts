@@ -10,7 +10,7 @@ declare class TokenGate {
     private readonly CACHE_DURATION;
     private readonly PRICE_CACHE_DURATION;
     /**
-     * Get DTGC price in USD from PulseX pair
+     * Get DTGC price in USD from DexScreener API
      */
     private getDtgcPriceUsd;
     /**
