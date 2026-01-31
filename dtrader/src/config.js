@@ -1,6 +1,6 @@
 /**
  * ⚜️ DTRADER MANDALORIAN - Configuration
- * Congruent with PulseXGold at dtgc.io/pulsexgold
+ * Congruent with DTGC Gold at dtgc.io/gold
  */
 
 require('dotenv').config();
@@ -33,9 +33,9 @@ module.exports = {
   DEV_WALLET: '0xc1cd5a70815e2874d2db038f398f2d8939d8e87c',
   BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
 
-  // Links - CONGRUENT WITH PULSEXGOLD
+  // Links - CONGRUENT WITH DTGC GOLD
   LINKS: {
-    PULSEX_GOLD: 'https://dtgc.io/pulsexgold',
+    GOLD: 'https://dtgc.io/gold',
     DTGC_WEBSITE: 'https://dtgc.io',
     PULSESCAN: 'https://scan.pulsechain.com',
     PUMP_TIRES: 'https://pump.tires',
