@@ -812,9 +812,28 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
       if (result.verified) {
         setTelegramVerified(result);
-        setToast({ message: `✅ Verified! ${result.balance?.toLocaleString()} DTGC`, type: 'success' });
-        // Open Telegram link
-        window.open(result.telegramLink, '_blank');
+        setToast({ message: `✅ Verified! Opening Telegram...`, type: 'success' });
+
+        // Try multiple methods to open Telegram link (mobile-friendly)
+        const tgLink = result.telegramLink;
+
+        // Method 1: Use location.href for mobile deep links
+        setTimeout(() => {
+          // Check if it's a mobile device
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+          if (isMobile) {
+            // On mobile, use location.href for better deep link handling
+            window.location.href = tgLink;
+          } else {
+            // On desktop, try window.open first
+            const win = window.open(tgLink, '_blank');
+            if (!win || win.closed || typeof win.closed === 'undefined') {
+              // Popup blocked, fall back to location
+              window.location.href = tgLink;
+            }
+          }
+        }, 500);
       } else {
         setToast({ message: result.message || '❌ Insufficient DTGC balance', type: 'error' });
       }
@@ -2111,6 +2130,46 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               {userAddress}
             </div>
           </div>
+
+          {/* Verification Success - Open Telegram */}
+          {telegramVerified && telegramVerified.telegramLink && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(0,200,83,0.15) 0%, rgba(0,230,118,0.1) 100%)',
+              borderRadius: '8px',
+              padding: '12px',
+              marginBottom: '10px',
+              border: '1px solid rgba(0,200,83,0.3)',
+            }}>
+              <div style={{ fontSize: '0.75rem', color: '#00C853', fontWeight: 600, marginBottom: '6px' }}>
+                ✅ Wallet Verified!
+              </div>
+              <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '10px' }}>
+                Balance: {telegramVerified.balance?.toLocaleString()} DTGC (~${telegramVerified.balanceUsd?.toFixed(2)})
+              </div>
+              <a
+                href={telegramVerified.telegramLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block',
+                  background: 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  color: '#fff',
+                  fontSize: '0.75rem',
+                  textAlign: 'center',
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                  marginBottom: '8px',
+                }}
+              >
+                🚀 OPEN TELEGRAM BOT
+              </a>
+              <div style={{ fontSize: '0.55rem', color: '#666', textAlign: 'center' }}>
+                Tap above if Telegram didn't open automatically
+              </div>
+            </div>
+          )}
 
           {/* Bot Wallet (from Telegram) */}
           {telegramVerified && (
