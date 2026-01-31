@@ -40,10 +40,11 @@ export const config = {
     minHoldUsd: Number(process.env.MIN_HOLD_USD) || 50,
   },
 
-  // pump.tires Integration
+  // pump.tires Integration - Richard Heart's Official PUMP.fun fork
   pumpTires: {
-    contract: process.env.PUMP_TIRES_CONTRACT || '',
+    contract: process.env.PUMP_TIRES_CONTRACT || '0xec4252e62c6de3d655ca9ce3afc12e553ebba274',
     graduationThreshold: BigInt(process.env.GRADUATION_THRESHOLD || '200000000000000000000000000'), // 200M PLS
+    totalSupply: BigInt('1000000000000000000000000000'), // 1 Billion tokens per coin
   },
 
   // Trading Defaults

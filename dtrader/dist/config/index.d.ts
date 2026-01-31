@@ -21,6 +21,7 @@ export declare const config: {
     pumpTires: {
         contract: string;
         graduationThreshold: bigint;
+        totalSupply: bigint;
     };
     trading: {
         defaultSlippage: number;
