@@ -134,3 +134,295 @@ export const snipeTargetsStore = createStore<{
   source: string;
   createdAt: number;
 }>('snipeTargets');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRADE HISTORY - Complete record of all trades, snipes, and limit orders
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type TradeHistoryType =
+  | 'instabond_snipe'  // InstaBond graduation snipe order
+  | 'limit_buy'        // Limit buy order
+  | 'limit_sell'       // Limit sell order
+  | 'stop_loss'        // Stop loss order
+  | 'take_profit'      // Take profit order
+  | 'market_buy'       // Instant market buy
+  | 'market_sell'      // Instant market sell
+  | 'dca'              // DCA order
+  | 'copy_trade';      // Copy trade execution
+
+export type TradeHistoryStatus =
+  | 'pending'          // Order placed, waiting
+  | 'watching'         // Watching for trigger
+  | 'executing'        // Currently executing
+  | 'completed'        // Successfully executed
+  | 'failed'           // Execution failed
+  | 'cancelled';       // User cancelled
+
+export interface TradeHistoryEntry {
+  id: string;
+  vistoId: string;           // User ID
+  chatId: string;            // Telegram chat ID for notifications
+  type: TradeHistoryType;
+  status: TradeHistoryStatus;
+
+  // Token info
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenName?: string;
+
+  // Order details
+  amountPls: string;         // Amount in PLS
+  amountUsd?: string;        // USD value at time of order
+  targetPrice?: string;      // Target price for limit orders
+  triggerCondition?: string; // What triggers execution (e.g., "graduation", "price < 0.001")
+
+  // Execution details
+  executedPrice?: string;
+  tokensReceived?: string;
+  txHash?: string;
+  gasCost?: string;
+  slippage?: number;
+
+  // PnL tracking
+  entryPrice?: string;
+  currentPrice?: string;
+  pnlPls?: string;
+  pnlPercent?: number;
+
+  // Sell order linked (for take profit/stop loss)
+  linkedOrderId?: string;
+
+  // Timestamps
+  createdAt: number;
+  updatedAt: number;
+  executedAt?: number;
+
+  // Notes
+  notes?: string;
+}
+
+export const tradeHistoryStore = createStore<TradeHistoryEntry>('tradeHistory');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRADE HISTORY HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const TradeHistory = {
+  /**
+   * Log a new InstaBond snipe order
+   */
+  logInstaBondSnipe: (
+    vistoId: string,
+    chatId: string,
+    tokenAddress: string,
+    tokenSymbol: string,
+    amountPls: string,
+    sellPercent?: number,
+    sellMultiplier?: number
+  ): TradeHistoryEntry => {
+    const entry: TradeHistoryEntry = {
+      id: `ib_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      vistoId,
+      chatId,
+      type: 'instabond_snipe',
+      status: 'watching',
+      tokenAddress,
+      tokenSymbol,
+      amountPls,
+      triggerCondition: 'graduation (200M PLS bonding curve)',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      notes: sellPercent && sellMultiplier
+        ? `Auto-sell ${sellPercent}% at ${sellMultiplier}x`
+        : undefined,
+    };
+
+    tradeHistoryStore.insert(entry);
+    return entry;
+  },
+
+  /**
+   * Log a limit order (buy/sell/take profit/stop loss)
+   */
+  logLimitOrder: (
+    vistoId: string,
+    chatId: string,
+    type: 'limit_buy' | 'limit_sell' | 'stop_loss' | 'take_profit',
+    tokenAddress: string,
+    tokenSymbol: string,
+    amountPls: string,
+    targetPrice: string,
+    linkedOrderId?: string
+  ): TradeHistoryEntry => {
+    const entry: TradeHistoryEntry = {
+      id: `lo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      vistoId,
+      chatId,
+      type,
+      status: 'watching',
+      tokenAddress,
+      tokenSymbol,
+      amountPls,
+      targetPrice,
+      linkedOrderId,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    tradeHistoryStore.insert(entry);
+    return entry;
+  },
+
+  /**
+   * Update order status
+   */
+  updateStatus: (
+    orderId: string,
+    status: TradeHistoryStatus,
+    executionDetails?: {
+      executedPrice?: string;
+      tokensReceived?: string;
+      txHash?: string;
+      gasCost?: string;
+      pnlPls?: string;
+      pnlPercent?: number;
+    }
+  ): void => {
+    tradeHistoryStore.update(
+      (e) => e.id === orderId,
+      {
+        status,
+        updatedAt: Date.now(),
+        executedAt: status === 'completed' || status === 'failed' ? Date.now() : undefined,
+        ...executionDetails,
+      }
+    );
+  },
+
+  /**
+   * Get all orders for a user
+   */
+  getUserHistory: (vistoId: string, limit: number = 20): TradeHistoryEntry[] => {
+    return tradeHistoryStore
+      .findMany((e) => e.vistoId === vistoId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  },
+
+  /**
+   * Get active (pending/watching) orders for a user
+   */
+  getActiveOrders: (vistoId: string): TradeHistoryEntry[] => {
+    return tradeHistoryStore
+      .findMany((e) =>
+        e.vistoId === vistoId &&
+        (e.status === 'pending' || e.status === 'watching' || e.status === 'executing')
+      )
+      .sort((a, b) => b.createdAt - a.createdAt);
+  },
+
+  /**
+   * Get completed trades for PnL summary
+   */
+  getCompletedTrades: (vistoId: string, limit: number = 50): TradeHistoryEntry[] => {
+    return tradeHistoryStore
+      .findMany((e) =>
+        e.vistoId === vistoId &&
+        (e.status === 'completed' || e.status === 'failed')
+      )
+      .sort((a, b) => b.executedAt! - a.executedAt!)
+      .slice(0, limit);
+  },
+
+  /**
+   * Cancel an order
+   */
+  cancelOrder: (orderId: string): boolean => {
+    const order = tradeHistoryStore.findOne((e) => e.id === orderId);
+    if (order && (order.status === 'pending' || order.status === 'watching')) {
+      tradeHistoryStore.update(
+        (e) => e.id === orderId,
+        { status: 'cancelled', updatedAt: Date.now() }
+      );
+      return true;
+    }
+    return false;
+  },
+
+  /**
+   * Format order for Telegram display
+   */
+  formatForTelegram: (entry: TradeHistoryEntry): string => {
+    const typeEmoji: Record<TradeHistoryType, string> = {
+      instabond_snipe: '🎓',
+      limit_buy: '🟢',
+      limit_sell: '🔴',
+      stop_loss: '🛑',
+      take_profit: '💰',
+      market_buy: '💰',
+      market_sell: '💸',
+      dca: '📊',
+      copy_trade: '🐋',
+    };
+
+    const statusEmoji: Record<TradeHistoryStatus, string> = {
+      pending: '⏳',
+      watching: '👁️',
+      executing: '⚡',
+      completed: '✅',
+      failed: '❌',
+      cancelled: '🚫',
+    };
+
+    const typeName: Record<TradeHistoryType, string> = {
+      instabond_snipe: 'InstaBond Snipe',
+      limit_buy: 'Limit Buy',
+      limit_sell: 'Limit Sell',
+      stop_loss: 'Stop Loss',
+      take_profit: 'Take Profit',
+      market_buy: 'Market Buy',
+      market_sell: 'Market Sell',
+      dca: 'DCA Order',
+      copy_trade: 'Copy Trade',
+    };
+
+    const date = new Date(entry.createdAt).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    let msg = `${typeEmoji[entry.type]} **${typeName[entry.type]}**\n`;
+    msg += `${statusEmoji[entry.status]} ${entry.status.toUpperCase()}\n`;
+    msg += `🪙 ${entry.tokenSymbol || entry.tokenAddress.slice(0, 8)}\n`;
+    msg += `💰 ${formatPls(entry.amountPls)} PLS\n`;
+
+    if (entry.targetPrice) {
+      msg += `🎯 Target: ${entry.targetPrice}\n`;
+    }
+
+    if (entry.executedPrice) {
+      msg += `📈 Executed @ ${entry.executedPrice}\n`;
+    }
+
+    if (entry.pnlPercent !== undefined) {
+      const sign = entry.pnlPercent >= 0 ? '+' : '';
+      msg += `📊 PnL: ${sign}${entry.pnlPercent.toFixed(2)}%\n`;
+    }
+
+    if (entry.txHash) {
+      msg += `🔗 [Tx](https://scan.pulsechain.com/tx/${entry.txHash})\n`;
+    }
+
+    msg += `📅 ${date}`;
+
+    return msg;
+  },
+};
+
+// Helper to format PLS numbers
+function formatPls(value: string | number): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+  if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+  if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+  return num.toFixed(2);
+}

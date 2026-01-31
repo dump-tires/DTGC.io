@@ -30,8 +30,11 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
       { text: '📈 Portfolio', callback_data: 'portfolio' },
     ],
     [
-      { text: '🛡️ Check Token', callback_data: 'check_token' },
+      { text: '📋 Trade History', callback_data: 'history_menu' },
       { text: '⚙️ Settings', callback_data: 'settings' },
+    ],
+    [
+      { text: '🛡️ Check Token', callback_data: 'check_token' },
     ],
     [
       { text: '⚜️ Gold Suite 📱', url: 'https://dtgc.io/gold' },
@@ -398,6 +401,38 @@ export const quickActionsKeyboard = (tokenAddress: string): TelegramBot.InlineKe
     ],
     [
       { text: '🔙 Back', callback_data: 'main_menu' },
+    ],
+  ],
+});
+
+// ==================== TRADE HISTORY ====================
+
+export const tradeHistoryKeyboard: TelegramBot.InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [
+      { text: '👁️ Active Orders', callback_data: 'history_active' },
+      { text: '✅ Completed', callback_data: 'history_completed' },
+    ],
+    [
+      { text: '🎓 InstaBond Snipes', callback_data: 'history_instabond' },
+      { text: '📊 Limit Orders', callback_data: 'history_limits' },
+    ],
+    [
+      { text: '📈 PnL Summary', callback_data: 'history_pnl' },
+    ],
+    [
+      { text: '🔙 Back', callback_data: 'main_menu' },
+    ],
+  ],
+};
+
+export const tradeHistoryEntryKeyboard = (orderId: string): TelegramBot.InlineKeyboardMarkup => ({
+  inline_keyboard: [
+    [
+      { text: '❌ Cancel Order', callback_data: `history_cancel_${orderId}` },
+    ],
+    [
+      { text: '🔙 Back to History', callback_data: 'history_menu' },
     ],
   ],
 });

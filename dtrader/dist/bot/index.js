@@ -49,6 +49,7 @@ const graduation_1 = require("../sniper/graduation");
 const mempool_1 = require("../sniper/mempool");
 const limitOrder_1 = require("../orders/limitOrder");
 const antiRug_1 = require("../security/antiRug");
+const jsonStore_1 = require("../db/jsonStore");
 const keyboards = __importStar(require("./keyboards"));
 const GAS_GWEI = {
     normal: 0.01,
@@ -727,6 +728,44 @@ ${isNew ? '\n⚠️ Fund this wallet with PLS to start!\n' : ''}
             await this.bot.sendMessage(chatId, `🐋 **Copy Trade** ⚜️\n\n` +
                 `_This feature is coming soon!_\n\n` +
                 `Copy whale wallets automatically.`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+            return;
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+        // 📋 TRADE HISTORY MENU
+        // ═══════════════════════════════════════════════════════════════════════════
+        if (data === 'history_menu') {
+            await this.showTradeHistory(chatId, userId);
+            return;
+        }
+        if (data === 'history_active') {
+            await this.showActiveOrders(chatId, userId);
+            return;
+        }
+        if (data === 'history_completed') {
+            await this.showCompletedTrades(chatId, userId);
+            return;
+        }
+        if (data === 'history_instabond') {
+            await this.showInstaBondHistory(chatId, userId);
+            return;
+        }
+        if (data === 'history_limits') {
+            await this.showLimitOrderHistory(chatId, userId);
+            return;
+        }
+        if (data === 'history_pnl') {
+            await this.showPnLSummary(chatId, userId);
+            return;
+        }
+        if (data.startsWith('history_cancel_')) {
+            const orderId = data.replace('history_cancel_', '');
+            const cancelled = jsonStore_1.TradeHistory.cancelOrder(orderId);
+            if (cancelled) {
+                await this.bot.sendMessage(chatId, `✅ Order \`${orderId}\` cancelled successfully.`, { parse_mode: 'Markdown', reply_markup: keyboards.tradeHistoryKeyboard });
+            }
+            else {
+                await this.bot.sendMessage(chatId, `❌ Could not cancel order \`${orderId}\`. It may already be executed or cancelled.`, { parse_mode: 'Markdown', reply_markup: keyboards.tradeHistoryKeyboard });
+            }
             return;
         }
         // Snipe menu items
@@ -1876,6 +1915,9 @@ ${isNew ? '\n⚠️ Fund this wallet with PLS to start!\n' : ''}
             };
             // Store the order
             session.snipeOrders.push(snipeOrder);
+            // Log to trade history for persistent record
+            jsonStore_1.TradeHistory.logInstaBondSnipe(userId, chatId, tokenAddress, snipeOrder.id, // Use order ID as symbol for now
+            plsAmount.toString());
             // Set up graduation snipe using watchToken with gas priority
             graduation_1.graduationSniper.watchToken(tokenAddress, {
                 amountPls: BigInt(plsAmount) * BigInt(10 ** 18),
@@ -2212,6 +2254,157 @@ Hold $50+ of DTGC to trade
         // Start order engine
         await limitOrder_1.limitOrderEngine.start();
         console.log('✅ @DTGBondBot is running!');
+    }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📋 TRADE HISTORY HANDLERS
+    // ═══════════════════════════════════════════════════════════════════════════
+    /**
+     * Show trade history main menu
+     */
+    async showTradeHistory(chatId, userId) {
+        const allHistory = jsonStore_1.TradeHistory.getUserHistory(userId, 50);
+        const active = allHistory.filter(e => e.status === 'pending' || e.status === 'watching' || e.status === 'executing');
+        const completed = allHistory.filter(e => e.status === 'completed');
+        const failed = allHistory.filter(e => e.status === 'failed' || e.status === 'cancelled');
+        let msg = `📋 **TRADE HISTORY**\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        msg += `👁️ Active Orders: **${active.length}**\n`;
+        msg += `✅ Completed: **${completed.length}**\n`;
+        msg += `❌ Failed/Cancelled: **${failed.length}**\n\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        msg += `_All trades and orders are saved here for your records._`;
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.tradeHistoryKeyboard,
+        });
+    }
+    /**
+     * Show active (pending/watching) orders
+     */
+    async showActiveOrders(chatId, userId) {
+        const active = jsonStore_1.TradeHistory.getActiveOrders(userId);
+        if (active.length === 0) {
+            await this.bot.sendMessage(chatId, `👁️ **ACTIVE ORDERS**\n\n_No active orders right now._`, { parse_mode: 'Markdown', reply_markup: keyboards.tradeHistoryKeyboard });
+            return;
+        }
+        let msg = `👁️ **ACTIVE ORDERS** (${active.length})\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        for (const entry of active.slice(0, 10)) {
+            msg += jsonStore_1.TradeHistory.formatForTelegram(entry);
+            msg += `\n\n`;
+        }
+        if (active.length > 10) {
+            msg += `_...and ${active.length - 10} more_\n`;
+        }
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.tradeHistoryKeyboard,
+        });
+    }
+    /**
+     * Show completed trades
+     */
+    async showCompletedTrades(chatId, userId) {
+        const completed = jsonStore_1.TradeHistory.getCompletedTrades(userId, 10);
+        if (completed.length === 0) {
+            await this.bot.sendMessage(chatId, `✅ **COMPLETED TRADES**\n\n_No completed trades yet. Start trading!_`, { parse_mode: 'Markdown', reply_markup: keyboards.tradeHistoryKeyboard });
+            return;
+        }
+        let msg = `✅ **COMPLETED TRADES**\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        for (const entry of completed) {
+            msg += jsonStore_1.TradeHistory.formatForTelegram(entry);
+            msg += `\n\n`;
+        }
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.tradeHistoryKeyboard,
+        });
+    }
+    /**
+     * Show InstaBond snipe history
+     */
+    async showInstaBondHistory(chatId, userId) {
+        const all = jsonStore_1.TradeHistory.getUserHistory(userId, 50);
+        const instabond = all.filter(e => e.type === 'instabond_snipe');
+        if (instabond.length === 0) {
+            await this.bot.sendMessage(chatId, `🎓 **INSTABOND SNIPES**\n\n_No InstaBond snipes yet._\n\nUse the pump.tires menu to snipe graduating tokens!`, { parse_mode: 'Markdown', reply_markup: keyboards.tradeHistoryKeyboard });
+            return;
+        }
+        let msg = `🎓 **INSTABOND SNIPES** (${instabond.length})\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        for (const entry of instabond.slice(0, 10)) {
+            msg += jsonStore_1.TradeHistory.formatForTelegram(entry);
+            msg += `\n\n`;
+        }
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.tradeHistoryKeyboard,
+        });
+    }
+    /**
+     * Show limit order history
+     */
+    async showLimitOrderHistory(chatId, userId) {
+        const all = jsonStore_1.TradeHistory.getUserHistory(userId, 50);
+        const limits = all.filter(e => e.type === 'limit_buy' || e.type === 'limit_sell' ||
+            e.type === 'stop_loss' || e.type === 'take_profit');
+        if (limits.length === 0) {
+            await this.bot.sendMessage(chatId, `📊 **LIMIT ORDERS**\n\n_No limit orders yet._\n\nSet up limit buys, sells, stop losses, and take profits!`, { parse_mode: 'Markdown', reply_markup: keyboards.tradeHistoryKeyboard });
+            return;
+        }
+        let msg = `📊 **LIMIT ORDERS** (${limits.length})\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        for (const entry of limits.slice(0, 10)) {
+            msg += jsonStore_1.TradeHistory.formatForTelegram(entry);
+            msg += `\n\n`;
+        }
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.tradeHistoryKeyboard,
+        });
+    }
+    /**
+     * Show PnL summary
+     */
+    async showPnLSummary(chatId, userId) {
+        const completed = jsonStore_1.TradeHistory.getCompletedTrades(userId, 100);
+        if (completed.length === 0) {
+            await this.bot.sendMessage(chatId, `📈 **PNL SUMMARY**\n\n_No completed trades to calculate PnL._`, { parse_mode: 'Markdown', reply_markup: keyboards.tradeHistoryKeyboard });
+            return;
+        }
+        let totalPnlPercent = 0;
+        let wins = 0;
+        let losses = 0;
+        for (const entry of completed) {
+            if (entry.pnlPercent !== undefined) {
+                totalPnlPercent += entry.pnlPercent;
+                if (entry.pnlPercent > 0)
+                    wins++;
+                else if (entry.pnlPercent < 0)
+                    losses++;
+            }
+        }
+        const avgPnl = totalPnlPercent / completed.length;
+        const winRate = (wins / (wins + losses) * 100) || 0;
+        let msg = `📈 **PNL SUMMARY**\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        msg += `📊 Total Trades: **${completed.length}**\n`;
+        msg += `✅ Wins: **${wins}**\n`;
+        msg += `❌ Losses: **${losses}**\n`;
+        msg += `🎯 Win Rate: **${winRate.toFixed(1)}%**\n\n`;
+        msg += `📈 Avg PnL: **${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}%**\n\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        msg += `⚜️ _View detailed P&L in Gold Suite_`;
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '⚜️ Open Gold Suite', url: 'https://dtgc.io/gold' }],
+                    [{ text: '🔙 Back to History', callback_data: 'history_menu' }],
+                ],
+            },
+        });
     }
     /**
      * Stop the bot

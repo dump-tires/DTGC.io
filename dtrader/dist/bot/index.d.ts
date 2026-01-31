@@ -94,6 +94,30 @@ export declare class DtraderBot {
      */
     start(): Promise<void>;
     /**
+     * Show trade history main menu
+     */
+    private showTradeHistory;
+    /**
+     * Show active (pending/watching) orders
+     */
+    private showActiveOrders;
+    /**
+     * Show completed trades
+     */
+    private showCompletedTrades;
+    /**
+     * Show InstaBond snipe history
+     */
+    private showInstaBondHistory;
+    /**
+     * Show limit order history
+     */
+    private showLimitOrderHistory;
+    /**
+     * Show PnL summary
+     */
+    private showPnLSummary;
+    /**
      * Stop the bot
      */
     stop(): Promise<void>;

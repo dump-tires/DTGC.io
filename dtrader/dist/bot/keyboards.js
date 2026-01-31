@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.quickActionsKeyboard = exports.gasPriorityKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.mainMenuKeyboard = void 0;
+exports.tradeHistoryEntryKeyboard = exports.tradeHistoryKeyboard = exports.quickActionsKeyboard = exports.gasPriorityKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.mainMenuKeyboard = void 0;
 /**
  * Enhanced Telegram Keyboard Layouts
  * Modeled after Maestro/Solid Trader bot structure
@@ -29,8 +29,11 @@ exports.mainMenuKeyboard = {
             { text: '📈 Portfolio', callback_data: 'portfolio' },
         ],
         [
-            { text: '🛡️ Check Token', callback_data: 'check_token' },
+            { text: '📋 Trade History', callback_data: 'history_menu' },
             { text: '⚙️ Settings', callback_data: 'settings' },
+        ],
+        [
+            { text: '🛡️ Check Token', callback_data: 'check_token' },
         ],
         [
             { text: '⚜️ Gold Suite 📱', url: 'https://dtgc.io/gold' },
@@ -372,4 +375,34 @@ const quickActionsKeyboard = (tokenAddress) => ({
     ],
 });
 exports.quickActionsKeyboard = quickActionsKeyboard;
+// ==================== TRADE HISTORY ====================
+exports.tradeHistoryKeyboard = {
+    inline_keyboard: [
+        [
+            { text: '👁️ Active Orders', callback_data: 'history_active' },
+            { text: '✅ Completed', callback_data: 'history_completed' },
+        ],
+        [
+            { text: '🎓 InstaBond Snipes', callback_data: 'history_instabond' },
+            { text: '📊 Limit Orders', callback_data: 'history_limits' },
+        ],
+        [
+            { text: '📈 PnL Summary', callback_data: 'history_pnl' },
+        ],
+        [
+            { text: '🔙 Back', callback_data: 'main_menu' },
+        ],
+    ],
+};
+const tradeHistoryEntryKeyboard = (orderId) => ({
+    inline_keyboard: [
+        [
+            { text: '❌ Cancel Order', callback_data: `history_cancel_${orderId}` },
+        ],
+        [
+            { text: '🔙 Back to History', callback_data: 'history_menu' },
+        ],
+    ],
+});
+exports.tradeHistoryEntryKeyboard = tradeHistoryEntryKeyboard;
 //# sourceMappingURL=keyboards.js.map
