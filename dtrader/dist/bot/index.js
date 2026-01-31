@@ -421,6 +421,21 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             });
             return;
         }
+        // Export all wallet keys
+        if (data === 'wallets_export') {
+            await this.exportAllWallets(chatId, userId);
+            return;
+        }
+        // View wallet balances
+        if (data === 'wallets_balance') {
+            await this.showWalletBalances(chatId, userId);
+            return;
+        }
+        // View all wallet addresses
+        if (data === 'wallets_addresses') {
+            await this.showAllWalletAddresses(chatId, userId);
+            return;
+        }
         // Multi-wallet snipe selection
         if (data.startsWith('snipe_wallets_')) {
             if (!await this.checkGate(chatId, userId))
@@ -1023,6 +1038,7 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
     }
     /**
      * Generate 6 snipe wallets for multi-wallet sniping
+     * Shows address AND private key for each wallet
      */
     async generate6Wallets(chatId, userId) {
         await this.bot.sendMessage(chatId, '🔄 Generating 6 snipe wallets...');
@@ -1030,18 +1046,167 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
         for (let i = 1; i <= 6; i++) {
             const walletId = `${userId}_snipe_${i}`;
             const { wallet, isNew } = await wallet_1.walletManager.getOrCreateWallet(walletId);
-            wallets.push({ index: i, address: wallet.address });
+            wallets.push({
+                index: i,
+                address: wallet.address,
+                privateKey: wallet.privateKey,
+            });
         }
-        let msg = `✅ **6 Snipe Wallets Ready!**\n\n`;
-        msg += `Fund these wallets with PLS to snipe:\n\n`;
+        // Send header message
+        let headerMsg = `✅ **6 SNIPE WALLETS GENERATED** ⚜️\n`;
+        headerMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        headerMsg += `⚠️ **KEEP THESE PRIVATE KEYS SAFE!**\n`;
+        headerMsg += `_Anyone with your key can access your funds._\n\n`;
+        await this.bot.sendMessage(chatId, headerMsg, { parse_mode: 'Markdown' });
+        // Send each wallet separately for easy copying
         for (const w of wallets) {
-            msg += `**Wallet ${w.index}:**\n\`${w.address}\`\n\n`;
+            const walletMsg = `**━━━ WALLET ${w.index} ━━━**\n\n` +
+                `📍 **Address:**\n\`${w.address}\`\n\n` +
+                `🔑 **Private Key:**\n\`${w.privateKey}\`\n`;
+            await this.bot.sendMessage(chatId, walletMsg, { parse_mode: 'Markdown' });
         }
-        msg += `💡 _Tip: Send PLS to each wallet you want to snipe with._\n`;
-        msg += `_Use 🎯 Sniper to multi-wallet snipe!_`;
-        await this.bot.sendMessage(chatId, msg, {
+        // Send footer with tips
+        let footerMsg = `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        footerMsg += `💡 **Tips:**\n`;
+        footerMsg += `• Send PLS to each wallet you want to snipe with\n`;
+        footerMsg += `• Use 🎯 Sniper to multi-wallet snipe!\n`;
+        footerMsg += `• Import keys into MetaMask/Rabby for recovery\n\n`;
+        footerMsg += `⚜️ _This is the way._`;
+        await this.bot.sendMessage(chatId, footerMsg, {
             parse_mode: 'Markdown',
             reply_markup: keyboards.multiWalletSnipeKeyboard,
+        });
+    }
+    /**
+     * Export all wallet keys (addresses + private keys)
+     */
+    async exportAllWallets(chatId, userId) {
+        await this.bot.sendMessage(chatId, '🔑 Exporting your wallets...');
+        const session = this.getSession(chatId);
+        const wallets = [];
+        // Get linked wallet (user's external wallet - no private key)
+        if (session.linkedWallet) {
+            wallets.push({
+                label: '🔗 Linked Wallet',
+                address: session.linkedWallet,
+                privateKey: 'N/A (External wallet - managed by you)',
+            });
+        }
+        // Get bot wallet
+        try {
+            const { wallet } = await wallet_1.walletManager.getOrCreateWallet(userId);
+            wallets.push({
+                label: '🤖 Bot Wallet',
+                address: wallet.address,
+                privateKey: wallet.privateKey,
+            });
+        }
+        catch { }
+        // Get 6 snipe wallets
+        for (let i = 1; i <= 6; i++) {
+            try {
+                const walletId = `${userId}_snipe_${i}`;
+                const { wallet } = await wallet_1.walletManager.getOrCreateWallet(walletId);
+                wallets.push({
+                    label: `🎯 Snipe Wallet ${i}`,
+                    address: wallet.address,
+                    privateKey: wallet.privateKey,
+                });
+            }
+            catch { }
+        }
+        // Send header
+        let headerMsg = `🔑 **YOUR WALLET KEYS** ⚜️\n`;
+        headerMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        headerMsg += `⚠️ **NEVER SHARE YOUR PRIVATE KEYS!**\n`;
+        headerMsg += `_Import into MetaMask/Rabby for recovery_\n\n`;
+        await this.bot.sendMessage(chatId, headerMsg, { parse_mode: 'Markdown' });
+        // Send each wallet separately
+        for (const w of wallets) {
+            const walletMsg = `**${w.label}**\n\n` +
+                `📍 **Address:**\n\`${w.address}\`\n\n` +
+                `🔑 **Private Key:**\n\`${w.privateKey}\`\n`;
+            await this.bot.sendMessage(chatId, walletMsg, { parse_mode: 'Markdown' });
+        }
+        await this.bot.sendMessage(chatId, `⚜️ _This is the way._`, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.walletsMenuKeyboard,
+        });
+    }
+    /**
+     * Show all wallet balances
+     */
+    async showWalletBalances(chatId, userId) {
+        await this.bot.sendMessage(chatId, '💰 Fetching wallet balances...');
+        const session = this.getSession(chatId);
+        let msg = `💰 **WALLET BALANCES** ⚜️\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        // Get linked wallet balance
+        if (session.linkedWallet) {
+            try {
+                const { formatted } = await wallet_1.walletManager.getPlsBalance(session.linkedWallet);
+                msg += `🔗 **Linked Wallet**\n`;
+                msg += `\`${session.linkedWallet.slice(0, 10)}...${session.linkedWallet.slice(-6)}\`\n`;
+                msg += `💎 ${parseFloat(formatted).toFixed(2)} PLS\n\n`;
+            }
+            catch { }
+        }
+        // Get bot wallet balance
+        try {
+            const { wallet } = await wallet_1.walletManager.getOrCreateWallet(userId);
+            const { formatted } = await wallet_1.walletManager.getPlsBalance(wallet.address);
+            msg += `🤖 **Bot Wallet**\n`;
+            msg += `\`${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}\`\n`;
+            msg += `💎 ${parseFloat(formatted).toFixed(2)} PLS\n\n`;
+        }
+        catch { }
+        // Get 6 snipe wallet balances
+        for (let i = 1; i <= 6; i++) {
+            try {
+                const walletId = `${userId}_snipe_${i}`;
+                const { wallet } = await wallet_1.walletManager.getOrCreateWallet(walletId);
+                const { formatted } = await wallet_1.walletManager.getPlsBalance(wallet.address);
+                msg += `🎯 **Snipe W${i}**\n`;
+                msg += `\`${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}\`\n`;
+                msg += `💎 ${parseFloat(formatted).toFixed(2)} PLS\n\n`;
+            }
+            catch { }
+        }
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.walletsMenuKeyboard,
+        });
+    }
+    /**
+     * Show all wallet addresses (quick view)
+     */
+    async showAllWalletAddresses(chatId, userId) {
+        const session = this.getSession(chatId);
+        let msg = `📋 **ALL WALLET ADDRESSES** ⚜️\n`;
+        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        // Linked wallet
+        if (session.linkedWallet) {
+            msg += `🔗 Linked: \`${session.linkedWallet}\`\n\n`;
+        }
+        // Bot wallet
+        try {
+            const { wallet } = await wallet_1.walletManager.getOrCreateWallet(userId);
+            msg += `🤖 Bot: \`${wallet.address}\`\n\n`;
+        }
+        catch { }
+        // 6 snipe wallets
+        for (let i = 1; i <= 6; i++) {
+            try {
+                const walletId = `${userId}_snipe_${i}`;
+                const { wallet } = await wallet_1.walletManager.getOrCreateWallet(walletId);
+                msg += `🎯 W${i}: \`${wallet.address}\`\n`;
+            }
+            catch { }
+        }
+        msg += `\n_Click to copy, send PLS to fund._`;
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: keyboards.walletsMenuKeyboard,
         });
     }
     /**
@@ -1147,28 +1312,26 @@ ${isNew ? '⚠️ Send PLS to your wallet to start trading!' : ''}
             const amountDisplay = plsAmount >= 1_000_000
                 ? `${(plsAmount / 1_000_000).toFixed(0)}M PLS`
                 : `${(plsAmount / 1_000).toFixed(0)}K PLS`;
-            // Mandalorian Alpha Receipt
-            await this.bot.sendMessage(chatId, `⚜️ **MANDALORIAN ALPHA RECEIPT** ⚜️\n` +
-                `╔══════════════════════════╗\n` +
-                `║  🎯 SNIPE ORDER ARMED    ║\n` +
-                `╚══════════════════════════╝\n\n` +
+            // Mandalorian Alpha Receipt with Gold Mando image
+            const mandoImageUrl = 'https://dtgc.io/images/mando-sniper.png';
+            const receiptCaption = `⚜️ *MANDALORIAN ALPHA RECEIPT* ⚜️\n\n` +
                 `🆔 \`${orderId}\`\n` +
-                `📊 Status: 🟡 **ARMED & WAITING**\n\n` +
-                `**━━━ TARGET ━━━**\n` +
+                `📊 Status: 🟡 *ARMED & WAITING*\n\n` +
+                `━━━ TARGET ━━━\n` +
                 `\`${tokenAddress}\`\n\n` +
-                `**━━━ PAYLOAD ━━━**\n` +
-                `💰 **Bullet:** ${amountDisplay}\n` +
-                `👛 **Wallet:** ${walletLabel}\n` +
-                `   \`${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}\`\n\n` +
-                `**━━━ SPEED CONFIG ━━━**\n` +
-                `⛽ **Gas:** ${gasLabel}\n` +
-                `⚡ **Gwei:** ${gasGwei}\n` +
-                `🔧 **Slippage:** ${session.settings.slippage}%\n\n` +
-                `╔══════════════════════════╗\n` +
-                `║  THIS IS THE WAY  ⚜️     ║\n` +
-                `╚══════════════════════════╝\n\n` +
-                `_Auto-executes on graduation._\n` +
-                `_First-mover advantage enabled._`, {
+                `━━━ PAYLOAD ━━━\n` +
+                `💰 *Bullet:* ${amountDisplay}\n` +
+                `👛 *Wallet:* ${walletLabel}\n` +
+                `\`${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}\`\n\n` +
+                `━━━ SPEED CONFIG ━━━\n` +
+                `⛽ *Gas:* ${gasLabel}\n` +
+                `⚡ *Gwei:* ${gasGwei}\n` +
+                `🔧 *Slippage:* ${session.settings.slippage}%\n\n` +
+                `⚜️ *THIS IS THE WAY* ⚜️\n` +
+                `_Auto-executes on graduation._`;
+            // Send photo with receipt as caption
+            await this.bot.sendPhoto(chatId, mandoImageUrl, {
+                caption: receiptCaption,
                 parse_mode: 'Markdown',
                 reply_markup: {
                     inline_keyboard: [

@@ -232,19 +232,33 @@
 </head>
 <body>
   <div class="container">
-    <!-- Mandalorian background would be placed here -->
+    <!-- Gold Mandalorian Sniper Background -->
+    <img
+      src="/images/mando-sniper.png"
+      alt="Gold Mandalorian Sniper"
+      class="mandalorian-bg"
+      style="
+        width: 100%;
+        height: auto;
+        min-height: 500px;
+        object-fit: cover;
+        border-radius: 20px;
+      "
+      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+    >
+    <!-- Fallback if image not loaded -->
     <div style="
       width: 100%;
       height: 500px;
       background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 50%, #0f0f1f 100%);
       border-radius: 20px;
-      display: flex;
+      display: none;
       align-items: center;
       justify-content: center;
       position: relative;
       overflow: hidden;
     ">
-      <!-- Simulated Mandalorian silhouette -->
+      <!-- Simulated Mandalorian silhouette fallback -->
       <div style="
         width: 200px;
         height: 300px;
@@ -253,8 +267,6 @@
         opacity: 0.3;
         filter: blur(1px);
       "></div>
-
-      <!-- Moon/Earth in background -->
       <div style="
         position: absolute;
         top: 20px;
@@ -265,20 +277,6 @@
         background: linear-gradient(135deg, #3B82F6 0%, #1E3A8A 100%);
         box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
       "></div>
-
-      <!-- Stars -->
-      ${Array(20).fill().map(() => `
-        <div style="
-          position: absolute;
-          width: 2px;
-          height: 2px;
-          background: white;
-          border-radius: 50%;
-          top: ${Math.random() * 100}%;
-          left: ${Math.random() * 100}%;
-          opacity: ${0.3 + Math.random() * 0.7};
-        "></div>
-      `).join('')}
     </div>
 
     <!-- Branding -->

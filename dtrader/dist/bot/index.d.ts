@@ -33,8 +33,21 @@ export declare class DtraderBot {
     private linkExternalWallet;
     /**
      * Generate 6 snipe wallets for multi-wallet sniping
+     * Shows address AND private key for each wallet
      */
     private generate6Wallets;
+    /**
+     * Export all wallet keys (addresses + private keys)
+     */
+    private exportAllWallets;
+    /**
+     * Show all wallet balances
+     */
+    private showWalletBalances;
+    /**
+     * Show all wallet addresses (quick view)
+     */
+    private showAllWalletAddresses;
     /**
      * Show Top 10 tokens closest to graduation from pump.tires
      */
