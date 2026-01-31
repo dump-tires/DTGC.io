@@ -2340,36 +2340,32 @@ ${isNew ? '\n⚠️ Fund this wallet with PLS to start!\n' : ''}
         ? `${(plsAmount / 1_000_000).toFixed(0)}M PLS`
         : `${(plsAmount / 1_000).toFixed(0)}K PLS`;
 
-      // Mandalorian Alpha Receipt with Gold Mando image
-      const mandoImageUrl = 'https://dtgc.io/images/mando-sniper.png';
-      const receiptCaption =
-        `⚜️ *MANDALORIAN ALPHA RECEIPT* ⚜️\n\n` +
-        `🆔 \`${orderId}\`\n` +
-        `📊 Status: 🟡 *ARMED & WAITING*\n\n` +
+      // InstaBond Snipe Receipt
+      const receiptMsg =
+        `✅ **INSTABOND SNIPE ARMED!**\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🆔 Order: \`${orderId}\`\n` +
+        `📊 Status: 🟡 **WAITING FOR GRADUATION**\n\n` +
         `━━━ TARGET ━━━\n` +
-        `\`${tokenAddress}\`\n\n` +
-        `━━━ PAYLOAD ━━━\n` +
-        `💰 *Bullet:* ${amountDisplay}\n` +
-        `👛 *Wallet:* ${walletLabel}\n` +
-        `\`${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}\`\n\n` +
-        `━━━ SPEED CONFIG ━━━\n` +
-        `⛽ *Gas:* ${gasLabel}\n` +
-        `⚡ *Gwei:* ${gasGwei}\n` +
-        `🔧 *Slippage:* ${session.settings.slippage}%\n\n` +
-        `⚜️ *THIS IS THE WAY* ⚜️\n` +
-        `_Auto-executes on graduation._`;
+        `📋 \`${tokenAddress}\`\n\n` +
+        `━━━ CONFIG ━━━\n` +
+        `💰 Amount: **${amountDisplay}**\n` +
+        `👛 Wallet: ${walletLabel}\n` +
+        `⛽ Gas: ${gasLabel} (${gasGwei} Gwei)\n` +
+        `🔧 Slippage: ${session.settings.slippage}%\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `⚜️ **Auto-executes when token graduates to PulseX!**\n\n` +
+        `💡 Set a **Limit Bond Sell** below to auto-take profit!`;
 
-      // Send photo with receipt as caption
-      await this.bot.sendPhoto(chatId, mandoImageUrl, {
-        caption: receiptCaption,
+      // Send receipt message
+      await this.bot.sendMessage(chatId, receiptMsg, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '📈 Set Limit Bond Sell', callback_data: `set_tp_${orderId}` }],
+            [{ text: '📈 Set Limit Bond Sell (Take Profit)', callback_data: `set_tp_${orderId}` }],
             [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
-            [{ text: '❌ Cancel This Snipe', callback_data: `cancel_snipe_${orderId}` }],
+            [{ text: '❌ Cancel Snipe', callback_data: `cancel_snipe_${orderId}` }],
             [{ text: '🔥 Snipe Another', callback_data: 'pump_near_grad' }],
-            [{ text: '⚜️ Gold Suite P&L', url: 'https://dtgc.io/gold' }],
             [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
           ],
         },
