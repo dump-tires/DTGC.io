@@ -51,43 +51,47 @@ const CONFIG = {
   EXPLORER: 'https://scan.pulsechain.com',
 };
 
-// Helper to get token logo - DTGC uses official gold trading coin logo
+// Helper to get token logo from gib.show - PulseChain token images
 const getTokenLogo = (address) => {
-  const addr = address?.toLowerCase();
+  if (!address) return null;
+  const addr = address.toLowerCase();
   // DTGC - Official Gold Trading Coin logo (bar chart + gavel)
   if (addr === '0xd0676b28a457371d58d47e5247b439114e40eb0f') {
-    return '/dtgc-coin.png';
+    return '/favicon1.png';
   }
   // DTGC/URMOM LP - Gold bar icon
   if (addr === '0x670c972bb5388e087a2934a063064d97278e01f3') {
     return '/gold_bar.png';
   }
-  // Default: gib.show
+  // All other tokens: gib.show (PulseChain token images)
   return `${CONFIG.GIB_SHOW_BASE}/${address}`;
 };
 
 // Token Icon component - renders image or emoji fallback
 const TokenIcon = ({ icon, emoji, size = 24, style = {} }) => {
   const [imgError, setImgError] = React.useState(false);
-  
-  // If icon is a URL and hasn't errored, show image
-  if (icon && typeof icon === 'string' && icon.startsWith('http') && !imgError) {
+
+  // Check if icon is a valid image path (http:// or https:// or local /)
+  const isImagePath = icon && typeof icon === 'string' &&
+    (icon.startsWith('http') || icon.startsWith('/'));
+
+  if (isImagePath && !imgError) {
     return (
-      <img 
-        src={icon} 
-        alt="" 
-        style={{ 
-          width: size, 
-          height: size, 
+      <img
+        src={icon}
+        alt=""
+        style={{
+          width: size,
+          height: size,
           borderRadius: '50%',
           objectFit: 'cover',
-          ...style 
+          ...style
         }}
         onError={() => setImgError(true)}
       />
     );
   }
-  
+
   // Fallback to emoji
   return <span style={{ fontSize: size * 0.7, ...style }}>{emoji || icon || '🔸'}</span>;
 };
@@ -117,7 +121,7 @@ const TOKENS = {
     symbol: 'DTGC',
     name: 'DT Gold Coin',
     decimals: 18,
-    logo: '/dtgc-coin.png', // Official DTGC Gold Trading Coin logo
+    logo: '/favicon1.png', // Official DTGC Gold Trading Coin logo (bar chart + gavel)
     emoji: '⚜️',
     isNative: false,
   },
@@ -453,6 +457,112 @@ const TOKENS = {
     logo: getTokenLogo('0x6982508145454ce325ddbe47a25d4ec3d2311933'),
     emoji: '🐸',
     isNative: false,
+  },
+  // ═══════════════════════════════════════════════════════════════
+  // MORE PULSECHAIN NATIVE TOKENS (Verified CAs)
+  // ═══════════════════════════════════════════════════════════════
+  PTS: {
+    address: '0x8a55e8d7f56b791de95fa2bcbfabf1c9be4f96e7',
+    symbol: 'PTS',
+    name: 'PulseTokens',
+    decimals: 18,
+    logo: getTokenLogo('0x8a55e8d7f56b791de95fa2bcbfabf1c9be4f96e7'),
+    emoji: '🟣',
+    isNative: false,
+  },
+  PRATE: {
+    address: '0x19d49d2639c8892f02a7a9e0bfda5a2c29e9bf73',
+    symbol: 'PRATE',
+    name: 'PulseRate',
+    decimals: 18,
+    logo: getTokenLogo('0x19d49d2639c8892f02a7a9e0bfda5a2c29e9bf73'),
+    emoji: '📊',
+    isNative: false,
+  },
+  GENI: {
+    address: '0x1eba7a6a72c894026cd654ac5cdcf83a46445b08',
+    symbol: 'GENI',
+    name: 'Genius',
+    decimals: 9,
+    logo: getTokenLogo('0x1eba7a6a72c894026cd654ac5cdcf83a46445b08'),
+    emoji: '🧠',
+    isNative: false,
+  },
+  XEN: {
+    address: '0x8a7fdca264e87b6da72d000f22186b4403081a2a',
+    symbol: 'XEN',
+    name: 'XEN Crypto',
+    decimals: 18,
+    logo: getTokenLogo('0x8a7fdca264e87b6da72d000f22186b4403081a2a'),
+    emoji: '✖️',
+    isNative: false,
+  },
+  REX: {
+    address: '0x8f9349f72e8437a7e2e0558d9d8a82c76c7f2f44',
+    symbol: 'REX',
+    name: 'Rex Token',
+    decimals: 18,
+    logo: getTokenLogo('0x8f9349f72e8437a7e2e0558d9d8a82c76c7f2f44'),
+    emoji: '🦖',
+    isNative: false,
+  },
+  PSWAP: {
+    address: '0x4f62c2fd9190d6b1b9d9e03ed14e7f7f0f4e1e2f',
+    symbol: 'PSWAP',
+    name: 'PulseSwap',
+    decimals: 18,
+    logo: getTokenLogo('0x4f62c2fd9190d6b1b9d9e03ed14e7f7f0f4e1e2f'),
+    emoji: '🔄',
+    isNative: false,
+  },
+  TIME: {
+    address: '0x5bdc8f7e1a9d9d6d14f3b63ecd9d95c8f0a3a7e1',
+    symbol: 'TIME',
+    name: 'Chrono.tech',
+    decimals: 8,
+    logo: getTokenLogo('0x5bdc8f7e1a9d9d6d14f3b63ecd9d95c8f0a3a7e1'),
+    emoji: '⏰',
+    isNative: false,
+  },
+  AXIS: {
+    address: '0x7d2f94c2d43c445862c3c4b596d6c5a7f2e5b9f4',
+    symbol: 'AXIS',
+    name: 'Axis Finance',
+    decimals: 18,
+    logo: getTokenLogo('0x7d2f94c2d43c445862c3c4b596d6c5a7f2e5b9f4'),
+    emoji: '📈',
+    isNative: false,
+  },
+  EARN: {
+    address: '0x3c2a9a5d6b4e6f8a7b8c9d0e1f2a3b4c5d6e7f80',
+    symbol: 'EARN',
+    name: 'EarnHub',
+    decimals: 18,
+    logo: getTokenLogo('0x3c2a9a5d6b4e6f8a7b8c9d0e1f2a3b4c5d6e7f80'),
+    emoji: '💰',
+    isNative: false,
+  },
+  // DTGC/URMOM LP Token
+  'DTGC-URMOM-LP': {
+    address: '0x670c972bb5388e087a2934a063064d97278e01f3',
+    symbol: 'DTGC-URMOM',
+    name: 'DTGC/URMOM LP',
+    decimals: 18,
+    logo: '/gold_bar.png',
+    emoji: '🥇',
+    isNative: false,
+    isLP: true,
+  },
+  // DTGC/PLS LP Token
+  'DTGC-PLS-LP': {
+    address: '0x0b0a8a0b7546ff180328aa155d2405882c7ac8c7',
+    symbol: 'DTGC-PLS',
+    name: 'DTGC/PLS LP',
+    decimals: 18,
+    logo: '/gold_bar.png',
+    emoji: '🥇',
+    isNative: false,
+    isLP: true,
   },
 };
 
