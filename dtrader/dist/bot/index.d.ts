@@ -109,6 +109,10 @@ export declare class DtraderBot {
      */
     private showActiveOrders;
     /**
+     * Enhanced Active Orders View - with limit sell options and details
+     */
+    private showEnhancedActiveOrders;
+    /**
      * Show completed trades
      */
     private showCompletedTrades;

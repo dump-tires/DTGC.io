@@ -122,6 +122,9 @@ interface UserSession {
   botKeyLast4?: string;        // Last 4 chars of bot wallet private key
   gateVerified: boolean;
   gateExpiry: number;
+  // Limit sell from active orders
+  pendingOrderIdForSell?: string;  // ID of order to attach limit sell to
+  sellAll?: boolean;               // Whether to sell all tokens
 }
 
 export class DtraderBot {
@@ -2680,6 +2683,89 @@ export class DtraderBot {
       return;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📋 VIEW ACTIVE ORDERS - Enhanced with limit sell options
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    if (data === 'orders_active') {
+      if (!await this.checkGate(chatId, userId)) return;
+      await this.showEnhancedActiveOrders(chatId, userId);
+      return;
+    }
+
+    // Set limit sell on an existing order/position
+    if (data.startsWith('order_limit_sell_')) {
+      if (!await this.checkGate(chatId, userId)) return;
+      const orderId = data.replace('order_limit_sell_', '');
+      session.pendingOrderIdForSell = orderId;
+      session.pendingAction = 'order_limit_sell_price';
+
+      // Get order info
+      const activeOrders = TradeHistory.getActiveOrders(userId);
+      const order = activeOrders.find(o => o.id === orderId);
+
+      if (!order) {
+        await this.bot.sendMessage(chatId, '❌ Order not found.');
+        return;
+      }
+
+      // Fetch current price
+      try {
+        const tokenInfo = await dexScreener.getTokenInfo(order.tokenAddress);
+        session.tokenInfo = tokenInfo || undefined;
+        session.pendingToken = order.tokenAddress;
+
+        const currentPrice = tokenInfo?.pricePls || 0;
+        await this.bot.sendMessage(chatId,
+          `🔴 **SET LIMIT SELL**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `🪙 Token: **${order.tokenSymbol || 'TOKEN'}**\n` +
+          `📍 \`${order.tokenAddress.slice(0, 12)}...${order.tokenAddress.slice(-8)}\`\n\n` +
+          `📈 **Current Price:** ${currentPrice > 0 ? currentPrice.toFixed(12) + ' PLS' : 'Unknown'}\n\n` +
+          `Enter your sell target:\n` +
+          `• Direct price: \`0.00002\`\n` +
+          `• Percentage: \`+50%\` (50% above current)\n` +
+          `• Multiplier: \`2x\` or \`3x\``,
+          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'orders_active' }]] } }
+        );
+      } catch (e) {
+        await this.bot.sendMessage(chatId,
+          `🔴 **SET LIMIT SELL**\n\n` +
+          `Token: \`${order.tokenAddress}\`\n\n` +
+          `Enter sell target price in PLS or percentage (+50%):`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+      return;
+    }
+
+    // Cancel specific order
+    if (data.startsWith('order_cancel_')) {
+      const orderId = data.replace('order_cancel_', '');
+      const cancelled = TradeHistory.cancelOrder(orderId);
+      if (cancelled) {
+        await this.bot.sendMessage(chatId,
+          `✅ Order cancelled: \`${orderId.slice(0, 20)}...\``,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        await this.bot.sendMessage(chatId, '❌ Could not cancel order.');
+      }
+      // Refresh active orders
+      await this.showEnhancedActiveOrders(chatId, userId);
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📊 P&L CARD GENERATOR - Mandalorian themed
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    if (data === 'generate_pnl_card' || data === 'pnl_card') {
+      if (!await this.checkGate(chatId, userId)) return;
+      await this.generatePnLCard(chatId, userId);
+      return;
+    }
+
     // Top 10 Near Graduation tokens
     if (data === 'pump_near_grad') {
       if (!await this.checkGate(chatId, userId)) return;
@@ -4014,6 +4100,176 @@ export class DtraderBot {
         `✅ **Target Price Set**${priceMsg}\n💰 Enter token amount to sell (per wallet):`,
         { parse_mode: 'Markdown' }
       );
+      return;
+    }
+
+    // Handle limit sell price from active orders page (with orderId context)
+    if (session.pendingAction === 'order_limit_sell_price') {
+      let targetPrice: number;
+      const currentPrice = session.tokenInfo?.pricePls || 0;
+
+      // Support multipliers like 2x, 3x
+      if (text.toLowerCase().includes('x')) {
+        const multiplierMatch = text.match(/(\d+(?:\.\d+)?)\s*x/i);
+        if (!multiplierMatch || !currentPrice) {
+          await this.bot.sendMessage(chatId,
+            `❌ Invalid multiplier. Current price needed.\n\nTry: +50%, 2x, or a direct price`
+          );
+          return;
+        }
+        const multiplier = parseFloat(multiplierMatch[1]);
+        targetPrice = currentPrice * multiplier;
+      }
+      // Support percentages like +50%, +100%
+      else if (text.includes('%')) {
+        const percentMatch = text.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+        if (!percentMatch || !currentPrice) {
+          await this.bot.sendMessage(chatId,
+            `❌ Invalid percentage or no price data.\n\nCurrent: ${currentPrice ? currentPrice.toFixed(12) + ' PLS' : 'Unknown'}\n\nTry again:`
+          );
+          return;
+        }
+        const percent = parseFloat(percentMatch[1]);
+        targetPrice = currentPrice * (1 + percent / 100);
+      } else {
+        targetPrice = parseFloat(text);
+      }
+
+      if (isNaN(targetPrice) || targetPrice <= 0) {
+        await this.bot.sendMessage(chatId, '❌ Invalid price. Try: +50%, 2x, or direct price');
+        return;
+      }
+
+      // Get the original order to link to
+      const orderId = session.pendingOrderIdForSell;
+      const activeOrders = TradeHistory.getActiveOrders(userId);
+      const originalOrder = activeOrders.find(o => o.id === orderId);
+
+      if (!originalOrder) {
+        await this.bot.sendMessage(chatId, '❌ Original order not found.');
+        session.pendingAction = undefined;
+        return;
+      }
+
+      session.pendingPrice = targetPrice.toString();
+      session.pendingAction = 'order_limit_sell_amount';
+
+      // Calculate percentage change
+      const priceMsg = currentPrice
+        ? `📊 Current: ${currentPrice.toFixed(12)} PLS\n🎯 Target: ${targetPrice.toFixed(12)} PLS (${((targetPrice/currentPrice - 1) * 100).toFixed(1)}%)`
+        : `🎯 Target: ${targetPrice.toFixed(12)} PLS`;
+
+      await this.bot.sendMessage(chatId,
+        `✅ **Sell Target Set!**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🪙 Token: **${originalOrder.tokenSymbol || 'TOKEN'}**\n` +
+        `${priceMsg}\n\n` +
+        `💰 Enter token amount to sell (or "all" for 100%):`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Handle limit sell amount from active orders page
+    if (session.pendingAction === 'order_limit_sell_amount') {
+      let amount: number;
+      const text_lower = text.toLowerCase().trim();
+
+      if (text_lower === 'all' || text_lower === '100%' || text_lower === 'max') {
+        // TODO: Get actual token balance - for now use a placeholder
+        amount = 0; // Will be handled as "sell all" in the order
+        session.sellAll = true;
+      } else {
+        amount = parseFloat(text);
+        session.sellAll = false;
+      }
+
+      if (text_lower !== 'all' && text_lower !== '100%' && text_lower !== 'max' && (isNaN(amount) || amount <= 0)) {
+        await this.bot.sendMessage(chatId, '❌ Invalid amount. Enter a number or "all":');
+        return;
+      }
+
+      const orderId = session.pendingOrderIdForSell;
+      const tokenAddress = session.pendingToken!;
+      const targetPrice = parseFloat(session.pendingPrice!);
+      const currentPrice = session.tokenInfo?.pricePls || 0;
+
+      // Get original order info
+      const activeOrders = TradeHistory.getActiveOrders(userId);
+      const originalOrder = activeOrders.find(o => o.id === orderId);
+      const tokenSymbol = originalOrder?.tokenSymbol || 'TOKEN';
+
+      // Create the limit sell order
+      const wallet = await walletManager.getWallet(userId);
+      if (!wallet) {
+        await this.bot.sendMessage(chatId, '❌ No wallet found.');
+        return;
+      }
+
+      try {
+        const order = await limitOrderEngine.createOrder({
+          userId,
+          walletAddress: wallet.address,
+          tokenAddress,
+          orderType: 'limit_sell',
+          targetPrice: ethers.parseEther(targetPrice.toString()),
+          amount: session.sellAll ? BigInt(0) : ethers.parseEther(amount.toString()),
+          slippage: session.settings.slippage,
+        });
+
+        // Log to trade history
+        TradeHistory.logLimitOrder(
+          userId,
+          chatId,
+          'limit_sell',
+          tokenAddress,
+          tokenSymbol,
+          session.sellAll ? 'ALL' : amount.toString(),
+          targetPrice.toString(),
+          orderId // Link to original buy order
+        );
+
+        // Clear session
+        session.pendingAction = undefined;
+        session.pendingOrderIdForSell = undefined;
+        session.pendingToken = undefined;
+        session.pendingPrice = undefined;
+        session.sellAll = undefined;
+
+        // Show receipt
+        const priceChange = currentPrice ? ((targetPrice / currentPrice - 1) * 100).toFixed(1) : '?';
+
+        await this.bot.sendMessage(chatId,
+          `╔══════════════════════════════╗\n` +
+          `║  🔴 **LIMIT SELL SET!**       ║\n` +
+          `╠══════════════════════════════╣\n\n` +
+          `🪙 **Token:** ${tokenSymbol}\n` +
+          `📍 \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n\n` +
+          `━━━ **Price Target** ━━━\n` +
+          `${currentPrice ? `📈 Current: ${currentPrice.toFixed(12)} PLS\n` : ''}` +
+          `🎯 Sell At: **${targetPrice.toFixed(12)} PLS**\n` +
+          `📊 Change: **${priceChange}%**\n\n` +
+          `━━━ **Order Details** ━━━\n` +
+          `💰 Amount: **${session.sellAll ? 'ALL' : amount.toLocaleString()}**\n` +
+          `🆔 Order: \`${order.id}\`\n` +
+          `🔗 Linked to: \`${orderId?.slice(0, 15)}...\`\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n` +
+          `✅ **Watching for target!** 👁️`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '📋 View Active Orders', callback_data: 'orders_active' }],
+                [{ text: '📊 P&L Card', callback_data: 'pnl_card' }],
+                [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+              ]
+            }
+          }
+        );
+      } catch (e) {
+        console.error('Failed to create limit sell:', e);
+        await this.bot.sendMessage(chatId, '❌ Failed to create limit sell order. Try again.');
+      }
       return;
     }
 
@@ -5665,6 +5921,133 @@ Hold $50+ of DTGC to trade
       reply_markup: keyboards.tradeHistoryKeyboard,
     });
   }
+
+  /**
+   * Enhanced Active Orders View - with limit sell options and details
+   */
+  private async showEnhancedActiveOrders(chatId: string, userId: string): Promise<void> {
+    // Get both TradeHistory orders and LimitOrderEngine orders
+    const historyOrders = TradeHistory.getActiveOrders(userId);
+    const limitOrders = limitOrderEngine.getUserOrders(userId);
+
+    // Get completed for summary
+    const completedOrders = TradeHistory.getCompletedTrades(userId, 20);
+
+    if (historyOrders.length === 0 && limitOrders.length === 0) {
+      await this.bot.sendMessage(chatId,
+        `📋 **ACTIVE ORDERS**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `👁️ **Pending:** 0\n` +
+        `✅ **Executed:** ${completedOrders.length}\n\n` +
+        `_No active orders right now._\n\n` +
+        `Create a new order to get started!`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🟢 New Limit Buy', callback_data: 'order_limit_buy' }],
+              [{ text: '🔴 New Limit Sell', callback_data: 'order_limit_sell' }],
+              [{ text: '💰 Take Profit', callback_data: 'order_take_profit' }],
+              [{ text: '🛑 Stop Loss', callback_data: 'order_stop_loss' }],
+              [{ text: '📊 P&L Card', callback_data: 'pnl_card' }],
+              [{ text: '🔙 Back', callback_data: 'orders_menu' }],
+            ]
+          }
+        }
+      );
+      return;
+    }
+
+    // Build detailed order list with action buttons
+    let msg = `📋 **ACTIVE ORDERS**\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    msg += `👁️ **Pending:** ${historyOrders.length + limitOrders.length}\n`;
+    msg += `✅ **Executed (recent):** ${completedOrders.length}\n\n`;
+
+    // Type emojis
+    const typeEmoji: Record<string, string> = {
+      instabond_snipe: '🎓',
+      limit_buy: '🟢',
+      limit_sell: '🔴',
+      stop_loss: '🛑',
+      take_profit: '💰',
+      market_buy: '💰',
+      market_sell: '💸',
+      dca: '📊',
+    };
+
+    const statusEmoji: Record<string, string> = {
+      pending: '⏳',
+      watching: '👁️',
+      executing: '⚡',
+      completed: '✅',
+      failed: '❌',
+      cancelled: '🚫',
+    };
+
+    msg += `━━━ **WATCHING** ━━━\n\n`;
+
+    // Build buttons for each order
+    const buttons: { text: string; callback_data: string }[][] = [];
+
+    // Show history orders
+    for (const order of historyOrders.slice(0, 8)) {
+      const emoji = typeEmoji[order.type] || '📊';
+      const status = statusEmoji[order.status] || '⏳';
+      const symbol = order.tokenSymbol || order.tokenAddress.slice(0, 8);
+      const amount = parseFloat(order.amountPls);
+      const amountStr = amount >= 1000000 ? (amount / 1000000).toFixed(1) + 'M' : amount >= 1000 ? (amount / 1000).toFixed(0) + 'K' : amount.toFixed(0);
+
+      msg += `${emoji} ${status} **${symbol}**\n`;
+      msg += `   ${order.type.replace('_', ' ').toUpperCase()}\n`;
+      msg += `   💰 ${amountStr} PLS`;
+      if (order.targetPrice) msg += ` @ ${order.targetPrice}`;
+      msg += `\n\n`;
+
+      // Add action buttons for this order
+      if (order.type === 'limit_buy' || order.type === 'instabond_snipe') {
+        buttons.push([
+          { text: `🔴 Set Sell for ${symbol}`, callback_data: `order_limit_sell_${order.id}` },
+          { text: `❌ Cancel`, callback_data: `order_cancel_${order.id}` },
+        ]);
+      } else {
+        buttons.push([
+          { text: `❌ Cancel ${symbol}`, callback_data: `order_cancel_${order.id}` },
+        ]);
+      }
+    }
+
+    // Recent completed section
+    if (completedOrders.length > 0) {
+      msg += `━━━ **RECENTLY EXECUTED** ━━━\n\n`;
+      for (const order of completedOrders.slice(0, 3)) {
+        const emoji = typeEmoji[order.type] || '📊';
+        const symbol = order.tokenSymbol || order.tokenAddress.slice(0, 8);
+        msg += `${emoji} ✅ **${symbol}** - ${order.type.replace('_', ' ')}\n`;
+      }
+      msg += `\n`;
+    }
+
+    // Add navigation buttons
+    buttons.push([{ text: '━━━━━━━━━━━━━━━━━━━━━', callback_data: 'noop' }]);
+    buttons.push([
+      { text: '🟢 New Limit Buy', callback_data: 'order_limit_buy' },
+      { text: '🔴 New Limit Sell', callback_data: 'order_limit_sell' },
+    ]);
+    buttons.push([
+      { text: '📊 P&L Card', callback_data: 'pnl_card' },
+    ]);
+    buttons.push([
+      { text: '🔙 Orders Menu', callback_data: 'orders_menu' },
+      { text: '🏠 Main', callback_data: 'main_menu' },
+    ]);
+
+    await this.bot.sendMessage(chatId, msg, {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: buttons },
+    });
+  }
+
 
   /**
    * Show completed trades
