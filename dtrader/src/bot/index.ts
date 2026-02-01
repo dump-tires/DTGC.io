@@ -150,7 +150,54 @@ export class DtraderBot {
     this.setupHandlers();
     this.setupSniperEvents();
     this.setupOrderEvents();
+    this.initializeBotMenu();
     console.log('✅ Bot handlers initialized');
+  }
+
+  /**
+   * Initialize bot commands menu, description, and menu button
+   * This makes the bot more user-friendly before /start is pressed
+   */
+  private async initializeBotMenu(): Promise<void> {
+    try {
+      // Set bot commands - creates the menu button
+      await this.bot.setMyCommands([
+        { command: 'start', description: '🚀 Start Bot / Main Menu' },
+        { command: 'wallet', description: '👛 Manage Wallets (6 slots)' },
+        { command: 'snipe', description: '🎯 InstaBond Sniper' },
+        { command: 'trade', description: '💱 Quick Buy/Sell' },
+        { command: 'orders', description: '📋 Limit Orders & History' },
+        { command: 'pnl', description: '📊 P&L Card Generator' },
+        { command: 'settings', description: '⚙️ Bot Settings' },
+        { command: 'help', description: '❓ Help & Features' },
+      ]);
+      console.log('✅ Bot commands menu set');
+
+      // Set bot description - shown BEFORE user presses START
+      // This is what appears in the bot's profile/bio area
+      const description = `⚜️ DTG BOND BOT - PulseChain Trading Power
+
+🎯 InstaBond Sniper - Auto-buy at pump.tires graduation
+👛 6 Wallet Slots - Manage multiple trading wallets
+💱 Quick Trade - Buy/Sell any PulseChain token
+📈 Limit Orders - Set take profit & stop loss
+📊 P&L Cards - Share your trading wins
+
+💰 Hold $50+ DTGC for PRO access
+🌐 Web: dtgc.io/gold`;
+
+      await this.bot.setMyDescription({ description });
+      console.log('✅ Bot description set');
+
+      // Set short description (shown in search results & forwarded messages)
+      await this.bot.setMyShortDescription({
+        short_description: '⚜️ PulseChain Trading Bot | InstaBond Sniper | 6 Wallets | P&L Cards'
+      });
+      console.log('✅ Bot short description set');
+
+    } catch (error) {
+      console.log('⚠️ Could not set bot menu/description:', error);
+    }
   }
 
   private getSession(chatId: string): UserSession {
@@ -479,6 +526,222 @@ export class DtraderBot {
       await this.bot.sendMessage(chatId, welcomeMsg, {
         parse_mode: 'Markdown',
         reply_markup: keyboards.mainMenuKeyboard,
+      });
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // QUICK MENU COMMANDS - Direct access without parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // /help command - Feature overview
+    this.bot.onText(/\/help/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+
+      const helpMsg = `⚜️ **DTG BOND BOT** - Feature Guide\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🎯 **INSTABOND SNIPER**\n` +
+        `Auto-buy tokens when they graduate from pump.tires bonding curve (200M PLS). ` +
+        `Set take-profit % to auto-sell at your target!\n\n` +
+        `👛 **6 WALLET SLOTS**\n` +
+        `Generate up to 6 hot wallets for trading. Your main DTGC wallet stays safe - ` +
+        `just fund these bot wallets with PLS to trade.\n\n` +
+        `💱 **QUICK TRADE**\n` +
+        `Buy or sell any PulseChain token via PulseX. ` +
+        `Use /buy <token> or /sell <token> for quick access.\n\n` +
+        `📈 **LIMIT ORDERS**\n` +
+        `Set buy orders at target prices, take-profit levels, or stop-loss protection.\n\n` +
+        `📊 **P&L CARDS**\n` +
+        `Generate shareable cards showing your trading performance. Perfect for flexing wins!\n\n` +
+        `🔗 **WALLET LINKING**\n` +
+        `Link your DTGC-holding wallet (MetaMask/Rabby) via dtgc.io to unlock features. ` +
+        `Hold $50+ DTGC for PRO access.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 **HOW TO START:**\n` +
+        `1. Generate a bot wallet (/wallet)\n` +
+        `2. Fund it with PLS from your main wallet\n` +
+        `3. Start trading!\n\n` +
+        `🌐 **Web Interface:** dtgc.io/gold`;
+
+      await this.bot.sendMessage(chatId, helpMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🚀 Main Menu', callback_data: 'main_menu' }],
+            [{ text: '🌐 Open Website', url: 'https://dtgc.io/gold' }],
+          ],
+        },
+      });
+    });
+
+    // /wallet command - Quick wallet access
+    this.bot.onText(/\/wallet/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      const { wallet, isNew } = await walletManager.getOrCreateWallet(userId);
+
+      let walletMsg = `👛 **Your Bot Wallet**\n`;
+      walletMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      if (isNew) {
+        walletMsg += `✨ **New wallet created!**\n\n`;
+      }
+
+      walletMsg += `📋 **Address (tap to copy):**\n`;
+      walletMsg += `\`${wallet.address}\`\n\n`;
+      walletMsg += `💡 **To fund:** Send PLS from your main wallet to this address\n\n`;
+      walletMsg += `_Your DTGC-holding wallet stays safe!_`;
+
+      await this.bot.sendMessage(chatId, walletMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '💰 Check Balance', callback_data: 'wallet_balance' }],
+            [{ text: '🔑 Export Key', callback_data: 'wallet_export' }],
+            [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+          ],
+        },
+      });
+    });
+
+    // /snipe command (no params) - Open sniper menu
+    this.bot.onText(/^\/snipe$/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) {
+        await this.bot.sendMessage(chatId,
+          `🔒 **Token Gate Required**\n\nHold $50+ DTGC to access the sniper.\n`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } }],
+                [{ text: '💰 Buy DTGC', url: 'https://dtgc.io/gold' }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      await this.bot.sendMessage(chatId,
+        `🎯 **DTRADER Sniper** ⚜️\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🔥 **InstaBond** - Auto-buy at pump.tires graduation\n` +
+        `📈 **Take Profit** - Auto-sell at your target %\n\n` +
+        `_Paste a token address or select an option:_`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboards.snipeMenuKeyboard,
+        }
+      );
+    });
+
+    // /trade command - Quick trade menu
+    this.bot.onText(/\/trade/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) {
+        await this.bot.sendMessage(chatId,
+          `🔒 **Token Gate Required**\n\nHold $50+ DTGC to trade.\n`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      await this.bot.sendMessage(chatId,
+        `💱 **Quick Trade**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Paste any PulseChain token address to trade,\nor use these quick commands:\n\n` +
+        `• \`/buy <token>\` - Buy token\n` +
+        `• \`/sell <token>\` - Sell token\n`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboards.tradeMenuKeyboard,
+        }
+      );
+    });
+
+    // /orders command - Show active orders
+    this.bot.onText(/\/orders/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      const activeOrders = TradeHistory.getActiveOrders(userId);
+
+      if (activeOrders.length === 0) {
+        await this.bot.sendMessage(chatId,
+          `📋 **No Active Orders**\n\nYou don't have any pending limit orders or snipes.\n`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🎯 Set Up Snipe', callback_data: 'snipe_menu' }],
+                [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+              ],
+            },
+          }
+        );
+        return;
+      }
+
+      let ordersMsg = `📋 **Active Orders** (${activeOrders.length})\n`;
+      ordersMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      for (const order of activeOrders.slice(0, 5)) {
+        ordersMsg += TradeHistory.formatForTelegram(order) + '\n\n';
+      }
+
+      if (activeOrders.length > 5) {
+        ordersMsg += `_...and ${activeOrders.length - 5} more orders_`;
+      }
+
+      await this.bot.sendMessage(chatId, ordersMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🗑 Cancel All', callback_data: 'cancel_all_orders' }],
+            [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+          ],
+        },
+      });
+    });
+
+    // /pnl command (no params) - Generate P&L card
+    this.bot.onText(/^\/pnl$/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      await this.bot.sendMessage(chatId,
+        `📊 **P&L Card Generator**\n\nGenerating your trading performance card...`
+      );
+      await this.generatePnLCard(chatId, userId);
+    });
+
+    // /settings command - Bot settings
+    this.bot.onText(/\/settings/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const session = this.getSession(chatId);
+
+      const settingsMsg = `⚙️ **Bot Settings**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `📊 **Slippage:** ${session.settings.slippage}%\n` +
+        `⛽ **Gas Priority:** ${GAS_LABELS[session.settings.gasPriority]}\n` +
+        `🛡 **Anti-Rug:** ${session.settings.antiRug ? '✅ ON' : '❌ OFF'}\n` +
+        `🔔 **Alerts:** ${session.settings.alerts ? '✅ ON' : '❌ OFF'}\n`;
+
+      await this.bot.sendMessage(chatId, settingsMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboards.settingsKeyboard,
       });
     });
 

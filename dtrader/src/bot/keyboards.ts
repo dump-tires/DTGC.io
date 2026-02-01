@@ -173,6 +173,24 @@ export const ordersMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
   ],
 };
 
+// ==================== TRADE MENU ====================
+
+export const tradeMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [
+      { text: '💰 Quick Buy', callback_data: 'action_buy' },
+      { text: '💸 Quick Sell', callback_data: 'action_sell' },
+    ],
+    [
+      { text: '🎯 Sniper', callback_data: 'snipe_menu' },
+      { text: '📊 Limit Order', callback_data: 'orders_menu' },
+    ],
+    [
+      { text: '🔙 Main Menu', callback_data: 'main_menu' },
+    ],
+  ],
+};
+
 // ==================== PUMP.TIRES MENU ====================
 
 export const pumpMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {

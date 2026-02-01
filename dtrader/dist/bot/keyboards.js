@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.tradeHistoryEntryKeyboard = exports.tradeHistoryKeyboard = exports.quickActionsKeyboard = exports.gasPriorityKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.helpMenuKeyboard = exports.mainMenuKeyboard = void 0;
+exports.tradeHistoryEntryKeyboard = exports.tradeHistoryKeyboard = exports.quickActionsKeyboard = exports.gasPriorityKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.tradeMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.helpMenuKeyboard = exports.mainMenuKeyboard = void 0;
 /**
  * Enhanced Telegram Keyboard Layouts
  * Modeled after Maestro/Solid Trader bot structure
@@ -156,6 +156,22 @@ exports.ordersMenuKeyboard = {
         ],
         [
             { text: '🔙 Back', callback_data: 'main_menu' },
+        ],
+    ],
+};
+// ==================== TRADE MENU ====================
+exports.tradeMenuKeyboard = {
+    inline_keyboard: [
+        [
+            { text: '💰 Quick Buy', callback_data: 'action_buy' },
+            { text: '💸 Quick Sell', callback_data: 'action_sell' },
+        ],
+        [
+            { text: '🎯 Sniper', callback_data: 'snipe_menu' },
+            { text: '📊 Limit Order', callback_data: 'orders_menu' },
+        ],
+        [
+            { text: '🔙 Main Menu', callback_data: 'main_menu' },
         ],
     ],
 };

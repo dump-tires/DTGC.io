@@ -4,6 +4,11 @@ export declare class DtraderBot {
     private pollingErrorCount;
     private maxPollingErrors;
     constructor();
+    /**
+     * Initialize bot commands menu, description, and menu button
+     * This makes the bot more user-friendly before /start is pressed
+     */
+    private initializeBotMenu;
     private getSession;
     /**
      * Check token gate before allowing actions

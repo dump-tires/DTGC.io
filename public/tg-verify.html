@@ -383,7 +383,7 @@
       }
     }
 
-    // Check if user already verified via Gold Suite
+    // Check if user already verified via Gold Suite or Bot
     async function checkExisting() {
       if (!telegramUserId) {
         alert('Could not detect your Telegram ID. Please open this from the Telegram bot.');
@@ -398,10 +398,9 @@
         const response = await fetch(`/api/tg-verify?telegramUserId=${telegramUserId}`);
         const data = await response.json();
 
-        document.getElementById('step-verifying').classList.add('hidden');
-        document.getElementById('step-result').classList.remove('hidden');
-
         if (data.verified && data.balanceUsd >= GATE_MIN_USD) {
+          document.getElementById('step-verifying').classList.add('hidden');
+          document.getElementById('step-result').classList.remove('hidden');
           document.getElementById('result-success').classList.remove('hidden');
           document.getElementById('success-details').textContent = `Already verified with $${data.balanceUsd.toFixed(2)} DTGC!`;
           document.getElementById('display-address').textContent = data.walletAddress;
@@ -413,16 +412,40 @@
           if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
           setTimeout(() => { if (tg) tg.close(); }, 2500);
         } else {
-          document.getElementById('result-error').classList.remove('hidden');
-          document.getElementById('error-details').textContent = 'No existing verification found. Please enter your wallet address.';
+          // No verification found - just go back to form with helpful message
+          document.getElementById('step-verifying').classList.add('hidden');
+          document.getElementById('step-connect').classList.remove('hidden');
+
+          // Show helpful tip
+          const input = document.getElementById('wallet-input');
+          input.placeholder = 'Paste your DTGC wallet address...';
+          input.focus();
+
+          // Add a small message
+          showTip('💡 Enter your wallet address to verify your DTGC holdings');
         }
 
       } catch (error) {
         console.error('Check error:', error);
         document.getElementById('step-verifying').classList.add('hidden');
         document.getElementById('step-connect').classList.remove('hidden');
-        alert('Could not check existing verification. Please enter your wallet address manually.');
+        showTip('Enter your wallet address to verify');
       }
+    }
+
+    // Show a temporary tip message
+    function showTip(message) {
+      // Check if tip element exists, if not create it
+      let tip = document.getElementById('tip-message');
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.id = 'tip-message';
+        tip.style.cssText = 'background: rgba(212,175,55,0.2); border: 1px solid rgba(212,175,55,0.4); border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: center; color: #D4AF37; font-size: 13px;';
+        const card = document.getElementById('step-connect');
+        card.insertBefore(tip, card.firstChild);
+      }
+      tip.textContent = message;
+      tip.style.display = 'block';
     }
 
     // Restart flow

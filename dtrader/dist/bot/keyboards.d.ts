@@ -13,6 +13,7 @@ export declare const walletSelectKeyboard: (wallets: {
 }[]) => TelegramBot.InlineKeyboardMarkup;
 export declare const snipeMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const ordersMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
+export declare const tradeMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const pumpMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const copyMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const settingsKeyboard: TelegramBot.InlineKeyboardMarkup;
