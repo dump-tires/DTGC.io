@@ -2868,8 +2868,8 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             </div>
           )}
 
-          {/* Limit Price Input (only for limit orders) */}
-          {sniperLimitType !== 'market' && (
+          {/* Limit Price Input (only for limit-buy and limit-sell, NOT for InstaBond) */}
+          {sniperLimitType !== 'market' && sniperLimitType !== 'instabond' && (
             <div style={styles.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={styles.label}>🎯 Target Price (USD)</span>
@@ -2888,6 +2888,44 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 {sniperLimitType === 'limit-buy'
                   ? '💡 Order triggers when price drops to this level'
                   : '💡 Order triggers when price rises to this level'}
+              </div>
+            </div>
+          )}
+
+          {/* InstaBond Summary - Show calculated values */}
+          {sniperLimitType === 'instabond' && sniperToken && sniperPlsAmount && sniperLimitPrice && (
+            <div style={styles.card}>
+              <div style={{ color: '#FF5722', fontWeight: 700, fontSize: '0.85rem', marginBottom: '12px' }}>
+                📊 InstaBond Calculation
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+                  <div style={{ color: '#888', fontSize: '0.65rem' }}>Investment</div>
+                  <div style={{ color: '#4CAF50', fontSize: '1rem', fontWeight: 600 }}>
+                    {parseFloat(sniperPlsAmount).toLocaleString()} PLS
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+                  <div style={{ color: '#888', fontSize: '0.65rem' }}>Take Profit Target</div>
+                  <div style={{ color: '#FF5722', fontSize: '1rem', fontWeight: 600 }}>
+                    +{sniperLimitPrice}% ({((100 + parseInt(sniperLimitPrice)) / 100).toFixed(1)}x)
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+                  <div style={{ color: '#888', fontSize: '0.65rem' }}>Auto-Sell Amount</div>
+                  <div style={{ color: '#D4AF37', fontSize: '1rem', fontWeight: 600 }}>
+                    {(100 / (1 + parseInt(sniperLimitPrice) / 100)).toFixed(1)}% of tokens
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
+                  <div style={{ color: '#888', fontSize: '0.65rem' }}>Recovers</div>
+                  <div style={{ color: '#4CAF50', fontSize: '1rem', fontWeight: 600 }}>
+                    100% Initial ✓
+                  </div>
+                </div>
+              </div>
+              <div style={{ color: '#666', fontSize: '0.7rem', marginTop: '12px', textAlign: 'center' }}>
+                🔥 Remaining tokens after TP = pure profit!
               </div>
             </div>
           )}
@@ -3486,7 +3524,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             </div>
 
             <a
-              href="https://t.me/DtraderSniperBot"
+              href="https://t.me/DTGBondBot?start=sniper"
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -3508,7 +3546,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               🤖 Set Up in Telegram Bot →
             </a>
             <div style={{ color: '#666', fontSize: '0.65rem', textAlign: 'center', marginTop: '8px' }}>
-              Sniper → Set TP → Auto-executes on target
+              Opens sniper menu → Set TP → Auto-executes on target
             </div>
           </div>
         </div>

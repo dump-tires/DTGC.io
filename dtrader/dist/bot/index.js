@@ -330,6 +330,36 @@ class DtraderBot {
                 await this.generatePnLCard(chatId, userId);
                 return;
             }
+            // Handle sniper deep link from Gold Suite
+            if (param === 'sniper') {
+                // Check gate first
+                const gateOk = await this.checkGate(chatId, userId);
+                if (!gateOk) {
+                    await this.bot.sendMessage(chatId, `🔒 **Token Gate Required**\n\n` +
+                        `Hold $50+ worth of DTGC to access the sniper.\n\n` +
+                        `_Tap below to verify your wallet._`, {
+                        parse_mode: 'Markdown',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } }],
+                                [{ text: '💰 Buy DTGC', url: 'https://dtgc.io/gold' }],
+                            ],
+                        },
+                    });
+                    return;
+                }
+                await this.bot.sendMessage(chatId, `🎯 **DTRADER Sniper** ⚜️\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                    `Set up your InstaBond snipe with automatic take profit!\n\n` +
+                    `🔥 **InstaBond** - Auto-buy at pump.tires graduation\n` +
+                    `📈 **Take Profit** - Auto-sell at your target %\n` +
+                    `💰 **Breakeven** - Recover your initial investment\n\n` +
+                    `_Select an option below:_`, {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboards.snipeMenuKeyboard,
+                });
+                return;
+            }
             const { wallet, isNew } = await wallet_1.walletManager.getOrCreateWallet(userId);
             // Check if user has linked wallet from persistent storage
             const persistedLink = jsonStore_1.LinkedWallets.get(userId);
@@ -2482,19 +2512,44 @@ Hold $50+ of DTGC to trade
                     order.status = 'filled';
                     order.filledAt = Date.now();
                     order.txHash = result.txHash;
+                    order.tokensReceived = result.amountOut || '0';
                 }
-                // Success message
-                await this.bot.sendMessage(chatId, `✅ **SNIPE SUCCESSFUL!**\n\n` +
-                    `🆔 Order: \`${orderId}\`\n` +
-                    `📋 Token: \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n` +
-                    `💰 Spent: ${ethers_1.ethers.formatEther(amountPls || BigInt(0))} PLS\n` +
-                    `🔗 [View TX](https://scan.pulsechain.com/tx/${result.txHash})\n\n` +
-                    `🎉 You're in early!`, {
+                // Get pair info if available
+                const pairAddress = pairInfo?.pairAddress || 'Check PulseX';
+                // 🎉 VICTORY NOTIFICATION - Send celebration message
+                await this.bot.sendMessage(chatId, `🏆🎊 **SNIPE VICTORY!** 🎊🏆\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                    `⚜️ **MANDO BOT STRIKES AGAIN!** ⚜️\n\n` +
+                    `🎓 **Token Graduated & Sniped!**\n\n` +
+                    `📋 **Token CA:**\n\`${tokenAddress}\`\n\n` +
+                    `🔗 **NEW PulseX Pair:**\n\`${pairAddress}\`\n\n` +
+                    `💰 **Invested:** ${ethers_1.ethers.formatEther(amountPls || BigInt(0))} PLS\n` +
+                    `🪙 **Tokens:** ${result.amountOut || 'Pending...'}\n\n` +
+                    `🔗 [View TX on PulseScan](https://scan.pulsechain.com/tx/${result.txHash})\n` +
+                    `📊 [View Pair on PulseX](https://app.pulsex.com/swap?outputCurrency=${tokenAddress})\n\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `_You're in early! This is the way. 🚀_`, {
                     parse_mode: 'Markdown',
-                    reply_markup: keyboards.mainMenuKeyboard,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '📊 Generate P&L Card', callback_data: 'generate_pnl_card' }],
+                            [{ text: '📋 My Snipe Orders', callback_data: 'snipe_list' }],
+                            [{ text: '🎯 New Snipe', callback_data: 'snipe_menu' }],
+                            [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+                        ],
+                    },
                 });
+                // Send a victory sticker (trophy/celebration)
+                try {
+                    // Telegram sticker for celebration (trophy emoji sticker)
+                    await this.bot.sendSticker(chatId, 'CAACAgIAAxkBAAEBBQZj9Z-xT0UAAe_qAAGzNl8HNlDjlxAAAj8AA0G1Vg7TZwq7GwABAdQfBA');
+                }
+                catch (stickerError) {
+                    // Sticker failed, send emoji instead
+                    await this.bot.sendMessage(chatId, '🏆🎉🚀');
+                }
                 // Trade is already logged via the order tracking system
-                console.log(`📝 InstaBond snipe completed: ${orderId}, tx: ${result.txHash}`);
+                console.log(`📝 InstaBond snipe completed: ${orderId}, tx: ${result.txHash}, pair: ${pairAddress}`);
             }
             catch (error) {
                 console.error(`❌ Snipe execution failed:`, error);
