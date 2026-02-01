@@ -936,7 +936,7 @@ export class DtraderBot {
       await this.showQuickSellMenu(chatId, userId, tokenAddress);
     });
 
-    // /buy <token> - Alias command
+    // /buy - Buy a token (DEX)
     this.bot.onText(/^\/buy$/, async (msg) => {
       const chatId = msg.chat.id.toString();
       const userId = msg.from?.id.toString() || '';
@@ -944,15 +944,24 @@ export class DtraderBot {
       if (!await this.checkGate(chatId, userId)) return;
 
       const session = this.getSession(chatId);
-      session.pendingAction = 'buy_token';
+      session.pendingAction = 'buy_token_address';
       await this.bot.sendMessage(chatId,
-        `💰 **Buy Token**\n\n` +
-        `📋 Send the token contract address:`,
-        { parse_mode: 'Markdown' }
+        `💰 **Buy Token (DEX)**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `📋 Send the token contract address:\n\n` +
+        `_After entering the address, you can choose:_\n` +
+        `• Instant buy at market price\n` +
+        `• Limit buy at your target price`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'main_menu' }]]
+          }
+        }
       );
     });
 
-    // /sell <token> - Alias command
+    // /sell - Sell a token (DEX)
     this.bot.onText(/^\/sell$/, async (msg) => {
       const chatId = msg.chat.id.toString();
       const userId = msg.from?.id.toString() || '';
@@ -960,11 +969,20 @@ export class DtraderBot {
       if (!await this.checkGate(chatId, userId)) return;
 
       const session = this.getSession(chatId);
-      session.pendingAction = 'sell_token';
+      session.pendingAction = 'sell_token_address';
       await this.bot.sendMessage(chatId,
-        `💸 **Sell Token**\n\n` +
-        `📋 Send the token contract address:`,
-        { parse_mode: 'Markdown' }
+        `💸 **Sell Token (DEX)**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `📋 Send the token contract address:\n\n` +
+        `_After entering the address, you can choose:_\n` +
+        `• Instant sell at market price\n` +
+        `• Limit sell at your target price`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'main_menu' }]]
+          }
+        }
       );
     });
 
@@ -2305,8 +2323,60 @@ export class DtraderBot {
       return;
     }
 
+    // Limit order from buy/sell flow
+    if (data === 'buy_limit_order') {
+      if (!await this.checkGate(chatId, userId)) return;
+      // User already has a token selected, go straight to price entry
+      if (session.pendingToken) {
+        session.pendingAction = 'limit_buy_price';
+        session.pendingOrderType = 'limit_buy';
+        await this.bot.sendMessage(chatId,
+          `🟢 **LIMIT BUY ORDER**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `📋 Token: \`${session.pendingToken.slice(0, 12)}...${session.pendingToken.slice(-8)}\`\n\n` +
+          `Enter your target buy price in PLS:\n` +
+          `_Example: 0.00001 or 1000000_\n\n` +
+          `Or enter a percentage below current price:\n` +
+          `_Example: -10% or -25%_`,
+          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'main_menu' }]] } }
+        );
+      } else {
+        session.pendingAction = 'limit_buy_token';
+        await this.bot.sendMessage(chatId, '📝 Enter token address for limit buy:');
+      }
+      return;
+    }
+
+    if (data === 'sell_limit_order') {
+      if (!await this.checkGate(chatId, userId)) return;
+      // User already has a token selected, go straight to price entry
+      if (session.pendingToken) {
+        session.pendingAction = 'limit_sell_price';
+        session.pendingOrderType = 'limit_sell';
+        await this.bot.sendMessage(chatId,
+          `🔴 **LIMIT SELL ORDER**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `📋 Token: \`${session.pendingToken.slice(0, 12)}...${session.pendingToken.slice(-8)}\`\n\n` +
+          `Enter your target sell price in PLS:\n` +
+          `_Example: 0.00002 or 2000000_\n\n` +
+          `Or enter a percentage above current price:\n` +
+          `_Example: +50% or +100%_`,
+          { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '❌ Cancel', callback_data: 'main_menu' }]] } }
+        );
+      } else {
+        session.pendingAction = 'limit_sell_token';
+        await this.bot.sendMessage(chatId, '📝 Enter token address for limit sell:');
+      }
+      return;
+    }
+
+    // noop for separator buttons
+    if (data === 'noop') {
+      return;
+    }
+
     // Buy amount selection
-    if (data.startsWith('buy_') && !data.startsWith('buy_custom')) {
+    if (data.startsWith('buy_') && !data.startsWith('buy_custom') && !data.startsWith('buy_limit')) {
       const amount = data.replace('buy_', '');
       if (!isNaN(parseInt(amount))) {
         session.pendingAmount = amount;
@@ -2316,7 +2386,7 @@ export class DtraderBot {
     }
 
     // Sell percentage
-    if (data.startsWith('sell_') && !data.startsWith('sell_custom')) {
+    if (data.startsWith('sell_') && !data.startsWith('sell_custom') && !data.startsWith('sell_limit')) {
       const percent = parseInt(data.replace('sell_', ''));
       if (!isNaN(percent)) {
         await this.executeSell(chatId, userId, percent);

@@ -264,17 +264,23 @@ exports.settingsKeyboard = {
 exports.buyAmountKeyboard = {
     inline_keyboard: [
         [
-            { text: '1M PLS', callback_data: 'buy_1000000' },
-            { text: '5M PLS', callback_data: 'buy_5000000' },
-            { text: '10M PLS', callback_data: 'buy_10000000' },
+            { text: '💰 1M PLS', callback_data: 'buy_1000000' },
+            { text: '💰 5M PLS', callback_data: 'buy_5000000' },
+            { text: '💰 10M PLS', callback_data: 'buy_10000000' },
         ],
         [
-            { text: '20M PLS', callback_data: 'buy_20000000' },
-            { text: '50M PLS', callback_data: 'buy_50000000' },
-            { text: '100M PLS', callback_data: 'buy_100000000' },
+            { text: '💰 20M PLS', callback_data: 'buy_20000000' },
+            { text: '💰 50M PLS', callback_data: 'buy_50000000' },
+            { text: '💰 100M PLS', callback_data: 'buy_100000000' },
         ],
         [
             { text: '📝 Custom Amount', callback_data: 'buy_custom' },
+        ],
+        [
+            { text: '━━━━━ OR SET LIMIT ORDER ━━━━━', callback_data: 'noop' },
+        ],
+        [
+            { text: '🟢 Limit Buy (set target price)', callback_data: 'buy_limit_order' },
         ],
         [
             { text: '❌ Cancel', callback_data: 'main_menu' },
@@ -284,13 +290,23 @@ exports.buyAmountKeyboard = {
 exports.sellPercentKeyboard = {
     inline_keyboard: [
         [
-            { text: '25%', callback_data: 'sell_25' },
-            { text: '50%', callback_data: 'sell_50' },
-            { text: '75%', callback_data: 'sell_75' },
-            { text: '100%', callback_data: 'sell_100' },
+            { text: '💸 10%', callback_data: 'sell_10' },
+            { text: '💸 25%', callback_data: 'sell_25' },
+            { text: '💸 33%', callback_data: 'sell_33' },
+        ],
+        [
+            { text: '💸 50%', callback_data: 'sell_50' },
+            { text: '💸 75%', callback_data: 'sell_75' },
+            { text: '💸 100%', callback_data: 'sell_100' },
         ],
         [
             { text: '📝 Custom %', callback_data: 'sell_custom' },
+        ],
+        [
+            { text: '━━━━━ OR SET LIMIT ORDER ━━━━━', callback_data: 'noop' },
+        ],
+        [
+            { text: '🔴 Limit Sell (set target price)', callback_data: 'sell_limit_order' },
         ],
         [
             { text: '❌ Cancel', callback_data: 'main_menu' },
