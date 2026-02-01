@@ -41,34 +41,22 @@ export default async function handler(req, res) {
 
   // Try multiple API sources with fallbacks
   const apiSources = [
-    // Primary: Hetzner Ponder indexer (your dedicated server)
-    {
-      name: 'hetzner-ponder',
-      url: `http://65.109.68.172:42069/tokens?limit=100&offset=${(safePage - 1) * 100}`,
-      transform: (data) => data.items || data.tokens || data || [],
-    },
-    // Fallback 1: dump.tires Ponder indexer
-    {
-      name: 'dump.tires-ponder',
-      url: `https://dump.tires/tokens?limit=100&offset=${(safePage - 1) * 100}`,
-      transform: (data) => data.items || data.tokens || data || [],
-    },
-    // Fallback 2: dump.tires with filter
-    {
-      name: 'dump.tires',
-      url: `https://dump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
-      transform: (data) => data.tokens || data.data || data || [],
-    },
-    // Fallback 3: pump.tires official API
+    // Primary: pump.tires official API (was working this morning)
     {
       name: 'pump.tires',
       url: `https://pump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
       transform: (data) => data.tokens || data.data || data || [],
     },
-    // Fallback 4: pump.tires activity endpoint
+    // Fallback 1: pump.tires activity endpoint
     {
       name: 'pump.tires-activity',
       url: `https://pump.tires/api/tokens?filter=activity&page=1`,
+      transform: (data) => data.tokens || data.data || data || [],
+    },
+    // Fallback 2: dump.tires API
+    {
+      name: 'dump.tires',
+      url: `https://dump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
       transform: (data) => data.tokens || data.data || data || [],
     },
   ];
