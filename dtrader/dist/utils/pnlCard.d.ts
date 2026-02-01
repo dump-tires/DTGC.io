@@ -72,5 +72,26 @@ export declare function generatePnLTextCard(summary: PnLSummary, trades: TradeFo
  * Generate a simple single-trade P&L card
  */
 export declare function generateSingleTradeCard(symbol: string, entryPls: number, exitPls: number, tokensAmount: number, txHash?: string): Promise<Buffer | null>;
+export interface VictoryCardData {
+    type: 'snipe' | 'limit_buy' | 'limit_sell' | 'take_profit' | 'instabond';
+    tokenSymbol: string;
+    tokenAddress: string;
+    amountPls: number;
+    tokensReceived?: number;
+    pnlPls?: number;
+    pnlPercent?: number;
+    txHash?: string;
+    pairAddress?: string;
+    username?: string;
+}
+/**
+ * Generate a beautiful Victory Card with Mando background
+ * Laser-etched stats style overlay
+ */
+export declare function generateVictoryCard(data: VictoryCardData): Promise<Buffer>;
+/**
+ * Generate a text-based victory card when images aren't available
+ */
+export declare function generateVictoryTextCard(data: VictoryCardData): string;
 export {};
 //# sourceMappingURL=pnlCard.d.ts.map

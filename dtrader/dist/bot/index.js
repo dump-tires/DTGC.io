@@ -3029,14 +3029,39 @@ Hold $50+ of DTGC to trade
                         ],
                     },
                 });
-                // Send a victory sticker (trophy/celebration)
+                // 🎨 Generate and send Victory Card
                 try {
-                    // Telegram sticker for celebration (trophy emoji sticker)
-                    await this.bot.sendSticker(chatId, 'CAACAgIAAxkBAAEBBQZj9Z-xT0UAAe_qAAGzNl8HNlDjlxAAAj8AA0G1Vg7TZwq7GwABAdQfBA');
+                    const victoryData = {
+                        type: 'instabond',
+                        tokenSymbol: order?.tokenSymbol || 'TOKEN',
+                        tokenAddress,
+                        amountPls: parseFloat(ethers_1.ethers.formatEther(amountPls || BigInt(0))),
+                        tokensReceived: parseFloat(result.amountOut || '0'),
+                        pairAddress,
+                        txHash: result.txHash,
+                    };
+                    if ((0, pnlCard_1.canGenerateImages)()) {
+                        const cardBuffer = await (0, pnlCard_1.generateVictoryCard)(victoryData);
+                        await this.bot.sendPhoto(chatId, cardBuffer, {
+                            caption: '🏆 **Victory Card** - Share your win! _This is the way._',
+                            parse_mode: 'Markdown',
+                        });
+                    }
+                    else {
+                        // Fallback to text card
+                        const textCard = (0, pnlCard_1.generateVictoryTextCard)(victoryData);
+                        await this.bot.sendMessage(chatId, textCard, { parse_mode: 'Markdown' });
+                    }
                 }
-                catch (stickerError) {
-                    // Sticker failed, send emoji instead
-                    await this.bot.sendMessage(chatId, '🏆🎉🚀');
+                catch (cardError) {
+                    console.log('Could not generate victory card:', cardError);
+                    // Send sticker as fallback
+                    try {
+                        await this.bot.sendSticker(chatId, 'CAACAgIAAxkBAAEBBQZj9Z-xT0UAAe_qAAGzNl8HNlDjlxAAAj8AA0G1Vg7TZwq7GwABAdQfBA');
+                    }
+                    catch {
+                        await this.bot.sendMessage(chatId, '🏆🎉🚀');
+                    }
                 }
                 // Trade is already logged via the order tracking system
                 console.log(`📝 InstaBond snipe completed: ${orderId}, tx: ${result.txHash}, pair: ${pairAddress}`);
@@ -3083,6 +3108,27 @@ Hold $50+ of DTGC to trade
                                 `Spent: ${result.amountIn} PLS\n` +
                                 `Got: ${result.amountOut} tokens\n\n` +
                                 `🔗 [TX](${config_1.config.explorerUrl}/tx/${result.txHash})`, { parse_mode: 'Markdown' });
+                            // 🎨 Generate and send Victory Card
+                            try {
+                                const victoryData = {
+                                    type: 'snipe',
+                                    tokenSymbol: 'NEW',
+                                    tokenAddress: target.tokenAddress,
+                                    amountPls: parseFloat(ethers_1.ethers.formatEther(target.amountPls)),
+                                    tokensReceived: result.amountOut ? parseFloat(result.amountOut) : undefined,
+                                    txHash: result.txHash,
+                                };
+                                if ((0, pnlCard_1.canGenerateImages)()) {
+                                    const cardBuffer = await (0, pnlCard_1.generateVictoryCard)(victoryData);
+                                    await this.bot.sendPhoto(chatId, cardBuffer, {
+                                        caption: '🏆 **Snipe Victory** - First in! _This is the way._',
+                                        parse_mode: 'Markdown',
+                                    });
+                                }
+                            }
+                            catch (cardError) {
+                                console.log('Could not generate victory card for mempool snipe:', cardError);
+                            }
                         }
                         else {
                             await this.bot.sendMessage(chatId, `❌ Snipe failed: ${result.error}`);
@@ -3159,15 +3205,39 @@ Hold $50+ of DTGC to trade
                             ],
                         },
                     });
-                    // Send victory sticker
+                    // 🎨 Generate and send Victory Card
                     try {
-                        await this.bot.sendSticker(userChatId, 'CAACAgIAAxkBAAEBBQZj9Z-xT0UAAe_qAAGzNl8HNlDjlxAAAj8AA0G1Vg7TZwq7GwABAdQfBA');
+                        const victoryData = {
+                            type: order.orderType,
+                            tokenSymbol: order.tokenSymbol || 'TOKEN',
+                            tokenAddress: order.tokenAddress,
+                            amountPls: parseFloat(ethers_1.ethers.formatEther(BigInt(order.amount))),
+                            tokensReceived: result.amountOut ? parseFloat(result.amountOut) : undefined,
+                            txHash: result.txHash,
+                        };
+                        if ((0, pnlCard_1.canGenerateImages)()) {
+                            const cardBuffer = await (0, pnlCard_1.generateVictoryCard)(victoryData);
+                            await this.bot.sendPhoto(userChatId, cardBuffer, {
+                                caption: '🏆 **Victory Card** - Share your win! _This is the way._',
+                                parse_mode: 'Markdown',
+                            });
+                        }
+                        else {
+                            // Fallback to text card
+                            const textCard = (0, pnlCard_1.generateVictoryTextCard)(victoryData);
+                            await this.bot.sendMessage(userChatId, textCard, { parse_mode: 'Markdown' });
+                        }
                     }
-                    catch {
-                        await this.bot.sendMessage(userChatId, '🏆💰🚀');
+                    catch (cardError) {
+                        console.log('Could not generate victory card for limit order:', cardError);
+                        // Fallback to sticker
+                        try {
+                            await this.bot.sendSticker(userChatId, 'CAACAgIAAxkBAAEBBQZj9Z-xT0UAAe_qAAGzNl8HNlDjlxAAAj8AA0G1Vg7TZwq7GwABAdQfBA');
+                        }
+                        catch {
+                            await this.bot.sendMessage(userChatId, '🏆💰🚀');
+                        }
                     }
-                    // Auto-generate P&L card for the user
-                    await this.generatePnLCard(userChatId, order.userId);
                 }
             }
             else {

@@ -93,19 +93,104 @@ export function canGenerateImages(): boolean {
 }
 
 /**
- * Find the Mando sniper image
+ * Mando image collection for P&L cards
+ * Images are stored in public/images/mando/ folder
+ */
+const MANDO_IMAGES = [
+  'mando-sniper.png',
+  'mando-hallway.jpg',
+  'mando-gold-aim.jpg',
+  'mando-lava.jpg',
+  'mando-gold-lava.jpg',
+  'mando-watercolor.jpg',
+  'mando-aiming.jpg',
+  'mando-desert.jpg',
+];
+
+/**
+ * Find the Mando sniper image (randomly selects from collection)
  */
 function findMandoImage(): string | null {
-  const possiblePaths = [
-    path.join(process.cwd(), '..', 'public', 'images', 'mando-sniper.png'),
-    path.join(process.cwd(), 'public', 'images', 'mando-sniper.png'),
-    '/app/public/images/mando-sniper.png',
-    path.join(__dirname, '..', '..', '..', 'public', 'images', 'mando-sniper.png'),
+  const basePaths = [
+    path.join(process.cwd(), '..', 'public', 'images'),
+    path.join(process.cwd(), 'public', 'images'),
+    '/app/public/images',
+    path.join(__dirname, '..', '..', '..', 'public', 'images'),
   ];
 
-  for (const imgPath of possiblePaths) {
-    if (fs.existsSync(imgPath)) {
-      return imgPath;
+  // First check for mando subfolder with multiple images
+  for (const basePath of basePaths) {
+    const mandoFolder = path.join(basePath, 'mando');
+    if (fs.existsSync(mandoFolder)) {
+      // Get all images in mando folder
+      try {
+        const files = fs.readdirSync(mandoFolder).filter(f =>
+          f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.jpeg')
+        );
+        if (files.length > 0) {
+          // Random selection
+          const randomFile = files[Math.floor(Math.random() * files.length)];
+          return path.join(mandoFolder, randomFile);
+        }
+      } catch {}
+    }
+
+    // Fall back to single mando-sniper.png
+    const singlePath = path.join(basePath, 'mando-sniper.png');
+    if (fs.existsSync(singlePath)) {
+      return singlePath;
+    }
+  }
+  return null;
+}
+
+/**
+ * Get a specific Mando image by type
+ */
+function getMandoImageByType(type: 'victory' | 'pnl' | 'snipe'): string | null {
+  const basePaths = [
+    path.join(process.cwd(), '..', 'public', 'images'),
+    path.join(process.cwd(), 'public', 'images'),
+    '/app/public/images',
+    path.join(__dirname, '..', '..', '..', 'public', 'images'),
+  ];
+
+  // Map types to preferred images
+  const typePreferences: Record<string, string[]> = {
+    victory: ['mando-gold-aim.jpg', 'mando-hallway.jpg', 'mando-gold-lava.jpg'],
+    pnl: ['mando-sniper.png', 'mando-aiming.jpg', 'mando-desert.jpg'],
+    snipe: ['mando-lava.jpg', 'mando-aiming.jpg', 'mando-watercolor.jpg'],
+  };
+
+  const preferred = typePreferences[type] || MANDO_IMAGES;
+
+  for (const basePath of basePaths) {
+    const mandoFolder = path.join(basePath, 'mando');
+
+    // Check preferred images first
+    for (const imgName of preferred) {
+      const imgPath = path.join(mandoFolder, imgName);
+      if (fs.existsSync(imgPath)) {
+        return imgPath;
+      }
+    }
+
+    // Check any image in folder
+    if (fs.existsSync(mandoFolder)) {
+      try {
+        const files = fs.readdirSync(mandoFolder).filter(f =>
+          f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.jpeg')
+        );
+        if (files.length > 0) {
+          return path.join(mandoFolder, files[Math.floor(Math.random() * files.length)]);
+        }
+      } catch {}
+    }
+
+    // Fall back to single image
+    const singlePath = path.join(basePath, 'mando-sniper.png');
+    if (fs.existsSync(singlePath)) {
+      return singlePath;
     }
   }
   return null;
@@ -476,4 +561,293 @@ export async function generateSingleTradeCard(
   );
 
   return image.getBufferAsync(Jimp.MIME_PNG);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏆 VICTORY CARD GENERATOR - For Snipe/Limit Order Fills
+// Uses Mando images with laser-etched stats overlay
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface VictoryCardData {
+  type: 'snipe' | 'limit_buy' | 'limit_sell' | 'take_profit' | 'instabond';
+  tokenSymbol: string;
+  tokenAddress: string;
+  amountPls: number;
+  tokensReceived?: number;
+  pnlPls?: number;
+  pnlPercent?: number;
+  txHash?: string;
+  pairAddress?: string;
+  username?: string;
+}
+
+/**
+ * Generate a beautiful Victory Card with Mando background
+ * Laser-etched stats style overlay
+ */
+export async function generateVictoryCard(data: VictoryCardData): Promise<Buffer> {
+  if (!Jimp) {
+    throw new Error('Image generation not available');
+  }
+
+  const width = 800;
+  const height = 1000;
+
+  // Load Mando background
+  let image: any;
+  const mandoPath = getMandoImageByType('victory');
+
+  if (mandoPath) {
+    try {
+      image = await Jimp.read(mandoPath);
+      // Resize to fit card - cover mode
+      const scaleX = width / image.getWidth();
+      const scaleY = height / image.getHeight();
+      const scale = Math.max(scaleX, scaleY);
+      image.scale(scale);
+      // Center crop
+      const cropX = (image.getWidth() - width) / 2;
+      const cropY = (image.getHeight() - height) / 2;
+      image.crop(Math.max(0, cropX), Math.max(0, cropY), width, height);
+
+      // Add gradient overlay (darker at top and bottom for text)
+      const overlay = new Jimp(width, height, 0x00000000);
+      // Top gradient
+      for (let y = 0; y < 250; y++) {
+        const opacity = Math.floor(200 * (1 - y / 250));
+        for (let x = 0; x < width; x++) {
+          overlay.setPixelColor(Jimp.rgbaToInt(0, 0, 0, opacity), x, y);
+        }
+      }
+      // Bottom gradient
+      for (let y = height - 300; y < height; y++) {
+        const opacity = Math.floor(220 * ((y - (height - 300)) / 300));
+        for (let x = 0; x < width; x++) {
+          overlay.setPixelColor(Jimp.rgbaToInt(0, 0, 0, opacity), x, y);
+        }
+      }
+      image.composite(overlay, 0, 0);
+    } catch (e) {
+      console.log('Could not load Mando image, using dark background');
+      image = new Jimp(width, height, 0x0a0a14FF);
+    }
+  } else {
+    image = new Jimp(width, height, 0x0a0a14FF);
+  }
+
+  // Load fonts
+  const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
+  const fontMedium = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
+  const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE);
+
+  // Type emoji and text
+  const typeConfig: Record<string, { emoji: string; title: string }> = {
+    snipe: { emoji: '🎯', title: 'SNIPE VICTORY' },
+    instabond: { emoji: '🔥', title: 'INSTABOND WIN' },
+    limit_buy: { emoji: '📈', title: 'LIMIT BUY FILLED' },
+    limit_sell: { emoji: '📉', title: 'LIMIT SELL FILLED' },
+    take_profit: { emoji: '💰', title: 'TAKE PROFIT HIT' },
+  };
+
+  const config = typeConfig[data.type] || typeConfig.snipe;
+
+  // Header - "laser etched" style
+  image.print(
+    fontMedium,
+    0, 30,
+    {
+      text: '⚜️ DTG BOND BOT ⚜️',
+      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+    },
+    width, 50
+  );
+
+  // Victory type
+  image.print(
+    fontLarge,
+    0, 90,
+    {
+      text: `${config.emoji} ${config.title}`,
+      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+    },
+    width, 80
+  );
+
+  // Token symbol (large)
+  image.print(
+    fontLarge,
+    0, 180,
+    {
+      text: `$${data.tokenSymbol}`,
+      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+    },
+    width, 80
+  );
+
+  // Stats section - bottom portion with dark overlay
+  const statsY = height - 380;
+
+  // Draw "laser etched" line
+  image.print(
+    fontSmall,
+    0, statsY,
+    {
+      text: '━━━━━━━━━ TRADE STATS ━━━━━━━━━',
+      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+    },
+    width, 30
+  );
+
+  // Stats grid
+  const statItems = [
+    { label: 'INVESTED', value: `${formatNumber(data.amountPls)} PLS` },
+    { label: 'TOKENS', value: data.tokensReceived ? formatNumber(data.tokensReceived) : 'Pending' },
+  ];
+
+  if (data.pnlPls !== undefined) {
+    const sign = data.pnlPls >= 0 ? '+' : '';
+    statItems.push({ label: 'P&L', value: `${sign}${formatNumber(data.pnlPls)} PLS` });
+  }
+
+  if (data.pnlPercent !== undefined) {
+    const sign = data.pnlPercent >= 0 ? '+' : '';
+    statItems.push({ label: 'GAIN', value: `${sign}${data.pnlPercent.toFixed(1)}%` });
+  }
+
+  // Print stats in a grid
+  statItems.forEach((stat, i) => {
+    const x = i % 2 === 0 ? 50 : width / 2 + 50;
+    const y = statsY + 40 + Math.floor(i / 2) * 70;
+
+    // Label
+    image.print(
+      fontSmall,
+      x, y,
+      { text: stat.label },
+      width / 2 - 100, 25
+    );
+
+    // Value
+    image.print(
+      fontMedium,
+      x, y + 20,
+      { text: stat.value },
+      width / 2 - 100, 40
+    );
+  });
+
+  // Contract address (abbreviated)
+  image.print(
+    fontSmall,
+    0, height - 130,
+    {
+      text: `CA: ${data.tokenAddress.slice(0, 10)}...${data.tokenAddress.slice(-8)}`,
+      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+    },
+    width, 25
+  );
+
+  // Pair address if available
+  if (data.pairAddress) {
+    image.print(
+      fontSmall,
+      0, height - 105,
+      {
+        text: `Pair: ${data.pairAddress.slice(0, 10)}...${data.pairAddress.slice(-8)}`,
+        alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+      },
+      width, 25
+    );
+  }
+
+  // Footer
+  const now = new Date();
+  const dateStr = now.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  image.print(
+    fontSmall,
+    0, height - 60,
+    {
+      text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+    },
+    width, 20
+  );
+
+  image.print(
+    fontSmall,
+    0, height - 35,
+    {
+      text: `dtgc.io/gold | @DTGBondBot | ${dateStr}`,
+      alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+    },
+    width, 30
+  );
+
+  // Username watermark if provided
+  if (data.username) {
+    image.print(
+      fontSmall,
+      width - 150, 10,
+      { text: `@${data.username}` },
+      140, 25
+    );
+  }
+
+  return image.getBufferAsync(Jimp.MIME_PNG);
+}
+
+/**
+ * Generate a text-based victory card when images aren't available
+ */
+export function generateVictoryTextCard(data: VictoryCardData): string {
+  const typeConfig: Record<string, { emoji: string; title: string }> = {
+    snipe: { emoji: '🎯', title: 'SNIPE VICTORY' },
+    instabond: { emoji: '🔥', title: 'INSTABOND WIN' },
+    limit_buy: { emoji: '📈', title: 'LIMIT BUY FILLED' },
+    limit_sell: { emoji: '📉', title: 'LIMIT SELL FILLED' },
+    take_profit: { emoji: '💰', title: 'TAKE PROFIT HIT' },
+  };
+
+  const config = typeConfig[data.type] || typeConfig.snipe;
+
+  let text = `🏆🎊 **${config.emoji} ${config.title}** 🎊🏆\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  text += `⚜️ **DTG BOND BOT** ⚜️\n\n`;
+
+  text += `🪙 **$${data.tokenSymbol}**\n`;
+  text += `📋 \`${data.tokenAddress}\`\n\n`;
+
+  text += `━━━ TRADE STATS ━━━\n`;
+  text += `💰 Invested: **${formatNumber(data.amountPls)} PLS**\n`;
+
+  if (data.tokensReceived) {
+    text += `🪙 Tokens: **${formatNumber(data.tokensReceived)}**\n`;
+  }
+
+  if (data.pnlPls !== undefined) {
+    const sign = data.pnlPls >= 0 ? '+' : '';
+    text += `📊 P&L: **${sign}${formatNumber(data.pnlPls)} PLS**\n`;
+  }
+
+  if (data.pnlPercent !== undefined) {
+    const sign = data.pnlPercent >= 0 ? '+' : '';
+    text += `📈 Gain: **${sign}${data.pnlPercent.toFixed(1)}%**\n`;
+  }
+
+  if (data.pairAddress) {
+    text += `\n🔗 Pair: \`${data.pairAddress}\`\n`;
+  }
+
+  if (data.txHash) {
+    text += `\n🔗 [View TX](https://scan.pulsechain.com/tx/${data.txHash})\n`;
+  }
+
+  text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `🌐 dtgc.io/gold | @DTGBondBot`;
+
+  return text;
 }
