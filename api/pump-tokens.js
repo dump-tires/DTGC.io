@@ -1,11 +1,11 @@
 /**
- * pump.tires / dump.tires Token Proxy API
+ * pump.tires Token Proxy API
  * Proxies requests to bonding curve token APIs to handle CORS
  *
- * Primary: dump.tires (Ponder indexer)
- * Fallback: pump.tires (Richard Heart's pump.fun fork)
+ * Primary: api2.pump.tires (new API endpoint as of Jan 2026)
+ * Fallback: dump.tires (Ponder indexer)
  *
- * Usage: /api/pump-tokens?filter=activity&page=1
+ * Usage: /api/pump-tokens?filter=activity
  */
 
 export default async function handler(req, res) {
@@ -23,12 +23,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { filter = 'activity', page = '1' } = req.query;
+  const { filter = 'activity' } = req.query;
 
   // Validate filter - pump.tires supported filters
   const validFilters = ['activity', 'latest_timestamp', 'created_timestamp', 'market_value', 'latest_burn_timestamp', 'launch_timestamp'];
   const safeFilter = validFilters.includes(filter) ? filter : 'activity';
-  const safePage = parseInt(page) || 1;
 
   // Common headers to avoid 403 errors
   const commonHeaders = {
@@ -40,23 +39,24 @@ export default async function handler(req, res) {
   };
 
   // Try multiple API sources with fallbacks
+  // NOTE: pump.tires moved their API to api2.pump.tires subdomain (Jan 2026)
   const apiSources = [
-    // Primary: pump.tires official API (was working this morning)
+    // Primary: api2.pump.tires (NEW endpoint - discovered Jan 31, 2026)
     {
-      name: 'pump.tires',
-      url: `https://pump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
+      name: 'api2.pump.tires',
+      url: `https://api2.pump.tires/api/tokens?filter=${safeFilter}&direction=next`,
       transform: (data) => data.tokens || data.data || data || [],
     },
-    // Fallback 1: pump.tires activity endpoint
+    // Fallback 1: api2.pump.tires launch_timestamp (for tokens close to graduation)
     {
-      name: 'pump.tires-activity',
-      url: `https://pump.tires/api/tokens?filter=activity&page=1`,
+      name: 'api2.pump.tires-launch',
+      url: `https://api2.pump.tires/api/tokens?filter=launch_timestamp&direction=next`,
       transform: (data) => data.tokens || data.data || data || [],
     },
-    // Fallback 2: dump.tires API
+    // Fallback 2: dump.tires API (Ponder indexer)
     {
       name: 'dump.tires',
-      url: `https://dump.tires/api/tokens?filter=${safeFilter}&page=${safePage}`,
+      url: `https://dump.tires/api/tokens?filter=${safeFilter}`,
       transform: (data) => data.tokens || data.data || data || [],
     },
   ];
