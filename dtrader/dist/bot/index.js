@@ -2953,8 +2953,38 @@ class DtraderBot {
                 return;
             }
             session.pendingToken = text;
-            session.pendingAction = 'limit_buy_price';
-            await this.bot.sendMessage(chatId, '📊 Enter target price in PLS (buy when price drops to this):');
+            // Fetch token info to get current price
+            await this.bot.sendMessage(chatId, '🔍 Fetching token price...');
+            try {
+                const tokenInfo = await dexscreener_1.dexScreener.getTokenInfo(text);
+                if (tokenInfo) {
+                    session.tokenInfo = tokenInfo;
+                    const priceDisplay = tokenInfo.pricePls
+                        ? `${tokenInfo.pricePls.toFixed(12)} PLS (~$${tokenInfo.priceUsd?.toFixed(8) || '?'})`
+                        : 'Unknown';
+                    session.pendingAction = 'limit_buy_price';
+                    await this.bot.sendMessage(chatId, `📊 **LIMIT BUY - Set Target Price**\n` +
+                        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                        `🪙 **${tokenInfo.symbol || 'Token'}**\n` +
+                        `📋 \`${text.slice(0, 12)}...${text.slice(-8)}\`\n\n` +
+                        `💵 **Current Price:** ${priceDisplay}\n\n` +
+                        `━━━━━━━━━━━━━━━━━━━━━\n` +
+                        `Enter your target buy price:\n\n` +
+                        `• **Direct price:** \`0.00000001\`\n` +
+                        `• **Percentage:** \`-5%\` or \`-10%\` (below current)\n\n` +
+                        `_Order triggers when price drops to target._`, { parse_mode: 'Markdown' });
+                }
+                else {
+                    session.pendingAction = 'limit_buy_price';
+                    await this.bot.sendMessage(chatId, `⚠️ Could not fetch price data.\n\n` +
+                        `📋 Token: \`${text.slice(0, 12)}...${text.slice(-8)}\`\n\n` +
+                        `Enter target price in PLS directly:`, { parse_mode: 'Markdown' });
+                }
+            }
+            catch (e) {
+                session.pendingAction = 'limit_buy_price';
+                await this.bot.sendMessage(chatId, `📊 Enter target price in PLS (buy when price drops to this):`);
+            }
             return;
         }
         if (session.pendingAction === 'limit_sell_token') {
@@ -2963,8 +2993,38 @@ class DtraderBot {
                 return;
             }
             session.pendingToken = text;
-            session.pendingAction = 'limit_sell_price';
-            await this.bot.sendMessage(chatId, '📊 Enter target price in PLS (sell when price rises to this):');
+            // Fetch token info to get current price
+            await this.bot.sendMessage(chatId, '🔍 Fetching token price...');
+            try {
+                const tokenInfo = await dexscreener_1.dexScreener.getTokenInfo(text);
+                if (tokenInfo) {
+                    session.tokenInfo = tokenInfo;
+                    const priceDisplay = tokenInfo.pricePls
+                        ? `${tokenInfo.pricePls.toFixed(12)} PLS (~$${tokenInfo.priceUsd?.toFixed(8) || '?'})`
+                        : 'Unknown';
+                    session.pendingAction = 'limit_sell_price';
+                    await this.bot.sendMessage(chatId, `📊 **LIMIT SELL - Set Target Price**\n` +
+                        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                        `🪙 **${tokenInfo.symbol || 'Token'}**\n` +
+                        `📋 \`${text.slice(0, 12)}...${text.slice(-8)}\`\n\n` +
+                        `💵 **Current Price:** ${priceDisplay}\n\n` +
+                        `━━━━━━━━━━━━━━━━━━━━━\n` +
+                        `Enter your target sell price:\n\n` +
+                        `• **Direct price:** \`0.00000005\`\n` +
+                        `• **Percentage:** \`+50%\` or \`+100%\` (above current)\n\n` +
+                        `_Order triggers when price rises to target._`, { parse_mode: 'Markdown' });
+                }
+                else {
+                    session.pendingAction = 'limit_sell_price';
+                    await this.bot.sendMessage(chatId, `⚠️ Could not fetch price data.\n\n` +
+                        `📋 Token: \`${text.slice(0, 12)}...${text.slice(-8)}\`\n\n` +
+                        `Enter target price in PLS directly:`, { parse_mode: 'Markdown' });
+                }
+            }
+            catch (e) {
+                session.pendingAction = 'limit_sell_price';
+                await this.bot.sendMessage(chatId, `📊 Enter target price in PLS (sell when price rises to this):`);
+            }
             return;
         }
         if (session.pendingAction === 'limit_buy_price') {
