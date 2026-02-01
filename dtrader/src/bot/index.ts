@@ -116,6 +116,10 @@ interface UserSession {
     blacklistedDevs: number;
     isActive: boolean;
   };
+  // Wallet linking flow (Option A post-verification)
+  gateKeyLast4?: string;       // Last 4 chars of gate wallet private key
+  botWalletAddress?: string;   // Bot wallet address being linked
+  botKeyLast4?: string;        // Last 4 chars of bot wallet private key
   gateVerified: boolean;
   gateExpiry: number;
 }
@@ -395,6 +399,9 @@ export class DtraderBot {
       LinkedWallets.link(userId, chatId, walletAddress, payload.u);
       console.log(`✅ Wallet verified and persisted for user ${userId}: ${walletAddress.slice(0, 10)}...`);
 
+      // Link any existing wallets to this gated wallet
+      multiWallet.linkWalletsToGatedWallet(userId, walletAddress);
+
       // Format balance
       const formatNumber = (v: number) => {
         if (v >= 1e9) return (v/1e9).toFixed(2)+'B';
@@ -403,22 +410,52 @@ export class DtraderBot {
         return v.toFixed(0);
       };
 
-      await this.bot.sendMessage(chatId,
-        `✅ **Wallet Verified!**\n\n` +
-        `🔗 **Linked Wallet:**\n\`${walletAddress}\`\n\n` +
-        `💰 **DTGC Balance:** ${formatNumber(payload.b)} (~$${payload.u})\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `🎉 **Gold Suite Unlocked!**\n` +
-        `You now have full access to all PRO features:\n\n` +
-        `🎯 Instabond Sniper\n` +
-        `⚡ New Pair Sniper\n` +
-        `📊 Limit Orders\n` +
-        `💱 DEX Trading\n` +
-        `🛡️ Anti-Rug Protection\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `_Verification valid for 24 hours_`,
-        { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard }
-      );
+      // Check if user has existing wallets already linked in this session
+      const existingWallets = await multiWallet.getUserWallets(userId);
+
+      if (existingWallets.length > 0) {
+        // User already has wallets in current session - show success with linked count
+        await this.bot.sendMessage(chatId,
+          `✅ **Wallet Verified!**\n\n` +
+          `🔗 **DTGC Gate Wallet:**\n\`${walletAddress}\`\n\n` +
+          `💰 **DTGC Balance:** ${formatNumber(payload.b)} (~$${payload.u})\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `👛 **${existingWallets.length} Snipe Wallets Linked!**\n\n` +
+          `🎉 Gold Suite Unlocked - Full access enabled!\n\n` +
+          `_Verification valid for 24 hours_`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard }
+        );
+      } else {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CRITICAL POST-VERIFICATION WALLET SETUP FLOW
+        // Two options: A) Link existing wallets  B) Generate fresh wallets
+        // ═══════════════════════════════════════════════════════════════════════════
+        await this.bot.sendMessage(chatId,
+          `✅ **$50 DTGC Verified!**\n\n` +
+          `🔗 **DTGC Gate Wallet:**\n\`${walletAddress}\`\n\n` +
+          `💰 **Balance:** ${formatNumber(payload.b)} DTGC (~$${payload.u})\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚜️ **WALLET SETUP REQUIRED**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `Choose how to set up your trading wallets:\n\n` +
+          `**🅰️ LINK EXISTING WALLETS**\n` +
+          `_Already have a bot wallet & snipe wallets?_\n` +
+          `Recover them and link to this gate wallet.\n\n` +
+          `**🅱️ GENERATE NEW WALLETS**\n` +
+          `_Fresh start?_\n` +
+          `Create new bot wallet + 6 snipe wallets.\n` +
+          `All permanently linked to your gate wallet.`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🅰️ LINK OLD WALLETS', callback_data: 'setup_link_existing' }],
+                [{ text: '🅱️ GENERATE NEW SETUP', callback_data: 'setup_generate_new' }],
+              ]
+            }
+          }
+        );
+      }
 
     } catch (error) {
       console.error('Web verification error:', error);
@@ -2013,6 +2050,142 @@ export class DtraderBot {
     // WALLET RECOVERY OPTIONS
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Post-verification wallet recovery (uses already-linked gated wallet)
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTION A: LINK EXISTING WALLETS (Post-Verification Setup)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (data === 'setup_link_existing') {
+      const gatedWallet = session.linkedWallet || LinkedWallets.getAddress(userId);
+      if (!gatedWallet) {
+        await this.bot.sendMessage(chatId, '❌ Please verify your $50 DTGC wallet first.');
+        return;
+      }
+
+      session.pendingAction = 'link_gate_wallet';
+      await this.bot.sendMessage(chatId,
+        `🅰️ **LINK EXISTING WALLETS**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `**Step 1 of 3: Verify Gate Wallet Ownership**\n\n` +
+        `🔗 Your DTGC Gate Wallet:\n\`${gatedWallet}\`\n\n` +
+        `Enter the **last 4 characters** of this\ngate wallet's private key:\n\n` +
+        `**Example:** \`a1b2\`\n\n` +
+        `_This proves you own the gate wallet._`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTION B: GENERATE NEW WALLET SETUP (Post-Verification Setup)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (data === 'setup_generate_new') {
+      const gatedWallet = session.linkedWallet || LinkedWallets.getAddress(userId);
+      if (!gatedWallet) {
+        await this.bot.sendMessage(chatId, '❌ Please verify your $50 DTGC wallet first.');
+        return;
+      }
+
+      await this.bot.sendMessage(chatId,
+        `🅱️ **GENERATING NEW WALLET SETUP**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `⏳ Creating your trading wallets...\n\n` +
+        `🔗 Linked to Gate: \`${gatedWallet.slice(0, 12)}...\``
+      );
+
+      try {
+        // Generate 6 new snipe wallets
+        const newWallets = await multiWallet.generateMultiple(userId, 6, gatedWallet);
+
+        // Format wallet info with keys
+        let walletInfo = '';
+        for (const w of newWallets) {
+          const privateKey = await multiWallet.exportPrivateKey(userId, w.index);
+          const keyLast4 = privateKey ? privateKey.slice(-4) : '????';
+          walletInfo += `\n**Wallet ${w.index + 1}:** \`${w.address.slice(0, 10)}...${w.address.slice(-6)}\`\n`;
+          walletInfo += `🔑 Key ends: \`...${keyLast4}\`\n`;
+        }
+
+        await this.bot.sendMessage(chatId,
+          `✅ **NEW WALLETS GENERATED!**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `🔗 **Gate Wallet:**\n\`${gatedWallet}\`\n\n` +
+          `👛 **6 Snipe Wallets Created:**\n` +
+          `${walletInfo}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `⚠️ **SAVE YOUR PRIVATE KEYS!**\n` +
+          `Use 👛 Wallets → Export to backup each key.\n\n` +
+          `💰 **Next:** Fund wallets with PLS to trade!\n\n` +
+          `_All wallets permanently linked to gate wallet._`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '👛 View & Export Wallets', callback_data: 'wallets_menu' }],
+                [{ text: '💰 Check Balances', callback_data: 'wallet_balance' }],
+                [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+              ]
+            }
+          }
+        );
+      } catch (error) {
+        console.error('Generate new setup error:', error);
+        await this.bot.sendMessage(chatId, '❌ Error generating wallets. Please try again.');
+      }
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // WALLET RECOVERY & LINKING OPTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    if (data === 'post_verify_recover') {
+      session.pendingAction = 'post_verify_recover';
+      const gatedWallet = session.linkedWallet || LinkedWallets.getAddress(userId);
+
+      if (!gatedWallet) {
+        await this.bot.sendMessage(chatId, '❌ No gated wallet found. Please verify first.');
+        return;
+      }
+
+      await this.bot.sendMessage(chatId,
+        `🔐 **Recover Your Wallets**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🔗 Gated Wallet: \`${gatedWallet.slice(0, 12)}...${gatedWallet.slice(-6)}\`\n\n` +
+        `Enter the **last 4 characters** of any\nsnipe wallet's private key:\n\n` +
+        `**Example:** \`f3e9\`\n\n` +
+        `_Your wallets are linked to your gated wallet._`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Bulk import wallets (up to 6)
+    if (data === 'bulk_import_wallets') {
+      session.pendingAction = 'bulk_import_wallets';
+      await this.bot.sendMessage(chatId,
+        `📥 **Bulk Import Wallets**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Enter up to **6 private keys**, one per line.\n` +
+        `Optionally add a label after each key:\n\n` +
+        `**Format:**\n` +
+        `\`\`\`\n` +
+        `<private_key1> Label1\n` +
+        `<private_key2> Label2\n` +
+        `<private_key3>\n` +
+        `...\n` +
+        `\`\`\`\n\n` +
+        `**Example:**\n` +
+        `\`\`\`\n` +
+        `0x123...abc Sniper Main\n` +
+        `0x456...def DCA Wallet\n` +
+        `0x789...ghi Moon Bag\n` +
+        `\`\`\`\n\n` +
+        `_All wallets will be linked to your gated wallet._`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
     if (data === 'recover_bot_wallet') {
       session.pendingAction = 'recover_bot_wallet';
       await this.bot.sendMessage(chatId,
@@ -2547,6 +2720,291 @@ export class DtraderBot {
     const session = this.getSession(chatId);
 
     if (!session.pendingAction) return;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 1: Verify Gate Wallet Ownership (Option A flow)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (session.pendingAction === 'link_gate_wallet') {
+      const keyLast4 = text.trim();
+
+      if (keyLast4.length !== 4) {
+        await this.bot.sendMessage(chatId,
+          `❌ Please enter exactly 4 characters.\n\n` +
+          `Example: \`a1b2\``,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      // Store the gate wallet key verification for later use
+      session.gateKeyLast4 = keyLast4;
+      session.pendingAction = 'link_bot_wallet';
+
+      await this.bot.sendMessage(chatId,
+        `✅ **Gate Wallet Verified!**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `**Step 2 of 3: Link Your Bot Wallet**\n\n` +
+        `Enter your **Bot Wallet address** and the\n**last 4 characters** of its private key:\n\n` +
+        `**Format:** \`<address> <last4>\`\n\n` +
+        `**Example:**\n` +
+        `\`0x1234567890abcdef1234567890abcdef12345678 c3d4\`\n\n` +
+        `_This is the bot wallet you previously used._`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 2: Link Bot Wallet (Option A flow)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (session.pendingAction === 'link_bot_wallet') {
+      const parts = text.trim().split(/\s+/);
+      if (parts.length < 2) {
+        await this.bot.sendMessage(chatId,
+          `❌ Invalid format. Please provide:\n\n\`<bot_wallet_address> <last4>\`\n\n` +
+          `Example: \`0x1234...abcd c3d4\``,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      const botWalletAddress = parts[0];
+      const botKeyLast4 = parts[1];
+
+      if (!ethers.isAddress(botWalletAddress)) {
+        await this.bot.sendMessage(chatId, '❌ Invalid wallet address. Please try again.');
+        return;
+      }
+
+      if (botKeyLast4.length !== 4) {
+        await this.bot.sendMessage(chatId, '❌ Please provide exactly 4 characters from the private key.');
+        return;
+      }
+
+      // Store bot wallet info
+      session.botWalletAddress = botWalletAddress;
+      session.botKeyLast4 = botKeyLast4;
+      session.pendingAction = 'link_import_snipe_wallets';
+
+      await this.bot.sendMessage(chatId,
+        `✅ **Bot Wallet Linked!**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🤖 Bot: \`${botWalletAddress.slice(0, 12)}...${botWalletAddress.slice(-6)}\`\n\n` +
+        `**Step 3 of 3: Import Snipe Wallets**\n\n` +
+        `Enter up to **6 private keys**, one per line.\n` +
+        `Optionally add a label after each key:\n\n` +
+        `**Format:**\n` +
+        `\`\`\`\n` +
+        `<private_key1> Sniper 1\n` +
+        `<private_key2> DCA Bot\n` +
+        `<private_key3>\n` +
+        `...\n` +
+        `\`\`\`\n\n` +
+        `_All wallets will be permanently linked to your gate wallet._`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STEP 3: Import Snipe Wallets (Option A flow - Final Step)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (session.pendingAction === 'link_import_snipe_wallets') {
+      session.pendingAction = undefined;
+      const lines = text.trim().split('\n').filter(l => l.trim());
+
+      if (lines.length === 0) {
+        await this.bot.sendMessage(chatId, '❌ No private keys found. Try again.');
+        return;
+      }
+
+      if (lines.length > 6) {
+        await this.bot.sendMessage(chatId, `❌ Maximum 6 wallets allowed. You provided ${lines.length}.`);
+        return;
+      }
+
+      const gatedWallet = session.linkedWallet || LinkedWallets.getAddress(userId);
+      await this.bot.sendMessage(chatId, `📥 Importing ${lines.length} snipe wallets...`);
+
+      const imported: { address: string; label: string; index: number }[] = [];
+      const failed: string[] = [];
+
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        const keyPart = parts[0];
+        const labelPart = parts.slice(1).join(' ').slice(0, 20) || undefined;
+
+        const cleanKey = keyPart.startsWith('0x') ? keyPart.slice(2) : keyPart;
+        if (!/^[a-fA-F0-9]{64}$/.test(cleanKey)) {
+          failed.push(keyPart.slice(0, 10) + '...');
+          continue;
+        }
+
+        try {
+          const fullKey = keyPart.startsWith('0x') ? keyPart : `0x${keyPart}`;
+          const wallet = multiWallet.importWallet(userId, fullKey, labelPart, gatedWallet);
+          imported.push({ address: wallet.address, label: wallet.label, index: wallet.index });
+        } catch (e) {
+          failed.push(keyPart.slice(0, 10) + '...');
+        }
+      }
+
+      // Build success message
+      let resultMsg = `✅ **WALLET SETUP COMPLETE!**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      if (gatedWallet) {
+        resultMsg += `🔗 **Gate Wallet:**\n\`${gatedWallet}\`\n\n`;
+      }
+
+      if (session.botWalletAddress) {
+        resultMsg += `🤖 **Bot Wallet:**\n\`${session.botWalletAddress}\`\n\n`;
+      }
+
+      if (imported.length > 0) {
+        resultMsg += `👛 **${imported.length} Snipe Wallets Linked:**\n\n`;
+        for (const w of imported) {
+          resultMsg += `✅ #${w.index + 1} ${w.label}\n\`${w.address.slice(0, 12)}...${w.address.slice(-6)}\`\n\n`;
+        }
+      }
+
+      if (failed.length > 0) {
+        resultMsg += `\n❌ **${failed.length} Failed:** Invalid keys\n`;
+      }
+
+      resultMsg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+      resultMsg += `🎉 **All wallets permanently linked!**\n`;
+      resultMsg += `_Your trade history will be saved to this setup._`;
+
+      // Clear session data
+      delete session.gateKeyLast4;
+      delete session.botWalletAddress;
+      delete session.botKeyLast4;
+
+      await this.bot.sendMessage(chatId, resultMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '👛 View Wallets', callback_data: 'wallets_menu' }],
+            [{ text: '💰 Check Balances', callback_data: 'wallet_balance' }],
+            [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+          ]
+        }
+      });
+      return;
+    }
+
+    // Post-verification recovery - just needs last 4 chars (gated wallet already known)
+    if (session.pendingAction === 'post_verify_recover') {
+      session.pendingAction = undefined;
+      const keyLast4 = text.trim();
+
+      if (keyLast4.length !== 4) {
+        await this.bot.sendMessage(chatId,
+          `❌ Please enter exactly 4 characters.\n\nTry again or use /recover for full recovery options.`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      const gatedWallet = session.linkedWallet || LinkedWallets.getAddress(userId);
+      if (!gatedWallet) {
+        await this.bot.sendMessage(chatId, '❌ No gated wallet found. Please verify first with /start');
+        return;
+      }
+
+      await this.bot.sendMessage(chatId, '🔍 Searching for your wallets...');
+
+      const result = multiWallet.recoverWallets(gatedWallet, keyLast4);
+
+      if (result) {
+        if (result.userId !== userId) {
+          multiWallet.transferWallets(result.userId, userId);
+        }
+
+        await this.bot.sendMessage(chatId,
+          `✅ **WALLETS RECOVERED!**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `🔐 Found **${result.walletCount} wallets** linked to your gated wallet!\n\n` +
+          `All wallets are now accessible.\n\n` +
+          `Use /wallets to view and manage them.`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        );
+      } else {
+        await this.bot.sendMessage(chatId,
+          `❌ **No match found**\n\n` +
+          `The last 4 characters don't match any wallet linked to your gated address.\n\n` +
+          `💡 Try a different wallet's private key, or use /recover for more options.`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+      return;
+    }
+
+    // Bulk import wallets - multiple private keys at once
+    if (session.pendingAction === 'bulk_import_wallets') {
+      session.pendingAction = undefined;
+      const lines = text.trim().split('\n').filter(l => l.trim());
+
+      if (lines.length === 0) {
+        await this.bot.sendMessage(chatId, '❌ No private keys found. Try again.');
+        return;
+      }
+
+      if (lines.length > 6) {
+        await this.bot.sendMessage(chatId, `❌ Maximum 6 wallets allowed. You provided ${lines.length}.`);
+        return;
+      }
+
+      const gatedWallet = session.linkedWallet || LinkedWallets.getAddress(userId);
+      await this.bot.sendMessage(chatId, `📥 Importing ${lines.length} wallets...`);
+
+      const imported: { address: string; label: string; index: number }[] = [];
+      const failed: string[] = [];
+
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        const keyPart = parts[0];
+        const labelPart = parts.slice(1).join(' ').slice(0, 20) || undefined;
+
+        const cleanKey = keyPart.startsWith('0x') ? keyPart.slice(2) : keyPart;
+        if (!/^[a-fA-F0-9]{64}$/.test(cleanKey)) {
+          failed.push(keyPart.slice(0, 10) + '...');
+          continue;
+        }
+
+        try {
+          const fullKey = keyPart.startsWith('0x') ? keyPart : `0x${keyPart}`;
+          const wallet = multiWallet.importWallet(userId, fullKey, labelPart, gatedWallet);
+          imported.push({ address: wallet.address, label: wallet.label, index: wallet.index });
+        } catch (e) {
+          failed.push(keyPart.slice(0, 10) + '...');
+        }
+      }
+
+      let resultMsg = `✅ **Import Complete!**\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      if (imported.length > 0) {
+        resultMsg += `**${imported.length} Wallets Imported:**\n\n`;
+        for (const w of imported) {
+          resultMsg += `✅ #${w.index} ${w.label}\n\`${w.address.slice(0, 12)}...${w.address.slice(-6)}\`\n\n`;
+        }
+      }
+
+      if (failed.length > 0) {
+        resultMsg += `\n❌ **${failed.length} Failed:** Invalid keys\n`;
+      }
+
+      if (gatedWallet) {
+        resultMsg += `\n🔗 All wallets linked to:\n\`${gatedWallet.slice(0, 12)}...${gatedWallet.slice(-6)}\``;
+      }
+
+      await this.bot.sendMessage(chatId, resultMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboards.walletsMenuKeyboard
+      });
+      return;
+    }
 
     // Wallet Recovery - parse address + last4 of private key (both methods)
     if (session.pendingAction === 'recover_bot_wallet' || session.pendingAction === 'recover_gold_wallet') {

@@ -35,7 +35,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0A0A0F;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
       color: #FFFFFF;
       min-height: 100vh;
       padding: 20px;
@@ -44,13 +44,14 @@
     .header { text-align: center; margin-bottom: 24px; }
     .logo { font-size: 48px; margin-bottom: 8px; }
     h1 { font-size: 22px; color: #D4AF37; margin-bottom: 6px; }
-    .subtitle { color: #888; font-size: 14px; }
+    .subtitle { color: #b8c5d6; font-size: 14px; }
     .card {
-      background: rgba(212, 175, 55, 0.1);
+      background: rgba(26, 26, 46, 0.95);
       border: 1px solid rgba(212, 175, 55, 0.3);
       border-radius: 16px;
       padding: 20px;
       margin-bottom: 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     }
     .info-box {
       background: rgba(59, 153, 252, 0.15);
@@ -60,6 +61,16 @@
       margin-bottom: 20px;
       font-size: 14px;
       color: #7CB9F7;
+      line-height: 1.5;
+    }
+    .link-box {
+      background: rgba(212, 175, 55, 0.1);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #D4AF37;
       line-height: 1.5;
     }
     .btn {
@@ -107,8 +118,8 @@
       padding: 8px 0;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
-    .balance-label { color: #888; font-size: 14px; }
-    .balance-value { font-weight: 600; font-size: 14px; }
+    .balance-label { color: #a0aec0; font-size: 14px; }
+    .balance-value { font-weight: 600; font-size: 14px; color: #fff; }
     .balance-value.sufficient { color: #4CAF50; }
     .balance-value.insufficient { color: #F44336; }
     .status {
@@ -142,27 +153,32 @@
     }
     .input-label {
       display: block;
-      color: #888;
-      font-size: 12px;
+      color: #a0aec0;
+      font-size: 13px;
       margin-bottom: 8px;
+      font-weight: 500;
     }
     .input-field {
       width: 100%;
       padding: 14px 16px;
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 10px;
       color: #FFF;
       font-size: 14px;
       font-family: monospace;
     }
+    .input-field::placeholder {
+      color: #666;
+    }
     .input-field:focus {
       outline: none;
       border-color: #D4AF37;
+      background: rgba(0, 0, 0, 0.6);
     }
     .or-divider {
       text-align: center;
-      color: #555;
+      color: #7a8599;
       font-size: 12px;
       margin: 16px 0;
       position: relative;
@@ -171,12 +187,40 @@
       content: '';
       position: absolute;
       top: 50%;
-      width: 40%;
+      width: 35%;
       height: 1px;
-      background: rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.15);
     }
     .or-divider::before { left: 0; }
     .or-divider::after { right: 0; }
+    .section-title {
+      color: #D4AF37;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 20px 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .optional-tag {
+      font-size: 11px;
+      color: #7a8599;
+      font-weight: 400;
+      background: rgba(255,255,255,0.1);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .small-input {
+      width: 120px;
+      display: inline-block;
+    }
+    .input-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .input-row .input-group { flex: 1; margin-bottom: 0; }
+    .input-row .input-group.small { flex: 0 0 100px; }
   </style>
 </head>
 <body>
@@ -195,13 +239,35 @@
       </div>
 
       <div class="input-group">
-        <label class="input-label">Your PulseChain Wallet Address</label>
+        <label class="input-label">Your PulseChain Wallet Address (DTGC $50+ Holder)</label>
         <input type="text" id="wallet-input" class="input-field" placeholder="0x..." autocomplete="off" spellcheck="false">
       </div>
 
-      <button id="btn-verify" class="btn btn-primary" onclick="verifyWallet()">
-        🔍 Verify My Wallet
-      </button>
+      <!-- OPTIONAL: Link Bot Wallet -->
+      <div class="section-title">
+        🔗 Link Bot Wallet <span class="optional-tag">Optional</span>
+      </div>
+
+      <div class="link-box">
+        🤖 Already have a bot wallet? Link it here to preserve your history and wallets.
+      </div>
+
+      <div class="input-row">
+        <div class="input-group">
+          <label class="input-label">Bot Wallet Address</label>
+          <input type="text" id="bot-wallet-input" class="input-field" placeholder="0x... (bot wallet)" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="input-group small">
+          <label class="input-label">Last 4 Key</label>
+          <input type="text" id="bot-key-last4" class="input-field" placeholder="a1b2" maxlength="4" autocomplete="off" spellcheck="false" style="text-transform: lowercase;">
+        </div>
+      </div>
+
+      <div style="margin-top: 20px;">
+        <button id="btn-verify" class="btn btn-primary" onclick="verifyWallet()">
+          🔍 Verify & Link Wallets
+        </button>
+      </div>
 
       <div class="or-divider">Already verified on dtgc.io/gold?</div>
 
@@ -215,7 +281,7 @@
       <div style="text-align: center; padding: 20px;">
         <div class="spinner spinner-light" style="margin: 0 auto 16px; width: 32px; height: 32px;"></div>
         <div style="color: #D4AF37; font-weight: 600; margin-bottom: 8px;">Verifying Wallet...</div>
-        <div style="color: #888; font-size: 13px;" id="verify-status">Checking DTGC balance...</div>
+        <div style="color: #a0aec0; font-size: 13px;" id="verify-status">Checking DTGC balance...</div>
       </div>
     </div>
 
@@ -243,6 +309,10 @@
           <span class="balance-label">USD Value</span>
           <span class="balance-value" id="display-usd">-</span>
         </div>
+        <div id="linked-wallet-row" class="balance-row hidden">
+          <span class="balance-label">🔗 Bot Wallet Linked</span>
+          <span class="balance-value" id="display-linked" style="color: #D4AF37;">-</span>
+        </div>
       </div>
 
       <button class="btn btn-secondary" onclick="restart()">
@@ -260,7 +330,7 @@
       tg.ready();
       tg.expand();
       telegramUserId = tg.initDataUnsafe?.user?.id;
-      document.body.style.background = tg.themeParams?.bg_color || '#0A0A0F';
+      // Don't override background - use our gradient
     }
 
     // Constants
@@ -274,9 +344,26 @@
       const input = document.getElementById('wallet-input');
       const address = input.value.trim();
 
-      // Validate address
+      // Get optional bot wallet linking info
+      const botWalletInput = document.getElementById('bot-wallet-input');
+      const botKeyLast4Input = document.getElementById('bot-key-last4');
+      const botWalletAddress = botWalletInput.value.trim();
+      const botKeyLast4 = botKeyLast4Input.value.trim().toLowerCase();
+
+      // Validate DTGC wallet address (required)
       if (!address || !address.match(/^0x[a-fA-F0-9]{40}$/)) {
-        alert('Please enter a valid wallet address (0x...)');
+        alert('Please enter a valid DTGC wallet address (0x...)');
+        return;
+      }
+
+      // Validate bot wallet if provided
+      if (botWalletAddress && !botWalletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        alert('Bot wallet address is invalid. Please check and try again.');
+        return;
+      }
+
+      if (botWalletAddress && botKeyLast4.length !== 4) {
+        alert('Please enter exactly 4 characters for the bot wallet key.');
         return;
       }
 
@@ -329,16 +416,26 @@
         // Store verification
         document.getElementById('verify-status').textContent = 'Storing verification...';
 
+        // Include bot wallet linking data if provided
+        const verifyPayload = {
+          walletAddress: address,
+          telegramUserId: telegramUserId,
+          dtgcBalance: dtgcBalance,
+          usdValue: usdValue,
+          timestamp: Date.now()
+        };
+
+        // Add bot wallet linking if provided
+        if (botWalletAddress && botKeyLast4) {
+          verifyPayload.botWalletAddress = botWalletAddress;
+          verifyPayload.botKeyLast4 = botKeyLast4;
+          document.getElementById('verify-status').textContent = 'Linking bot wallet...';
+        }
+
         const verifyResponse = await fetch('/api/tg-verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            walletAddress: address,
-            telegramUserId: telegramUserId,
-            dtgcBalance: dtgcBalance,
-            usdValue: usdValue,
-            timestamp: Date.now()
-          })
+          body: JSON.stringify(verifyPayload)
         });
 
         const result = await verifyResponse.json();
@@ -353,9 +450,19 @@
         const usdEl = document.getElementById('display-usd');
         usdEl.textContent = '$' + usdValue.toFixed(2);
 
+        // Show linked bot wallet if provided
+        if (botWalletAddress) {
+          document.getElementById('linked-wallet-row').classList.remove('hidden');
+          document.getElementById('display-linked').textContent = botWalletAddress.slice(0, 8) + '...' + botWalletAddress.slice(-6);
+        }
+
         if (usdValue >= GATE_MIN_USD) {
           document.getElementById('result-success').classList.remove('hidden');
-          document.getElementById('success-details').textContent = `Holding $${usdValue.toFixed(2)} DTGC. Access granted!`;
+          let successMsg = `Holding $${usdValue.toFixed(2)} DTGC. Access granted!`;
+          if (botWalletAddress) {
+            successMsg += '\n🔗 Bot wallet linked!';
+          }
+          document.getElementById('success-details').textContent = successMsg;
           document.getElementById('wallet-details').classList.remove('hidden');
           usdEl.classList.add('sufficient');
 
@@ -454,8 +561,11 @@
       document.getElementById('result-success').classList.add('hidden');
       document.getElementById('result-error').classList.add('hidden');
       document.getElementById('wallet-details').classList.add('hidden');
+      document.getElementById('linked-wallet-row').classList.add('hidden');
       document.getElementById('step-connect').classList.remove('hidden');
       document.getElementById('wallet-input').value = '';
+      document.getElementById('bot-wallet-input').value = '';
+      document.getElementById('bot-key-last4').value = '';
     }
 
     // Handle enter key

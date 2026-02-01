@@ -165,6 +165,52 @@ export class MultiWalletManager {
     return wallets;
   }
 
+  /**
+   * Generate a specific number of new wallets (up to 6 total)
+   * Used for "Option B: Generate New Setup" after gate verification
+   */
+  async generateMultiple(userId: string, count: number, linkedWalletAddress?: string): Promise<WalletInfo[]> {
+    const existing = this.store.countByUser(userId);
+    const toGenerate = Math.min(count, 6 - existing);
+
+    if (toGenerate <= 0) {
+      // Return existing wallets if already at max
+      return this.getUserWallets(userId);
+    }
+
+    const wallets: WalletInfo[] = [];
+
+    for (let i = 0; i < toGenerate; i++) {
+      const walletIndex = existing + i; // 0-indexed
+      const hdWallet = ethers.Wallet.createRandom();
+      const encryptedKey = this.encrypt(hdWallet.privateKey);
+      const keyLast4 = hdWallet.privateKey.slice(-4);
+
+      this.store.insert({
+        userId,
+        walletIndex,
+        address: hdWallet.address,
+        encryptedKey,
+        label: `Sniper ${walletIndex + 1}`,
+        isActive: true,
+        createdAt: Date.now(),
+        linkedWalletAddress: linkedWalletAddress?.toLowerCase(),
+        keyLast4
+      });
+
+      wallets.push({
+        index: walletIndex,
+        address: hdWallet.address,
+        label: `Sniper ${walletIndex + 1}`,
+        balance: 0n,
+        isActive: true,
+      });
+    }
+
+    console.log(`🔐 Generated ${wallets.length} new wallets for user ${userId}${linkedWalletAddress ? ` linked to ${linkedWalletAddress.slice(0, 10)}...` : ''}`);
+    return wallets;
+  }
+
   getUserWalletCount(userId: string): number {
     return this.store.countByUser(userId);
   }

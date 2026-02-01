@@ -239,6 +239,11 @@ export interface TradeHistoryEntry {
   type: TradeHistoryType;
   status: TradeHistoryStatus;
 
+  // Wallet linking - ties history to verification wallet
+  gatedWalletAddress?: string;  // $50 DTGC verification wallet
+  snipeWalletAddress?: string;  // Which snipe wallet executed the trade
+  snipeWalletIndex?: number;    // Snipe wallet index (1-6)
+
   // Token info
   tokenAddress: string;
   tokenSymbol: string;

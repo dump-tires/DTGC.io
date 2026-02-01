@@ -110,6 +110,9 @@ export interface TradeHistoryEntry {
     chatId: string;
     type: TradeHistoryType;
     status: TradeHistoryStatus;
+    gatedWalletAddress?: string;
+    snipeWalletAddress?: string;
+    snipeWalletIndex?: number;
     tokenAddress: string;
     tokenSymbol: string;
     tokenName?: string;

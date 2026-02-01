@@ -72,10 +72,15 @@ exports.helpMenuKeyboard = {
 exports.walletsMenuKeyboard = {
     inline_keyboard: [
         [
-            { text: '🔗 Verify & Link Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } },
+            { text: '🔗 Verify $50 DTGC Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } },
         ],
         [
-            { text: '🆕 Generate 6 Snipe Wallets', callback_data: 'wallets_generate_6' },
+            { text: '🔐 Recover Wallets', callback_data: 'post_verify_recover' },
+            { text: '🆕 Generate 6 New', callback_data: 'wallets_generate_6' },
+        ],
+        [
+            { text: '📥 Import 1 Wallet', callback_data: 'wallets_import' },
+            { text: '📥 Bulk Import (6)', callback_data: 'bulk_import_wallets' },
         ],
         [
             { text: '💰 View Balances', callback_data: 'wallets_balance' },
@@ -87,7 +92,6 @@ exports.walletsMenuKeyboard = {
         ],
         [
             { text: '🔑 Export Keys', callback_data: 'wallets_export' },
-            { text: '📥 Import Wallet', callback_data: 'wallets_import' },
         ],
         [
             { text: '🔙 Back', callback_data: 'main_menu' },

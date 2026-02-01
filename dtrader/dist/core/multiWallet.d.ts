@@ -17,6 +17,11 @@ export declare class MultiWalletManager {
     private encrypt;
     private decrypt;
     generateWallets(userId: string, linkedWalletAddress?: string): Promise<WalletInfo[]>;
+    /**
+     * Generate a specific number of new wallets (up to 6 total)
+     * Used for "Option B: Generate New Setup" after gate verification
+     */
+    generateMultiple(userId: string, count: number, linkedWalletAddress?: string): Promise<WalletInfo[]>;
     getUserWalletCount(userId: string): number;
     /**
      * Link existing wallets to a gated wallet address (called after gate verification)
