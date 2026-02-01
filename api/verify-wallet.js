@@ -104,6 +104,23 @@ export default async function handler(req, res) {
     // Generate Telegram deep link
     const telegramLink = `https://t.me/${BOT_USERNAME}?start=verify_${token}`;
 
+    // Also store in unified verification system (for wallet-based lookups)
+    try {
+      await fetch(`${req.headers.origin || 'https://dtgc.io'}/api/tg-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: address,
+          dtgcBalance: balanceResult.balance,
+          usdValue: balanceUsd,
+          telegramUserId: telegramId || null, // May be null until they click the deep link
+          timestamp: timestamp,
+        }),
+      });
+    } catch (e) {
+      console.log('Note: Could not sync to unified verification system:', e.message);
+    }
+
     return res.status(200).json({
       verified: true,
       balance: balanceResult.balance,
