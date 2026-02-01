@@ -507,6 +507,54 @@
             🎯 Arm Sniper
           </button>
 
+          {/* Share P&L Section */}
+          <div style={{
+            marginTop: '24px',
+            padding: '16px',
+            background: 'rgba(212,175,55,0.1)',
+            borderRadius: '16px',
+            border: '1px solid var(--gold-glow)',
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px',
+              color: 'var(--gold-primary)',
+              fontWeight: 600,
+            }}>
+              📊 Share Your P&L
+            </div>
+            <div style={{
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              marginBottom: '12px',
+            }}>
+              Generate a beautiful P&L card and share it on Telegram to flex your gains!
+            </div>
+            <a
+              href={`${CONFIG.TELEGRAM_BOT}?start=pnl_card`}
+              target="_blank"
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '12px',
+                background: 'linear-gradient(135deg, #0088cc, #005599)',
+                border: 'none',
+                borderRadius: '10px',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                textAlign: 'center',
+                textDecoration: 'none',
+                fontFamily: 'inherit',
+              }}
+            >
+              📤 Share P&L to Telegram
+            </a>
+          </div>
+
           <div style={{ marginTop: '16px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
             Also available on{' '}
             <a href={CONFIG.TELEGRAM_BOT} target="_blank" style={{ color: 'var(--gold-primary)' }}>

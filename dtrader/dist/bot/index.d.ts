@@ -119,6 +119,11 @@ export declare class DtraderBot {
      */
     private showPnLSummary;
     /**
+     * Generate and send P&L card image
+     * Uses Mando sniper image as background
+     */
+    private generatePnLCard;
+    /**
      * Stop the bot
      */
     stop(): Promise<void>;

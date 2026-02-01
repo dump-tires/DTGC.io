@@ -1,5 +1,16 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { generatePnLMessage, positionStore, calculatePnL, formatNumber } from '../utils/pnlCard';
+import {
+  generatePnLMessage,
+  positionStore,
+  calculatePnL,
+  formatNumber,
+  generatePnLCardImage,
+  generatePnLTextCard,
+  generateSingleTradeCard,
+  canGenerateImages,
+  PnLSummary,
+  TradeForCard
+} from '../utils/pnlCard';
 import { ethers } from 'ethers';
 import { config } from '../config';
 import { tokenGate } from '../gate/tokenGate';
@@ -383,6 +394,17 @@ export class DtraderBot {
             }
           );
         }
+        return;
+      }
+
+      // Handle P&L card deep link from Gold Suite
+      if (param === 'pnl_card') {
+        await this.bot.sendMessage(chatId,
+          `📊 **Generate P&L Card**\n\n` +
+          `Share your trading performance with a beautiful P&L card!\n\n` +
+          `_Generating your card..._`
+        );
+        await this.generatePnLCard(chatId, userId);
         return;
       }
 
@@ -824,6 +846,53 @@ export class DtraderBot {
         `✅ Cancelled ${cancelled} pending snipes.`,
         { reply_markup: keyboards.snipeMenuKeyboard }
       );
+      return;
+    }
+
+    // Delete all pending snipes
+    if (data === 'snipe_delete_pending') {
+      const pending = session.snipeOrders.filter(o => o.status === 'pending');
+      // Unwatch all pending tokens
+      for (const order of pending) {
+        try { graduationSniper.unwatchToken(order.tokenAddress); } catch {}
+      }
+      session.snipeOrders = session.snipeOrders.filter(o => o.status !== 'pending');
+      await this.bot.sendMessage(chatId,
+        `🗑️ **Deleted ${pending.length} pending snipes**\n\n_All pending orders removed._`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.snipeMenuKeyboard }
+      );
+      return;
+    }
+
+    // Clear completed/filled snipes (keep pending)
+    if (data === 'snipe_clear_completed') {
+      const cleared = session.snipeOrders.filter(o => o.status !== 'pending').length;
+      session.snipeOrders = session.snipeOrders.filter(o => o.status === 'pending');
+      await this.bot.sendMessage(chatId,
+        `🧹 **Cleared ${cleared} completed orders**\n\n_History cleaned. Pending orders kept._`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.snipeMenuKeyboard }
+      );
+      return;
+    }
+
+    // Delete ALL snipes
+    if (data === 'snipe_delete_all') {
+      const total = session.snipeOrders.length;
+      // Unwatch all tokens
+      for (const order of session.snipeOrders) {
+        try { graduationSniper.unwatchToken(order.tokenAddress); } catch {}
+      }
+      session.snipeOrders = [];
+      await this.bot.sendMessage(chatId,
+        `🗑️ **Deleted ALL ${total} snipe orders**\n\n_Clean slate!_`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.snipeMenuKeyboard }
+      );
+      return;
+    }
+
+    // Generate P&L Card
+    if (data === 'generate_pnl_card') {
+      await this.generatePnLCard(chatId, userId);
       return;
     }
 
@@ -2779,8 +2848,22 @@ export class DtraderBot {
     msg += `_${orders.filter(o => o.status === 'pending').length} pending, `;
     msg += `${orders.filter(o => o.status === 'filled').length} filled_`;
 
+    // Add bulk action buttons
+    const pendingCount = orders.filter(o => o.status === 'pending').length;
+    const completedCount = orders.filter(o => o.status !== 'pending').length;
+
+    if (pendingCount > 0) {
+      buttons.push([{ text: `🗑️ Delete All Pending (${pendingCount})`, callback_data: 'snipe_delete_pending' }]);
+    }
+    if (completedCount > 0) {
+      buttons.push([{ text: `🧹 Clear Completed (${completedCount})`, callback_data: 'snipe_clear_completed' }]);
+    }
+    if (orders.length > 0) {
+      buttons.push([{ text: '🗑️ Delete ALL Snipes', callback_data: 'snipe_delete_all' }]);
+    }
+
     buttons.push([{ text: '🔥 Add New Snipe', callback_data: 'pump_near_grad' }]);
-    buttons.push([{ text: '⚜️ Gold Suite P&L', url: 'https://dtgc.io/gold' }]);
+    buttons.push([{ text: '📊 Generate P&L Card', callback_data: 'generate_pnl_card' }]);
     buttons.push([{ text: '🔙 Main Menu', callback_data: 'main_menu' }]);
 
     await this.bot.sendMessage(chatId, msg, {
@@ -3356,6 +3439,175 @@ Hold $50+ of DTGC to trade
         ],
       },
     });
+  }
+
+  /**
+   * Generate and send P&L card image
+   * Uses Mando sniper image as background
+   */
+  private async generatePnLCard(chatId: string, userId: string): Promise<void> {
+    try {
+      await this.bot.sendMessage(chatId, '⏳ Generating your P&L card...');
+
+      const session = this.getSession(chatId);
+
+      // Gather data from snipe orders
+      const filledOrders = session.snipeOrders.filter(o => o.status === 'filled');
+      const cancelledOrders = session.snipeOrders.filter(o => o.status === 'cancelled');
+
+      // Also get from trade history
+      const completedTrades = TradeHistory.getCompletedTrades(userId, 50);
+
+      // Build trades array for the card
+      const trades: TradeForCard[] = [];
+      let totalPnlPls = 0;
+      let totalInvested = 0;
+      let wins = 0;
+      let losses = 0;
+      let bestTrade: { symbol: string; pnlPercent: number } | null = null;
+      let worstTrade: { symbol: string; pnlPercent: number } | null = null;
+
+      // Add from completed trade history
+      for (const entry of completedTrades) {
+        const pnlPls = parseFloat(entry.pnlPls || '0');
+        const amountPls = parseFloat(entry.amountPls || '0');
+        const pnlPercent = entry.pnlPercent || 0;
+        const isWin = pnlPercent > 0;
+
+        trades.push({
+          symbol: entry.tokenSymbol || entry.tokenAddress.slice(0, 8),
+          amountPls,
+          pnlPls,
+          pnlPercent,
+          isWin,
+        });
+
+        totalPnlPls += pnlPls;
+        totalInvested += amountPls;
+        if (isWin) wins++; else if (pnlPercent < 0) losses++;
+
+        if (!bestTrade || pnlPercent > bestTrade.pnlPercent) {
+          bestTrade = { symbol: entry.tokenSymbol || '???', pnlPercent };
+        }
+        if (!worstTrade || pnlPercent < worstTrade.pnlPercent) {
+          worstTrade = { symbol: entry.tokenSymbol || '???', pnlPercent };
+        }
+      }
+
+      // Add from filled snipe orders if they have entry/exit info
+      for (const order of filledOrders) {
+        if (order.entryPrice && order.tokensReceived) {
+          const amountPls = order.amountPls;
+          // Estimate current value (would need price check for accuracy)
+          const pnlPercent = order.sellProfitPls
+            ? ((order.sellProfitPls - amountPls) / amountPls) * 100
+            : 0;
+          const pnlPls = order.sellProfitPls ? order.sellProfitPls - amountPls : 0;
+          const isWin = pnlPercent > 0;
+
+          if (pnlPercent !== 0) {
+            trades.push({
+              symbol: order.tokenSymbol || order.tokenAddress.slice(0, 8),
+              amountPls,
+              pnlPls,
+              pnlPercent,
+              isWin,
+            });
+
+            totalPnlPls += pnlPls;
+            totalInvested += amountPls;
+            if (isWin) wins++; else losses++;
+
+            if (!bestTrade || pnlPercent > bestTrade.pnlPercent) {
+              bestTrade = { symbol: order.tokenSymbol || '???', pnlPercent };
+            }
+            if (!worstTrade || pnlPercent < worstTrade.pnlPercent) {
+              worstTrade = { symbol: order.tokenSymbol || '???', pnlPercent };
+            }
+          }
+        }
+      }
+
+      // Calculate overall percentage
+      const totalPnlPercent = totalInvested > 0 ? (totalPnlPls / totalInvested) * 100 : 0;
+
+      // Build summary
+      const summary: PnLSummary = {
+        totalTrades: wins + losses,
+        wins,
+        losses,
+        totalPnlPls,
+        totalPnlPercent,
+        bestTrade,
+        worstTrade,
+      };
+
+      // Get username if available
+      let username: string | undefined;
+      try {
+        const chatInfo = await this.bot.getChat(chatId);
+        username = (chatInfo as any).username;
+      } catch (e) {
+        // Username not available
+      }
+
+      // Try to generate image, fall back to text
+      if (canGenerateImages()) {
+        try {
+          const imageBuffer = await generatePnLCardImage(summary, trades, username);
+
+          // Send as photo
+          await this.bot.sendPhoto(chatId, imageBuffer, {
+            caption: `⚜️ **Your P&L Card**\n\n` +
+              `📊 ${summary.totalTrades} trades | ` +
+              `${summary.wins} wins | ${summary.losses} losses\n` +
+              `💰 Total P&L: ${totalPnlPls >= 0 ? '+' : ''}${formatNumber(totalPnlPls)} PLS\n\n` +
+              `_Share this card to flex your gains!_\n` +
+              `🌐 dtgc.io/gold`,
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🔄 Refresh Card', callback_data: 'generate_pnl_card' }],
+                [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
+                [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+              ],
+            },
+          });
+          return;
+        } catch (imgError) {
+          console.log('Image generation failed, falling back to text:', imgError);
+        }
+      }
+
+      // Fall back to text-based P&L card
+      const textCard = generatePnLTextCard(summary, trades, username);
+      await this.bot.sendMessage(chatId, textCard, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔄 Refresh Card', callback_data: 'generate_pnl_card' }],
+            [{ text: '📋 My Orders', callback_data: 'snipe_list' }],
+            [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+          ],
+        },
+      });
+
+    } catch (error: any) {
+      console.error('Failed to generate P&L card:', error);
+      await this.bot.sendMessage(chatId,
+        `❌ Failed to generate P&L card: ${error.message}\n\n` +
+        `Try again or view your P&L in Gold Suite.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '⚜️ Open Gold Suite', url: 'https://dtgc.io/gold' }],
+              [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+            ],
+          },
+        }
+      );
+    }
   }
 
   /**
