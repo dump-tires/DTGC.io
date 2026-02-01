@@ -142,19 +142,29 @@ export const snipeTargetsStore = createStore<{
 export interface LinkedWalletEntry {
   id: string;           // vistoId (Telegram user ID)
   chatId: string;       // Telegram chat ID
-  walletAddress: string; // Linked external wallet address
+  walletAddress: string; // Linked external wallet address (DTGC gate wallet)
   balanceUsd: number;   // USD balance at time of verification
   verifiedAt: number;   // Timestamp of verification
   expiresAt: number;    // When verification expires (24 hours)
+  // Bot wallet linking (optional - for wallet recovery/linking)
+  botWalletAddress?: string;  // Bot wallet address linked during verification
+  botKeyLast4?: string;       // Last 4 chars of bot wallet key for verification
 }
 
 export const linkedWalletsStore = createStore<LinkedWalletEntry>('linkedWallets');
 
 export const LinkedWallets = {
   /**
-   * Save a linked wallet
+   * Save a linked wallet (with optional bot wallet linking)
    */
-  link: (vistoId: string, chatId: string, walletAddress: string, balanceUsd: number): LinkedWalletEntry => {
+  link: (
+    vistoId: string,
+    chatId: string,
+    walletAddress: string,
+    balanceUsd: number,
+    botWalletAddress?: string,
+    botKeyLast4?: string
+  ): LinkedWalletEntry => {
     // Remove any existing entry for this user
     linkedWalletsStore.delete((e) => e.id === vistoId);
 
@@ -165,11 +175,24 @@ export const LinkedWallets = {
       balanceUsd,
       verifiedAt: Date.now(),
       expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      botWalletAddress: botWalletAddress?.toLowerCase(),
+      botKeyLast4: botKeyLast4?.toLowerCase(),
     };
 
     linkedWalletsStore.insert(entry);
-    console.log(`🔗 Linked wallet for user ${vistoId}: ${walletAddress.slice(0, 10)}...`);
+    console.log(`🔗 Linked wallet for user ${vistoId}: ${walletAddress.slice(0, 10)}...${botWalletAddress ? ` + bot wallet ${botWalletAddress.slice(0, 10)}...` : ''}`);
     return entry;
+  },
+
+  /**
+   * Get bot wallet for a user
+   */
+  getBotWallet: (vistoId: string): { address: string; keyLast4: string } | undefined => {
+    const entry = linkedWalletsStore.findOne((e) => e.id === vistoId);
+    if (entry?.botWalletAddress && entry?.botKeyLast4) {
+      return { address: entry.botWalletAddress, keyLast4: entry.botKeyLast4 };
+    }
+    return undefined;
   },
 
   /**

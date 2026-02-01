@@ -75,6 +75,9 @@ export default async function handler(req, res) {
           balanceUsd: verification.balanceUsd,
           verifiedAt: verification.verifiedAt,
           fresh: ageHours < 1, // Fresh if verified within last hour
+          // Include bot wallet info if stored
+          botWalletAddress: verification.botWalletAddress || null,
+          botKeyLast4: verification.botKeyLast4 || null,
         });
       }
     }
@@ -109,6 +112,9 @@ export default async function handler(req, res) {
         telegramUserId,
         dtgcBalance: providedBalance,
         usdValue: providedUsd,
+        // Bot wallet linking (optional)
+        botWalletAddress,
+        botKeyLast4,
       } = req.body;
 
       // Validate required fields
@@ -199,7 +205,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // Store verification
+      // Store verification (including bot wallet if provided)
       const verification = {
         walletAddress: walletAddress.toLowerCase(),
         telegramUserId: telegramUserId ? String(telegramUserId) : null,
@@ -207,7 +213,12 @@ export default async function handler(req, res) {
         dtgcBalance,
         verifiedAt: Date.now(),
         hasSignature: !!signature,
+        // Bot wallet linking for persistent recovery
+        botWalletAddress: botWalletAddress?.toLowerCase() || null,
+        botKeyLast4: botKeyLast4?.toLowerCase() || null,
       };
+
+      console.log(`[tg-verify] Storing verification${botWalletAddress ? ` with bot wallet ${botWalletAddress.slice(0, 10)}...` : ''}`);
 
       // Store by telegram ID if available
       if (telegramUserId) {

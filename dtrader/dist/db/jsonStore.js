@@ -71,9 +71,9 @@ exports.snipeTargetsStore = createStore('snipeTargets');
 exports.linkedWalletsStore = createStore('linkedWallets');
 exports.LinkedWallets = {
     /**
-     * Save a linked wallet
+     * Save a linked wallet (with optional bot wallet linking)
      */
-    link: (vistoId, chatId, walletAddress, balanceUsd) => {
+    link: (vistoId, chatId, walletAddress, balanceUsd, botWalletAddress, botKeyLast4) => {
         // Remove any existing entry for this user
         exports.linkedWalletsStore.delete((e) => e.id === vistoId);
         const entry = {
@@ -83,10 +83,22 @@ exports.LinkedWallets = {
             balanceUsd,
             verifiedAt: Date.now(),
             expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+            botWalletAddress: botWalletAddress?.toLowerCase(),
+            botKeyLast4: botKeyLast4?.toLowerCase(),
         };
         exports.linkedWalletsStore.insert(entry);
-        console.log(`🔗 Linked wallet for user ${vistoId}: ${walletAddress.slice(0, 10)}...`);
+        console.log(`🔗 Linked wallet for user ${vistoId}: ${walletAddress.slice(0, 10)}...${botWalletAddress ? ` + bot wallet ${botWalletAddress.slice(0, 10)}...` : ''}`);
         return entry;
+    },
+    /**
+     * Get bot wallet for a user
+     */
+    getBotWallet: (vistoId) => {
+        const entry = exports.linkedWalletsStore.findOne((e) => e.id === vistoId);
+        if (entry?.botWalletAddress && entry?.botKeyLast4) {
+            return { address: entry.botWalletAddress, keyLast4: entry.botKeyLast4 };
+        }
+        return undefined;
     },
     /**
      * Get linked wallet for a user

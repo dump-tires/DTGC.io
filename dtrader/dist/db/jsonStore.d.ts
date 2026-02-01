@@ -78,13 +78,22 @@ export interface LinkedWalletEntry {
     balanceUsd: number;
     verifiedAt: number;
     expiresAt: number;
+    botWalletAddress?: string;
+    botKeyLast4?: string;
 }
 export declare const linkedWalletsStore: Store<LinkedWalletEntry>;
 export declare const LinkedWallets: {
     /**
-     * Save a linked wallet
+     * Save a linked wallet (with optional bot wallet linking)
      */
-    link: (vistoId: string, chatId: string, walletAddress: string, balanceUsd: number) => LinkedWalletEntry;
+    link: (vistoId: string, chatId: string, walletAddress: string, balanceUsd: number, botWalletAddress?: string, botKeyLast4?: string) => LinkedWalletEntry;
+    /**
+     * Get bot wallet for a user
+     */
+    getBotWallet: (vistoId: string) => {
+        address: string;
+        keyLast4: string;
+    } | undefined;
     /**
      * Get linked wallet for a user
      */

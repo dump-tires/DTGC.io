@@ -266,14 +266,36 @@ export class DtraderBot {
         verified?: boolean;
         walletAddress?: string;
         balanceUsd?: number;
+        botWalletAddress?: string;
+        botKeyLast4?: string;
       };
       if (verifyData.verified && verifyData.balanceUsd && verifyData.balanceUsd >= 50 && verifyData.walletAddress) {
-        console.log(`✅ Mini App verified wallet for user ${userId}: $${verifyData.balanceUsd}`);
+        console.log(`✅ Mini App verified wallet for user ${userId}: $${verifyData.balanceUsd}${verifyData.botWalletAddress ? ` + bot wallet` : ''}`);
         session.linkedWallet = verifyData.walletAddress;
         session.gateVerified = true;
         session.gateExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
-        // Also persist to local storage
-        LinkedWallets.link(userId, chatId, verifyData.walletAddress, verifyData.balanceUsd);
+
+        // Store bot wallet in session if provided
+        if (verifyData.botWalletAddress) {
+          session.botWalletAddress = verifyData.botWalletAddress;
+          session.botKeyLast4 = verifyData.botKeyLast4;
+        }
+
+        // Persist to local storage with bot wallet info
+        LinkedWallets.link(
+          userId,
+          chatId,
+          verifyData.walletAddress,
+          verifyData.balanceUsd,
+          verifyData.botWalletAddress,
+          verifyData.botKeyLast4
+        );
+
+        // If bot wallet was provided, link snipe wallets to gated wallet
+        if (verifyData.botWalletAddress) {
+          multiWallet.linkWalletsToGatedWallet(userId, verifyData.walletAddress);
+        }
+
         return true;
       }
     } catch (e) {
@@ -1369,17 +1391,25 @@ export class DtraderBot {
     // Wallets menu - show wallet info with import options
     if (data === 'wallets_menu') {
       const gatedWallet = session.linkedWallet || LinkedWallets.getAddress(userId);
+      const linkedEntry = LinkedWallets.get(userId);
+      const botWallet = linkedEntry?.botWalletAddress || session.botWalletAddress;
       const snipeWallets = await multiWallet.getUserWallets(userId);
 
       let msg = `👛 **Wallet Management**\n`;
       msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
       if (gatedWallet) {
-        msg += `🔗 **Gate Wallet:** \`${gatedWallet.slice(0, 10)}...${gatedWallet.slice(-6)}\`\n\n`;
+        msg += `🔗 **Gate Wallet:** \`${gatedWallet.slice(0, 10)}...${gatedWallet.slice(-6)}\`\n`;
       } else {
         msg += `⚠️ **No Gate Wallet Linked**\n`;
-        msg += `Verify your $50 DTGC wallet first!\n\n`;
+        msg += `Verify your $50 DTGC wallet first!\n`;
       }
+
+      if (botWallet) {
+        msg += `🤖 **Bot Wallet:** \`${botWallet.slice(0, 10)}...${botWallet.slice(-6)}\`\n`;
+      }
+
+      msg += `\n`;
 
       if (snipeWallets.length > 0) {
         msg += `👛 **${snipeWallets.length} Snipe Wallets:**\n`;
