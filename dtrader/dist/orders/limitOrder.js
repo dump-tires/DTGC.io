@@ -222,6 +222,8 @@ class LimitOrderEngine extends events_1.EventEmitter {
         };
         this.orderStore.insert(newOrder);
         this.emit('orderCreated', newOrder);
+        // Auto-sync to Vercel backup (non-blocking)
+        this.syncToVercel(params.userId).catch(() => { });
         return newOrder;
     }
     /**
@@ -248,6 +250,8 @@ class LimitOrderEngine extends events_1.EventEmitter {
         };
         this.dcaStore.insert(order);
         this.emit('dcaCreated', order);
+        // Auto-sync to Vercel backup (non-blocking)
+        this.syncToVercel(params.userId).catch(() => { });
         return order;
     }
     /**
@@ -257,6 +261,8 @@ class LimitOrderEngine extends events_1.EventEmitter {
         const result = this.orderStore.cancel(orderId, userId);
         if (result) {
             this.emit('orderCancelled', orderId);
+            // Sync to Vercel backup (non-blocking)
+            this.syncToVercel(userId).catch(() => { });
         }
         return result;
     }
@@ -264,7 +270,12 @@ class LimitOrderEngine extends events_1.EventEmitter {
      * Cancel DCA order
      */
     cancelDCAOrder(orderId, userId) {
-        return this.dcaStore.cancel(orderId, userId);
+        const result = this.dcaStore.cancel(orderId, userId);
+        if (result) {
+            // Sync to Vercel backup (non-blocking)
+            this.syncToVercel(userId).catch(() => { });
+        }
+        return result;
     }
     /**
      * Get user's orders
@@ -406,13 +417,21 @@ class LimitOrderEngine extends events_1.EventEmitter {
      * Mark order as filled
      */
     markOrderFilled(orderId, txHash) {
+        const order = this.orderStore.findById(orderId);
         this.orderStore.update(orderId, { status: 'filled', filledAt: Date.now(), txHash });
+        // Sync to Vercel backup
+        if (order)
+            this.syncToVercel(order.userId).catch(() => { });
     }
     /**
      * Mark order as failed
      */
     markOrderFailed(orderId, error) {
+        const order = this.orderStore.findById(orderId);
         this.orderStore.update(orderId, { status: 'failed', error });
+        // Sync to Vercel backup
+        if (order)
+            this.syncToVercel(order.userId).catch(() => { });
     }
     /**
      * Update DCA after successful buy
@@ -428,6 +447,8 @@ class LimitOrderEngine extends events_1.EventEmitter {
             nextBuyAt: Date.now() + (order.intervalSeconds * 1000),
             status: isComplete ? 'filled' : 'active',
         });
+        // Sync to Vercel backup
+        this.syncToVercel(order.userId).catch(() => { });
     }
     /**
      * Stop the engine
