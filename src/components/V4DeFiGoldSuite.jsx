@@ -740,6 +740,14 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const TARGET_TOKENS_SOLD = 800_000_000; // 800M tokens = graduation
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // 🏆 PROBABLE WINS - AI-scored trading opportunities via DEXScreener
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [probableWins, setProbableWins] = useState([]);
+  const [winsLoading, setWinsLoading] = useState(false);
+  const [winsError, setWinsError] = useState(null);
+  const DEXSCREENER_API = 'https://api.dexscreener.com/latest';
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // 🎯 SNIPER - Paste CA, Set Limit, Snipe/Sell with P&L Tracker
   // ═══════════════════════════════════════════════════════════════════════════
   const [sniperCA, setSniperCA] = useState('');
@@ -1498,6 +1506,111 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       fetchPreBondedTokens();
     }
   }, [activeTab, preBondedTokens.length, fetchPreBondedTokens]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🏆 PROBABLE WINS: Fetch and score top tokens from DEXScreener
+  // ═══════════════════════════════════════════════════════════════════════════
+  const calculateWinScore = (pair) => {
+    let score = 50;
+    const reasons = [];
+
+    const volumeToLiq = (pair.volume?.h24 || 0) / (pair.liquidity?.usd || 1);
+    if (volumeToLiq > 2) { score += 15; reasons.push('🔥 High volume momentum'); }
+    else if (volumeToLiq > 1) { score += 10; reasons.push('📊 Good trading activity'); }
+    else if (volumeToLiq > 0.5) { score += 5; }
+
+    if ((pair.liquidity?.usd || 0) > 500000) { score += 15; reasons.push('💧 Deep liquidity'); }
+    else if ((pair.liquidity?.usd || 0) > 100000) { score += 10; reasons.push('💧 Solid liquidity'); }
+    else if ((pair.liquidity?.usd || 0) > 50000) { score += 5; }
+    else if ((pair.liquidity?.usd || 0) < 20000) { score -= 10; reasons.push('⚠️ Low liquidity risk'); }
+
+    const h24 = pair.priceChange?.h24 || 0;
+    const h1 = pair.priceChange?.h1 || 0;
+    if (h24 > 20 && h1 < 5 && h1 > -5) { score += 15; reasons.push('📈 Consolidating after pump'); }
+    else if (h24 > 5 && h24 < 30 && h1 > 0) { score += 12; reasons.push('📈 Steady uptrend'); }
+    else if (h24 < -10 && h1 > 2) { score += 10; reasons.push('🔄 Potential reversal'); }
+    else if (h24 > 100) { score -= 10; reasons.push('⚠️ Overextended'); }
+    else if (h24 < -30) { score -= 15; reasons.push('⚠️ Heavy selling'); }
+
+    const buyRatio = (pair.txns?.h24?.buys || 0) / ((pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 1));
+    if (buyRatio > 0.6) { score += 10; reasons.push('🟢 More buyers'); }
+    else if (buyRatio < 0.4) { score -= 5; reasons.push('🔴 More sellers'); }
+
+    const ageHours = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / (1000 * 60 * 60) : 0;
+    if (ageHours > 24 && ageHours < 168) { score += 10; reasons.push('⏰ Sweet spot age'); }
+    else if (ageHours < 6) { score += 5; reasons.push('🆕 Very new'); }
+
+    return { score: Math.max(0, Math.min(100, score)), reasons };
+  };
+
+  const fetchProbableWins = useCallback(async () => {
+    setWinsLoading(true);
+    setWinsError(null);
+
+    try {
+      const response = await fetch(`${DEXSCREENER_API}/dex/search?q=pulsechain`);
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+
+      const data = await response.json();
+      const pairs = (data.pairs || []).filter(
+        p => p.chainId === 'pulsechain' && (p.liquidity?.usd || 0) > 10000
+      );
+
+      pairs.sort((a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
+
+      const seen = new Set();
+      const scored = [];
+
+      for (const pair of pairs) {
+        const addr = pair.baseToken?.address?.toLowerCase();
+        if (!addr || seen.has(addr)) continue;
+        seen.add(addr);
+
+        const { score, reasons } = calculateWinScore(pair);
+        const ageHours = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / (1000 * 60 * 60) : 0;
+
+        scored.push({
+          address: pair.baseToken.address,
+          name: pair.baseToken.name,
+          symbol: pair.baseToken.symbol,
+          priceUsd: parseFloat(pair.priceUsd || '0'),
+          priceChange24h: pair.priceChange?.h24 || 0,
+          priceChange1h: pair.priceChange?.h1 || 0,
+          volume24h: pair.volume?.h24 || 0,
+          liquidity: pair.liquidity?.usd || 0,
+          marketCap: pair.marketCap || 0,
+          dexScreenerUrl: pair.url,
+          txns24h: pair.txns?.h24 || { buys: 0, sells: 0 },
+          ageHours,
+          score,
+          reasons,
+        });
+
+        if (scored.length >= 30) break;
+      }
+
+      scored.sort((a, b) => b.score - a.score);
+      setProbableWins(scored.slice(0, 15));
+
+      if (scored.length > 0) {
+        const top = scored[0];
+        showToastMsg(`🏆 Loaded ${scored.length} opportunities! Top: ${top.symbol} (${top.score}/100)`, 'success');
+      }
+    } catch (err) {
+      console.error('Probable Wins fetch error:', err);
+      setWinsError(`Failed to load: ${err.message}`);
+      showToastMsg(`❌ Could not load DEXScreener data`, 'error');
+    }
+
+    setWinsLoading(false);
+  }, [showToastMsg]);
+
+  // Auto-fetch when Wins tab is active
+  useEffect(() => {
+    if (activeTab === 'wins' && probableWins.length === 0) {
+      fetchProbableWins();
+    }
+  }, [activeTab, probableWins.length, fetchProbableWins]);
 
   // Get quote
   const getQuote = useCallback(async (inputAmount, from, to) => {
@@ -2313,9 +2426,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       <div style={styles.tabs}>
         {[
           { id: 'swap', icon: '🔄', label: 'Swap' },
+          { id: 'wins', icon: '🏆', label: 'Wins' },
           { id: 'sniper', icon: '🎯', label: 'Snipe' },
           { id: 'portfolio', icon: '📊', label: 'Port' },
-          { id: 'create-lp', icon: '💧', label: 'LP' },
           { id: 'instabond', icon: '🔥', label: 'Bond' },
         ].map((tab) => (
           <button
@@ -2574,6 +2687,169 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           <button style={{ ...styles.swapButton, ...(!userAddress || !fromAmount || !toAmount || swapLoading ? styles.swapButtonDisabled : {}) }} onClick={executeSwap} disabled={!userAddress || !fromAmount || !toAmount || swapLoading}>
             {!userAddress ? 'Connect Wallet' : swapLoading ? 'Swapping...' : !fromAmount ? 'Enter Amount' : `Swap ${fromToken} → ${toToken}`}
           </button>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════════
+          🏆 PROBABLE WINS TAB - AI-scored trading opportunities
+      ═══════════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'wins' && (
+        <div style={styles.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ color: '#D4AF37', fontWeight: 700, fontSize: '1.1rem' }}>🏆 Probable Wins</div>
+            <button
+              onClick={fetchProbableWins}
+              disabled={winsLoading}
+              style={{
+                background: 'rgba(212,175,55,0.2)',
+                border: '1px solid rgba(212,175,55,0.5)',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                color: '#D4AF37',
+                cursor: winsLoading ? 'wait' : 'pointer',
+                fontSize: '0.8rem',
+              }}
+            >
+              {winsLoading ? '⏳ Loading...' : '🔄 Refresh'}
+            </button>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+            <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '8px' }}>
+              AI-scored PulseChain tokens by volume, liquidity & price action
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ color: '#4CAF50', fontSize: '0.7rem' }}>🟢 70+ = Strong</span>
+              <span style={{ color: '#FFB300', fontSize: '0.7rem' }}>🟡 50-70 = Moderate</span>
+              <span style={{ color: '#F44336', fontSize: '0.7rem' }}>🔴 &lt;50 = Caution</span>
+            </div>
+          </div>
+
+          {/* Token list */}
+          <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+            {winsLoading ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '40px' }}>
+                ⏳ Loading from DEXScreener...
+              </div>
+            ) : winsError ? (
+              <div style={{ textAlign: 'center', padding: '30px', background: 'rgba(255,87,34,0.1)', borderRadius: '12px', border: '1px solid rgba(255,87,34,0.3)' }}>
+                <div style={{ color: '#FF5722', marginBottom: '12px', fontSize: '0.9rem' }}>⚠️ {winsError}</div>
+                <button onClick={fetchProbableWins} style={{ background: 'rgba(255,87,34,0.2)', border: '1px solid rgba(255,87,34,0.5)', borderRadius: '8px', padding: '10px 24px', color: '#FF5722', cursor: 'pointer', fontSize: '0.85rem' }}>🔄 Try Again</button>
+              </div>
+            ) : probableWins.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#888', padding: '40px' }}>
+                <div style={{ marginBottom: '16px' }}>No opportunities loaded yet.</div>
+                <button onClick={fetchProbableWins} style={{ background: 'rgba(212,175,55,0.2)', border: '1px solid rgba(212,175,55,0.5)', borderRadius: '8px', padding: '10px 24px', color: '#D4AF37', cursor: 'pointer', fontSize: '0.85rem' }}>🏆 Find Opportunities</button>
+              </div>
+            ) : (
+              probableWins.map((token, idx) => (
+                <div
+                  key={token.address}
+                  style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    marginBottom: '8px',
+                    border: token.score >= 70 ? '1px solid rgba(76,175,80,0.5)' : token.score >= 50 ? '1px solid rgba(255,179,0,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <div style={{
+                        width: '40px', height: '40px', borderRadius: '50%',
+                        background: `linear-gradient(135deg, hsl(${(idx * 36) % 360}, 70%, 50%), hsl(${(idx * 36 + 60) % 360}, 70%, 40%))`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontWeight: 700, fontSize: '0.9rem',
+                      }}>
+                        {token.symbol?.charAt(0) || '?'}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#fff' }}>{token.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#888' }}>${token.symbol}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        color: token.score >= 70 ? '#4CAF50' : token.score >= 50 ? '#FFB300' : '#F44336',
+                        fontWeight: 700, fontSize: '1.1rem',
+                      }}>
+                        {token.score}/100
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#888' }}>
+                        {token.score >= 70 ? '🏆 Strong' : token.score >= 50 ? '📊 Moderate' : '⚠️ Caution'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Score reasons */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                    {token.reasons.slice(0, 3).map((reason, i) => (
+                      <span key={i} style={{ background: 'rgba(212,175,55,0.15)', padding: '2px 8px', borderRadius: '10px', fontSize: '0.65rem', color: '#D4AF37' }}>{reason}</span>
+                    ))}
+                  </div>
+
+                  {/* Stats */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '0.7rem', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ color: '#888' }}>Price</div>
+                      <div style={{ color: '#fff' }}>${token.priceUsd < 0.0001 ? token.priceUsd.toExponential(2) : token.priceUsd.toFixed(6)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888' }}>24h</div>
+                      <div style={{ color: token.priceChange24h >= 0 ? '#4CAF50' : '#F44336' }}>
+                        {token.priceChange24h >= 0 ? '+' : ''}{token.priceChange24h.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888' }}>Volume</div>
+                      <div style={{ color: '#fff' }}>${token.volume24h >= 1e6 ? (token.volume24h / 1e6).toFixed(1) + 'M' : token.volume24h >= 1e3 ? (token.volume24h / 1e3).toFixed(1) + 'K' : token.volume24h.toFixed(0)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888' }}>Liquidity</div>
+                      <div style={{ color: '#fff' }}>${token.liquidity >= 1e6 ? (token.liquidity / 1e6).toFixed(1) + 'M' : token.liquidity >= 1e3 ? (token.liquidity / 1e3).toFixed(1) + 'K' : token.liquidity.toFixed(0)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888' }}>Buy/Sell</div>
+                      <div style={{ color: '#fff' }}>{token.txns24h.buys}/{token.txns24h.sells}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#888' }}>Age</div>
+                      <div style={{ color: '#fff' }}>{token.ageHours < 1 ? Math.round(token.ageHours * 60) + 'm' : token.ageHours < 24 ? Math.round(token.ageHours) + 'h' : Math.round(token.ageHours / 24) + 'd'}</div>
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => {
+                        setActiveTab('sniper');
+                        setSniperCA(token.address);
+                      }}
+                      style={{
+                        flex: 1, background: 'linear-gradient(135deg, #4CAF50, #2E7D32)',
+                        border: 'none', borderRadius: '8px', padding: '10px',
+                        color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem',
+                      }}
+                    >
+                      💰 Quick Buy
+                    </button>
+                    <a
+                      href={token.dexScreenerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: '10px 16px', background: 'rgba(255,255,255,0.1)',
+                        borderRadius: '8px', color: '#888', textDecoration: 'none', fontSize: '0.8rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      📊
+                    </a>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
