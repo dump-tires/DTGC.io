@@ -69,7 +69,7 @@ function generatePnLMessage(data) {
     const isProfit = pnl >= 0;
     const sign = isProfit ? '+' : '';
     const emoji = isProfit ? '🏆' : '📉';
-    return `⚜️ *DTRADER SNIPER P&L*\n━━━━━━━━━━━━━━━━━━\n\n${isProfit ? '🟢' : '🔴'} *$${data.tokenName}* \`...${data.contractAddress.slice(-4)}\`\n\n${emoji} *${isProfit ? 'PROFIT' : 'LOSS'}*\n\`${sign}${pct.toFixed(1)}%\`\n\`${sign}${formatNumber(pnl)} PLS\`\n\n_Powered by dtgc.io | @DtraderSniper_`;
+    return `⚜️ *DTRADER SNIPER P&L*\n━━━━━━━━━━━━━━━━━━\n\n${isProfit ? '🟢' : '🔴'} *$${data.tokenName}* \`...${data.contractAddress.slice(-4)}\`\n\n${emoji} *${isProfit ? 'PROFIT' : 'LOSS'}*\n\`${sign}${pct.toFixed(1)}%\`\n\`${sign}${formatNumber(pnl)} PLS\`\n\n_Powered by dtgc.io | @DTraderSniper_`;
 }
 function calculatePnL(d) {
     const inv = d.buyPrice * d.amount;
@@ -319,7 +319,7 @@ async function generatePnLCardImage(summary, trades, username) {
         hour: '2-digit', minute: '2-digit'
     });
     image.print(fontSmall, 0, height - 40, {
-        text: `dtgc.io | @DtraderSniper | ${dateStr}`,
+        text: `dtgc.io | @DTraderSniper | ${dateStr}`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_TOP,
     }, width, 30);
@@ -365,7 +365,7 @@ function generatePnLTextCard(summary, trades, username) {
         });
     }
     text += `\n━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `🌐 dtgc.io | @DtraderSniper`;
+    text += `🌐 dtgc.io | @DTraderSniper`;
     return text;
 }
 /**
@@ -417,7 +417,7 @@ async function generateSingleTradeCard(symbol, entryPls, exitPls, tokensAmount, 
     }, width, 30);
     // Footer
     image.print(fontSmall, 0, height - 30, {
-        text: 'dtgc.io | @DtraderSniper',
+        text: 'dtgc.io | @DTraderSniper',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 30);
     return image.getBufferAsync(Jimp.MIME_PNG);
@@ -553,7 +553,7 @@ async function generateVictoryCard(data) {
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 20);
     image.print(fontSmall, 0, height - 35, {
-        text: `dtgc.io | @DtraderSniper | ${dateStr}`,
+        text: `dtgc.io | @DTraderSniper | ${dateStr}`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 30);
     // Username watermark if provided
@@ -599,7 +599,7 @@ function generateVictoryTextCard(data) {
         text += `\n🔗 [View TX](https://scan.pulsechain.com/tx/${data.txHash})\n`;
     }
     text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `🌐 dtgc.io | @DtraderSniper`;
+    text += `🌐 dtgc.io | @DTraderSniper`;
     return text;
 }
 //# sourceMappingURL=pnlCard.js.map

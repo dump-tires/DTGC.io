@@ -24,7 +24,7 @@ export function generatePnLMessage(data: { tokenName: string; contractAddress: s
   const isProfit = pnl >= 0;
   const sign = isProfit ? '+' : '';
   const emoji = isProfit ? '🏆' : '📉';
-  return `⚜️ *DTRADER SNIPER P&L*\n━━━━━━━━━━━━━━━━━━\n\n${isProfit ? '🟢' : '🔴'} *$${data.tokenName}* \`...${data.contractAddress.slice(-4)}\`\n\n${emoji} *${isProfit ? 'PROFIT' : 'LOSS'}*\n\`${sign}${pct.toFixed(1)}%\`\n\`${sign}${formatNumber(pnl)} PLS\`\n\n_Powered by dtgc.io | @DtraderSniper_`;
+  return `⚜️ *DTRADER SNIPER P&L*\n━━━━━━━━━━━━━━━━━━\n\n${isProfit ? '🟢' : '🔴'} *$${data.tokenName}* \`...${data.contractAddress.slice(-4)}\`\n\n${emoji} *${isProfit ? 'PROFIT' : 'LOSS'}*\n\`${sign}${pct.toFixed(1)}%\`\n\`${sign}${formatNumber(pnl)} PLS\`\n\n_Powered by dtgc.io | @DTraderSniper_`;
 }
 
 export function calculatePnL(d: { buyPrice: number; currentPrice: number; amount: number }) {
@@ -389,7 +389,7 @@ export async function generatePnLCardImage(
     fontSmall,
     0, height - 40,
     {
-      text: `dtgc.io | @DtraderSniper | ${dateStr}`,
+      text: `dtgc.io | @DTraderSniper | ${dateStr}`,
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
       alignmentY: Jimp.VERTICAL_ALIGN_TOP,
     },
@@ -450,7 +450,7 @@ export function generatePnLTextCard(
   }
 
   text += `\n━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `🌐 dtgc.io | @DtraderSniper`;
+  text += `🌐 dtgc.io | @DTraderSniper`;
 
   return text;
 }
@@ -554,7 +554,7 @@ export async function generateSingleTradeCard(
     fontSmall,
     0, height - 30,
     {
-      text: 'dtgc.io | @DtraderSniper',
+      text: 'dtgc.io | @DTraderSniper',
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     },
     width, 30
@@ -781,7 +781,7 @@ export async function generateVictoryCard(data: VictoryCardData): Promise<Buffer
     fontSmall,
     0, height - 35,
     {
-      text: `dtgc.io | @DtraderSniper | ${dateStr}`,
+      text: `dtgc.io | @DTraderSniper | ${dateStr}`,
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     },
     width, 30
@@ -847,7 +847,7 @@ export function generateVictoryTextCard(data: VictoryCardData): string {
   }
 
   text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
-  text += `🌐 dtgc.io | @DtraderSniper`;
+  text += `🌐 dtgc.io | @DTraderSniper`;
 
   return text;
 }
