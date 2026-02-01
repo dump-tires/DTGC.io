@@ -2323,32 +2323,53 @@ class DtraderBot {
             }
             session.pendingAmount = amount.toString();
             session.pendingOrderType = 'limit_buy';
-            // Check if user has multiple wallets
+            // ALWAYS show wallet selection with balances
             const wallets = await multiWallet_1.multiWallet.getUserWallets(userId);
-            if (wallets.length > 1) {
-                // Show wallet selection
-                session.selectedWallets = wallets.filter(w => w.isActive).map(w => w.index);
-                session.pendingAction = 'limit_order_wallets';
-                const walletList = wallets.map(w => ({
-                    ...w,
-                    selected: session.selectedWallets?.includes(w.index)
-                }));
-                await this.bot.sendMessage(chatId, `👛 **Select Wallets for Limit Order**\n` +
-                    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                    `📊 Order: **LIMIT BUY**\n` +
-                    `🪙 Token: \`${session.pendingToken?.slice(0, 12)}...\`\n` +
-                    `💰 Target: ${session.pendingPrice} PLS\n` +
-                    `💵 Amount: ${amount} PLS per wallet\n\n` +
-                    `🟢 = Selected | ⚪ = Not selected\n` +
-                    `_Tap wallets to toggle, then confirm:_`, { parse_mode: 'Markdown', reply_markup: keyboards.orderWalletSelectKeyboard(walletList) });
+            if (wallets.length === 0) {
+                await this.bot.sendMessage(chatId, `❌ No wallets found!\n\nPlease generate wallets first using /wallets`, { parse_mode: 'Markdown' });
                 return;
             }
-            // Single wallet - create order directly
-            await this.createLimitOrder(chatId, userId, 'limit_buy', session.pendingToken, parseFloat(session.pendingPrice), amount);
-            session.pendingAction = undefined;
-            session.pendingToken = undefined;
-            session.pendingAmount = undefined;
-            session.pendingPrice = undefined;
+            // Fetch balances for all wallets
+            const walletsWithBalance = await Promise.all(wallets.map(async (w) => {
+                try {
+                    const provider = new ethers_1.ethers.JsonRpcProvider(config_1.config.rpc);
+                    const balance = await provider.getBalance(w.address);
+                    const balancePls = parseFloat(ethers_1.ethers.formatEther(balance));
+                    return {
+                        ...w,
+                        balance: balancePls,
+                        balanceFormatted: balancePls >= 1000000
+                            ? (balancePls / 1000000).toFixed(2) + 'M'
+                            : balancePls >= 1000
+                                ? (balancePls / 1000).toFixed(1) + 'K'
+                                : balancePls.toFixed(0),
+                        selected: w.isActive
+                    };
+                }
+                catch {
+                    return { ...w, balance: 0, balanceFormatted: '?', selected: w.isActive };
+                }
+            }));
+            session.selectedWallets = walletsWithBalance.filter(w => w.selected).map(w => w.index);
+            session.pendingAction = 'limit_order_wallets';
+            // Build wallet list message with balances
+            const walletListStr = walletsWithBalance.map(w => `${w.selected ? '🟢' : '⚪'} #${w.index} ${w.label || 'Wallet ' + w.index}: **${w.balanceFormatted} PLS**`).join('\n');
+            await this.bot.sendMessage(chatId, `👛 **Select Wallet(s) for Limit Order**\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `📊 Order: **LIMIT BUY**\n` +
+                `🪙 Token: \`${session.pendingToken?.slice(0, 12)}...\`\n` +
+                `🎯 Target: ${parseFloat(session.pendingPrice).toFixed(12)} PLS\n` +
+                `💵 Amount: ${amount.toLocaleString()} PLS per wallet\n\n` +
+                `**Your Wallets:**\n${walletListStr}\n\n` +
+                `_Tap wallets to toggle selection, then confirm:_`, {
+                parse_mode: 'Markdown',
+                reply_markup: keyboards.orderWalletSelectKeyboard(walletsWithBalance.map(w => ({
+                    index: w.index,
+                    label: `${w.label || 'W' + w.index} (${w.balanceFormatted})`,
+                    isActive: w.isActive,
+                    selected: w.selected
+                })))
+            });
             return;
         }
         // Limit sell price - supports percentages like +50%, +100%
@@ -2392,29 +2413,53 @@ class DtraderBot {
             }
             session.pendingAmount = amount.toString();
             session.pendingOrderType = 'limit_sell';
-            // Check if user has multiple wallets
+            // ALWAYS show wallet selection with balances
             const wallets = await multiWallet_1.multiWallet.getUserWallets(userId);
-            if (wallets.length > 1) {
-                session.selectedWallets = wallets.filter(w => w.isActive).map(w => w.index);
-                session.pendingAction = 'limit_order_wallets';
-                const walletList = wallets.map(w => ({
-                    ...w,
-                    selected: session.selectedWallets?.includes(w.index)
-                }));
-                await this.bot.sendMessage(chatId, `👛 **Select Wallets for Limit Order**\n` +
-                    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                    `📊 Order: **LIMIT SELL**\n` +
-                    `🪙 Token: \`${session.pendingToken?.slice(0, 12)}...\`\n` +
-                    `💰 Target: ${session.pendingPrice} PLS\n` +
-                    `💵 Amount: ${amount} tokens per wallet\n\n` +
-                    `🟢 = Selected | ⚪ = Not selected`, { parse_mode: 'Markdown', reply_markup: keyboards.orderWalletSelectKeyboard(walletList) });
+            if (wallets.length === 0) {
+                await this.bot.sendMessage(chatId, `❌ No wallets found!\n\nPlease generate wallets first using /wallets`, { parse_mode: 'Markdown' });
                 return;
             }
-            await this.createLimitOrder(chatId, userId, 'limit_sell', session.pendingToken, parseFloat(session.pendingPrice), amount);
-            session.pendingAction = undefined;
-            session.pendingToken = undefined;
-            session.pendingAmount = undefined;
-            session.pendingPrice = undefined;
+            // Fetch PLS balances for all wallets
+            const walletsWithBalance = await Promise.all(wallets.map(async (w) => {
+                try {
+                    const provider = new ethers_1.ethers.JsonRpcProvider(config_1.config.rpc);
+                    const balance = await provider.getBalance(w.address);
+                    const balancePls = parseFloat(ethers_1.ethers.formatEther(balance));
+                    return {
+                        ...w,
+                        balance: balancePls,
+                        balanceFormatted: balancePls >= 1000000
+                            ? (balancePls / 1000000).toFixed(2) + 'M'
+                            : balancePls >= 1000
+                                ? (balancePls / 1000).toFixed(1) + 'K'
+                                : balancePls.toFixed(0),
+                        selected: w.isActive
+                    };
+                }
+                catch {
+                    return { ...w, balance: 0, balanceFormatted: '?', selected: w.isActive };
+                }
+            }));
+            session.selectedWallets = walletsWithBalance.filter(w => w.selected).map(w => w.index);
+            session.pendingAction = 'limit_order_wallets';
+            // Build wallet list message with balances
+            const walletListStr = walletsWithBalance.map(w => `${w.selected ? '🟢' : '⚪'} #${w.index} ${w.label || 'Wallet ' + w.index}: **${w.balanceFormatted} PLS**`).join('\n');
+            await this.bot.sendMessage(chatId, `👛 **Select Wallet(s) for Limit Order**\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `📊 Order: **LIMIT SELL**\n` +
+                `🪙 Token: \`${session.pendingToken?.slice(0, 12)}...\`\n` +
+                `🎯 Target: ${parseFloat(session.pendingPrice).toFixed(12)} PLS\n` +
+                `💵 Amount: ${amount.toLocaleString()} tokens per wallet\n\n` +
+                `**Your Wallets:**\n${walletListStr}\n\n` +
+                `_Tap wallets to toggle selection, then confirm:_`, {
+                parse_mode: 'Markdown',
+                reply_markup: keyboards.orderWalletSelectKeyboard(walletsWithBalance.map(w => ({
+                    index: w.index,
+                    label: `${w.label || 'W' + w.index} (${w.balanceFormatted})`,
+                    isActive: w.isActive,
+                    selected: w.selected
+                })))
+            });
             return;
         }
         // Custom buy amount
