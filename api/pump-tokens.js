@@ -23,11 +23,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { filter = 'activity' } = req.query;
+  const { filter = 'bonding_only' } = req.query;
 
-  // Validate filter - pump.tires supported filters
-  const validFilters = ['activity', 'latest_timestamp', 'created_timestamp', 'market_value', 'latest_burn_timestamp', 'launch_timestamp'];
-  const safeFilter = validFilters.includes(filter) ? filter : 'activity';
+  // Validate filter - api2.pump.tires supported filters (Jan 2026)
+  // bonding_only = tokens still on bonding curve (not yet graduated)
+  // top_bonding = top tokens on bonding curve by market value
+  const validFilters = ['bonding_only', 'top_bonding', 'top_overall', 'latest_activity_timestamp', 'created_timestamp', 'launch_timestamp'];
+  const safeFilter = validFilters.includes(filter) ? filter : 'bonding_only';
 
   // Common headers to avoid 403 errors
   const commonHeaders = {
@@ -40,23 +42,24 @@ export default async function handler(req, res) {
 
   // Try multiple API sources with fallbacks
   // NOTE: pump.tires moved their API to api2.pump.tires subdomain (Jan 2026)
+  // Valid filters: bonding_only, top_bonding, top_overall, latest_activity_timestamp, created_timestamp, launch_timestamp
   const apiSources = [
-    // Primary: api2.pump.tires (NEW endpoint - discovered Jan 31, 2026)
+    // Primary: api2.pump.tires bonding_only (tokens still on bonding curve)
     {
       name: 'api2.pump.tires',
       url: `https://api2.pump.tires/api/tokens?filter=${safeFilter}&direction=next`,
       transform: (data) => data.tokens || data.data || data || [],
     },
-    // Fallback 1: api2.pump.tires launch_timestamp (for tokens close to graduation)
+    // Fallback 1: api2.pump.tires top_bonding (top bonding curve tokens by market value)
     {
-      name: 'api2.pump.tires-launch',
-      url: `https://api2.pump.tires/api/tokens?filter=launch_timestamp&direction=next`,
+      name: 'api2.pump.tires-top',
+      url: `https://api2.pump.tires/api/tokens?filter=top_bonding&direction=next`,
       transform: (data) => data.tokens || data.data || data || [],
     },
-    // Fallback 2: dump.tires API (Ponder indexer)
+    // Fallback 2: dump.tires API (Ponder indexer) - if available
     {
       name: 'dump.tires',
-      url: `https://dump.tires/api/tokens?filter=${safeFilter}`,
+      url: `https://dump.tires/api/tokens?filter=bonding`,
       transform: (data) => data.tokens || data.data || data || [],
     },
   ];
