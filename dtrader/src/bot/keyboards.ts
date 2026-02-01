@@ -35,7 +35,7 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
     ],
     [
       { text: '🛡️ Anti-Rug Check', callback_data: 'check_token' },
-      { text: '🔗 Link Wallet', url: 'https://dtgc.io/gold' },
+      { text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } },
     ],
     [
       { text: '⚜️ Gold Suite 📱', url: 'https://dtgc.io/gold' },
@@ -74,7 +74,7 @@ export const helpMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
 export const walletsMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
   inline_keyboard: [
     [
-      { text: '🔗 Link via Gold Suite', url: 'https://dtgc.io/gold' },
+      { text: '🔗 Verify & Link Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } },
     ],
     [
       { text: '🆕 Generate 6 Snipe Wallets', callback_data: 'wallets_generate_6' },

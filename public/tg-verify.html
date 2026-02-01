@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DTGC Wallet Verification</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color, #0A0A0F);
+      color: var(--tg-theme-text-color, #FFFFFF);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .logo {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: 24px;
+      color: #D4AF37;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 14px;
+    }
+
+    .card {
+      background: rgba(212, 175, 55, 0.1);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .requirement {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+    }
+
+    .requirement-icon {
+      font-size: 24px;
+    }
+
+    .requirement-text {
+      flex: 1;
+    }
+
+    .requirement-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .requirement-desc {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 16px 24px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%);
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(212, 175, 55, 0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: #FFF;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .status {
+      text-align: center;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .status-pending {
+      background: rgba(255, 193, 7, 0.1);
+      border: 1px solid rgba(255, 193, 7, 0.3);
+      color: #FFC107;
+    }
+
+    .status-success {
+      background: rgba(76, 175, 80, 0.1);
+      border: 1px solid rgba(76, 175, 80, 0.3);
+      color: #4CAF50;
+    }
+
+    .status-error {
+      background: rgba(244, 67, 54, 0.1);
+      border: 1px solid rgba(244, 67, 54, 0.3);
+      color: #F44336;
+    }
+
+    .wallet-info {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .wallet-address {
+      font-family: monospace;
+      font-size: 14px;
+      word-break: break-all;
+      color: #D4AF37;
+    }
+
+    .balance-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .balance-label {
+      color: #888;
+    }
+
+    .balance-value {
+      font-weight: 600;
+    }
+
+    .balance-value.sufficient {
+      color: #4CAF50;
+    }
+
+    .balance-value.insufficient {
+      color: #F44336;
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0, 0, 0, 0.3);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .steps {
+      margin-top: 20px;
+    }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .step.active {
+      opacity: 1;
+    }
+
+    .step.completed {
+      opacity: 1;
+    }
+
+    .step-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(212, 175, 55, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .step.active .step-number {
+      background: #D4AF37;
+      color: #000;
+    }
+
+    .step.completed .step-number {
+      background: #4CAF50;
+      color: #FFF;
+    }
+
+    .step-content {
+      flex: 1;
+    }
+
+    .step-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .step-desc {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">⚜️</div>
+      <h1>DTGC Token Gate</h1>
+      <p class="subtitle">Verify your $50+ DTGC holdings</p>
+    </div>
+
+    <!-- Step 1: Connect Wallet -->
+    <div id="step-connect" class="card">
+      <div class="requirement">
+        <span class="requirement-icon">💰</span>
+        <div class="requirement-text">
+          <div class="requirement-title">Requirement: $50+ DTGC</div>
+          <div class="requirement-desc">Hold DTGC tokens worth at least $50 USD</div>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step active" id="step1">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <div class="step-title">Connect Wallet</div>
+            <div class="step-desc">Connect your MetaMask, Rabby, or WalletConnect</div>
+          </div>
+        </div>
+        <div class="step" id="step2">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <div class="step-title">Sign Message</div>
+            <div class="step-desc">Prove you own this wallet (no gas fee)</div>
+          </div>
+        </div>
+        <div class="step" id="step3">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <div class="step-title">Verify Balance</div>
+            <div class="step-desc">We check your DTGC balance</div>
+          </div>
+        </div>
+      </div>
+
+      <button id="btn-connect" class="btn btn-primary" onclick="connectWallet()">
+        🔗 Connect Wallet
+      </button>
+    </div>
+
+    <!-- Step 2: Sign Message (hidden initially) -->
+    <div id="step-sign" class="card hidden">
+      <div class="wallet-info">
+        <div style="color: #888; font-size: 12px; margin-bottom: 8px;">Connected Wallet</div>
+        <div class="wallet-address" id="wallet-address"></div>
+        <div class="balance-row">
+          <span class="balance-label">DTGC Balance</span>
+          <span class="balance-value" id="dtgc-balance">Checking...</span>
+        </div>
+        <div class="balance-row">
+          <span class="balance-label">USD Value</span>
+          <span class="balance-value" id="dtgc-usd">Checking...</span>
+        </div>
+      </div>
+
+      <button id="btn-sign" class="btn btn-primary" onclick="signMessage()">
+        ✍️ Sign to Verify Ownership
+      </button>
+
+      <button class="btn btn-secondary" style="margin-top: 12px;" onclick="disconnect()">
+        Disconnect
+      </button>
+    </div>
+
+    <!-- Step 3: Result (hidden initially) -->
+    <div id="step-result" class="hidden">
+      <div id="status-success" class="status status-success hidden">
+        <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Wallet Verified!</div>
+        <div style="font-size: 14px; opacity: 0.8;">Your wallet is now linked to your Telegram account</div>
+      </div>
+
+      <div id="status-error" class="status status-error hidden">
+        <div style="font-size: 48px; margin-bottom: 12px;">❌</div>
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Verification Failed</div>
+        <div id="error-message" style="font-size: 14px; opacity: 0.8;"></div>
+      </div>
+
+      <button class="btn btn-secondary" onclick="restart()">
+        Try Again
+      </button>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading" class="status status-pending hidden">
+      <div class="spinner" style="margin: 0 auto 12px;"></div>
+      <div id="loading-text">Processing...</div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Telegram Web App
+    const tg = window.Telegram?.WebApp;
+    let telegramUserId = null;
+    let telegramInitData = null;
+
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      telegramUserId = tg.initDataUnsafe?.user?.id;
+      telegramInitData = tg.initData;
+
+      // Apply Telegram theme
+      document.body.style.background = tg.themeParams?.bg_color || '#0A0A0F';
+      document.body.style.color = tg.themeParams?.text_color || '#FFFFFF';
+    }
+
+    // State
+    let provider = null;
+    let signer = null;
+    let connectedAddress = null;
+    let dtgcBalance = 0;
+    let dtgcUsdValue = 0;
+
+    // DTGC Token Contract
+    const DTGC_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
+    const DTGC_ABI = ['function balanceOf(address) view returns (uint256)'];
+    const PULSECHAIN_RPC = 'https://rpc.pulsechain.com';
+    const GATE_MIN_USD = 50;
+
+    // Connect wallet
+    async function connectWallet() {
+      const btn = document.getElementById('btn-connect');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Connecting...';
+
+      try {
+        // Check for injected provider (MetaMask, Rabby, etc.)
+        if (window.ethereum) {
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          await provider.send('eth_requestAccounts', []);
+
+          // Check if on PulseChain (chainId 369)
+          const network = await provider.getNetwork();
+          if (network.chainId !== 369) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x171' }], // 369 in hex
+              });
+              provider = new ethers.providers.Web3Provider(window.ethereum);
+            } catch (switchError) {
+              if (switchError.code === 4902) {
+                await window.ethereum.request({
+                  method: 'wallet_addEthereumChain',
+                  params: [{
+                    chainId: '0x171',
+                    chainName: 'PulseChain',
+                    nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                    rpcUrls: ['https://rpc.pulsechain.com'],
+                    blockExplorerUrls: ['https://scan.pulsechain.com'],
+                  }],
+                });
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+              }
+            }
+          }
+
+          signer = provider.getSigner();
+          connectedAddress = await signer.getAddress();
+        } else {
+          // No injected provider - show message
+          throw new Error('Please open this in a browser with MetaMask or Rabby wallet installed');
+        }
+
+        // Update UI
+        document.getElementById('wallet-address').textContent = connectedAddress;
+        document.getElementById('step1').classList.remove('active');
+        document.getElementById('step1').classList.add('completed');
+        document.getElementById('step2').classList.add('active');
+
+        // Check DTGC balance
+        await checkBalance();
+
+        // Show sign step
+        document.getElementById('step-connect').classList.add('hidden');
+        document.getElementById('step-sign').classList.remove('hidden');
+
+      } catch (error) {
+        console.error('Connect error:', error);
+        alert(error.message || 'Failed to connect wallet');
+        btn.disabled = false;
+        btn.innerHTML = '🔗 Connect Wallet';
+      }
+    }
+
+    // Check DTGC balance
+    async function checkBalance() {
+      try {
+        const dtgcContract = new ethers.Contract(DTGC_ADDRESS, DTGC_ABI, provider);
+        const balance = await dtgcContract.balanceOf(connectedAddress);
+        dtgcBalance = parseFloat(ethers.utils.formatEther(balance));
+
+        // Get DTGC price from DexScreener
+        const priceResponse = await fetch('https://api.dexscreener.com/latest/dex/tokens/0xD0676B28a457371D58d47E5247b439114e40Eb0F');
+        const priceData = await priceResponse.json();
+        const dtgcPrice = priceData.pairs?.[0]?.priceUsd || 0;
+        dtgcUsdValue = dtgcBalance * parseFloat(dtgcPrice);
+
+        // Update UI
+        document.getElementById('dtgc-balance').textContent = dtgcBalance.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' DTGC';
+
+        const usdElement = document.getElementById('dtgc-usd');
+        usdElement.textContent = '$' + dtgcUsdValue.toFixed(2);
+
+        if (dtgcUsdValue >= GATE_MIN_USD) {
+          usdElement.classList.add('sufficient');
+          usdElement.classList.remove('insufficient');
+        } else {
+          usdElement.classList.add('insufficient');
+          usdElement.classList.remove('sufficient');
+        }
+      } catch (error) {
+        console.error('Balance check error:', error);
+        document.getElementById('dtgc-balance').textContent = 'Error';
+        document.getElementById('dtgc-usd').textContent = 'Error';
+      }
+    }
+
+    // Sign message to prove ownership
+    async function signMessage() {
+      const btn = document.getElementById('btn-sign');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Waiting for signature...';
+
+      try {
+        // Create verification message
+        const timestamp = Date.now();
+        const message = `DTGC Token Gate Verification\n\nWallet: ${connectedAddress}\nTelegram User: ${telegramUserId || 'Unknown'}\nTimestamp: ${timestamp}\n\nSign this message to verify wallet ownership. This does not cost any gas.`;
+
+        // Request signature
+        const signature = await signer.signMessage(message);
+
+        // Update steps
+        document.getElementById('step2').classList.remove('active');
+        document.getElementById('step2').classList.add('completed');
+        document.getElementById('step3').classList.add('active');
+
+        btn.innerHTML = '<div class="spinner"></div> Verifying...';
+
+        // Send to backend for verification
+        const response = await fetch('/api/tg-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            walletAddress: connectedAddress,
+            signature,
+            message,
+            timestamp,
+            telegramUserId,
+            telegramInitData,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          // Show success
+          document.getElementById('step-sign').classList.add('hidden');
+          document.getElementById('step-result').classList.remove('hidden');
+          document.getElementById('status-success').classList.remove('hidden');
+
+          // Close mini app after delay
+          setTimeout(() => {
+            if (tg) {
+              tg.close();
+            }
+          }, 2000);
+        } else {
+          throw new Error(result.error || 'Verification failed');
+        }
+
+      } catch (error) {
+        console.error('Sign error:', error);
+
+        document.getElementById('step-sign').classList.add('hidden');
+        document.getElementById('step-result').classList.remove('hidden');
+        document.getElementById('status-error').classList.remove('hidden');
+        document.getElementById('error-message').textContent = error.message || 'Signature failed';
+      }
+    }
+
+    // Disconnect wallet
+    function disconnect() {
+      provider = null;
+      signer = null;
+      connectedAddress = null;
+
+      document.getElementById('step-connect').classList.remove('hidden');
+      document.getElementById('step-sign').classList.add('hidden');
+      document.getElementById('step-result').classList.add('hidden');
+
+      document.getElementById('step1').classList.add('active');
+      document.getElementById('step1').classList.remove('completed');
+      document.getElementById('step2').classList.remove('active');
+      document.getElementById('step2').classList.remove('completed');
+      document.getElementById('step3').classList.remove('active');
+      document.getElementById('step3').classList.remove('completed');
+
+      const btn = document.getElementById('btn-connect');
+      btn.disabled = false;
+      btn.innerHTML = '🔗 Connect Wallet';
+    }
+
+    // Restart verification
+    function restart() {
+      disconnect();
+      document.getElementById('status-success').classList.add('hidden');
+      document.getElementById('status-error').classList.add('hidden');
+    }
+
+    // Handle Telegram back button
+    if (tg) {
+      tg.BackButton.onClick(() => {
+        tg.close();
+      });
+    }
+  </script>
+</body>
+</html>

@@ -163,7 +163,7 @@ export class DtraderBot {
   /**
    * Check token gate before allowing actions
    * Uses LINKED WALLET first (external MetaMask/Rabby), falls back to bot wallet
-   * NOW WITH PERSISTENT STORAGE - survives bot restarts!
+   * NOW WITH MINI APP VERIFICATION + PERSISTENT STORAGE
    */
   private async checkGate(chatId: string, userId: string): Promise<boolean> {
     const session = this.getSession(chatId);
@@ -173,7 +173,24 @@ export class DtraderBot {
       return true;
     }
 
-    // Priority 0: Restore linked wallet from persistent storage if not in session
+    // Priority 0: Check Mini App verification API first
+    try {
+      const verifyResponse = await fetch(`https://dtgc.io/api/tg-verify?telegramUserId=${userId}`);
+      const verifyData = await verifyResponse.json();
+      if (verifyData.verified && verifyData.balanceUsd >= 50) {
+        console.log(`✅ Mini App verified wallet for user ${userId}: $${verifyData.balanceUsd}`);
+        session.linkedWallet = verifyData.walletAddress;
+        session.gateVerified = true;
+        session.gateExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
+        // Also persist to local storage
+        LinkedWallets.link(userId, chatId, verifyData.walletAddress, verifyData.balanceUsd);
+        return true;
+      }
+    } catch (e) {
+      console.log(`[checkGate] Mini App API check failed, continuing with fallbacks`);
+    }
+
+    // Priority 1: Restore linked wallet from persistent storage if not in session
     if (!session.linkedWallet) {
       const persistedLink = LinkedWallets.get(userId);
       if (persistedLink) {
@@ -182,7 +199,7 @@ export class DtraderBot {
       }
     }
 
-    // Priority 1: Check linked external wallet (MetaMask/Rabby)
+    // Priority 2: Check linked external wallet (MetaMask/Rabby)
     if (session.linkedWallet) {
       console.log(`🔍 Checking linked wallet: ${session.linkedWallet.slice(0, 10)}...`);
       const linkedGateResult = await tokenGate.checkAccess(session.linkedWallet);
@@ -194,7 +211,7 @@ export class DtraderBot {
       }
     }
 
-    // Priority 2: Check bot wallet
+    // Priority 3: Check bot wallet
     const wallet = await walletManager.getWallet(userId);
     if (wallet) {
       console.log(`🔍 Checking bot wallet: ${wallet.address.slice(0, 10)}...`);
@@ -207,7 +224,7 @@ export class DtraderBot {
       }
     }
 
-    // Neither wallet passed - direct to dtgc.io/gold for verification
+    // Neither wallet passed - show Mini App verification button
     const linkedAddr = session.linkedWallet ? `\n🔗 Linked: \`${session.linkedWallet.slice(0,8)}...\`` : '';
     const botAddr = wallet ? `\n🤖 Bot: \`${wallet.address.slice(0,8)}...\`` : '';
 
@@ -215,13 +232,12 @@ export class DtraderBot {
       `❌ **Gate Check Failed**\n\n` +
       `Hold $50+ of DTGC in your wallet to access PRO features.${linkedAddr}${botAddr}\n\n` +
       `⚜️ DTGC: \`${config.tokenGate.dtgc}\`\n\n` +
-      `🌐 **Verify your wallet at dtgc.io/gold**\n` +
-      `_Connect wallet → Click "Link TG Bot" → Sign & verify_`,
+      `👇 **Tap below to verify your wallet**`,
       {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '🌐 Open dtgc.io/gold', url: 'https://dtgc.io/gold' }],
+            [{ text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } }],
             [{ text: '🔄 Refresh', callback_data: 'refresh_balance' }],
           ],
         },
