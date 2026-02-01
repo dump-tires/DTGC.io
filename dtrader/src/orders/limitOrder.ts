@@ -128,6 +128,28 @@ class LimitOrderStore {
     }
     return false;
   }
+
+  findById(orderId: string): LimitOrder | undefined {
+    return this.data.find(o => o.id === orderId);
+  }
+
+  // For Vercel sync - get all data
+  getAllData(): LimitOrder[] {
+    return [...this.data];
+  }
+
+  // For Vercel sync - import orders
+  importOrders(orders: LimitOrder[]): number {
+    let imported = 0;
+    for (const order of orders) {
+      if (!this.data.find(o => o.id === order.id)) {
+        this.data.push(order);
+        imported++;
+      }
+    }
+    if (imported > 0) this.save();
+    return imported;
+  }
 }
 
 // JSON Storage for DCA Orders
@@ -188,6 +210,24 @@ class DCAOrderStore {
       return true;
     }
     return false;
+  }
+
+  // For Vercel sync - get all data
+  getAllData(): DCAOrder[] {
+    return [...this.data];
+  }
+
+  // For Vercel sync - import orders
+  importOrders(orders: DCAOrder[]): number {
+    let imported = 0;
+    for (const order of orders) {
+      if (!this.data.find(o => o.id === order.id)) {
+        this.data.push(order);
+        imported++;
+      }
+    }
+    if (imported > 0) this.save();
+    return imported;
   }
 }
 
@@ -505,6 +545,66 @@ export class LimitOrderEngine extends EventEmitter {
       this.dcaCheckInterval = null;
     }
     console.log('🛑 Limit order engine stopped');
+  }
+
+  /**
+   * Sync orders to Vercel for backup persistence
+   */
+  async syncToVercel(userId: string): Promise<boolean> {
+    try {
+      const apiKey = process.env.BOT_TOKEN?.slice(-20) || '';
+      const limitOrders = this.orderStore.findByUser(userId);
+      const dcaOrders = this.dcaStore.findByUser(userId);
+
+      const response = await fetch(`https://dtgc.io/api/orders-sync?userId=${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ limitOrders, dcaOrders }),
+      });
+
+      if (response.ok) {
+        console.log(`☁️ [SYNC] Synced ${limitOrders.length} orders to Vercel for user ${userId}`);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error(`❌ [SYNC] Failed to sync to Vercel:`, e);
+      return false;
+    }
+  }
+
+  /**
+   * Recover orders from Vercel backup
+   */
+  async syncFromVercel(userId: string): Promise<{ limitOrders: number; dcaOrders: number }> {
+    try {
+      const apiKey = process.env.BOT_TOKEN?.slice(-20) || '';
+      const response = await fetch(`https://dtgc.io/api/orders-sync?userId=${userId}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+
+      if (!response.ok) {
+        return { limitOrders: 0, dcaOrders: 0 };
+      }
+
+      const data = await response.json() as { orders?: LimitOrder[]; dcaOrders?: DCAOrder[] };
+
+      // Import orders that don't already exist locally using public methods
+      const importedLimitOrders = this.orderStore.importOrders(data.orders || []);
+      const importedDcaOrders = this.dcaStore.importOrders(data.dcaOrders || []);
+
+      if (importedLimitOrders > 0 || importedDcaOrders > 0) {
+        console.log(`☁️ [SYNC] Recovered ${importedLimitOrders} limit orders, ${importedDcaOrders} DCA orders from Vercel`);
+      }
+
+      return { limitOrders: importedLimitOrders, dcaOrders: importedDcaOrders };
+    } catch (e) {
+      console.error(`❌ [SYNC] Failed to recover from Vercel:`, e);
+      return { limitOrders: 0, dcaOrders: 0 };
+    }
   }
 
   /**

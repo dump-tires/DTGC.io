@@ -693,6 +693,77 @@ class DtraderBot {
                 },
             });
         });
+        // /orderstatus command - Live status of limit orders with USD pricing
+        this.bot.onText(/\/orderstatus/, async (msg) => {
+            const chatId = msg.chat.id.toString();
+            const userId = msg.from?.id.toString() || '';
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const orders = limitOrder_1.limitOrderEngine.getUserOrders(userId);
+            const activeOrders = orders.filter(o => o.status === 'active');
+            if (activeOrders.length === 0) {
+                await this.bot.sendMessage(chatId, `📊 **No Active Limit Orders**\n\n` +
+                    `You don't have any pending limit orders.\n\n` +
+                    `Use 📊 Orders menu to create one!`, {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboards.ordersMenuKeyboard,
+                });
+                return;
+            }
+            await this.bot.sendMessage(chatId, `🔍 Fetching live prices for ${activeOrders.length} orders...`);
+            let statusMsg = `📊 **LIVE ORDER STATUS**\n`;
+            statusMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            statusMsg += `🟢 Engine: **RUNNING** (checks every 5s)\n\n`;
+            for (const order of activeOrders) {
+                const targetPrice = parseFloat(ethers_1.ethers.formatEther(BigInt(order.targetPrice)));
+                const amount = parseFloat(ethers_1.ethers.formatEther(BigInt(order.amount)));
+                const createdAgo = Math.floor((Date.now() - order.createdAt) / 60000);
+                // Fetch current price with USD
+                let currentPrice = 0;
+                let currentUsd = 0;
+                let targetUsd = 0;
+                let tokenSymbol = 'TOKEN';
+                try {
+                    const tokenInfo = await dexscreener_1.dexScreener.getTokenInfo(order.tokenAddress);
+                    if (tokenInfo) {
+                        currentPrice = tokenInfo.pricePls || 0;
+                        currentUsd = tokenInfo.priceUsd || 0;
+                        tokenSymbol = tokenInfo.symbol || 'TOKEN';
+                        // Calculate target USD (ratio-based)
+                        if (currentPrice > 0) {
+                            targetUsd = (targetPrice / currentPrice) * currentUsd;
+                        }
+                    }
+                }
+                catch { }
+                const priceChange = currentPrice > 0 ? ((currentPrice / targetPrice - 1) * 100).toFixed(2) : '?';
+                const orderEmoji = order.orderType === 'limit_buy' ? '🟢' : order.orderType === 'limit_sell' ? '🔴' : '🔶';
+                statusMsg += `${orderEmoji} **${order.orderType.toUpperCase().replace('_', ' ')}**\n`;
+                statusMsg += `🪙 ${tokenSymbol}: \`${order.tokenAddress.slice(0, 10)}...${order.tokenAddress.slice(-6)}\`\n`;
+                statusMsg += `👛 \`${order.walletAddress.slice(0, 8)}...${order.walletAddress.slice(-4)}\`\n`;
+                statusMsg += `━━━━━━━━━━━━━━━\n`;
+                statusMsg += `📈 **Current:** ${currentPrice.toFixed(12)} PLS\n`;
+                statusMsg += `   ≈ $${currentUsd.toFixed(10)}\n`;
+                statusMsg += `🎯 **Target:** ${targetPrice.toFixed(12)} PLS\n`;
+                statusMsg += `   ≈ $${targetUsd.toFixed(10)}\n`;
+                statusMsg += `📊 **Gap:** ${priceChange}% away\n`;
+                statusMsg += `💰 **Amount:** ${amount >= 1000000 ? (amount / 1000000).toFixed(2) + 'M' : amount.toLocaleString()} PLS\n`;
+                statusMsg += `⏱️ **Created:** ${createdAgo} min ago\n`;
+                statusMsg += `🆔 \`${order.id.slice(0, 20)}...\`\n\n`;
+            }
+            statusMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            statusMsg += `💡 _Orders execute automatically when price hits target_`;
+            await this.bot.sendMessage(chatId, statusMsg, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🔄 Refresh Status', callback_data: 'refresh_order_status' }],
+                        [{ text: '❌ Cancel All Orders', callback_data: 'order_cancel_all' }],
+                        [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+                    ],
+                },
+            });
+        });
         // /pnl command (no params) - Generate P&L card
         this.bot.onText(/^\/pnl$/, async (msg) => {
             const chatId = msg.chat.id.toString();
@@ -2147,6 +2218,56 @@ class DtraderBot {
             if (!await this.checkGate(chatId, userId))
                 return;
             await this.showEnhancedActiveOrders(chatId, userId);
+            return;
+        }
+        // Refresh order status - shows live prices
+        if (data === 'refresh_order_status') {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const orders = limitOrder_1.limitOrderEngine.getUserOrders(userId);
+            const activeOrders = orders.filter(o => o.status === 'active');
+            if (activeOrders.length === 0) {
+                await this.bot.sendMessage(chatId, `📊 No active limit orders.`, { reply_markup: keyboards.ordersMenuKeyboard });
+                return;
+            }
+            await this.bot.sendMessage(chatId, `🔄 Refreshing ${activeOrders.length} orders...`);
+            let statusMsg = `📊 **LIVE ORDER STATUS** (Refreshed)\n`;
+            statusMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            statusMsg += `🟢 Engine: **RUNNING**\n\n`;
+            for (const order of activeOrders) {
+                const targetPrice = parseFloat(ethers_1.ethers.formatEther(BigInt(order.targetPrice)));
+                const amount = parseFloat(ethers_1.ethers.formatEther(BigInt(order.amount)));
+                let currentPrice = 0;
+                let currentUsd = 0;
+                let targetUsd = 0;
+                let tokenSymbol = 'TOKEN';
+                try {
+                    const tokenInfo = await dexscreener_1.dexScreener.getTokenInfo(order.tokenAddress);
+                    if (tokenInfo) {
+                        currentPrice = tokenInfo.pricePls || 0;
+                        currentUsd = tokenInfo.priceUsd || 0;
+                        tokenSymbol = tokenInfo.symbol || 'TOKEN';
+                        if (currentPrice > 0)
+                            targetUsd = (targetPrice / currentPrice) * currentUsd;
+                    }
+                }
+                catch { }
+                const priceChange = currentPrice > 0 ? ((currentPrice / targetPrice - 1) * 100).toFixed(2) : '?';
+                const orderEmoji = order.orderType === 'limit_buy' ? '🟢' : '🔴';
+                statusMsg += `${orderEmoji} **${tokenSymbol}** - ${order.orderType.replace('_', ' ').toUpperCase()}\n`;
+                statusMsg += `📈 Current: ${currentPrice.toFixed(12)} PLS (~$${currentUsd.toFixed(10)})\n`;
+                statusMsg += `🎯 Target: ${targetPrice.toFixed(12)} PLS (~$${targetUsd.toFixed(10)})\n`;
+                statusMsg += `📊 Gap: **${priceChange}%** | 💰 ${amount >= 1000000 ? (amount / 1000000).toFixed(1) + 'M' : amount.toLocaleString()} PLS\n\n`;
+            }
+            await this.bot.sendMessage(chatId, statusMsg, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🔄 Refresh Again', callback_data: 'refresh_order_status' }],
+                        [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+                    ],
+                },
+            });
             return;
         }
         // Set limit sell on an existing order/position

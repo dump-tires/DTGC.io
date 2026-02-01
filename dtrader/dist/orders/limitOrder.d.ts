@@ -141,6 +141,17 @@ export declare class LimitOrderEngine extends EventEmitter {
      */
     stop(): void;
     /**
+     * Sync orders to Vercel for backup persistence
+     */
+    syncToVercel(userId: string): Promise<boolean>;
+    /**
+     * Recover orders from Vercel backup
+     */
+    syncFromVercel(userId: string): Promise<{
+        limitOrders: number;
+        dcaOrders: number;
+    }>;
+    /**
      * Format order for display
      */
     formatOrder(order: LimitOrder): string;
