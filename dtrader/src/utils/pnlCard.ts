@@ -197,7 +197,42 @@ function getMandoImageByType(type: 'victory' | 'pnl' | 'snipe'): string | null {
 }
 
 /**
- * Generate a P&L card image with Mando background
+ * Find gold bar image for decorating cards
+ */
+function findGoldBarImage(): string | null {
+  const basePaths = [
+    path.join(process.cwd(), '..', 'public', 'images'),
+    path.join(process.cwd(), 'public', 'images'),
+    '/app/public/images',
+    path.join(__dirname, '..', '..', '..', 'public', 'images'),
+  ];
+
+  for (const basePath of basePaths) {
+    const goldBarPath = path.join(basePath, 'gold_bar.png');
+    if (fs.existsSync(goldBarPath)) {
+      return goldBarPath;
+    }
+  }
+  return null;
+}
+
+/**
+ * Calculate how many gold bars to show based on PLS surplus
+ * 0 PLS = 0 bars, 10K+ = 1, 50K+ = 2, 100K+ = 3, 500K+ = 4, 1M+ = 5
+ */
+function getGoldBarCount(plsAmount: number): number {
+  const abs = Math.abs(plsAmount);
+  if (abs >= 1000000) return 5;  // 1M+
+  if (abs >= 500000) return 4;   // 500K+
+  if (abs >= 100000) return 3;   // 100K+
+  if (abs >= 50000) return 2;    // 50K+
+  if (abs >= 10000) return 1;    // 10K+
+  return 0;
+}
+
+/**
+ * Generate a P&L card image with Mando background - ENHANCED VERSION
+ * Bright gold glow aesthetic with gold bars based on surplus
  * Returns the image as a Buffer (PNG)
  */
 export async function generatePnLCardImage(
@@ -209,9 +244,9 @@ export async function generatePnLCardImage(
     throw new Error('Image generation not available');
   }
 
-  // Card dimensions
-  const width = 800;
-  const height = 600;
+  // Card dimensions - wider for better aesthetics
+  const width = 900;
+  const height = 700;
 
   // Create base image
   let image: any;
@@ -221,30 +256,76 @@ export async function generatePnLCardImage(
     try {
       // Load Mando background
       image = await Jimp.read(mandoPath);
-      image.resize(width, height);
-      // Add dark overlay
-      const overlay = new Jimp(width, height, 0x000000B3); // Black with 70% opacity
-      image.composite(overlay, 0, 0);
+
+      // Calculate scale to cover the card
+      const scaleX = width / image.getWidth();
+      const scaleY = height / image.getHeight();
+      const scale = Math.max(scaleX, scaleY);
+      image.scale(scale);
+
+      // Center crop to exact dimensions
+      const cropX = Math.max(0, (image.getWidth() - width) / 2);
+      const cropY = Math.max(0, (image.getHeight() - height) / 2);
+      image.crop(cropX, cropY, width, height);
+
+      // BRIGHTEN the image - make it pop!
+      image.brightness(0.15);  // Boost brightness
+      image.contrast(0.1);     // Slight contrast increase
+
+      // Add GOLDEN GLOW overlay (warm gold tint instead of dark black)
+      const goldOverlay = new Jimp(width, height, 0x00000000);
+
+      // Create a radial golden glow from center
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+          const ratio = dist / maxDist;
+
+          // Gold-tinted vignette: darker at edges, golden glow in center
+          // Less intense - 40% max opacity at edges
+          const goldR = 255;  // Gold
+          const goldG = 215;
+          const goldB = 0;
+          const alpha = Math.floor(100 * ratio);  // Subtle vignette
+
+          goldOverlay.setPixelColor(Jimp.rgbaToInt(0, 0, 0, alpha), x, y);
+        }
+      }
+      image.composite(goldOverlay, 0, 0);
+
+      // Add subtle golden tint to entire image
+      const goldTint = new Jimp(width, height, 0xFFD70020); // Gold with 12% opacity
+      image.composite(goldTint, 0, 0);
+
     } catch (e) {
-      console.log('Could not load Mando image, using gradient');
-      image = new Jimp(width, height, 0x1a1a2eFF);
+      console.log('Could not load Mando image, using golden gradient');
+      image = new Jimp(width, height, 0x1a150aFF); // Dark gold base
     }
   } else {
-    // Create gradient-like background
-    image = new Jimp(width, height, 0x1a1a2eFF);
+    // Create golden gradient background
+    image = new Jimp(width, height, 0x1a150aFF);
   }
 
-  // Load font - Jimp has built-in fonts
+  // Load fonts
   const fontWhite = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
   const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE);
   const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
+  const fontXL = await Jimp.loadFont(Jimp.FONT_SANS_128_WHITE);
 
-  // Header - ASCII safe (no emojis - Jimp fonts don't support them)
+  // Add text shadow effect by drawing header bar at top
+  const headerBar = new Jimp(width, 90, 0x00000080); // Semi-transparent black
+  image.composite(headerBar, 0, 0);
+
+  // Header - Gold styling
   image.print(
     fontWhite,
-    0, 20,
+    0, 15,
     {
-      text: ':: DTRADER SNIPER ::',
+      text: '=== DTRADER SNIPER ===',
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
       alignmentY: Jimp.VERTICAL_ALIGN_TOP,
     },
@@ -255,7 +336,7 @@ export async function generatePnLCardImage(
   if (username) {
     image.print(
       fontSmall,
-      0, 60,
+      0, 55,
       {
         text: `@${username}`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -265,15 +346,21 @@ export async function generatePnLCardImage(
     );
   }
 
-  // Main P&L
+  // Main P&L - HUGE and prominent with text background
   const isProfit = summary.totalPnlPls >= 0;
   const sign = isProfit ? '+' : '';
   const pnlText = `${sign}${formatNumber(summary.totalPnlPls)} PLS`;
   const pnlPercentText = `${sign}${summary.totalPnlPercent.toFixed(2)}%`;
 
+  // P&L background box
+  const pnlBgColor = isProfit ? 0x1a4d1a99 : 0x4d1a1a99; // Green or red tint
+  const pnlBg = new Jimp(width - 100, 150, pnlBgColor);
+  image.composite(pnlBg, 50, 100);
+
+  // Main PLS amount - Large
   image.print(
     fontLarge,
-    0, 120,
+    0, 110,
     {
       text: pnlText,
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -282,9 +369,10 @@ export async function generatePnLCardImage(
     width, 80
   );
 
+  // Percentage below
   image.print(
     fontWhite,
-    0, 200,
+    0, 180,
     {
       text: pnlPercentText,
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -293,12 +381,41 @@ export async function generatePnLCardImage(
     width, 50
   );
 
-  // Stats
+  // === GOLD BAR DECORATIONS based on surplus ===
+  const goldBarPath = findGoldBarImage();
+  const goldBarCount = getGoldBarCount(summary.totalPnlPls);
+
+  if (goldBarPath && goldBarCount > 0) {
+    try {
+      const goldBar = await Jimp.read(goldBarPath);
+      // Resize gold bar to fit nicely
+      const barWidth = 60;
+      const barHeight = Math.floor(goldBar.getHeight() * (barWidth / goldBar.getWidth()));
+      goldBar.resize(barWidth, barHeight);
+
+      // Position gold bars in a row below the P&L
+      const totalBarsWidth = goldBarCount * (barWidth + 10) - 10;
+      const startX = (width - totalBarsWidth) / 2;
+
+      for (let i = 0; i < goldBarCount; i++) {
+        const barX = startX + i * (barWidth + 10);
+        image.composite(goldBar.clone(), barX, 255);
+      }
+    } catch (e) {
+      console.log('Could not load gold bar image');
+    }
+  }
+
+  // Stats bar
+  const statsBarY = goldBarCount > 0 ? 310 : 270;
+  const statsBar = new Jimp(width, 35, 0x00000060);
+  image.composite(statsBar, 0, statsBarY);
+
   const winRate = summary.totalTrades > 0 ? (summary.wins / summary.totalTrades * 100) : 0;
   const statsText = `Trades: ${summary.totalTrades} | Wins: ${summary.wins} | Losses: ${summary.losses} | Win Rate: ${winRate.toFixed(1)}%`;
   image.print(
     fontSmall,
-    0, 270,
+    0, statsBarY + 8,
     {
       text: statsText,
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -307,11 +424,12 @@ export async function generatePnLCardImage(
     width, 30
   );
 
-  // Best/Worst - ASCII safe
+  // Best/Worst trades
+  const bestWorstY = statsBarY + 50;
   if (summary.bestTrade) {
     image.print(
       fontSmall,
-      50, 320,
+      60, bestWorstY,
       {
         text: `[+] Best: ${summary.bestTrade.symbol} (+${summary.bestTrade.pnlPercent.toFixed(1)}%)`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_LEFT,
@@ -324,20 +442,24 @@ export async function generatePnLCardImage(
   if (summary.worstTrade) {
     image.print(
       fontSmall,
-      width / 2, 320,
+      width / 2, bestWorstY,
       {
         text: `[-] Worst: ${summary.worstTrade.symbol} (${summary.worstTrade.pnlPercent.toFixed(1)}%)`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_RIGHT,
         alignmentY: Jimp.VERTICAL_ALIGN_TOP,
       },
-      width / 2 - 50, 30
+      width / 2 - 60, 30
     );
   }
 
-  // Recent trades header - ASCII safe
+  // Recent trades section with background
+  const tradesY = bestWorstY + 50;
+  const tradesBox = new Jimp(width - 80, 180, 0x00000050);
+  image.composite(tradesBox, 40, tradesY);
+
   image.print(
     fontWhite,
-    0, 370,
+    0, tradesY + 10,
     {
       text: '--- Recent Trades ---',
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -346,10 +468,10 @@ export async function generatePnLCardImage(
     width, 40
   );
 
-  // List trades - ASCII safe markers
+  // List trades
   const displayTrades = trades.slice(0, 4);
   displayTrades.forEach((trade, i) => {
-    const y = 410 + (i * 35);
+    const y = tradesY + 50 + (i * 32);
     const tradeSign = trade.isWin ? '+' : '';
     const marker = trade.isWin ? '[W]' : '[L]';
     const tradeText = `${marker} ${trade.symbol}: ${tradeSign}${trade.pnlPercent.toFixed(1)}% (${tradeSign}${formatNumber(trade.pnlPls)} PLS)`;
@@ -362,14 +484,14 @@ export async function generatePnLCardImage(
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_TOP,
       },
-      width, 35
+      width, 32
     );
   });
 
   if (trades.length === 0) {
     image.print(
       fontSmall,
-      0, 440,
+      0, tradesY + 80,
       {
         text: 'No trades yet',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -379,7 +501,10 @@ export async function generatePnLCardImage(
     );
   }
 
-  // Footer
+  // Footer bar
+  const footerBar = new Jimp(width, 45, 0x00000090);
+  image.composite(footerBar, 0, height - 45);
+
   const now = new Date();
   const dateStr = now.toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -387,7 +512,7 @@ export async function generatePnLCardImage(
   });
   image.print(
     fontSmall,
-    0, height - 40,
+    0, height - 35,
     {
       text: `dtgc.io | @DTraderSniper | ${dateStr}`,
       alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -583,7 +708,7 @@ export interface VictoryCardData {
 
 /**
  * Generate a beautiful Victory Card with Mando background
- * Laser-etched stats style overlay
+ * ENHANCED: Bright gold glow aesthetic with gold bars
  */
 export async function generateVictoryCard(data: VictoryCardData): Promise<Buffer> {
   if (!Jimp) {
@@ -610,29 +735,39 @@ export async function generateVictoryCard(data: VictoryCardData): Promise<Buffer
       const cropY = (image.getHeight() - height) / 2;
       image.crop(Math.max(0, cropX), Math.max(0, cropY), width, height);
 
-      // Add gradient overlay (darker at top and bottom for text)
+      // BRIGHTEN the image - make it pop!
+      image.brightness(0.12);
+      image.contrast(0.08);
+
+      // Add GOLDEN GLOW gradient overlay (subtle at edges, golden center)
       const overlay = new Jimp(width, height, 0x00000000);
-      // Top gradient
-      for (let y = 0; y < 250; y++) {
-        const opacity = Math.floor(200 * (1 - y / 250));
+
+      // Top gradient - lighter now
+      for (let y = 0; y < 200; y++) {
+        const opacity = Math.floor(130 * (1 - y / 200));  // Reduced from 200
         for (let x = 0; x < width; x++) {
           overlay.setPixelColor(Jimp.rgbaToInt(0, 0, 0, opacity), x, y);
         }
       }
-      // Bottom gradient
-      for (let y = height - 300; y < height; y++) {
-        const opacity = Math.floor(220 * ((y - (height - 300)) / 300));
+      // Bottom gradient - lighter now
+      for (let y = height - 350; y < height; y++) {
+        const opacity = Math.floor(150 * ((y - (height - 350)) / 350));  // Reduced from 220
         for (let x = 0; x < width; x++) {
           overlay.setPixelColor(Jimp.rgbaToInt(0, 0, 0, opacity), x, y);
         }
       }
       image.composite(overlay, 0, 0);
+
+      // Add subtle golden tint to entire image
+      const goldTint = new Jimp(width, height, 0xFFD70018); // Gold with 10% opacity
+      image.composite(goldTint, 0, 0);
+
     } catch (e) {
-      console.log('Could not load Mando image, using dark background');
-      image = new Jimp(width, height, 0x0a0a14FF);
+      console.log('Could not load Mando image, using golden background');
+      image = new Jimp(width, height, 0x1a150aFF);
     }
   } else {
-    image = new Jimp(width, height, 0x0a0a14FF);
+    image = new Jimp(width, height, 0x1a150aFF);
   }
 
   // Load fonts
@@ -683,6 +818,31 @@ export async function generateVictoryCard(data: VictoryCardData): Promise<Buffer
     },
     width, 80
   );
+
+  // === GOLD BAR DECORATIONS based on invested amount ===
+  const goldBarPath = findGoldBarImage();
+  const goldBarCount = getGoldBarCount(data.amountPls);
+
+  if (goldBarPath && goldBarCount > 0) {
+    try {
+      const goldBar = await Jimp.read(goldBarPath);
+      // Resize gold bar to fit nicely
+      const barWidth = 50;
+      const barHeight = Math.floor(goldBar.getHeight() * (barWidth / goldBar.getWidth()));
+      goldBar.resize(barWidth, barHeight);
+
+      // Position gold bars in a row below the token symbol
+      const totalBarsWidth = goldBarCount * (barWidth + 8) - 8;
+      const startX = (width - totalBarsWidth) / 2;
+
+      for (let i = 0; i < goldBarCount; i++) {
+        const barX = startX + i * (barWidth + 8);
+        image.composite(goldBar.clone(), barX, 270);
+      }
+    } catch (e) {
+      console.log('Could not load gold bar for victory card');
+    }
+  }
 
   // Stats section - bottom portion with dark overlay
   const statsY = height - 380;

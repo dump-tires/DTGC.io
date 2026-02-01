@@ -60,7 +60,8 @@ export interface TradeForCard {
  */
 export declare function canGenerateImages(): boolean;
 /**
- * Generate a P&L card image with Mando background
+ * Generate a P&L card image with Mando background - ENHANCED VERSION
+ * Bright gold glow aesthetic with gold bars based on surplus
  * Returns the image as a Buffer (PNG)
  */
 export declare function generatePnLCardImage(summary: PnLSummary, trades: TradeForCard[], username?: string): Promise<Buffer>;
@@ -86,7 +87,7 @@ export interface VictoryCardData {
 }
 /**
  * Generate a beautiful Victory Card with Mando background
- * Laser-etched stats style overlay
+ * ENHANCED: Bright gold glow aesthetic with gold bars
  */
 export declare function generateVictoryCard(data: VictoryCardData): Promise<Buffer>;
 /**
