@@ -137,6 +137,10 @@ export declare class DtraderBot {
      */
     private showPumpSniperSettings;
     /**
+     * Show Probable Wins - AI-scored top opportunities
+     */
+    private showProbableWins;
+    /**
      * Show quick sell menu for a token (PulsonicBot style)
      */
     private showQuickSellMenu;

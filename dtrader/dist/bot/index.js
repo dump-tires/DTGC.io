@@ -51,6 +51,7 @@ const mempool_1 = require("../sniper/mempool");
 const limitOrder_1 = require("../orders/limitOrder");
 const antiRug_1 = require("../security/antiRug");
 const jsonStore_1 = require("../db/jsonStore");
+const dexscreener_1 = require("../integrations/dexscreener");
 const keyboards = __importStar(require("./keyboards"));
 const GAS_GWEI = {
     normal: 0.01,
@@ -122,10 +123,11 @@ class DtraderBot {
             // Set bot commands - creates the menu button (PulsonicBot style)
             await this.bot.setMyCommands([
                 { command: 'start', description: 'Main Menu' },
-                { command: 'positions', description: 'Manage your positions' },
-                { command: 'wallets', description: 'Manage your wallets' },
+                { command: 'wins', description: '🏆 Probable Wins - Top Opportunities' },
                 { command: 'buy', description: 'Buy a token (DEX)' },
                 { command: 'sell', description: 'Sell a token (DEX)' },
+                { command: 'positions', description: 'Manage your positions' },
+                { command: 'wallets', description: 'Manage your wallets' },
                 { command: 'pumptire', description: 'Go to pump.tires menu' },
                 { command: 'pumpsnipe', description: 'Go to pump.tires sniper menu' },
                 { command: 'regroup', description: 'Moves tracked tokens to recent messages' },
@@ -772,6 +774,14 @@ class DtraderBot {
                 }
             });
         });
+        // /wins - Probable Wins (AI-scored top opportunities)
+        this.bot.onText(/\/wins/, async (msg) => {
+            const chatId = msg.chat.id.toString();
+            const userId = msg.from?.id.toString() || '';
+            if (!await this.checkGate(chatId, userId))
+                return;
+            await this.showProbableWins(chatId, userId);
+        });
         // Handle callback queries (button clicks)
         this.bot.on('callback_query', async (query) => {
             if (!query.message || !query.data)
@@ -961,6 +971,11 @@ class DtraderBot {
                     chat_id: parseInt(chatId),
                     message_id: messageId,
                 });
+                return;
+            case 'wins_menu':
+                if (!await this.checkGate(chatId, userId))
+                    return;
+                await this.showProbableWins(chatId, userId);
                 return;
         }
         // Actions
@@ -1903,6 +1918,59 @@ class DtraderBot {
         if (data === 'noop') {
             return;
         }
+        // Probable Wins quick buy
+        if (data.startsWith('wins_buy_')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const partialAddr = data.replace('wins_buy_', '');
+            // Find full address from recent wins
+            const wins = await dexscreener_1.dexScreener.getProbableWins(15);
+            const token = wins.find(w => w.token.address.startsWith(partialAddr));
+            if (token) {
+                session.pendingToken = token.token.address;
+                session.tokenInfo = token.token;
+                // Show token info and buy options
+                const msg = dexscreener_1.dexScreener.formatTokenInfo(token.token) + `\n\n⚜️ _Select buy amount:_`;
+                session.pendingAction = 'buy_amount';
+                await this.bot.sendMessage(chatId, msg, {
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true,
+                    reply_markup: keyboards.buyAmountKeyboard,
+                });
+            }
+            else {
+                await this.bot.sendMessage(chatId, '❌ Token not found. Try refreshing Probable Wins.');
+            }
+            return;
+        }
+        // Probable Wins details
+        if (data.startsWith('wins_details_')) {
+            const partialAddr = data.replace('wins_details_', '');
+            const wins = await dexscreener_1.dexScreener.getProbableWins(15);
+            const win = wins.find(w => w.token.address.startsWith(partialAddr));
+            if (win) {
+                let msg = dexscreener_1.dexScreener.formatTokenInfo(win.token);
+                msg += `\n\n🏆 **Score: ${win.score}%**\n`;
+                msg += `📋 **Analysis:**\n`;
+                for (const reason of win.reasons) {
+                    msg += `• ${reason}\n`;
+                }
+                await this.bot.sendMessage(chatId, msg, {
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: `💰 Buy $${win.token.symbol}`, callback_data: `wins_buy_${partialAddr}` }],
+                            [{ text: '🔙 Back to Probable Wins', callback_data: 'wins_menu' }],
+                        ]
+                    },
+                });
+            }
+            else {
+                await this.bot.sendMessage(chatId, '❌ Token not found. Try refreshing.');
+            }
+            return;
+        }
         // Buy amount selection
         if (data.startsWith('buy_') && !data.startsWith('buy_custom') && !data.startsWith('buy_limit')) {
             const amount = data.replace('buy_', '');
@@ -1935,17 +2003,44 @@ class DtraderBot {
         const session = this.getSession(chatId);
         if (!session.pendingAction)
             return;
-        // Token address inputs
+        // Token address inputs - with full DEXScreener breakdown
         if (session.pendingAction === 'buy_token_address') {
             if (!ethers_1.ethers.isAddress(text)) {
                 await this.bot.sendMessage(chatId, '❌ Invalid address. Try again:');
                 return;
             }
             session.pendingToken = text;
-            session.pendingAction = 'buy_amount';
-            await this.bot.sendMessage(chatId, '💰 Select amount to buy:', {
-                reply_markup: keyboards.buyAmountKeyboard,
-            });
+            // Fetch token info from DEXScreener
+            await this.bot.sendMessage(chatId, '⏳ Fetching token data...');
+            const tokenInfo = await dexscreener_1.dexScreener.getTokenInfo(text);
+            // Get user's wallets with balances
+            const wallets = await multiWallet_1.multiWallet.getUserWallets(userId);
+            let walletInfo = '';
+            if (wallets.length > 0) {
+                walletInfo = '\n\n👛 **Your Wallets:**\n';
+                for (const w of wallets) {
+                    const balPls = parseFloat(ethers_1.ethers.formatEther(w.balance));
+                    const icon = w.isActive ? '✅' : '⬜';
+                    walletInfo += `${icon} #${w.index} ${w.label}: **${(0, pnlCard_1.formatNumber)(balPls)} PLS**\n`;
+                }
+            }
+            if (tokenInfo) {
+                // Store token info in session for later use
+                session.tokenInfo = tokenInfo;
+                const msg = dexscreener_1.dexScreener.formatTokenInfo(tokenInfo) + walletInfo + `\n\n⚜️ _Select buy amount or set a limit order:_`;
+                session.pendingAction = 'buy_amount';
+                await this.bot.sendMessage(chatId, msg, {
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true,
+                    reply_markup: keyboards.buyAmountKeyboard,
+                });
+            }
+            else {
+                // Token not found on DEXScreener, proceed anyway
+                session.pendingAction = 'buy_amount';
+                await this.bot.sendMessage(chatId, `📋 Token: \`${text}\`\n\n` +
+                    `⚠️ _Token not found on DEXScreener. Proceed with caution._` + walletInfo + `\n\n💰 Select amount to buy:`, { parse_mode: 'Markdown', reply_markup: keyboards.buyAmountKeyboard });
+            }
             return;
         }
         if (session.pendingAction === 'sell_token_address') {
@@ -1954,10 +2049,35 @@ class DtraderBot {
                 return;
             }
             session.pendingToken = text;
-            session.pendingAction = 'sell_percent';
-            await this.bot.sendMessage(chatId, '📊 Select percentage to sell:', {
-                reply_markup: keyboards.sellPercentKeyboard,
-            });
+            // Fetch token info from DEXScreener
+            await this.bot.sendMessage(chatId, '⏳ Fetching token data...');
+            const tokenInfo = await dexscreener_1.dexScreener.getTokenInfo(text);
+            // Get user's wallets with balances
+            const wallets = await multiWallet_1.multiWallet.getUserWallets(userId);
+            let walletInfo = '';
+            if (wallets.length > 0) {
+                walletInfo = '\n\n👛 **Your Wallets:**\n';
+                for (const w of wallets) {
+                    const balPls = parseFloat(ethers_1.ethers.formatEther(w.balance));
+                    const icon = w.isActive ? '✅' : '⬜';
+                    walletInfo += `${icon} #${w.index} ${w.label}: **${(0, pnlCard_1.formatNumber)(balPls)} PLS**\n`;
+                }
+            }
+            if (tokenInfo) {
+                session.tokenInfo = tokenInfo;
+                const msg = dexscreener_1.dexScreener.formatTokenInfo(tokenInfo) + walletInfo + `\n\n⚜️ _Select sell percentage or set a limit order:_`;
+                session.pendingAction = 'sell_percent';
+                await this.bot.sendMessage(chatId, msg, {
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true,
+                    reply_markup: keyboards.sellPercentKeyboard,
+                });
+            }
+            else {
+                session.pendingAction = 'sell_percent';
+                await this.bot.sendMessage(chatId, `📋 Token: \`${text}\`\n\n` +
+                    `⚠️ _Token not found on DEXScreener._` + walletInfo + `\n\n📊 Select percentage to sell:`, { parse_mode: 'Markdown', reply_markup: keyboards.sellPercentKeyboard });
+            }
             return;
         }
         if (session.pendingAction === 'check_token_address') {
@@ -2164,14 +2284,35 @@ class DtraderBot {
             return;
         }
         if (session.pendingAction === 'limit_buy_price') {
-            const price = parseFloat(text);
-            if (isNaN(price) || price <= 0) {
-                await this.bot.sendMessage(chatId, '❌ Invalid price. Try again:');
+            let targetPrice;
+            const currentPrice = session.tokenInfo?.pricePls || 0;
+            // Check if input is a percentage (e.g., -1%, -10%, -25%)
+            if (text.includes('%')) {
+                const percentMatch = text.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+                if (!percentMatch || !currentPrice) {
+                    await this.bot.sendMessage(chatId, `❌ Invalid percentage or no price data.\n\n` +
+                        `Current price: ${currentPrice ? currentPrice.toFixed(12) + ' PLS' : 'Unknown'}\n\n` +
+                        `Enter a direct price in PLS or try again:`);
+                    return;
+                }
+                const percent = parseFloat(percentMatch[1]);
+                // For limit BUY, negative % means buy BELOW current price
+                targetPrice = currentPrice * (1 + percent / 100);
+            }
+            else {
+                targetPrice = parseFloat(text);
+            }
+            if (isNaN(targetPrice) || targetPrice <= 0) {
+                await this.bot.sendMessage(chatId, '❌ Invalid price. Try again with a number or percentage (e.g., -10%):');
                 return;
             }
-            session.pendingPrice = price.toString();
+            session.pendingPrice = targetPrice.toString();
             session.pendingAction = 'limit_buy_amount';
-            await this.bot.sendMessage(chatId, '💰 Enter PLS amount to spend (per wallet):');
+            // Show confirmation with calculated price
+            const priceMsg = currentPrice
+                ? `\n📊 Current: ${currentPrice.toFixed(12)} PLS\n🎯 Target: ${targetPrice.toFixed(12)} PLS (${((targetPrice / currentPrice - 1) * 100).toFixed(1)}%)\n`
+                : `\n🎯 Target: ${targetPrice.toFixed(12)} PLS\n`;
+            await this.bot.sendMessage(chatId, `✅ **Target Price Set**${priceMsg}\n💰 Enter PLS amount to spend (per wallet):`, { parse_mode: 'Markdown' });
             return;
         }
         if (session.pendingAction === 'limit_buy_amount') {
@@ -2210,16 +2351,37 @@ class DtraderBot {
             session.pendingPrice = undefined;
             return;
         }
-        // Limit sell price
+        // Limit sell price - supports percentages like +50%, +100%
         if (session.pendingAction === 'limit_sell_price') {
-            const price = parseFloat(text);
-            if (isNaN(price) || price <= 0) {
-                await this.bot.sendMessage(chatId, '❌ Invalid price. Try again:');
+            let targetPrice;
+            const currentPrice = session.tokenInfo?.pricePls || 0;
+            // Check if input is a percentage (e.g., +50%, +100%, +25%)
+            if (text.includes('%')) {
+                const percentMatch = text.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+                if (!percentMatch || !currentPrice) {
+                    await this.bot.sendMessage(chatId, `❌ Invalid percentage or no price data.\n\n` +
+                        `Current price: ${currentPrice ? currentPrice.toFixed(12) + ' PLS' : 'Unknown'}\n\n` +
+                        `Enter a direct price in PLS or try again:`);
+                    return;
+                }
+                const percent = parseFloat(percentMatch[1]);
+                // For limit SELL, positive % means sell ABOVE current price (take profit)
+                targetPrice = currentPrice * (1 + percent / 100);
+            }
+            else {
+                targetPrice = parseFloat(text);
+            }
+            if (isNaN(targetPrice) || targetPrice <= 0) {
+                await this.bot.sendMessage(chatId, '❌ Invalid price. Try again with a number or percentage (e.g., +50%):');
                 return;
             }
-            session.pendingPrice = price.toString();
+            session.pendingPrice = targetPrice.toString();
             session.pendingAction = 'limit_sell_amount';
-            await this.bot.sendMessage(chatId, '💰 Enter token amount to sell (per wallet):');
+            // Show confirmation with calculated price
+            const priceMsg = currentPrice
+                ? `\n📊 Current: ${currentPrice.toFixed(12)} PLS\n🎯 Target: ${targetPrice.toFixed(12)} PLS (${((targetPrice / currentPrice - 1) * 100).toFixed(1)}%)\n`
+                : `\n🎯 Target: ${targetPrice.toFixed(12)} PLS\n`;
+            await this.bot.sendMessage(chatId, `✅ **Target Price Set**${priceMsg}\n💰 Enter token amount to sell (per wallet):`, { parse_mode: 'Markdown' });
             return;
         }
         if (session.pendingAction === 'limit_sell_amount') {
@@ -3850,6 +4012,60 @@ Hold $50+ of DTGC to trade
             parse_mode: 'Markdown',
             reply_markup: keyboard,
         });
+    }
+    /**
+     * Show Probable Wins - AI-scored top opportunities
+     */
+    async showProbableWins(chatId, userId) {
+        await this.bot.sendMessage(chatId, '⏳ **Analyzing PulseChain tokens...**\n_Scoring opportunities based on volume, liquidity, and price action._', { parse_mode: 'Markdown' });
+        try {
+            const probableWins = await dexscreener_1.dexScreener.getProbableWins(15);
+            if (probableWins.length === 0) {
+                await this.bot.sendMessage(chatId, `🏆 **PROBABLE WINS**\n━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                    `No qualifying tokens found.\n\n` +
+                    `_Try again in a few minutes._`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+                return;
+            }
+            let msg = `🏆 **PROBABLE WINS** - Top Opportunities\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            for (let i = 0; i < Math.min(probableWins.length, 10); i++) {
+                const pw = probableWins[i];
+                const t = pw.token;
+                const scoreEmoji = pw.score >= 80 ? '🟢' : pw.score >= 60 ? '🟡' : '🟠';
+                const priceChangeEmoji = t.priceChange24h >= 0 ? '📈' : '📉';
+                const priceChangeSign = t.priceChange24h >= 0 ? '+' : '';
+                msg += `**${i + 1}. ${scoreEmoji} $${t.symbol}** (${pw.score}% score)\n`;
+                msg += `   💧 $${dexscreener_1.dexScreener.formatNumber(t.liquidity)} Liq | `;
+                msg += `📊 $${dexscreener_1.dexScreener.formatNumber(t.volume24h)} Vol | `;
+                msg += `${priceChangeEmoji} ${priceChangeSign}${t.priceChange24h.toFixed(1)}%\n`;
+                if (pw.reasons.length > 0) {
+                    msg += `   ${pw.reasons.slice(0, 2).join(' • ')}\n`;
+                }
+                msg += `   \`${t.address.slice(0, 8)}...${t.address.slice(-6)}\`\n\n`;
+            }
+            msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `⚜️ _Scores based on volume momentum, liquidity,_\n`;
+            msg += `_price action, and trading activity._`;
+            // Build keyboard with quick buy buttons for top 5
+            const buttons = [];
+            for (let i = 0; i < Math.min(probableWins.length, 5); i++) {
+                const pw = probableWins[i];
+                buttons.push([
+                    { text: `💰 Buy $${pw.token.symbol}`, callback_data: `wins_buy_${pw.token.address.slice(0, 16)}` },
+                    { text: `📊 Details`, callback_data: `wins_details_${pw.token.address.slice(0, 16)}` },
+                ]);
+            }
+            buttons.push([{ text: '🔄 Refresh', callback_data: 'wins_menu' }]);
+            buttons.push([{ text: '🔙 Main Menu', callback_data: 'main_menu' }]);
+            await this.bot.sendMessage(chatId, msg, {
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: buttons },
+            });
+        }
+        catch (error) {
+            console.error('Probable Wins error:', error);
+            await this.bot.sendMessage(chatId, `❌ Failed to load Probable Wins.\n\nError: ${error.message}`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+        }
     }
     /**
      * Show quick sell menu for a token (PulsonicBot style)

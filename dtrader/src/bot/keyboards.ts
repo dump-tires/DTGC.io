@@ -18,23 +18,26 @@ export const mainMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
       { text: '💸 Sell', callback_data: 'action_sell' },
     ],
     [
-      { text: '🎯 Sniper', callback_data: 'snipe_menu' },
+      { text: '🏆 Probable Wins', callback_data: 'wins_menu' },
       { text: '📊 Orders', callback_data: 'orders_menu' },
     ],
     [
+      { text: '🎯 Sniper', callback_data: 'snipe_menu' },
       { text: '🎓 pump.tires', callback_data: 'pump_menu' },
-      { text: '🐋 Copy Trade', callback_data: 'copy_menu' },
     ],
     [
       { text: '👛 Wallets', callback_data: 'wallets_menu' },
       { text: '📈 Portfolio', callback_data: 'portfolio' },
     ],
     [
+      { text: '🐋 Copy Trade', callback_data: 'copy_menu' },
       { text: '📋 Trade History', callback_data: 'history_menu' },
-      { text: '⚙️ Settings', callback_data: 'settings' },
     ],
     [
       { text: '🛡️ Anti-Rug Check', callback_data: 'check_token' },
+      { text: '⚙️ Settings', callback_data: 'settings' },
+    ],
+    [
       { text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } },
     ],
     [
@@ -308,6 +311,12 @@ export const buyAmountKeyboard: TelegramBot.InlineKeyboardMarkup = {
     ],
     [
       { text: '🟢 Limit Buy (set target price)', callback_data: 'buy_limit_order' },
+    ],
+    [
+      { text: '━━━━━━━━━━━━━━━━━━━━━━━━━━', callback_data: 'noop' },
+    ],
+    [
+      { text: '🏆 Probable Wins - Find Opportunities', callback_data: 'wins_menu' },
     ],
     [
       { text: '❌ Cancel', callback_data: 'main_menu' },
