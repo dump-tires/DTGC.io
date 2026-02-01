@@ -311,19 +311,33 @@ class LimitOrderEngine extends events_1.EventEmitter {
      */
     async checkPrices() {
         const activeTokens = this.orderStore.getDistinctActiveTokens();
+        if (activeTokens.length > 0) {
+            console.log(`🔍 [LIMIT] Checking ${activeTokens.length} tokens with active orders...`);
+        }
         for (const tokenAddress of activeTokens) {
             const priceData = await this.getTokenPrice(tokenAddress);
-            if (!priceData)
+            if (!priceData) {
+                console.log(`⚠️ [LIMIT] Could not get price for ${tokenAddress.slice(0, 12)}...`);
                 continue;
+            }
             const ordersForToken = this.orderStore.findActiveByToken(tokenAddress);
+            const currentPriceStr = ethers_1.ethers.formatEther(priceData.priceInPls);
             for (const order of ordersForToken) {
+                const targetPriceStr = ethers_1.ethers.formatEther(BigInt(order.targetPrice));
                 // Check expiry
                 if (order.expiresAt && Date.now() > order.expiresAt) {
+                    console.log(`⏰ [LIMIT] Order ${order.id.slice(0, 15)}... expired`);
                     this.orderStore.update(order.id, { status: 'expired' });
                     this.emit('orderExpired', order);
                     continue;
                 }
-                if (this.shouldExecute(order, priceData.priceInPls)) {
+                // Log price comparison
+                console.log(`📊 [LIMIT] ${order.orderType.toUpperCase()} ${order.id.slice(0, 15)}...`);
+                console.log(`   Current: ${currentPriceStr} PLS | Target: ${targetPriceStr} PLS`);
+                const shouldExec = this.shouldExecute(order, priceData.priceInPls);
+                console.log(`   Should execute: ${shouldExec ? '✅ YES' : '❌ NO'}`);
+                if (shouldExec) {
+                    console.log(`🎯 [LIMIT] TRIGGERING order ${order.id}!`);
                     this.emit('orderTriggered', { order, priceData });
                 }
             }

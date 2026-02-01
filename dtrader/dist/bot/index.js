@@ -4577,31 +4577,73 @@ Hold $50+ of DTGC to trade
     setupOrderEvents() {
         limitOrder_1.limitOrderEngine.on('orderTriggered', async (data) => {
             const { order, priceData } = data;
-            const wallet = await wallet_1.walletManager.getWallet(order.userId);
-            if (!wallet)
+            console.log(`🎯 [LIMIT ORDER] Triggered: ${order.orderType} for ${order.tokenAddress.slice(0, 12)}...`);
+            console.log(`   Target: ${ethers_1.ethers.formatEther(BigInt(order.targetPrice))} PLS`);
+            console.log(`   Current: ${ethers_1.ethers.formatEther(priceData.priceInPls)} PLS`);
+            console.log(`   Wallet: ${order.walletAddress}`);
+            console.log(`   Amount: ${ethers_1.ethers.formatEther(BigInt(order.amount))} PLS`);
+            // Get the correct wallet signer - use the wallet address stored in the order
+            // First try multi-wallet, then fall back to main wallet
+            let walletSigner = null;
+            // Try to find the wallet in multi-wallet by address
+            const userWallets = await multiWallet_1.multiWallet.getUserWallets(order.userId);
+            const matchingWallet = userWallets.find(w => w.address.toLowerCase() === order.walletAddress.toLowerCase());
+            if (matchingWallet) {
+                walletSigner = await multiWallet_1.multiWallet.getWalletSigner(order.userId, matchingWallet.index);
+                console.log(`   Using multi-wallet #${matchingWallet.index}: ${matchingWallet.address.slice(0, 12)}...`);
+            }
+            // Fall back to main bot wallet if multi-wallet not found
+            if (!walletSigner) {
+                const mainWallet = await wallet_1.walletManager.getWallet(order.userId);
+                if (mainWallet && mainWallet.address.toLowerCase() === order.walletAddress.toLowerCase()) {
+                    walletSigner = mainWallet;
+                    console.log(`   Using main bot wallet: ${mainWallet.address.slice(0, 12)}...`);
+                }
+            }
+            if (!walletSigner) {
+                console.error(`❌ [LIMIT ORDER] Wallet not found for order ${order.id}! Address: ${order.walletAddress}`);
+                limitOrder_1.limitOrderEngine.markOrderFailed(order.id, 'Wallet not found');
                 return;
+            }
             // Find the chat ID for this user
             let userChatId = null;
             for (const [chatId, session] of this.sessions) {
-                if (session.linkedWallet === wallet.address || chatId === order.userId) {
+                if (session.linkedWallet === walletSigner.address || chatId === order.userId) {
                     userChatId = chatId;
                     break;
                 }
+            }
+            // Also try using userId directly as chatId (common pattern)
+            if (!userChatId) {
+                userChatId = order.userId;
             }
             // Notify user that order is triggering
             if (userChatId) {
                 await this.bot.sendMessage(userChatId, `⚡ **LIMIT ORDER TRIGGERED!**\n\n` +
                     `📊 ${order.orderType.replace('_', ' ').toUpperCase()}\n` +
                     `🪙 Token: \`${order.tokenAddress.slice(0, 12)}...\`\n` +
-                    `💰 Target hit: ${ethers_1.ethers.formatEther(BigInt(order.targetPrice))} PLS\n\n` +
-                    `⏳ Executing trade...`, { parse_mode: 'Markdown' });
+                    `💰 Target hit: ${ethers_1.ethers.formatEther(BigInt(order.targetPrice))} PLS\n` +
+                    `📈 Current: ${ethers_1.ethers.formatEther(priceData.priceInPls)} PLS\n\n` +
+                    `⏳ Executing trade with wallet ${order.walletAddress.slice(0, 8)}...`, { parse_mode: 'Markdown' });
             }
             let result;
-            if (order.orderType === 'limit_buy') {
-                result = await pulsex_1.pulsex.executeBuy(wallet, order.tokenAddress, BigInt(order.amount), order.slippage, 500000);
+            try {
+                if (order.orderType === 'limit_buy') {
+                    console.log(`   Executing BUY: ${ethers_1.ethers.formatEther(BigInt(order.amount))} PLS for token`);
+                    result = await pulsex_1.pulsex.executeBuy(walletSigner, order.tokenAddress, BigInt(order.amount), order.slippage, 500000);
+                }
+                else {
+                    console.log(`   Executing SELL: ${ethers_1.ethers.formatEther(BigInt(order.amount))} tokens for PLS`);
+                    result = await pulsex_1.pulsex.executeSell(walletSigner, order.tokenAddress, BigInt(order.amount), order.slippage, 500000);
+                }
             }
-            else {
-                result = await pulsex_1.pulsex.executeSell(wallet, order.tokenAddress, BigInt(order.amount), order.slippage, 500000);
+            catch (execError) {
+                console.error(`❌ [LIMIT ORDER] Execution error:`, execError);
+                limitOrder_1.limitOrderEngine.markOrderFailed(order.id, String(execError));
+                if (userChatId) {
+                    await this.bot.sendMessage(userChatId, `❌ **Limit order failed!**\n\nError: ${String(execError).slice(0, 200)}`, { parse_mode: 'Markdown' });
+                }
+                return;
             }
             if (result.success) {
                 limitOrder_1.limitOrderEngine.markOrderFilled(order.id, result.txHash);
