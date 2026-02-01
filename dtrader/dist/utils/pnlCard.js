@@ -110,18 +110,25 @@ function canGenerateImages() {
 /**
  * Mando image collection for P&L cards
  * Images are stored in dtrader/public/images/mando/ folder
- * Bright, golden aesthetic images preferred
+ * Bright, golden aesthetic images preferred - 13 total images!
  */
 const MANDO_IMAGES = [
-    'mando-sniper.png', // Original gold moon sniper
+    // Original images
+    'mando-sniper.png', // Gold moon sniper (original)
     'mando-hallway-gold.jpg', // Gold armor, marble hallway - VERY BRIGHT
     'mando-hallway-bright.jpg', // Silver armor, bright marble - BRIGHTEST
     'mando-gold-lava.jpg', // Gold armor, volcanic background
     'mando-silver-lava.jpg', // Silver armor, lava scene
     'mando-watercolor.jpg', // Watercolor artistic style
     'mando-watercolor-lava.jpg', // Watercolor with red lava
-    // 'mando-collage-1.jpg',  // 4-grid collage (skip for now)
-    // 'mando-collage-2.jpg',  // 4-grid collage (skip for now)
+    // Split from collages - desert series
+    'mando-desert-1.jpg', // Gold armor, orange desert
+    'mando-desert-2.jpg', // Silver armor aiming, red sky
+    'mando-desert-3.jpg', // Planet background, bronze armor
+    'mando-desert-4.jpg', // Gold armor, dark lava scene
+    // Split from collages - action series
+    'mando-action-1.jpg', // Gold armor aiming, red planet
+    'mando-action-3.jpg', // Forest background, action pose
 ];
 /**
  * Find the Mando sniper image (randomly selects from collection)
@@ -174,9 +181,9 @@ function getMandoImageByType(type) {
     ];
     // Map types to preferred images - BRIGHT images first!
     const typePreferences = {
-        victory: ['mando-hallway-gold.jpg', 'mando-hallway-bright.jpg', 'mando-gold-lava.jpg', 'mando-sniper.png'],
-        pnl: ['mando-hallway-bright.jpg', 'mando-hallway-gold.jpg', 'mando-sniper.png', 'mando-gold-lava.jpg'],
-        snipe: ['mando-gold-lava.jpg', 'mando-silver-lava.jpg', 'mando-watercolor-lava.jpg', 'mando-hallway-gold.jpg'],
+        victory: ['mando-hallway-gold.jpg', 'mando-hallway-bright.jpg', 'mando-gold-lava.jpg', 'mando-desert-4.jpg', 'mando-sniper.png'],
+        pnl: ['mando-hallway-bright.jpg', 'mando-hallway-gold.jpg', 'mando-desert-1.jpg', 'mando-sniper.png', 'mando-gold-lava.jpg'],
+        snipe: ['mando-action-1.jpg', 'mando-desert-2.jpg', 'mando-gold-lava.jpg', 'mando-silver-lava.jpg', 'mando-watercolor-lava.jpg'],
     };
     const preferred = typePreferences[type] || MANDO_IMAGES;
     for (const basePath of basePaths) {
