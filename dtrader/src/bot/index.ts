@@ -206,7 +206,7 @@ export class DtraderBot {
 
       // Set bot description - shown BEFORE user presses START
       // This is what appears in the bot's profile/bio area
-      const description = `⚜️ DTG BOND BOT - PulseChain Trading Power
+      const description = `⚜️ DTRADER SNIPER - PulseChain Trading Power
 
 🎯 InstaBond Sniper - Auto-buy at pump.tires graduation
 👛 6 Wallet Slots - Manage multiple trading wallets
@@ -671,7 +671,7 @@ export class DtraderBot {
       const hasLinkedWallet = !!persistedLink;
 
       // Show compact welcome with menu immediately visible
-      let welcomeMsg = `⚜️ **DTG BOND BOT**\n`;
+      let welcomeMsg = `⚜️ **DTRADER SNIPER**\n`;
       welcomeMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
       if (isNew) {
@@ -708,7 +708,7 @@ export class DtraderBot {
     this.bot.onText(/\/help/, async (msg) => {
       const chatId = msg.chat.id.toString();
 
-      const helpMsg = `⚜️ **DTG BOND BOT** - Feature Guide\n` +
+      const helpMsg = `⚜️ **DTRADER SNIPER** - Feature Guide\n` +
         `━━━━━━━━━━━━━━━━━━━━━\n\n` +
         `🎯 **INSTABOND SNIPER**\n` +
         `Auto-buy tokens when they graduate from pump.tires bonding curve (200M PLS). ` +
@@ -1727,6 +1727,36 @@ export class DtraderBot {
       return;
     }
 
+    // Positions menu actions
+    if (data === 'positions_menu') {
+      await this.showPositionsMenu(chatId, userId);
+      return;
+    }
+
+    if (data === 'positions_refresh') {
+      await this.bot.sendMessage(chatId, '🔄 Refreshing positions...');
+      await this.showPositionsMenu(chatId, userId);
+      return;
+    }
+
+    if (data === 'positions_sort_pnl') {
+      await this.bot.sendMessage(chatId, '📊 Sorting by P&L...');
+      await this.showPositionsMenu(chatId, userId);
+      return;
+    }
+
+    if (data === 'positions_sort_value') {
+      await this.bot.sendMessage(chatId, '📈 Sorting by value...');
+      await this.showPositionsMenu(chatId, userId);
+      return;
+    }
+
+    if (data === 'positions_regroup') {
+      await this.bot.sendMessage(chatId, '🗂️ Regrouping messages...');
+      await this.showPositionsMenu(chatId, userId);
+      return;
+    }
+
     // Settings toggles
     if (data === 'toggle_antirug') {
       session.settings.antiRug = !session.settings.antiRug;
@@ -1826,7 +1856,7 @@ export class DtraderBot {
 
     if (data === 'help_menu') {
       await this.bot.sendMessage(chatId,
-        `ℹ️ **DTG BOND BOT - Help Center**\n\n` +
+        `ℹ️ **DTRADER SNIPER - Help Center**\n\n` +
         `━━━━━━━━━━━━━━━━━━━━━\n\n` +
         `Select a feature to learn more:\n\n` +
         `💰 **Buy/Sell** - Instant DEX trading\n` +
@@ -5657,7 +5687,7 @@ export class DtraderBot {
 
   private async showHelp(chatId: string): Promise<void> {
     await this.bot.sendMessage(chatId, `
-⚜️ **DTG BOND BOT Help**
+⚜️ **DTRADER SNIPER Help**
 
 **Quick Commands:**
 /buy <token> - Buy a token
