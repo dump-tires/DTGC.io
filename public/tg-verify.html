@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>DTGC Wallet Verification</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
   <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+  <script src="https://unpkg.com/@walletconnect/modal@2.6.2/dist/index.umd.js"></script>
+  <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.11.0/dist/index.umd.js"></script>
   <style>
     * {
       margin: 0;
@@ -97,6 +98,11 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .btn:last-child {
+      margin-bottom: 0;
     }
 
     .btn-primary {
@@ -119,6 +125,11 @@
       background: rgba(255, 255, 255, 0.1);
       color: #FFF;
       border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-walletconnect {
+      background: linear-gradient(135deg, #3B99FC 0%, #2D7DD2 100%);
+      color: #FFF;
     }
 
     .status {
@@ -193,6 +204,11 @@
       animation: spin 1s linear infinite;
     }
 
+    .spinner-light {
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #FFF;
+    }
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
@@ -254,8 +270,44 @@
       color: #888;
     }
 
+    .divider {
+      display: flex;
+      align-items: center;
+      margin: 16px 0;
+      color: #666;
+      font-size: 12px;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .divider span {
+      padding: 0 12px;
+    }
+
     .hidden {
       display: none;
+    }
+
+    .wallet-options {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .info-box {
+      background: rgba(59, 153, 252, 0.1);
+      border: 1px solid rgba(59, 153, 252, 0.3);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #3B99FC;
     }
   </style>
 </head>
@@ -277,12 +329,16 @@
         </div>
       </div>
 
+      <div class="info-box">
+        📱 Tap WalletConnect to open your wallet app (MetaMask, Rabby, Trust Wallet, etc.)
+      </div>
+
       <div class="steps">
         <div class="step active" id="step1">
           <div class="step-number">1</div>
           <div class="step-content">
             <div class="step-title">Connect Wallet</div>
-            <div class="step-desc">Connect your MetaMask, Rabby, or WalletConnect</div>
+            <div class="step-desc">Connect via WalletConnect or browser extension</div>
           </div>
         </div>
         <div class="step" id="step2">
@@ -301,9 +357,17 @@
         </div>
       </div>
 
-      <button id="btn-connect" class="btn btn-primary" onclick="connectWallet()">
-        🔗 Connect Wallet
-      </button>
+      <div class="wallet-options">
+        <button id="btn-walletconnect" class="btn btn-walletconnect" onclick="connectWalletConnect()">
+          🔗 Connect with WalletConnect
+        </button>
+
+        <div class="divider"><span>or</span></div>
+
+        <button id="btn-browser" class="btn btn-secondary" onclick="connectBrowserWallet()">
+          🦊 Browser Extension (MetaMask/Rabby)
+        </button>
+      </div>
     </div>
 
     <!-- Step 2: Sign Message (hidden initially) -->
@@ -325,7 +389,7 @@
         ✍️ Sign to Verify Ownership
       </button>
 
-      <button class="btn btn-secondary" style="margin-top: 12px;" onclick="disconnect()">
+      <button class="btn btn-secondary" onclick="disconnect()">
         Disconnect
       </button>
     </div>
@@ -351,12 +415,15 @@
 
     <!-- Loading overlay -->
     <div id="loading" class="status status-pending hidden">
-      <div class="spinner" style="margin: 0 auto 12px;"></div>
+      <div class="spinner spinner-light" style="margin: 0 auto 12px;"></div>
       <div id="loading-text">Processing...</div>
     </div>
   </div>
 
   <script>
+    // WalletConnect Project ID (get yours at https://cloud.walletconnect.com)
+    const WALLETCONNECT_PROJECT_ID = 'a95ae7b3e629c5e6351c52d4dbf10e20';
+
     // Initialize Telegram Web App
     const tg = window.Telegram?.WebApp;
     let telegramUserId = null;
@@ -375,87 +442,155 @@
 
     // State
     let provider = null;
+    let wcProvider = null;
     let signer = null;
     let connectedAddress = null;
     let dtgcBalance = 0;
     let dtgcUsdValue = 0;
+    let connectionType = null; // 'walletconnect' or 'browser'
 
     // DTGC Token Contract
     const DTGC_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
     const DTGC_ABI = ['function balanceOf(address) view returns (uint256)'];
     const PULSECHAIN_RPC = 'https://rpc.pulsechain.com';
+    const PULSECHAIN_CHAIN_ID = 369;
     const GATE_MIN_USD = 50;
 
-    // Connect wallet
-    async function connectWallet() {
-      const btn = document.getElementById('btn-connect');
+    // Connect via WalletConnect (works in Telegram!)
+    async function connectWalletConnect() {
+      const btn = document.getElementById('btn-walletconnect');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner spinner-light"></div> Opening wallet...';
+
+      try {
+        // Create WalletConnect provider
+        const EthereumProvider = window.EthereumProvider?.default || window.EthereumProvider;
+
+        wcProvider = await EthereumProvider.init({
+          projectId: WALLETCONNECT_PROJECT_ID,
+          chains: [PULSECHAIN_CHAIN_ID],
+          showQrModal: true,
+          metadata: {
+            name: 'DTGC Token Gate',
+            description: 'Verify your DTGC holdings',
+            url: 'https://dtgc.io',
+            icons: ['https://dtgc.io/logo192.png']
+          },
+          rpcMap: {
+            369: PULSECHAIN_RPC
+          }
+        });
+
+        // Enable session (triggers QR code or deep link)
+        await wcProvider.enable();
+
+        // Create ethers provider
+        provider = new ethers.providers.Web3Provider(wcProvider);
+        signer = provider.getSigner();
+        connectedAddress = await signer.getAddress();
+        connectionType = 'walletconnect';
+
+        // Listen for disconnect
+        wcProvider.on('disconnect', () => {
+          console.log('WalletConnect disconnected');
+          disconnect();
+        });
+
+        await onWalletConnected();
+
+      } catch (error) {
+        console.error('WalletConnect error:', error);
+
+        // More user-friendly error messages
+        let errorMsg = error.message || 'Failed to connect';
+        if (errorMsg.includes('User rejected')) {
+          errorMsg = 'Connection was rejected. Please try again.';
+        } else if (errorMsg.includes('No matching key')) {
+          errorMsg = 'Session expired. Please try again.';
+        }
+
+        alert(errorMsg);
+        btn.disabled = false;
+        btn.innerHTML = '🔗 Connect with WalletConnect';
+      }
+    }
+
+    // Connect via browser extension (MetaMask, Rabby)
+    async function connectBrowserWallet() {
+      const btn = document.getElementById('btn-browser');
       btn.disabled = true;
       btn.innerHTML = '<div class="spinner"></div> Connecting...';
 
       try {
-        // Check for injected provider (MetaMask, Rabby, etc.)
-        if (window.ethereum) {
-          provider = new ethers.providers.Web3Provider(window.ethereum);
-          await provider.send('eth_requestAccounts', []);
-
-          // Check if on PulseChain (chainId 369)
-          const network = await provider.getNetwork();
-          if (network.chainId !== 369) {
-            try {
-              await window.ethereum.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: '0x171' }], // 369 in hex
-              });
-              provider = new ethers.providers.Web3Provider(window.ethereum);
-            } catch (switchError) {
-              if (switchError.code === 4902) {
-                await window.ethereum.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [{
-                    chainId: '0x171',
-                    chainName: 'PulseChain',
-                    nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
-                    rpcUrls: ['https://rpc.pulsechain.com'],
-                    blockExplorerUrls: ['https://scan.pulsechain.com'],
-                  }],
-                });
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-              }
-            }
-          }
-
-          signer = provider.getSigner();
-          connectedAddress = await signer.getAddress();
-        } else {
-          // No injected provider - show message
-          throw new Error('Please open this in a browser with MetaMask or Rabby wallet installed');
+        if (!window.ethereum) {
+          throw new Error('No wallet extension found. Please use WalletConnect instead, or open this page in a browser with MetaMask/Rabby installed.');
         }
 
-        // Update UI
-        document.getElementById('wallet-address').textContent = connectedAddress;
-        document.getElementById('step1').classList.remove('active');
-        document.getElementById('step1').classList.add('completed');
-        document.getElementById('step2').classList.add('active');
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send('eth_requestAccounts', []);
 
-        // Check DTGC balance
-        await checkBalance();
+        // Check if on PulseChain (chainId 369)
+        const network = await provider.getNetwork();
+        if (network.chainId !== PULSECHAIN_CHAIN_ID) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: '0x171' }],
+            });
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+          } catch (switchError) {
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                  chainId: '0x171',
+                  chainName: 'PulseChain',
+                  nativeCurrency: { name: 'PLS', symbol: 'PLS', decimals: 18 },
+                  rpcUrls: ['https://rpc.pulsechain.com'],
+                  blockExplorerUrls: ['https://scan.pulsechain.com'],
+                }],
+              });
+              provider = new ethers.providers.Web3Provider(window.ethereum);
+            }
+          }
+        }
 
-        // Show sign step
-        document.getElementById('step-connect').classList.add('hidden');
-        document.getElementById('step-sign').classList.remove('hidden');
+        signer = provider.getSigner();
+        connectedAddress = await signer.getAddress();
+        connectionType = 'browser';
+
+        await onWalletConnected();
 
       } catch (error) {
-        console.error('Connect error:', error);
+        console.error('Browser wallet error:', error);
         alert(error.message || 'Failed to connect wallet');
         btn.disabled = false;
-        btn.innerHTML = '🔗 Connect Wallet';
+        btn.innerHTML = '🦊 Browser Extension (MetaMask/Rabby)';
       }
+    }
+
+    // Called after successful connection
+    async function onWalletConnected() {
+      // Update UI
+      document.getElementById('wallet-address').textContent = connectedAddress;
+      document.getElementById('step1').classList.remove('active');
+      document.getElementById('step1').classList.add('completed');
+      document.getElementById('step2').classList.add('active');
+
+      // Check DTGC balance
+      await checkBalance();
+
+      // Show sign step
+      document.getElementById('step-connect').classList.add('hidden');
+      document.getElementById('step-sign').classList.remove('hidden');
     }
 
     // Check DTGC balance
     async function checkBalance() {
       try {
-        const dtgcContract = new ethers.Contract(DTGC_ADDRESS, DTGC_ABI, provider);
+        // Use a dedicated RPC provider for balance check (more reliable)
+        const rpcProvider = new ethers.providers.JsonRpcProvider(PULSECHAIN_RPC);
+        const dtgcContract = new ethers.Contract(DTGC_ADDRESS, DTGC_ABI, rpcProvider);
         const balance = await dtgcContract.balanceOf(connectedAddress);
         dtgcBalance = parseFloat(ethers.utils.formatEther(balance));
 
@@ -489,7 +624,7 @@
     async function signMessage() {
       const btn = document.getElementById('btn-sign');
       btn.disabled = true;
-      btn.innerHTML = '<div class="spinner"></div> Waiting for signature...';
+      btn.innerHTML = '<div class="spinner"></div> Open your wallet to sign...';
 
       try {
         // Create verification message
@@ -528,12 +663,17 @@
           document.getElementById('step-result').classList.remove('hidden');
           document.getElementById('status-success').classList.remove('hidden');
 
+          // Haptic feedback if available
+          if (tg?.HapticFeedback) {
+            tg.HapticFeedback.notificationOccurred('success');
+          }
+
           // Close mini app after delay
           setTimeout(() => {
             if (tg) {
               tg.close();
             }
-          }, 2000);
+          }, 2500);
         } else {
           throw new Error(result.error || 'Verification failed');
         }
@@ -541,18 +681,38 @@
       } catch (error) {
         console.error('Sign error:', error);
 
+        // Haptic feedback if available
+        if (tg?.HapticFeedback) {
+          tg.HapticFeedback.notificationOccurred('error');
+        }
+
         document.getElementById('step-sign').classList.add('hidden');
         document.getElementById('step-result').classList.remove('hidden');
         document.getElementById('status-error').classList.remove('hidden');
-        document.getElementById('error-message').textContent = error.message || 'Signature failed';
+
+        let errorMsg = error.message || 'Signature failed';
+        if (errorMsg.includes('User rejected') || errorMsg.includes('user rejected')) {
+          errorMsg = 'Signature was rejected. Please try again.';
+        }
+        document.getElementById('error-message').textContent = errorMsg;
       }
     }
 
     // Disconnect wallet
-    function disconnect() {
+    async function disconnect() {
+      if (wcProvider) {
+        try {
+          await wcProvider.disconnect();
+        } catch (e) {
+          console.log('WC disconnect error:', e);
+        }
+        wcProvider = null;
+      }
+
       provider = null;
       signer = null;
       connectedAddress = null;
+      connectionType = null;
 
       document.getElementById('step-connect').classList.remove('hidden');
       document.getElementById('step-sign').classList.add('hidden');
@@ -565,9 +725,11 @@
       document.getElementById('step3').classList.remove('active');
       document.getElementById('step3').classList.remove('completed');
 
-      const btn = document.getElementById('btn-connect');
-      btn.disabled = false;
-      btn.innerHTML = '🔗 Connect Wallet';
+      // Reset buttons
+      document.getElementById('btn-walletconnect').disabled = false;
+      document.getElementById('btn-walletconnect').innerHTML = '🔗 Connect with WalletConnect';
+      document.getElementById('btn-browser').disabled = false;
+      document.getElementById('btn-browser').innerHTML = '🦊 Browser Extension (MetaMask/Rabby)';
     }
 
     // Restart verification
