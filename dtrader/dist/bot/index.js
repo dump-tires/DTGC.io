@@ -1096,23 +1096,49 @@ class DtraderBot {
             await this.generate6Wallets(chatId, userId);
             return;
         }
-        // Wallets menu - show wallet info with copy-friendly display
+        // Wallets menu - show wallet info with import options
         if (data === 'wallets_menu') {
-            const wallet = await wallet_1.walletManager.getWallet(userId);
-            if (wallet) {
-                await this.bot.sendMessage(chatId, `👛 **Your Bot Wallet**\n\n` +
-                    `📋 **Address (tap to copy):**\n\`${wallet.address}\`\n\n` +
-                    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                    `💡 **How to use:**\n` +
-                    `1. Copy address above\n` +
-                    `2. Send PLS from your main wallet\n` +
-                    `3. Link DTGC wallet via Gold Suite\n` +
-                    `4. Start trading!\n\n` +
-                    `🔗 **Link your DTGC wallet:** dtgc.io/gold`, {
-                    parse_mode: 'Markdown',
-                    reply_markup: keyboards.walletsMenuKeyboard,
-                });
+            const gatedWallet = session.linkedWallet || jsonStore_1.LinkedWallets.getAddress(userId);
+            const snipeWallets = await multiWallet_1.multiWallet.getUserWallets(userId);
+            let msg = `👛 **Wallet Management**\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            if (gatedWallet) {
+                msg += `🔗 **Gate Wallet:** \`${gatedWallet.slice(0, 10)}...${gatedWallet.slice(-6)}\`\n\n`;
             }
+            else {
+                msg += `⚠️ **No Gate Wallet Linked**\n`;
+                msg += `Verify your $50 DTGC wallet first!\n\n`;
+            }
+            if (snipeWallets.length > 0) {
+                msg += `👛 **${snipeWallets.length} Snipe Wallets:**\n`;
+                for (const w of snipeWallets) {
+                    const status = w.isActive ? '✅' : '⬜';
+                    msg += `${status} #${w.index + 1} ${w.label}: \`${w.address.slice(0, 8)}...${w.address.slice(-4)}\`\n`;
+                }
+                msg += `\n`;
+            }
+            else {
+                msg += `📥 **No Snipe Wallets Yet**\n`;
+                msg += `Import your existing wallets or generate new ones!\n\n`;
+            }
+            msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `💡 **Tap "Import All 6" to paste all your private keys at once with labels!**`;
+            await this.bot.sendMessage(chatId, msg, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '📥 IMPORT ALL 6 WALLETS', callback_data: 'bulk_import_wallets' }],
+                        [{ text: '🔐 Recover Wallets', callback_data: 'post_verify_recover' },
+                            { text: '🆕 Generate 6', callback_data: 'wallets_generate_6' }],
+                        [{ text: '💰 Balances', callback_data: 'wallets_balance' },
+                            { text: '📋 Addresses', callback_data: 'wallets_addresses' }],
+                        [{ text: '✅ Toggle Active', callback_data: 'wallets_toggle' },
+                            { text: '🏷️ Labels', callback_data: 'wallets_labels' }],
+                        [{ text: '🔑 Export Keys', callback_data: 'wallets_export' }],
+                        [{ text: '🔙 Main Menu', callback_data: 'main_menu' }],
+                    ]
+                }
+            });
             return;
         }
         // Export all wallet keys
@@ -1718,6 +1744,30 @@ class DtraderBot {
         }
         // Bulk import wallets (up to 6)
         if (data === 'bulk_import_wallets') {
+            session.pendingAction = 'bulk_import_wallets';
+            const gatedWallet = session.linkedWallet || jsonStore_1.LinkedWallets.getAddress(userId);
+            let headerMsg = `📥 **IMPORT YOUR 6 WALLETS**\n`;
+            headerMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            if (gatedWallet) {
+                headerMsg += `🔗 Linking to: \`${gatedWallet.slice(0, 10)}...${gatedWallet.slice(-6)}\`\n\n`;
+            }
+            headerMsg += `Paste your **private keys** below, one per line.\n`;
+            headerMsg += `Add a **label** after each key (optional):\n\n`;
+            headerMsg += `**Format:**\n`;
+            headerMsg += `\`0xKEY1... Sniper 1\`\n`;
+            headerMsg += `\`0xKEY2... DCA Bot\`\n`;
+            headerMsg += `\`0xKEY3... Moon Bag\`\n`;
+            headerMsg += `\`0xKEY4...\`\n`;
+            headerMsg += `\`0xKEY5...\`\n`;
+            headerMsg += `\`0xKEY6...\`\n\n`;
+            headerMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            headerMsg += `⚠️ **Paste ALL your keys now** (up to 6)\n`;
+            headerMsg += `_All wallets will be permanently saved!_`;
+            await this.bot.sendMessage(chatId, headerMsg, { parse_mode: 'Markdown' });
+            return;
+        }
+        // OLD bulk import message backup - keep for reference
+        if (data === 'bulk_import_wallets_old') {
             session.pendingAction = 'bulk_import_wallets';
             await this.bot.sendMessage(chatId, `📥 **Bulk Import Wallets**\n` +
                 `━━━━━━━━━━━━━━━━━━━━━\n\n` +

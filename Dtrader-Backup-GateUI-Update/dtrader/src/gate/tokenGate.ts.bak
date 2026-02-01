@@ -1,0 +1,152 @@
+import { ethers } from 'ethers';
+import { config, ERC20_ABI, PULSEX_ROUTER_ABI } from '../config';
+
+/**
+ * Token Gate - DTGC Only
+ *
+ * Users must hold $50+ of DTGC to access Dtrader features.
+ * This applies to both Telegram bot and PulseX Gold web interface.
+ */
+
+interface TokenHolding {
+  token: string;
+  symbol: string;
+  balance: bigint;
+  balanceFormatted: string;
+  priceUsd: number;
+  valueUsd: number;
+}
+
+interface GateCheckResult {
+  allowed: boolean;
+  holding: TokenHolding;
+  message: string;
+}
+
+export class TokenGate {
+  private provider: ethers.JsonRpcProvider;
+  private router: ethers.Contract;
+
+  // Stablecoin for price reference
+  private readonly DAI = '0xefD766cCb38EaF1dfd701853BFCe31359239F305';
+
+  constructor() {
+    this.provider = new ethers.JsonRpcProvider(config.rpc);
+    this.router = new ethers.Contract(config.pulsexRouter, PULSEX_ROUTER_ABI, this.provider);
+  }
+
+  /**
+   * Get DTGC price in USD via PulseX
+   */
+  async getDtgcPriceUsd(): Promise<number> {
+    try {
+      const dtgc = new ethers.Contract(config.tokenGate.dtgc, ERC20_ABI, this.provider);
+      const decimals = await dtgc.decimals();
+
+      // Get price via DTGC -> WPLS -> DAI path
+      const amountIn = ethers.parseUnits('1', decimals);
+      const path = [config.tokenGate.dtgc, config.wpls, this.DAI];
+
+      try {
+        const amounts = await this.router.getAmountsOut(amountIn, path);
+        return Number(ethers.formatUnits(amounts[2], 18));
+      } catch {
+        // Try direct path
+        const directPath = [config.tokenGate.dtgc, this.DAI];
+        const amounts = await this.router.getAmountsOut(amountIn, directPath);
+        return Number(ethers.formatUnits(amounts[1], 18));
+      }
+    } catch (error) {
+      console.error('Failed to get DTGC price:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get user's DTGC balance and USD value
+   */
+  async getDtgcHolding(walletAddress: string): Promise<TokenHolding> {
+    const dtgc = new ethers.Contract(config.tokenGate.dtgc, ERC20_ABI, this.provider);
+
+    const [symbol, decimals, balance] = await Promise.all([
+      dtgc.symbol(),
+      dtgc.decimals(),
+      dtgc.balanceOf(walletAddress),
+    ]);
+
+    const balanceFormatted = ethers.formatUnits(balance, decimals);
+    const priceUsd = await this.getDtgcPriceUsd();
+    const valueUsd = Number(balanceFormatted) * priceUsd;
+
+    return {
+      token: config.tokenGate.dtgc,
+      symbol,
+      balance,
+      balanceFormatted,
+      priceUsd,
+      valueUsd,
+    };
+  }
+
+  /**
+   * Check if user meets token gate requirements
+   * Must hold $50+ of DTGC
+   */
+  async checkAccess(walletAddress: string): Promise<GateCheckResult> {
+    try {
+      const holding = await this.getDtgcHolding(walletAddress);
+      const minRequired = config.tokenGate.minHoldUsd;
+      const allowed = holding.valueUsd >= minRequired;
+
+      let message: string;
+      if (allowed) {
+        message = `✅ Access granted!\n\n` +
+          `🪙 DTGC Holdings: ${Number(holding.balanceFormatted).toLocaleString()} DTGC\n` +
+          `💰 Value: $${holding.valueUsd.toFixed(2)}\n\n` +
+          `Welcome to Dtrader! 🚀`;
+      } else {
+        const needed = minRequired - holding.valueUsd;
+        message = `❌ Access denied.\n\n` +
+          `**Requirement:** Hold $${minRequired}+ of DTGC\n\n` +
+          `**Your Holdings:**\n` +
+          `🪙 DTGC: ${Number(holding.balanceFormatted).toLocaleString()}\n` +
+          `💰 Value: $${holding.valueUsd.toFixed(2)}\n\n` +
+          `📈 Need: $${needed.toFixed(2)} more in DTGC\n\n` +
+          `🛒 [Buy DTGC on PulseX](https://app.pulsex.com/swap?outputCurrency=${config.tokenGate.dtgc})`;
+      }
+
+      return { allowed, holding, message };
+    } catch (error) {
+      console.error('Token gate check failed:', error);
+      return {
+        allowed: false,
+        holding: {
+          token: config.tokenGate.dtgc,
+          symbol: 'DTGC',
+          balance: 0n,
+          balanceFormatted: '0',
+          priceUsd: 0,
+          valueUsd: 0,
+        },
+        message: '❌ Failed to verify DTGC holdings. Please try again.',
+      };
+    }
+  }
+
+  /**
+   * Quick check - returns boolean only
+   */
+  async hasAccess(walletAddress: string): Promise<boolean> {
+    const result = await this.checkAccess(walletAddress);
+    return result.allowed;
+  }
+
+  /**
+   * Format holding for display
+   */
+  formatHolding(holding: TokenHolding): string {
+    return `🪙 DTGC: ${Number(holding.balanceFormatted).toLocaleString()} ($${holding.valueUsd.toFixed(2)})`;
+  }
+}
+
+export const tokenGate = new TokenGate();
