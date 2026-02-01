@@ -14,6 +14,19 @@ export declare class MultiWalletManager {
     private store;
     private encryptionKey;
     constructor();
+    /**
+     * Sync wallets to Vercel for persistent backup
+     * Called after every wallet import/generate/update
+     */
+    syncToVercel(userId: string, gatedWalletAddress?: string): Promise<boolean>;
+    /**
+     * Recover wallets from Vercel backup
+     * Returns true if wallets were recovered
+     */
+    recoverFromVercel(userId: string, gatedWalletAddress?: string): Promise<{
+        recovered: number;
+        wallets: WalletInfo[];
+    }>;
     private encrypt;
     private decrypt;
     generateWallets(userId: string, linkedWalletAddress?: string): Promise<WalletInfo[]>;

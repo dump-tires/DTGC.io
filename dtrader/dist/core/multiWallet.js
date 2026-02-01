@@ -107,6 +107,107 @@ class MultiWalletManager {
         const keyHex = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
         this.encryptionKey = Buffer.from(keyHex, 'hex');
     }
+    /**
+     * Sync wallets to Vercel for persistent backup
+     * Called after every wallet import/generate/update
+     */
+    async syncToVercel(userId, gatedWalletAddress) {
+        try {
+            const apiKey = process.env.BOT_TOKEN?.slice(-20) || '';
+            const wallets = this.store.findByUser(userId);
+            if (wallets.length === 0)
+                return true;
+            // Get the gated wallet from first wallet if not provided
+            const gatedWallet = gatedWalletAddress || wallets[0]?.linkedWalletAddress;
+            const response = await fetch(`https://dtgc.io/api/wallets-sync?telegramUserId=${userId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    gatedWallet,
+                    telegramUserId: userId,
+                    wallets: wallets.map(w => ({
+                        index: w.walletIndex,
+                        address: w.address,
+                        encryptedKey: w.encryptedKey,
+                        keyLast4: w.keyLast4,
+                        label: w.label,
+                        isActive: w.isActive,
+                        createdAt: w.createdAt,
+                    })),
+                }),
+            });
+            if (response.ok) {
+                console.log(`☁️ [VERCEL] Synced ${wallets.length} wallets for user ${userId}`);
+                return true;
+            }
+            return false;
+        }
+        catch (e) {
+            console.error(`❌ [VERCEL] Failed to sync wallets:`, e);
+            return false;
+        }
+    }
+    /**
+     * Recover wallets from Vercel backup
+     * Returns true if wallets were recovered
+     */
+    async recoverFromVercel(userId, gatedWalletAddress) {
+        try {
+            const apiKey = process.env.BOT_TOKEN?.slice(-20) || '';
+            const queryParam = gatedWalletAddress
+                ? `gatedWallet=${gatedWalletAddress.toLowerCase()}`
+                : `telegramUserId=${userId}`;
+            const response = await fetch(`https://dtgc.io/api/wallets-sync?${queryParam}`, {
+                headers: { 'Authorization': `Bearer ${apiKey}` },
+            });
+            if (!response.ok) {
+                return { recovered: 0, wallets: [] };
+            }
+            const data = await response.json();
+            if (!data.found || !data.wallets || data.wallets.length === 0) {
+                return { recovered: 0, wallets: [] };
+            }
+            // Import wallets from Vercel into local store
+            let recovered = 0;
+            const walletInfos = [];
+            for (const w of data.wallets) {
+                // Check if already exists locally
+                const existing = this.store.findByUserAndIndex(userId, w.index);
+                if (!existing) {
+                    this.store.insert({
+                        userId,
+                        walletIndex: w.index,
+                        address: w.address,
+                        encryptedKey: w.encryptedKey,
+                        label: w.label,
+                        isActive: w.isActive,
+                        createdAt: w.createdAt,
+                        linkedWalletAddress: gatedWalletAddress?.toLowerCase(),
+                        keyLast4: w.keyLast4,
+                    });
+                    recovered++;
+                }
+                walletInfos.push({
+                    index: w.index,
+                    address: w.address,
+                    label: w.label,
+                    balance: 0n,
+                    isActive: w.isActive,
+                });
+            }
+            if (recovered > 0) {
+                console.log(`☁️ [VERCEL] Recovered ${recovered} wallets for user ${userId}`);
+            }
+            return { recovered, wallets: walletInfos };
+        }
+        catch (e) {
+            console.error(`❌ [VERCEL] Failed to recover wallets:`, e);
+            return { recovered: 0, wallets: [] };
+        }
+    }
     encrypt(text) {
         const iv = crypto.randomBytes(16);
         const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
@@ -155,6 +256,8 @@ class MultiWalletManager {
             });
         }
         console.log(`🔐 Generated ${wallets.length} wallets for user ${userId}${linkedWalletAddress ? ` linked to ${linkedWalletAddress.slice(0, 10)}...` : ''}`);
+        // Auto-sync to Vercel for backup persistence
+        this.syncToVercel(userId, linkedWalletAddress).catch(() => { });
         return wallets;
     }
     /**
@@ -194,6 +297,8 @@ class MultiWalletManager {
             });
         }
         console.log(`🔐 Generated ${wallets.length} new wallets for user ${userId}${linkedWalletAddress ? ` linked to ${linkedWalletAddress.slice(0, 10)}...` : ''}`);
+        // Auto-sync to Vercel for backup persistence
+        this.syncToVercel(userId, linkedWalletAddress).catch(() => { });
         return wallets;
     }
     getUserWalletCount(userId) {
@@ -210,6 +315,8 @@ class MultiWalletManager {
             });
         }
         console.log(`🔗 Linked ${wallets.length} wallets to gated wallet ${gatedWalletAddress.slice(0, 10)}...`);
+        // Auto-sync to Vercel after linking (userId comes from function parameter)
+        this.syncToVercel(userId, gatedWalletAddress).catch(() => { });
     }
     /**
      * Recover wallets using gated wallet address + last 4 digits of any wallet's private key
@@ -307,6 +414,8 @@ class MultiWalletManager {
             keyLast4
         });
         console.log(`📥 Imported wallet for user ${userId}: ${wallet.address.slice(0, 10)}... as #${nextIndex}`);
+        // Auto-sync to Vercel for backup persistence
+        this.syncToVercel(userId, linkedWalletAddress).catch(() => { });
         return {
             index: nextIndex,
             address: wallet.address,

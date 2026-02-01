@@ -3575,12 +3575,31 @@ export class DtraderBot {
 
       await this.bot.sendMessage(chatId, '🔍 Searching for your wallets...');
 
+      // 1. Try Vercel backup first (more reliable than local file)
+      const vercelResult = await multiWallet.recoverFromVercel(userId, gatedWallet);
+
+      if (vercelResult.recovered > 0) {
+        await this.bot.sendMessage(chatId,
+          `✅ **WALLETS RECOVERED FROM CLOUD!**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `☁️ Found **${vercelResult.wallets.length} wallets** in cloud backup!\n\n` +
+          `All wallets are now accessible.\n\n` +
+          `Use /wallets to view and manage them.`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        );
+        return;
+      }
+
+      // 2. Fall back to local store recovery
       const result = multiWallet.recoverWallets(gatedWallet, keyLast4);
 
       if (result) {
         if (result.userId !== userId) {
           multiWallet.transferWallets(result.userId, userId);
         }
+
+        // Sync recovered wallets to Vercel for future
+        multiWallet.syncToVercel(userId, gatedWallet).catch(() => {});
 
         await this.bot.sendMessage(chatId,
           `✅ **WALLETS RECOVERED!**\n` +
@@ -3696,7 +3715,27 @@ export class DtraderBot {
 
       await this.bot.sendMessage(chatId, `🔍 Searching via ${recoveryType} wallet...`);
 
-      // Try to recover
+      // 1. Try Vercel cloud backup first (most reliable)
+      const vercelResult = await multiWallet.recoverFromVercel(userId, walletAddress);
+
+      if (vercelResult.recovered > 0 || vercelResult.wallets.length > 0) {
+        // Link the gated wallet to current session
+        session.linkedWallet = walletAddress.toLowerCase();
+        LinkedWallets.link(userId, chatId, walletAddress, 0);
+
+        await this.bot.sendMessage(chatId,
+          `✅ **WALLETS RECOVERED FROM CLOUD!**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `☁️ Found **${vercelResult.wallets.length} wallets** via ${recoveryType}:\n` +
+          `\`${walletAddress.slice(0, 12)}...${walletAddress.slice(-8)}\`\n\n` +
+          `Your snipe wallets are now accessible!\n\n` +
+          `Use /wallets to view and manage them.`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        );
+        return;
+      }
+
+      // 2. Fall back to local store recovery
       const result = multiWallet.recoverWallets(walletAddress, keyLast4);
 
       if (result) {
@@ -3709,6 +3748,9 @@ export class DtraderBot {
         session.linkedWallet = walletAddress.toLowerCase();
         LinkedWallets.link(userId, chatId, walletAddress, 0);
 
+        // Sync recovered wallets to Vercel for future
+        multiWallet.syncToVercel(userId, walletAddress).catch(() => {});
+
         await this.bot.sendMessage(chatId,
           `✅ **WALLETS RECOVERED!**\n` +
           `━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -3719,7 +3761,25 @@ export class DtraderBot {
           { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
         );
       } else {
-        // Show what wallets exist for this address
+        // Check Vercel one more time for any wallets (maybe different key last4)
+        const vercelCheck = await multiWallet.recoverFromVercel(userId, walletAddress);
+
+        if (vercelCheck.wallets.length > 0) {
+          session.linkedWallet = walletAddress.toLowerCase();
+          LinkedWallets.link(userId, chatId, walletAddress, 0);
+
+          await this.bot.sendMessage(chatId,
+            `✅ **WALLETS RECOVERED FROM CLOUD!**\n` +
+            `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `☁️ Found **${vercelCheck.wallets.length} wallets** in cloud backup!\n\n` +
+            `Your snipe wallets are now accessible!\n\n` +
+            `Use /wallets to view and manage them.`,
+            { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+          );
+          return;
+        }
+
+        // Show what wallets exist for this address locally
         const existingWallets = multiWallet.getWalletsForRecovery(walletAddress);
 
         if (existingWallets.length > 0) {
@@ -3733,7 +3793,7 @@ export class DtraderBot {
         } else {
           await this.bot.sendMessage(chatId,
             `❌ **No wallets found**\n\n` +
-            `No snipe wallets are linked to this ${recoveryType} address.\n\n` +
+            `No snipe wallets are linked to this ${recoveryType} address (checked both local & cloud).\n\n` +
             `💡 Try the other recovery option:\n` +
             `• /recover → Choose different method\n\n` +
             `Make sure you're using the correct wallet address.`,
