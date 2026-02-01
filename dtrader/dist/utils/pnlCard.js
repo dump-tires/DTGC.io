@@ -109,26 +109,31 @@ function canGenerateImages() {
 }
 /**
  * Mando image collection for P&L cards
- * Images are stored in public/images/mando/ folder
+ * Images are stored in dtrader/public/images/mando/ folder
+ * Bright, golden aesthetic images preferred
  */
 const MANDO_IMAGES = [
-    'mando-sniper.png',
-    'mando-hallway.jpg',
-    'mando-gold-aim.jpg',
-    'mando-lava.jpg',
-    'mando-gold-lava.jpg',
-    'mando-watercolor.jpg',
-    'mando-aiming.jpg',
-    'mando-desert.jpg',
+    'mando-sniper.png', // Original gold moon sniper
+    'mando-hallway-gold.jpg', // Gold armor, marble hallway - VERY BRIGHT
+    'mando-hallway-bright.jpg', // Silver armor, bright marble - BRIGHTEST
+    'mando-gold-lava.jpg', // Gold armor, volcanic background
+    'mando-silver-lava.jpg', // Silver armor, lava scene
+    'mando-watercolor.jpg', // Watercolor artistic style
+    'mando-watercolor-lava.jpg', // Watercolor with red lava
+    // 'mando-collage-1.jpg',  // 4-grid collage (skip for now)
+    // 'mando-collage-2.jpg',  // 4-grid collage (skip for now)
 ];
 /**
  * Find the Mando sniper image (randomly selects from collection)
+ * Prefers bright gold images for best aesthetic
  */
 function findMandoImage() {
     const basePaths = [
+        path.join(process.cwd(), 'public', 'images'), // dtrader/public/images
         path.join(process.cwd(), '..', 'public', 'images'),
-        path.join(process.cwd(), 'public', 'images'),
         '/app/public/images',
+        '/app/dtrader/public/images',
+        path.join(__dirname, '..', '..', 'public', 'images'),
         path.join(__dirname, '..', '..', '..', 'public', 'images'),
     ];
     // First check for mando subfolder with multiple images
@@ -156,19 +161,22 @@ function findMandoImage() {
 }
 /**
  * Get a specific Mando image by type
+ * Uses BRIGHT images for best gold glow aesthetic
  */
 function getMandoImageByType(type) {
     const basePaths = [
+        path.join(process.cwd(), 'public', 'images'), // dtrader/public/images
         path.join(process.cwd(), '..', 'public', 'images'),
-        path.join(process.cwd(), 'public', 'images'),
         '/app/public/images',
+        '/app/dtrader/public/images',
+        path.join(__dirname, '..', '..', 'public', 'images'),
         path.join(__dirname, '..', '..', '..', 'public', 'images'),
     ];
-    // Map types to preferred images
+    // Map types to preferred images - BRIGHT images first!
     const typePreferences = {
-        victory: ['mando-gold-aim.jpg', 'mando-hallway.jpg', 'mando-gold-lava.jpg'],
-        pnl: ['mando-sniper.png', 'mando-aiming.jpg', 'mando-desert.jpg'],
-        snipe: ['mando-lava.jpg', 'mando-aiming.jpg', 'mando-watercolor.jpg'],
+        victory: ['mando-hallway-gold.jpg', 'mando-hallway-bright.jpg', 'mando-gold-lava.jpg', 'mando-sniper.png'],
+        pnl: ['mando-hallway-bright.jpg', 'mando-hallway-gold.jpg', 'mando-sniper.png', 'mando-gold-lava.jpg'],
+        snipe: ['mando-gold-lava.jpg', 'mando-silver-lava.jpg', 'mando-watercolor-lava.jpg', 'mando-hallway-gold.jpg'],
     };
     const preferred = typePreferences[type] || MANDO_IMAGES;
     for (const basePath of basePaths) {
@@ -203,9 +211,11 @@ function getMandoImageByType(type) {
  */
 function findGoldBarImage() {
     const basePaths = [
+        path.join(process.cwd(), 'public', 'images'), // dtrader/public/images
         path.join(process.cwd(), '..', 'public', 'images'),
-        path.join(process.cwd(), 'public', 'images'),
         '/app/public/images',
+        '/app/dtrader/public/images',
+        path.join(__dirname, '..', '..', 'public', 'images'),
         path.join(__dirname, '..', '..', '..', 'public', 'images'),
     ];
     for (const basePath of basePaths) {
