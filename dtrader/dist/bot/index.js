@@ -2512,6 +2512,54 @@ class DtraderBot {
             }
             return;
         }
+        // Custom buy amount - prompt user
+        if (data === 'buy_custom') {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            if (!session.pendingToken) {
+                await this.bot.sendMessage(chatId, '❌ No token selected. Start a new buy flow.');
+                return;
+            }
+            session.pendingAction = 'buy_amount';
+            await this.bot.sendMessage(chatId, `📝 **Custom Buy Amount**\n\n` +
+                `Token: \`${session.pendingToken.slice(0, 12)}...${session.pendingToken.slice(-8)}\`\n\n` +
+                `Enter PLS amount to spend:`, { parse_mode: 'Markdown' });
+            return;
+        }
+        // Custom sell percentage - prompt user
+        if (data === 'sell_custom') {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            if (!session.pendingToken) {
+                await this.bot.sendMessage(chatId, '❌ No token selected. Start a new sell flow.');
+                return;
+            }
+            session.pendingAction = 'sell_custom_percent';
+            await this.bot.sendMessage(chatId, `📝 **Custom Sell Percentage**\n\n` +
+                `Token: \`${session.pendingToken.slice(0, 12)}...${session.pendingToken.slice(-8)}\`\n\n` +
+                `Enter percentage to sell (1-100):`, { parse_mode: 'Markdown' });
+            return;
+        }
+        // Confirmation handlers
+        if (data === 'confirm_yes') {
+            // Handle various pending confirmations
+            if (session.pendingAction === 'confirm_risky_buy') {
+                // User confirmed buying risky token
+                session.pendingAction = 'buy_amount';
+                await this.bot.sendMessage(chatId, `⚠️ Proceeding with risky token...\n\nSelect buy amount:`, { reply_markup: keyboards.buyAmountKeyboard });
+            }
+            else {
+                await this.bot.sendMessage(chatId, '✅ Confirmed!');
+            }
+            return;
+        }
+        if (data === 'confirm_no') {
+            session.pendingAction = undefined;
+            session.pendingToken = undefined;
+            session.pendingAmount = undefined;
+            await this.bot.sendMessage(chatId, `❌ Cancelled.`, { reply_markup: keyboards.mainMenuKeyboard });
+            return;
+        }
         // Buy amount selection
         if (data.startsWith('buy_') && !data.startsWith('buy_custom') && !data.startsWith('buy_limit')) {
             const amount = data.replace('buy_', '');
@@ -3490,6 +3538,17 @@ class DtraderBot {
                     selected: w.selected
                 })))
             });
+            return;
+        }
+        // Custom sell percentage
+        if (session.pendingAction === 'sell_custom_percent') {
+            const percent = parseFloat(text);
+            if (isNaN(percent) || percent <= 0 || percent > 100) {
+                await this.bot.sendMessage(chatId, '❌ Invalid percentage. Enter 1-100:');
+                return;
+            }
+            session.pendingAction = undefined;
+            await this.executeSell(chatId, userId, Math.floor(percent));
             return;
         }
         // Custom buy amount
