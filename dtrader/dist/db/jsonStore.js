@@ -82,7 +82,7 @@ exports.LinkedWallets = {
             walletAddress: walletAddress.toLowerCase(),
             balanceUsd,
             verifiedAt: Date.now(),
-            expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+            expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 365 days - permanent for practical purposes
             botWalletAddress: botWalletAddress?.toLowerCase(),
             botKeyLast4: botKeyLast4?.toLowerCase(),
         };

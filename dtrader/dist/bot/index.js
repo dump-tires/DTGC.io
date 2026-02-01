@@ -219,6 +219,27 @@ class DtraderBot {
             if (persistedLink) {
                 console.log(`🔗 Restored linked wallet from storage for user ${userId}`);
                 session.linkedWallet = persistedLink.walletAddress;
+                // REVERSE SYNC: Push local data back to Vercel API if it lost memory
+                // This ensures Vercel always has the latest data even after cold starts
+                try {
+                    const pushResponse = await fetch('https://dtgc.io/api/tg-verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            walletAddress: persistedLink.walletAddress,
+                            telegramUserId: userId,
+                            dtgcBalance: persistedLink.balanceUsd / 0.0001, // Approximate balance
+                            usdValue: persistedLink.balanceUsd,
+                            botWalletAddress: persistedLink.botWalletAddress,
+                            botKeyLast4: persistedLink.botKeyLast4,
+                        }),
+                    });
+                    const pushResult = await pushResponse.json();
+                    console.log(`🔄 Reverse sync to Vercel: ${pushResult.success ? 'SUCCESS' : 'FAILED'}`);
+                }
+                catch (syncErr) {
+                    console.log(`[checkGate] Reverse sync failed:`, syncErr);
+                }
             }
         }
         // Priority 2: Check linked external wallet (MetaMask/Rabby)
@@ -2032,6 +2053,24 @@ class DtraderBot {
                     console.error(`Failed to create order for wallet ${walletIndex}:`, e);
                 }
             }
+            // Get token info for receipt
+            const tokenSymbol = session.tokenInfo?.symbol || tokenAddress.slice(0, 10) + '...';
+            const currentPrice = session.tokenInfo?.pricePls || 0;
+            const priceChangePercent = currentPrice ? ((targetPrice / currentPrice - 1) * 100).toFixed(1) : '?';
+            // Get selected wallets info
+            const wallets = await multiWallet_1.multiWallet.getUserWallets(userId);
+            const selectedWalletList = session.selectedWallets
+                .map(idx => wallets.find(w => w.index === idx))
+                .filter(w => w)
+                .map(w => `  • ${w.label || 'Wallet ' + w.index}: \`${w.address.slice(0, 8)}...${w.address.slice(-4)}\``)
+                .join('\n');
+            // Calculate totals
+            const totalPls = amount * session.selectedWallets.length;
+            const totalPlsFormatted = totalPls >= 1000000
+                ? (totalPls / 1000000).toFixed(2) + 'M'
+                : totalPls >= 1000
+                    ? (totalPls / 1000).toFixed(1) + 'K'
+                    : totalPls.toFixed(0);
             // Clear session
             session.pendingAction = undefined;
             session.pendingToken = undefined;
@@ -2039,13 +2078,55 @@ class DtraderBot {
             session.pendingPrice = undefined;
             session.pendingOrderType = undefined;
             session.selectedWallets = undefined;
-            await this.bot.sendMessage(chatId, `✅ **${successCount} Limit Orders Created!**\n` +
-                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `📊 Type: ${orderType.replace('_', ' ').toUpperCase()}\n` +
-                `🪙 Token: \`${tokenAddress}\`\n` +
-                `💰 Target: ${targetPrice} PLS\n` +
-                `💵 Amount: ${amount} per wallet\n\n` +
-                `🎯 Orders will execute when price is reached!`, { parse_mode: 'Markdown', reply_markup: keyboards.ordersMenuKeyboard });
+            // Generate receipt timestamp
+            const now = new Date();
+            const timestamp = now.toLocaleString('en-US', {
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+            });
+            // Order type emoji and name
+            const orderTypeEmoji = {
+                limit_buy: '🟢',
+                limit_sell: '🔴',
+                stop_loss: '🛑',
+                take_profit: '💰'
+            };
+            const orderTypeName = {
+                limit_buy: 'LIMIT BUY',
+                limit_sell: 'LIMIT SELL',
+                stop_loss: 'STOP LOSS',
+                take_profit: 'TAKE PROFIT'
+            };
+            await this.bot.sendMessage(chatId, `╔══════════════════════════════╗\n` +
+                `║  ${orderTypeEmoji[orderType] || '📊'} **LIMIT ORDER RECEIPT**    ║\n` +
+                `╠══════════════════════════════╣\n` +
+                `║  📋 **Order Details**               ║\n` +
+                `╚══════════════════════════════╝\n\n` +
+                `📊 **Type:** ${orderTypeName[orderType] || orderType.toUpperCase()}\n` +
+                `🪙 **Token:** ${tokenSymbol}\n` +
+                `📍 **Contract:** \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n\n` +
+                `━━━ **Price Target** ━━━\n` +
+                `${currentPrice ? `📈 Current: ${currentPrice.toFixed(12)} PLS\n` : ''}` +
+                `🎯 Target: **${targetPrice.toFixed(12)} PLS**\n` +
+                `${currentPrice ? `📊 Change: ${priceChangePercent}%\n` : ''}\n` +
+                `━━━ **Investment** ━━━\n` +
+                `💵 Per Wallet: **${amount.toLocaleString()} PLS**\n` +
+                `👛 Wallets: **${successCount}**\n` +
+                `💰 Total: **${totalPlsFormatted} PLS**\n\n` +
+                `━━━ **Wallets** ━━━\n` +
+                `${selectedWalletList}\n\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n` +
+                `✅ **${successCount} orders watching!**\n` +
+                `🕐 Created: ${timestamp}\n` +
+                `🆔 IDs: \`${orderIds.slice(0, 3).join(', ')}${orderIds.length > 3 ? '...' : ''}\``, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '📋 View Active Orders', callback_data: 'orders_active' }],
+                        [{ text: '➕ New Limit Order', callback_data: 'order_limit' }],
+                        [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+                    ]
+                }
+            });
             return;
         }
         // Order trailing stop
