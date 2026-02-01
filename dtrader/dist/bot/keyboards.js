@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.tradeHistoryEntryKeyboard = exports.tradeHistoryKeyboard = exports.quickActionsKeyboard = exports.gasPriorityKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.tradeMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.helpMenuKeyboard = exports.mainMenuKeyboard = void 0;
+exports.tradeHistoryEntryKeyboard = exports.tradeHistoryKeyboard = exports.quickActionsKeyboard = exports.gasPriorityKeyboard = exports.snipeAmountKeyboard = exports.multiWalletSnipeKeyboard = exports.tokenActionKeyboard = exports.confirmWithDetailsKeyboard = exports.confirmKeyboard = exports.slippageKeyboard = exports.sellPercentKeyboard = exports.buyAmountKeyboard = exports.settingsKeyboard = exports.copyMenuKeyboard = exports.pumpMenuKeyboard = exports.tradeMenuKeyboard = exports.ordersMenuKeyboard = exports.snipeMenuKeyboard = exports.orderWalletSelectKeyboard = exports.walletSelectKeyboard = exports.walletsMenuKeyboard = exports.helpMenuKeyboard = exports.mainMenuKeyboard = void 0;
 /**
  * Enhanced Telegram Keyboard Layouts
  * Modeled after Maestro/Solid Trader bot structure
@@ -113,6 +113,26 @@ const walletSelectKeyboard = (wallets) => {
     return { inline_keyboard: buttons };
 };
 exports.walletSelectKeyboard = walletSelectKeyboard;
+// ==================== LIMIT ORDER WALLET SELECTION ====================
+const orderWalletSelectKeyboard = (wallets) => {
+    const buttons = [];
+    for (const w of wallets) {
+        const icon = w.selected ? '🟢' : '⚪';
+        buttons.push([{
+                text: `${icon} ${w.label} (#${w.index})`,
+                callback_data: `order_wallet_${w.index}`,
+            }]);
+    }
+    buttons.push([
+        { text: '✅ All Wallets', callback_data: 'order_wallet_all' },
+    ]);
+    buttons.push([
+        { text: '🚀 Confirm & Create Orders', callback_data: 'order_wallet_confirm' },
+    ]);
+    buttons.push([{ text: '❌ Cancel', callback_data: 'orders_menu' }]);
+    return { inline_keyboard: buttons };
+};
+exports.orderWalletSelectKeyboard = orderWalletSelectKeyboard;
 // ==================== SNIPE MENUS ====================
 exports.snipeMenuKeyboard = {
     inline_keyboard: [

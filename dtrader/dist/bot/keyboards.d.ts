@@ -11,6 +11,12 @@ export declare const walletSelectKeyboard: (wallets: {
     label: string;
     isActive: boolean;
 }[]) => TelegramBot.InlineKeyboardMarkup;
+export declare const orderWalletSelectKeyboard: (wallets: {
+    index: number;
+    label: string;
+    isActive: boolean;
+    selected?: boolean;
+}[]) => TelegramBot.InlineKeyboardMarkup;
 export declare const snipeMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const ordersMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const tradeMenuKeyboard: TelegramBot.InlineKeyboardMarkup;

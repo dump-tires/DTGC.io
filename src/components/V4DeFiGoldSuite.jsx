@@ -2872,10 +2872,10 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           {sniperLimitType !== 'market' && sniperLimitType !== 'instabond' && (
             <div style={styles.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={styles.label}>🎯 Target Price (USD)</span>
+                <span style={styles.label}>🎯 Target Price (PLS)</span>
               </div>
               <div style={styles.inputGroup}>
-                <span style={{ color: '#888', fontSize: '1.2rem' }}>$</span>
+                <span style={{ color: '#888', fontSize: '1.2rem' }}>◈</span>
                 <input
                   type="number"
                   placeholder="0.00001"
@@ -2888,6 +2888,46 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 {sniperLimitType === 'limit-buy'
                   ? '💡 Order triggers when price drops to this level'
                   : '💡 Order triggers when price rises to this level'}
+              </div>
+
+              {/* Multi-wallet limit order info */}
+              <div style={{
+                background: 'rgba(212,175,55,0.1)',
+                border: '1px solid rgba(212,175,55,0.3)',
+                borderRadius: '8px',
+                padding: '12px',
+                marginTop: '12px'
+              }}>
+                <div style={{ color: '#D4AF37', fontSize: '0.75rem', fontWeight: 600, marginBottom: '8px' }}>
+                  👛 Multi-Wallet Support
+                </div>
+                <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>
+                  Create limit orders across multiple wallets at once! Set labels, toggle active wallets, and execute coordinated orders.
+                </div>
+                <a
+                  href={`https://t.me/DTGBondBot?start=${sniperLimitType === 'limit-buy' ? 'limit_buy' : 'limit_sell'}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    background: 'linear-gradient(135deg, #0088cc, #0099dd)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 16px',
+                    color: '#fff',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span>🤖</span>
+                  <span>Set Up Limit Order in TG Bot</span>
+                  <span>→</span>
+                </a>
               </div>
             </div>
           )}

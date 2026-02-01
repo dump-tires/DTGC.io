@@ -123,6 +123,30 @@ export const walletSelectKeyboard = (wallets: { index: number; label: string; is
   return { inline_keyboard: buttons };
 };
 
+// ==================== LIMIT ORDER WALLET SELECTION ====================
+
+export const orderWalletSelectKeyboard = (wallets: { index: number; label: string; isActive: boolean; selected?: boolean }[]): TelegramBot.InlineKeyboardMarkup => {
+  const buttons: TelegramBot.InlineKeyboardButton[][] = [];
+
+  for (const w of wallets) {
+    const icon = w.selected ? '🟢' : '⚪';
+    buttons.push([{
+      text: `${icon} ${w.label} (#${w.index})`,
+      callback_data: `order_wallet_${w.index}`,
+    }]);
+  }
+
+  buttons.push([
+    { text: '✅ All Wallets', callback_data: 'order_wallet_all' },
+  ]);
+  buttons.push([
+    { text: '🚀 Confirm & Create Orders', callback_data: 'order_wallet_confirm' },
+  ]);
+  buttons.push([{ text: '❌ Cancel', callback_data: 'orders_menu' }]);
+
+  return { inline_keyboard: buttons };
+};
+
 // ==================== SNIPE MENUS ====================
 
 export const snipeMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {

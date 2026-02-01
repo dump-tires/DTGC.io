@@ -15,6 +15,7 @@ import { ethers } from 'ethers';
 import { config } from '../config';
 import { tokenGate } from '../gate/tokenGate';
 import { walletManager } from '../core/wallet';
+import { multiWallet } from '../core/multiWallet';
 import { pulsex } from '../core/pulsex';
 import { feeManager } from '../core/feeManager';
 import { graduationSniper } from '../sniper/graduation';
@@ -86,6 +87,9 @@ interface UserSession {
   pendingToken?: string;
   pendingAmount?: string;
   pendingGas?: GasPriority;
+  pendingPrice?: string;          // For limit orders - target price
+  pendingOrderType?: string;      // For limit orders - buy/sell/stop_loss/take_profit
+  selectedWallets?: number[];     // For multi-wallet orders/snipes
   linkedWallet?: string; // External wallet address (MetaMask, Rabby, etc.)
   snipeOrders: SnipeOrder[]; // Track all snipe orders
   settings: {
@@ -489,6 +493,70 @@ export class DtraderBot {
             parse_mode: 'Markdown',
             reply_markup: keyboards.snipeMenuKeyboard,
           }
+        );
+        return;
+      }
+
+      // Handle limit buy deep link from Gold Suite
+      if (param === 'limit_buy') {
+        const gateOk = await this.checkGate(chatId, userId);
+        if (!gateOk) {
+          await this.bot.sendMessage(chatId,
+            `🔒 **Token Gate Required**\n\nHold $50+ DTGC to access limit orders.`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } }],
+                ],
+              },
+            }
+          );
+          return;
+        }
+
+        const session = this.getSession(chatId);
+        session.pendingAction = 'limit_buy_token';
+
+        await this.bot.sendMessage(chatId,
+          `📈 **LIMIT BUY ORDER**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `Create a limit buy order that executes when price drops to your target.\n\n` +
+          `👛 **Multi-Wallet Support**: Use multiple wallets for coordinated buys!\n\n` +
+          `📝 **Enter token address:**`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      // Handle limit sell deep link from Gold Suite
+      if (param === 'limit_sell') {
+        const gateOk = await this.checkGate(chatId, userId);
+        if (!gateOk) {
+          await this.bot.sendMessage(chatId,
+            `🔒 **Token Gate Required**\n\nHold $50+ DTGC to access limit orders.`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '🔗 Verify Wallet', web_app: { url: 'https://dtgc.io/tg-verify.html' } }],
+                ],
+              },
+            }
+          );
+          return;
+        }
+
+        const session = this.getSession(chatId);
+        session.pendingAction = 'limit_sell_token';
+
+        await this.bot.sendMessage(chatId,
+          `📉 **LIMIT SELL ORDER**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `Create a limit sell order that executes when price rises to your target.\n\n` +
+          `👛 **Multi-Wallet Support**: Sell from multiple wallets at once!\n\n` +
+          `📝 **Enter token address:**`,
+          { parse_mode: 'Markdown' }
         );
         return;
       }
@@ -1612,21 +1680,105 @@ export class DtraderBot {
       return;
     }
 
-    // Wallet management
+    // Wallet management - Toggle active wallets
     if (data === 'wallets_toggle') {
+      const wallets = await multiWallet.getUserWallets(userId);
+      if (wallets.length === 0) {
+        await this.bot.sendMessage(chatId,
+          `❌ No wallets yet. Generate them first!`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        );
+        return;
+      }
+
+      const buttons: TelegramBot.InlineKeyboardButton[][] = [];
+      for (const w of wallets) {
+        const icon = w.isActive ? '✅' : '⬜';
+        buttons.push([{
+          text: `${icon} ${w.label} (${w.address.slice(0, 8)}...)`,
+          callback_data: `toggle_wallet_${w.index}`
+        }]);
+      }
+      buttons.push([{ text: '🔙 Back', callback_data: 'wallets_menu' }]);
+
       await this.bot.sendMessage(chatId,
-        `✅ **Toggle Active Wallets**\n\n` +
-        `_Wallet toggle coming soon._`,
-        { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        `✅ **Toggle Active Wallets**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Tap a wallet to toggle it ON/OFF for trading:\n\n` +
+        `✅ = Active (will be used for snipes/orders)\n` +
+        `⬜ = Inactive (skipped)\n`,
+        { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }
       );
       return;
     }
 
-    if (data === 'wallets_labels') {
+    // Handle wallet toggle
+    if (data.startsWith('toggle_wallet_')) {
+      const index = parseInt(data.replace('toggle_wallet_', ''));
+      multiWallet.toggleWalletActive(userId, index);
+      const wallets = await multiWallet.getUserWallets(userId);
+      const toggled = wallets.find(w => w.index === index);
+
       await this.bot.sendMessage(chatId,
-        `🏷️ **Set Wallet Labels**\n\n` +
-        `_Wallet labels coming soon._`,
-        { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        `${toggled?.isActive ? '✅' : '⬜'} **${toggled?.label}** is now ${toggled?.isActive ? 'ACTIVE' : 'INACTIVE'}`,
+        { parse_mode: 'Markdown' }
+      );
+
+      // Refresh the toggle menu
+      const buttons: TelegramBot.InlineKeyboardButton[][] = [];
+      for (const w of wallets) {
+        const icon = w.isActive ? '✅' : '⬜';
+        buttons.push([{
+          text: `${icon} ${w.label} (${w.address.slice(0, 8)}...)`,
+          callback_data: `toggle_wallet_${w.index}`
+        }]);
+      }
+      buttons.push([{ text: '🔙 Back', callback_data: 'wallets_menu' }]);
+
+      await this.bot.sendMessage(chatId,
+        `✅ **Toggle Active Wallets**\n\nTap to toggle:`,
+        { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }
+      );
+      return;
+    }
+
+    // Wallet labels menu
+    if (data === 'wallets_labels') {
+      const wallets = await multiWallet.getUserWallets(userId);
+      if (wallets.length === 0) {
+        await this.bot.sendMessage(chatId,
+          `❌ No wallets yet. Generate them first!`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        );
+        return;
+      }
+
+      const buttons: TelegramBot.InlineKeyboardButton[][] = [];
+      for (const w of wallets) {
+        buttons.push([{
+          text: `🏷️ ${w.label} → Rename`,
+          callback_data: `rename_wallet_${w.index}`
+        }]);
+      }
+      buttons.push([{ text: '🔙 Back', callback_data: 'wallets_menu' }]);
+
+      await this.bot.sendMessage(chatId,
+        `🏷️ **Set Wallet Labels**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Tap a wallet to rename it:\n`,
+        { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }
+      );
+      return;
+    }
+
+    // Handle wallet rename
+    if (data.startsWith('rename_wallet_')) {
+      const index = parseInt(data.replace('rename_wallet_', ''));
+      session.pendingAction = `rename_wallet_${index}`;
+      await this.bot.sendMessage(chatId,
+        `🏷️ **Rename Wallet #${index}**\n\n` +
+        `Enter a new label (e.g., "Snipe Main", "DCA Wallet", "Moon Bag"):`,
+        { parse_mode: 'Markdown' }
       );
       return;
     }
@@ -1637,6 +1789,109 @@ export class DtraderBot {
         `📥 **Import Wallet**\n\n` +
         `⚠️ Enter your private key (64 hex chars):`,
         { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MULTI-WALLET ORDER SELECTION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Toggle wallet selection for orders
+    if (data.startsWith('order_wallet_') && !data.includes('confirm') && !data.includes('all')) {
+      const index = parseInt(data.replace('order_wallet_', ''));
+      if (!session.selectedWallets) session.selectedWallets = [];
+
+      if (session.selectedWallets.includes(index)) {
+        session.selectedWallets = session.selectedWallets.filter(i => i !== index);
+      } else {
+        session.selectedWallets.push(index);
+      }
+
+      // Refresh keyboard
+      const wallets = await multiWallet.getUserWallets(userId);
+      const walletList = wallets.map(w => ({
+        ...w,
+        selected: session.selectedWallets?.includes(w.index)
+      }));
+
+      await this.bot.editMessageReplyMarkup(
+        keyboards.orderWalletSelectKeyboard(walletList),
+        { chat_id: parseInt(chatId), message_id: messageId }
+      );
+      return;
+    }
+
+    // Select all wallets for order
+    if (data === 'order_wallet_all') {
+      const wallets = await multiWallet.getUserWallets(userId);
+      session.selectedWallets = wallets.map(w => w.index);
+
+      const walletList = wallets.map(w => ({ ...w, selected: true }));
+      await this.bot.editMessageReplyMarkup(
+        keyboards.orderWalletSelectKeyboard(walletList),
+        { chat_id: parseInt(chatId), message_id: messageId }
+      );
+      return;
+    }
+
+    // Confirm and create multi-wallet orders
+    if (data === 'order_wallet_confirm') {
+      if (!session.selectedWallets || session.selectedWallets.length === 0) {
+        await this.bot.sendMessage(chatId, '❌ Please select at least one wallet!');
+        return;
+      }
+
+      const orderType = session.pendingOrderType as 'limit_buy' | 'limit_sell' | 'stop_loss' | 'take_profit';
+      const tokenAddress = session.pendingToken!;
+      const targetPrice = parseFloat(session.pendingPrice!);
+      const amount = parseFloat(session.pendingAmount!);
+
+      await this.bot.sendMessage(chatId,
+        `⏳ Creating ${session.selectedWallets.length} limit orders...`
+      );
+
+      let successCount = 0;
+      const orderIds: string[] = [];
+
+      for (const walletIndex of session.selectedWallets) {
+        try {
+          const wallet = await multiWallet.getWalletSigner(userId, walletIndex);
+          if (wallet) {
+            const order = await limitOrderEngine.createOrder({
+              userId,
+              walletAddress: wallet.address,
+              tokenAddress,
+              orderType,
+              targetPrice: ethers.parseEther(targetPrice.toString()),
+              amount: ethers.parseEther(amount.toString()),
+              slippage: session.settings.slippage,
+            });
+            orderIds.push(order.id);
+            successCount++;
+          }
+        } catch (e) {
+          console.error(`Failed to create order for wallet ${walletIndex}:`, e);
+        }
+      }
+
+      // Clear session
+      session.pendingAction = undefined;
+      session.pendingToken = undefined;
+      session.pendingAmount = undefined;
+      session.pendingPrice = undefined;
+      session.pendingOrderType = undefined;
+      session.selectedWallets = undefined;
+
+      await this.bot.sendMessage(chatId,
+        `✅ **${successCount} Limit Orders Created!**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `📊 Type: ${orderType.replace('_', ' ').toUpperCase()}\n` +
+        `🪙 Token: \`${tokenAddress}\`\n` +
+        `💰 Target: ${targetPrice} PLS\n` +
+        `💵 Amount: ${amount} per wallet\n\n` +
+        `🎯 Orders will execute when price is reached!`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.ordersMenuKeyboard }
       );
       return;
     }
@@ -2145,6 +2400,20 @@ export class DtraderBot {
       return;
     }
 
+    // Rename wallet label
+    if (session.pendingAction?.startsWith('rename_wallet_')) {
+      const index = parseInt(session.pendingAction.replace('rename_wallet_', ''));
+      const label = text.slice(0, 20); // Max 20 chars
+      multiWallet.setWalletLabel(userId, index, label);
+      session.pendingAction = undefined;
+
+      await this.bot.sendMessage(chatId,
+        `✅ **Wallet #${index} renamed to "${label}"**`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+      );
+      return;
+    }
+
     // Custom insta-snipe amount -> then gas priority
     if (session.pendingAction === 'instasnipe_custom_amount') {
       const amount = parseFloat(text);
@@ -2184,15 +2453,26 @@ export class DtraderBot {
       return;
     }
 
+    if (session.pendingAction === 'limit_sell_token') {
+      if (!ethers.isAddress(text)) {
+        await this.bot.sendMessage(chatId, '❌ Invalid address. Try again:');
+        return;
+      }
+      session.pendingToken = text;
+      session.pendingAction = 'limit_sell_price';
+      await this.bot.sendMessage(chatId, '📊 Enter target price in PLS (sell when price rises to this):');
+      return;
+    }
+
     if (session.pendingAction === 'limit_buy_price') {
       const price = parseFloat(text);
       if (isNaN(price) || price <= 0) {
         await this.bot.sendMessage(chatId, '❌ Invalid price. Try again:');
         return;
       }
-      session.pendingAmount = price.toString();
+      session.pendingPrice = price.toString();
       session.pendingAction = 'limit_buy_amount';
-      await this.bot.sendMessage(chatId, '💰 Enter PLS amount to spend:');
+      await this.bot.sendMessage(chatId, '💰 Enter PLS amount to spend (per wallet):');
       return;
     }
 
@@ -2202,12 +2482,97 @@ export class DtraderBot {
         await this.bot.sendMessage(chatId, '❌ Invalid amount. Try again:');
         return;
       }
+      session.pendingAmount = amount.toString();
+      session.pendingOrderType = 'limit_buy';
 
+      // Check if user has multiple wallets
+      const wallets = await multiWallet.getUserWallets(userId);
+      if (wallets.length > 1) {
+        // Show wallet selection
+        session.selectedWallets = wallets.filter(w => w.isActive).map(w => w.index);
+        session.pendingAction = 'limit_order_wallets';
+
+        const walletList = wallets.map(w => ({
+          ...w,
+          selected: session.selectedWallets?.includes(w.index)
+        }));
+
+        await this.bot.sendMessage(chatId,
+          `👛 **Select Wallets for Limit Order**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `📊 Order: **LIMIT BUY**\n` +
+          `🪙 Token: \`${session.pendingToken?.slice(0, 12)}...\`\n` +
+          `💰 Target: ${session.pendingPrice} PLS\n` +
+          `💵 Amount: ${amount} PLS per wallet\n\n` +
+          `🟢 = Selected | ⚪ = Not selected\n` +
+          `_Tap wallets to toggle, then confirm:_`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.orderWalletSelectKeyboard(walletList) }
+        );
+        return;
+      }
+
+      // Single wallet - create order directly
       await this.createLimitOrder(chatId, userId, 'limit_buy', session.pendingToken!,
-        parseFloat(session.pendingAmount!), amount);
+        parseFloat(session.pendingPrice!), amount);
       session.pendingAction = undefined;
       session.pendingToken = undefined;
       session.pendingAmount = undefined;
+      session.pendingPrice = undefined;
+      return;
+    }
+
+    // Limit sell price
+    if (session.pendingAction === 'limit_sell_price') {
+      const price = parseFloat(text);
+      if (isNaN(price) || price <= 0) {
+        await this.bot.sendMessage(chatId, '❌ Invalid price. Try again:');
+        return;
+      }
+      session.pendingPrice = price.toString();
+      session.pendingAction = 'limit_sell_amount';
+      await this.bot.sendMessage(chatId, '💰 Enter token amount to sell (per wallet):');
+      return;
+    }
+
+    if (session.pendingAction === 'limit_sell_amount') {
+      const amount = parseFloat(text);
+      if (isNaN(amount) || amount <= 0) {
+        await this.bot.sendMessage(chatId, '❌ Invalid amount. Try again:');
+        return;
+      }
+      session.pendingAmount = amount.toString();
+      session.pendingOrderType = 'limit_sell';
+
+      // Check if user has multiple wallets
+      const wallets = await multiWallet.getUserWallets(userId);
+      if (wallets.length > 1) {
+        session.selectedWallets = wallets.filter(w => w.isActive).map(w => w.index);
+        session.pendingAction = 'limit_order_wallets';
+
+        const walletList = wallets.map(w => ({
+          ...w,
+          selected: session.selectedWallets?.includes(w.index)
+        }));
+
+        await this.bot.sendMessage(chatId,
+          `👛 **Select Wallets for Limit Order**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `📊 Order: **LIMIT SELL**\n` +
+          `🪙 Token: \`${session.pendingToken?.slice(0, 12)}...\`\n` +
+          `💰 Target: ${session.pendingPrice} PLS\n` +
+          `💵 Amount: ${amount} tokens per wallet\n\n` +
+          `🟢 = Selected | ⚪ = Not selected`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.orderWalletSelectKeyboard(walletList) }
+        );
+        return;
+      }
+
+      await this.createLimitOrder(chatId, userId, 'limit_sell', session.pendingToken!,
+        parseFloat(session.pendingPrice!), amount);
+      session.pendingAction = undefined;
+      session.pendingToken = undefined;
+      session.pendingAmount = undefined;
+      session.pendingPrice = undefined;
       return;
     }
 
@@ -3524,27 +3889,91 @@ Hold $50+ of DTGC to trade
       const wallet = await walletManager.getWallet(order.userId);
       if (!wallet) return;
 
+      // Find the chat ID for this user
+      let userChatId: string | null = null;
+      for (const [chatId, session] of this.sessions) {
+        if (session.linkedWallet === wallet.address || chatId === order.userId) {
+          userChatId = chatId;
+          break;
+        }
+      }
+
+      // Notify user that order is triggering
+      if (userChatId) {
+        await this.bot.sendMessage(userChatId,
+          `⚡ **LIMIT ORDER TRIGGERED!**\n\n` +
+          `📊 ${order.orderType.replace('_', ' ').toUpperCase()}\n` +
+          `🪙 Token: \`${order.tokenAddress.slice(0, 12)}...\`\n` +
+          `💰 Target hit: ${ethers.formatEther(BigInt(order.targetPrice))} PLS\n\n` +
+          `⏳ Executing trade...`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+
       let result;
       if (order.orderType === 'limit_buy') {
-        result = await pulsex.executeBuy(wallet, order.tokenAddress, order.amount, order.slippage, 500000);
+        result = await pulsex.executeBuy(wallet, order.tokenAddress, BigInt(order.amount), order.slippage, 500000);
       } else {
-        result = await pulsex.executeSell(wallet, order.tokenAddress, order.amount, order.slippage, 500000);
+        result = await pulsex.executeSell(wallet, order.tokenAddress, BigInt(order.amount), order.slippage, 500000);
       }
 
       if (result.success) {
         limitOrderEngine.markOrderFilled(order.id, result.txHash!);
 
-        for (const [chatId, _] of this.sessions) {
-          await this.bot.sendMessage(chatId,
-            `✅ **Order Filled!**\n\n` +
-            `${order.orderType.replace('_', ' ').toUpperCase()}\n` +
+        // 🏆 VICTORY NOTIFICATION with P&L Card
+        if (userChatId) {
+          const typeEmoji = order.orderType === 'limit_buy' ? '🟢' :
+                           order.orderType === 'limit_sell' ? '🔴' :
+                           order.orderType === 'take_profit' ? '💰' : '🛑';
+
+          await this.bot.sendMessage(userChatId,
+            `🏆🎊 **LIMIT ORDER VICTORY!** 🎊🏆\n` +
+            `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `⚜️ **MANDO BOT EXECUTED!** ⚜️\n\n` +
+            `${typeEmoji} **${order.orderType.replace('_', ' ').toUpperCase()}**\n\n` +
+            `📋 **Token:**\n\`${order.tokenAddress}\`\n\n` +
+            `💰 **Trade:**\n` +
             `${result.amountIn} → ${result.amountOut}\n\n` +
-            `🔗 [TX](${config.explorerUrl}/tx/${result.txHash})`,
-            { parse_mode: 'Markdown' }
+            `${result.feeCollected ? `🔥 **DTGC Burned:** ${result.dtgcBurned}\n\n` : ''}` +
+            `🔗 [View TX on PulseScan](${config.explorerUrl}/tx/${result.txHash})\n` +
+            `📊 [View on PulseX](https://app.pulsex.com/swap?outputCurrency=${order.tokenAddress})\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━\n` +
+            `_Your limit order hit the target! 🎯_`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '📊 Generate P&L Card', callback_data: 'generate_pnl_card' }],
+                  [{ text: '📋 My Orders', callback_data: 'order_list' }],
+                  [{ text: '🎯 New Order', callback_data: 'orders_menu' }],
+                  [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+                ],
+              },
+            }
           );
+
+          // Send victory sticker
+          try {
+            await this.bot.sendSticker(userChatId, 'CAACAgIAAxkBAAEBBQZj9Z-xT0UAAe_qAAGzNl8HNlDjlxAAAj8AA0G1Vg7TZwq7GwABAdQfBA');
+          } catch {
+            await this.bot.sendMessage(userChatId, '🏆💰🚀');
+          }
+
+          // Auto-generate P&L card for the user
+          await this.generatePnLCard(userChatId, order.userId);
         }
       } else {
         limitOrderEngine.markOrderFailed(order.id, result.error!);
+
+        if (userChatId) {
+          await this.bot.sendMessage(userChatId,
+            `❌ **LIMIT ORDER FAILED**\n\n` +
+            `Order: \`${order.id}\`\n` +
+            `Error: ${result.error}\n\n` +
+            `_The price was reached but execution failed._`,
+            { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard }
+          );
+        }
       }
     });
   }
