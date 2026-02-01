@@ -176,8 +176,12 @@ export class DtraderBot {
     // Priority 0: Check Mini App verification API first
     try {
       const verifyResponse = await fetch(`https://dtgc.io/api/tg-verify?telegramUserId=${userId}`);
-      const verifyData = await verifyResponse.json();
-      if (verifyData.verified && verifyData.balanceUsd >= 50) {
+      const verifyData = await verifyResponse.json() as {
+        verified?: boolean;
+        walletAddress?: string;
+        balanceUsd?: number;
+      };
+      if (verifyData.verified && verifyData.balanceUsd && verifyData.balanceUsd >= 50 && verifyData.walletAddress) {
         console.log(`✅ Mini App verified wallet for user ${userId}: $${verifyData.balanceUsd}`);
         session.linkedWallet = verifyData.walletAddress;
         session.gateVerified = true;
