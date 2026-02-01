@@ -5799,27 +5799,29 @@ Hold $50+ of DTGC to trade
         // Get pair info if available
         const pairAddress = pairInfo?.pairAddress || 'Check PulseX';
 
-        // 🎉 VICTORY NOTIFICATION - Send celebration message
+        // 🎉 VICTORY NOTIFICATION - Send celebration message with Take Profit option
         await this.bot.sendMessage(chatId,
           `🏆🎊 **SNIPE VICTORY!** 🎊🏆\n` +
           `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-          `⚜️ **MANDO BOT STRIKES AGAIN!** ⚜️\n\n` +
+          `⚜️ **DTRADER SNIPER STRIKES!** ⚜️\n\n` +
           `🎓 **Token Graduated & Sniped!**\n\n` +
           `📋 **Token CA:**\n\`${tokenAddress}\`\n\n` +
           `🔗 **NEW PulseX Pair:**\n\`${pairAddress}\`\n\n` +
           `💰 **Invested:** ${ethers.formatEther(amountPls || BigInt(0))} PLS\n` +
           `🪙 **Tokens:** ${result.amountOut || 'Pending...'}\n\n` +
-          `🔗 [View TX on PulseScan](https://scan.pulsechain.com/tx/${result.txHash})\n` +
-          `📊 [View Pair on PulseX](https://app.pulsex.com/swap?outputCurrency=${tokenAddress})\n\n` +
+          `🔗 [View TX](https://scan.pulsechain.com/tx/${result.txHash})\n` +
+          `📊 [Trade on PulseX](https://app.pulsex.com/swap?outputCurrency=${tokenAddress})\n\n` +
           `━━━━━━━━━━━━━━━━━━━━━\n` +
-          `_You're in early! This is the way. 🚀_`,
+          `💡 **Set a Take Profit** to auto-sell at target %!\n` +
+          `_Secure gains & recover initial investment._`,
           {
             parse_mode: 'Markdown',
             reply_markup: {
               inline_keyboard: [
-                [{ text: '📊 Generate P&L Card', callback_data: 'generate_pnl_card' }],
-                [{ text: '📋 My Snipe Orders', callback_data: 'snipe_list' }],
-                [{ text: '🎯 New Snipe', callback_data: 'snipe_menu' }],
+                [{ text: '📈 SET TAKE PROFIT (Auto-Sell)', callback_data: `set_tp_${orderId}` }],
+                [{ text: '🔴 Quick Sell 50%', callback_data: `quick_sell_${tokenAddress}` }],
+                [{ text: '📊 P&L Card', callback_data: 'generate_pnl_card' }, { text: '📋 Orders', callback_data: 'snipe_list' }],
+                [{ text: '🎯 Snipe Another', callback_data: 'pump_near_grad' }],
                 [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
               ],
             },
