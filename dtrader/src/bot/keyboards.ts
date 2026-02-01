@@ -505,3 +505,203 @@ export const tradeHistoryEntryKeyboard = (orderId: string): TelegramBot.InlineKe
     ],
   ],
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚜️ MANDO BOT - PULSONIC-STYLE TOKEN POSITION KEYBOARD
+// Clean, precise layout with sell percentages and quick actions
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface TokenPositionData {
+  tokenAddress: string;
+  tokenSymbol: string;
+  walletIndex?: number;
+  slippage?: string;
+}
+
+/**
+ * Generate PulsonicBot-style token position keyboard
+ * Mandalorian themed with clean, precise buttons
+ */
+export const tokenPositionKeyboard = (data: TokenPositionData): TelegramBot.InlineKeyboardMarkup => {
+  const { tokenAddress, tokenSymbol, walletIndex = 1, slippage = 'auto' } = data;
+  const shortAddr = tokenAddress.slice(0, 8);
+
+  return {
+    inline_keyboard: [
+      // Row 1: Refresh
+      [
+        { text: '🔄 Refresh', callback_data: `pos_refresh_${shortAddr}` },
+      ],
+      // Row 2: Wallet & Slippage
+      [
+        { text: `⚜️ Wallet - #${walletIndex}`, callback_data: `pos_wallet_${shortAddr}` },
+      ],
+      [
+        { text: `🎯 Slippage - ${slippage}`, callback_data: `pos_slip_${shortAddr}` },
+      ],
+      // Row 3-4: Sell Percentages (Mando style)
+      [
+        { text: '💰 Sell 10%', callback_data: `pos_sell_10_${shortAddr}` },
+        { text: '💰 Sell 25%', callback_data: `pos_sell_25_${shortAddr}` },
+        { text: '💰 Sell 33%', callback_data: `pos_sell_33_${shortAddr}` },
+      ],
+      [
+        { text: '💰 Sell 50%', callback_data: `pos_sell_50_${shortAddr}` },
+        { text: '💰 Sell 75%', callback_data: `pos_sell_75_${shortAddr}` },
+        { text: '💰 Sell 100%', callback_data: `pos_sell_100_${shortAddr}` },
+      ],
+      // Row 5: Custom sell
+      [
+        { text: `💰 Sell X ${tokenSymbol}`, callback_data: `pos_sell_x_${shortAddr}` },
+      ],
+      // Row 6: Limit Orders
+      [
+        { text: '🔴 Limit Sell', callback_data: `pos_limit_sell_${shortAddr}` },
+        { text: '🟢 Limit Buy', callback_data: `pos_limit_buy_${shortAddr}` },
+      ],
+      // Row 7: Buy more
+      [
+        { text: `📈 Buy more ${tokenSymbol}`, callback_data: `pos_buy_${shortAddr}` },
+      ],
+      // Row 8: Share & Ignore
+      [
+        { text: '📤 Share', callback_data: `pos_share_${shortAddr}` },
+      ],
+      [
+        { text: '🚫 Ignore forever', callback_data: `pos_ignore_${shortAddr}` },
+      ],
+      // Row 9: Back
+      [
+        { text: '🔙 Back to Positions', callback_data: 'positions_menu' },
+      ],
+    ],
+  };
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯 PUMP.TIRES SNIPER SETTINGS KEYBOARD (PulsonicBot style)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface SniperSettingsData {
+  walletIndex: number;
+  walletBalance: string;
+  snipeAmount: string;
+  gasIncrease: string;
+  tickers: string[];
+  maxSnipes: number | string;
+  blacklistedDevs: number;
+  maxDevSnipe: string;
+  maxTokensDeployed: string;
+  minBondedTokens: string;
+  isActive: boolean;
+}
+
+/**
+ * Generate pump.tires sniper settings keyboard (PulsonicBot style)
+ */
+export const pumpSniperSettingsKeyboard = (data: SniperSettingsData): TelegramBot.InlineKeyboardMarkup => {
+  const tickerStr = data.tickers.length > 0 ? data.tickers.map(t => `$${t}`).join(' ') : 'Any';
+
+  return {
+    inline_keyboard: [
+      // Wallet selection
+      [
+        { text: `⚜️ Wallet - #${data.walletIndex}`, callback_data: 'pump_snipe_wallet' },
+      ],
+      // Snipe amount
+      [
+        { text: `💰 Snipe Amount - ${data.snipeAmount}`, callback_data: 'pump_snipe_amount' },
+      ],
+      // Ticker filter
+      [
+        { text: `🏷️ Snipe Ticker(s) - ${tickerStr}`, callback_data: 'pump_snipe_tickers' },
+      ],
+      // Max snipes
+      [
+        { text: `🎯 Max Snipes - ${data.maxSnipes}`, callback_data: 'pump_snipe_max' },
+      ],
+      // Dev filters
+      [
+        { text: `🎯 Max Dev Snipe - ${data.maxDevSnipe}`, callback_data: 'pump_snipe_dev_max' },
+      ],
+      [
+        { text: `🪙 Max Tokens Deployed - ${data.maxTokensDeployed}`, callback_data: 'pump_snipe_tokens_max' },
+      ],
+      [
+        { text: `⭐ Min Bonded Tokens - ${data.minBondedTokens}`, callback_data: 'pump_snipe_bonded_min' },
+      ],
+      // Gas
+      [
+        { text: `⛽ Gas Increase - ${data.gasIncrease}`, callback_data: 'pump_snipe_gas' },
+      ],
+      // Blacklist
+      [
+        { text: `🚫 Blacklisted - ${data.blacklistedDevs}`, callback_data: 'pump_snipe_blacklist' },
+        { text: '➕ Add', callback_data: 'pump_snipe_blacklist_add' },
+        { text: '➖ Remove', callback_data: 'pump_snipe_blacklist_remove' },
+      ],
+      // Enable/Disable
+      [
+        { text: data.isActive ? '✅ Enabled' : '❌ Disabled', callback_data: 'pump_snipe_toggle' },
+      ],
+      // Back
+      [
+        { text: '🔙 Back to Pump.tires Menu', callback_data: 'pump_menu' },
+      ],
+    ],
+  };
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📊 POSITIONS MENU (List all held tokens)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const positionsMenuKeyboard: TelegramBot.InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [
+      { text: '🔄 Refresh All', callback_data: 'positions_refresh' },
+    ],
+    [
+      { text: '📊 Sort by P&L', callback_data: 'positions_sort_pnl' },
+      { text: '📈 Sort by Value', callback_data: 'positions_sort_value' },
+    ],
+    [
+      { text: '🗂️ Regroup Messages', callback_data: 'positions_regroup' },
+    ],
+    [
+      { text: '🔙 Main Menu', callback_data: 'main_menu' },
+    ],
+  ],
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔄 QUICK SELL MENU (for /sellmenu command)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const quickSellMenuKeyboard = (tokenAddress: string, tokenSymbol: string): TelegramBot.InlineKeyboardMarkup => {
+  const shortAddr = tokenAddress.slice(0, 8);
+
+  return {
+    inline_keyboard: [
+      [
+        { text: '💰 10%', callback_data: `qsell_10_${shortAddr}` },
+        { text: '💰 25%', callback_data: `qsell_25_${shortAddr}` },
+        { text: '💰 33%', callback_data: `qsell_33_${shortAddr}` },
+      ],
+      [
+        { text: '💰 50%', callback_data: `qsell_50_${shortAddr}` },
+        { text: '💰 75%', callback_data: `qsell_75_${shortAddr}` },
+        { text: '💰 100%', callback_data: `qsell_100_${shortAddr}` },
+      ],
+      [
+        { text: `📝 Sell X ${tokenSymbol}`, callback_data: `qsell_x_${shortAddr}` },
+      ],
+      [
+        { text: '🔴 Set Limit Sell', callback_data: `qlimit_sell_${shortAddr}` },
+      ],
+      [
+        { text: '❌ Cancel', callback_data: 'main_menu' },
+      ],
+    ],
+  };
+};

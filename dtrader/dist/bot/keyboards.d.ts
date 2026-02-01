@@ -35,4 +35,34 @@ export declare const gasPriorityKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const quickActionsKeyboard: (tokenAddress: string) => TelegramBot.InlineKeyboardMarkup;
 export declare const tradeHistoryKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const tradeHistoryEntryKeyboard: (orderId: string) => TelegramBot.InlineKeyboardMarkup;
+export interface TokenPositionData {
+    tokenAddress: string;
+    tokenSymbol: string;
+    walletIndex?: number;
+    slippage?: string;
+}
+/**
+ * Generate PulsonicBot-style token position keyboard
+ * Mandalorian themed with clean, precise buttons
+ */
+export declare const tokenPositionKeyboard: (data: TokenPositionData) => TelegramBot.InlineKeyboardMarkup;
+export interface SniperSettingsData {
+    walletIndex: number;
+    walletBalance: string;
+    snipeAmount: string;
+    gasIncrease: string;
+    tickers: string[];
+    maxSnipes: number | string;
+    blacklistedDevs: number;
+    maxDevSnipe: string;
+    maxTokensDeployed: string;
+    minBondedTokens: string;
+    isActive: boolean;
+}
+/**
+ * Generate pump.tires sniper settings keyboard (PulsonicBot style)
+ */
+export declare const pumpSniperSettingsKeyboard: (data: SniperSettingsData) => TelegramBot.InlineKeyboardMarkup;
+export declare const positionsMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
+export declare const quickSellMenuKeyboard: (tokenAddress: string, tokenSymbol: string) => TelegramBot.InlineKeyboardMarkup;
 //# sourceMappingURL=keyboards.d.ts.map

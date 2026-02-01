@@ -102,6 +102,18 @@ interface UserSession {
     antiRug: boolean;
     alerts: boolean;
   };
+  // PulsonicBot-style pump.tires sniper settings
+  sniperSettings?: {
+    snipeAmount: string;
+    gasIncrease: string;
+    tickers: string[];
+    maxSnipes: number | string;
+    maxDevSnipe: string;
+    maxTokensDeployed: string;
+    minBondedTokens: string;
+    blacklistedDevs: number;
+    isActive: boolean;
+  };
   gateVerified: boolean;
   gateExpiry: number;
 }
@@ -167,16 +179,19 @@ export class DtraderBot {
    */
   private async initializeBotMenu(): Promise<void> {
     try {
-      // Set bot commands - creates the menu button
+      // Set bot commands - creates the menu button (PulsonicBot style)
       await this.bot.setMyCommands([
-        { command: 'start', description: '🚀 Start Bot / Main Menu' },
-        { command: 'wallet', description: '👛 Manage Wallets (6 slots)' },
-        { command: 'snipe', description: '🎯 InstaBond Sniper' },
-        { command: 'trade', description: '💱 Quick Buy/Sell' },
-        { command: 'orders', description: '📋 Limit Orders & History' },
-        { command: 'pnl', description: '📊 P&L Card Generator' },
-        { command: 'settings', description: '⚙️ Bot Settings' },
-        { command: 'help', description: '❓ Help & Features' },
+        { command: 'start', description: 'Main Menu' },
+        { command: 'positions', description: 'Manage your positions' },
+        { command: 'wallets', description: 'Manage your wallets' },
+        { command: 'buy', description: 'Buy a token (DEX)' },
+        { command: 'sell', description: 'Sell a token (DEX)' },
+        { command: 'pumptire', description: 'Go to pump.tires menu' },
+        { command: 'pumpsnipe', description: 'Go to pump.tires sniper menu' },
+        { command: 'regroup', description: 'Moves tracked tokens to recent messages' },
+        { command: 'sellmenu', description: 'Quick sell menu for a token' },
+        { command: 'pnl', description: 'Generate P&L card' },
+        { command: 'settings', description: 'Bot settings' },
       ]);
       console.log('✅ Bot commands menu set');
 
@@ -814,6 +829,143 @@ export class DtraderBot {
         parse_mode: 'Markdown',
         reply_markup: keyboards.settingsKeyboard,
       });
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🎯 PULSONIC-STYLE COMMANDS - Quick access from command menu
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // /positions - Manage your positions (tracked tokens)
+    this.bot.onText(/\/positions/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      await this.showPositionsMenu(chatId, userId);
+    });
+
+    // /wallets - Manage your wallets (alias for /wallet)
+    this.bot.onText(/\/wallets/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      const session = this.getSession(chatId);
+      const wallets = await multiWallet.getUserWallets(userId);
+      const walletList = wallets.length > 0
+        ? wallets.map((w, i) => `${w.isActive ? '✅' : '⬜'} **#${i + 1}** ${w.label || `Wallet ${i + 1}`}\n   \`${w.address.slice(0, 10)}...${w.address.slice(-8)}\``).join('\n')
+        : '_No wallets generated yet_';
+
+      await this.bot.sendMessage(chatId,
+        `⚜️ **MANDO WALLETS**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `${walletList}\n\n` +
+        `_Generate up to 6 snipe wallets for multi-wallet trading_`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+      );
+    });
+
+    // /pumptire - Go to pump.tires menu
+    this.bot.onText(/\/pumptire/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      await this.bot.sendMessage(chatId,
+        `🎓 **PUMP.TIRES - InstaBond**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `⚜️ _This is the way to catch graduations._\n\n` +
+        `🔥 **Top Near Graduation** - Tokens close to bonding\n` +
+        `🎓 **Recently Bonded** - Just graduated tokens\n` +
+        `🤖 **Auto-Snipe** - Auto-buy all graduations\n` +
+        `🎯 **Snipe Specific** - Target a token CA`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.pumpMenuKeyboard }
+      );
+    });
+
+    // /pumpsnipe - Go to pump.tires sniper settings
+    this.bot.onText(/\/pumpsnipe/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      await this.showPumpSniperSettings(chatId, userId);
+    });
+
+    // /regroup - Moves tracked tokens to recent messages
+    this.bot.onText(/\/regroup/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      await this.bot.sendMessage(chatId,
+        `🔄 **Regrouping Positions...**\n\n` +
+        `_Moving all your tracked tokens to recent messages._`,
+        { parse_mode: 'Markdown' }
+      );
+
+      // Re-send all positions
+      await this.showPositionsMenu(chatId, userId);
+    });
+
+    // /sellmenu <token> - Quick sell menu for a token
+    this.bot.onText(/\/sellmenu\s*(.*)/, async (msg, match) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+      const tokenAddress = match?.[1]?.trim();
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      if (!tokenAddress) {
+        const session = this.getSession(chatId);
+        await this.bot.sendMessage(chatId,
+          `💰 **Quick Sell Menu**\n\n` +
+          `Usage: \`/sellmenu <token_address>\`\n\n` +
+          `Or paste a token address to see the sell menu.`,
+          { parse_mode: 'Markdown' }
+        );
+        session.pendingAction = 'sellmenu_token';
+        return;
+      }
+
+      await this.showQuickSellMenu(chatId, userId, tokenAddress);
+    });
+
+    // /buy <token> - Alias command
+    this.bot.onText(/^\/buy$/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      const session = this.getSession(chatId);
+      session.pendingAction = 'buy_token';
+      await this.bot.sendMessage(chatId,
+        `💰 **Buy Token**\n\n` +
+        `📋 Send the token contract address:`,
+        { parse_mode: 'Markdown' }
+      );
+    });
+
+    // /sell <token> - Alias command
+    this.bot.onText(/^\/sell$/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const userId = msg.from?.id.toString() || '';
+
+      if (!await this.checkGate(chatId, userId)) return;
+
+      const session = this.getSession(chatId);
+      session.pendingAction = 'sell_token';
+      await this.bot.sendMessage(chatId,
+        `💸 **Sell Token**\n\n` +
+        `📋 Send the token contract address:`,
+        { parse_mode: 'Markdown' }
+      );
     });
 
     // Handle callback queries (button clicks)
@@ -4433,6 +4585,267 @@ Hold $50+ of DTGC to trade
             ],
           },
         }
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🎯 PULSONIC-STYLE MENU HANDLERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Show positions menu (tracked tokens)
+   */
+  private async showPositionsMenu(chatId: string, userId: string): Promise<void> {
+    const session = this.getSession(chatId);
+
+    // Get tracked tokens from snipe orders and trade history
+    const snipeOrders = session.snipeOrders.filter(o => o.status === 'filled');
+    const trades = TradeHistory.getCompletedTrades(userId, 20);
+
+    // Collect unique token addresses
+    const tokenSet = new Set<string>();
+    for (const o of snipeOrders) tokenSet.add(o.tokenAddress.toLowerCase());
+    for (const t of trades) if (t.tokenAddress) tokenSet.add(t.tokenAddress.toLowerCase());
+
+    if (tokenSet.size === 0) {
+      await this.bot.sendMessage(chatId,
+        `📊 **YOUR POSITIONS**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `_No tracked positions yet._\n\n` +
+        `Start trading or sniping to see your positions here.\n\n` +
+        `⚜️ _This is the way._`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.positionsMenuKeyboard }
+      );
+      return;
+    }
+
+    let msg = `📊 **YOUR POSITIONS** (${tokenSet.size})\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    let count = 0;
+    for (const addr of Array.from(tokenSet).slice(0, 10)) {
+      count++;
+      const order = snipeOrders.find(o => o.tokenAddress.toLowerCase() === addr);
+      const symbol = order?.tokenSymbol || 'TOKEN';
+      msg += `${count}. **$${symbol}**\n`;
+      msg += `   \`${addr.slice(0, 10)}...${addr.slice(-8)}\`\n\n`;
+    }
+
+    if (tokenSet.size > 10) {
+      msg += `_...and ${tokenSet.size - 10} more_\n\n`;
+    }
+
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `⚜️ _Send a token address to view details_`;
+
+    await this.bot.sendMessage(chatId, msg, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboards.positionsMenuKeyboard,
+    });
+  }
+
+  /**
+   * Show pump.tires sniper settings (PulsonicBot style)
+   */
+  private async showPumpSniperSettings(chatId: string, userId: string): Promise<void> {
+    const session = this.getSession(chatId);
+    const wallets = await multiWallet.getUserWallets(userId);
+    const activeWallet = wallets.find(w => w.isActive) || wallets[0];
+    const walletIndex = activeWallet ? wallets.indexOf(activeWallet) + 1 : 1;
+
+    // Get wallet balance
+    let balanceStr = '0';
+    if (activeWallet) {
+      try {
+        const provider = new ethers.JsonRpcProvider(config.rpc);
+        const balance = await provider.getBalance(activeWallet.address);
+        const formatted = parseFloat(ethers.formatEther(balance));
+        balanceStr = formatted > 1000 ? `${(formatted / 1000).toFixed(2)}K` : formatted.toFixed(2);
+      } catch {}
+    }
+
+    // Sniper settings from session
+    const sniperSettings = session.sniperSettings || {
+      snipeAmount: '1M PLS',
+      gasIncrease: '+90%',
+      tickers: [],
+      maxSnipes: 'Any',
+      maxDevSnipe: 'Any',
+      maxTokensDeployed: 'Any',
+      minBondedTokens: 'Any',
+      blacklistedDevs: 0,
+      isActive: false,
+    };
+
+    // Build the PulsonicBot-style display message
+    const tickerStr = sniperSettings.tickers?.length > 0
+      ? sniperSettings.tickers.map((t: string) => `$${t.toUpperCase()}`).join(' ')
+      : 'Any';
+
+    let msg = `🎯 **PUMP.Tires - Sniper Menu**\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `Welcome to sniper menu where you can easily setup and activate your sniper to snipe newly deployed tokens on PUMP.Tires\n\n`;
+    msg += `**Current sniper settings:**\n\n`;
+    msg += `💰 Wallet: **#${walletIndex} (${balanceStr})**\n`;
+    msg += `💵 Snipe Amount: **${sniperSettings.snipeAmount}**\n`;
+    msg += `⛽ Gas Increase: **${sniperSettings.gasIncrease}**\n\n`;
+    msg += `🏷️ Ticker(s): **${tickerStr}**\n\n`;
+    msg += `🎯 Max Snipes: **${sniperSettings.maxSnipes}**\n`;
+    msg += `🚫 Blacklisted Devs: **${sniperSettings.blacklistedDevs}**\n\n`;
+    msg += `🎯 Max Dev Snipe: **${sniperSettings.maxDevSnipe}**\n`;
+    msg += `🪙 Max Tokens Deployed: **${sniperSettings.maxTokensDeployed}**\n`;
+    msg += `⭐ Min Bonded Tokens: **${sniperSettings.minBondedTokens}**\n\n`;
+    msg += `🤖 Is Active: ${sniperSettings.isActive ? '✅ **Yes**' : '❌ **No**'}`;
+
+    const keyboard = keyboards.pumpSniperSettingsKeyboard({
+      walletIndex,
+      walletBalance: balanceStr,
+      snipeAmount: sniperSettings.snipeAmount,
+      gasIncrease: sniperSettings.gasIncrease,
+      tickers: sniperSettings.tickers || [],
+      maxSnipes: sniperSettings.maxSnipes,
+      blacklistedDevs: sniperSettings.blacklistedDevs,
+      maxDevSnipe: sniperSettings.maxDevSnipe,
+      maxTokensDeployed: sniperSettings.maxTokensDeployed,
+      minBondedTokens: sniperSettings.minBondedTokens,
+      isActive: sniperSettings.isActive,
+    });
+
+    await this.bot.sendMessage(chatId, msg, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  }
+
+  /**
+   * Show quick sell menu for a token (PulsonicBot style)
+   */
+  private async showQuickSellMenu(chatId: string, userId: string, tokenAddress: string): Promise<void> {
+    // Get token info
+    let tokenSymbol = 'TOKEN';
+    let pnlPercent = 0;
+    let worth = 0;
+    let cost = 0;
+    let tokens = 0;
+
+    try {
+      // Try to get token symbol from contract
+      const provider = new ethers.JsonRpcProvider(config.rpc);
+      const tokenContract = new ethers.Contract(tokenAddress, [
+        'function symbol() view returns (string)',
+        'function balanceOf(address) view returns (uint256)',
+        'function decimals() view returns (uint8)',
+      ], provider);
+
+      tokenSymbol = await tokenContract.symbol().catch(() => 'TOKEN');
+
+      // Get user's wallet balance of this token
+      const wallets = await multiWallet.getUserWallets(userId);
+      const activeWallet = wallets.find(w => w.isActive) || wallets[0];
+      if (activeWallet) {
+        const balance = await tokenContract.balanceOf(activeWallet.address);
+        const decimals = await tokenContract.decimals().catch(() => 18);
+        tokens = parseFloat(ethers.formatUnits(balance, decimals));
+      }
+
+      // Try to get price and calculate worth
+      // (simplified - actual implementation would use price oracle)
+    } catch (e) {
+      console.log('Error getting token info:', e);
+    }
+
+    // Build message
+    let msg = `🪙 **Token: ${tokenSymbol}**\n`;
+    msg += `📋 \`${tokenAddress}\`\n`;
+    msg += `📊 PNL: ${pnlPercent >= 0 ? '🟢' : '🔴'} **${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%**\n\n`;
+    msg += `💰 Worth: **${formatNumber(worth)} PLS**\n`;
+    msg += `💵 Cost: **${formatNumber(cost)} PLS**\n`;
+    msg += `🪙 Tokens: **${formatNumber(tokens)}**\n\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `⚜️ _Select sell percentage:_`;
+
+    const keyboard = keyboards.quickSellMenuKeyboard(tokenAddress, tokenSymbol);
+
+    await this.bot.sendMessage(chatId, msg, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  }
+
+  /**
+   * Show token position details (PulsonicBot style)
+   */
+  private async showTokenPosition(chatId: string, userId: string, tokenAddress: string): Promise<void> {
+    // Get token info
+    let tokenSymbol = 'TOKEN';
+    let marketCap = 0;
+    let liquidity = 0;
+    let pnlPercent = 0;
+    let worth = 0;
+    let cost = 0;
+    let tokens = 0;
+    let supply = 0;
+
+    try {
+      const provider = new ethers.JsonRpcProvider(config.rpc);
+      const tokenContract = new ethers.Contract(tokenAddress, [
+        'function symbol() view returns (string)',
+        'function name() view returns (string)',
+        'function balanceOf(address) view returns (uint256)',
+        'function decimals() view returns (uint8)',
+        'function totalSupply() view returns (uint256)',
+      ], provider);
+
+      tokenSymbol = await tokenContract.symbol().catch(() => 'TOKEN');
+      const decimals = await tokenContract.decimals().catch(() => 18);
+      const totalSupply = await tokenContract.totalSupply().catch(() => BigInt(0));
+      supply = parseFloat(ethers.formatUnits(totalSupply, decimals));
+
+      // Get user's wallet balance
+      const wallets = await multiWallet.getUserWallets(userId);
+      const activeWallet = wallets.find(w => w.isActive) || wallets[0];
+      const walletIndex = activeWallet ? wallets.indexOf(activeWallet) + 1 : 1;
+
+      if (activeWallet) {
+        const balance = await tokenContract.balanceOf(activeWallet.address);
+        tokens = parseFloat(ethers.formatUnits(balance, decimals));
+      }
+
+      const supplyPercent = supply > 0 ? (tokens / supply * 100) : 0;
+
+      // Build PulsonicBot-style message
+      let msg = `➡️ **Token: ${tokenSymbol}**\n`;
+      msg += `📋 \`${tokenAddress}\`\n`;
+      msg += `📊 PNL: ${pnlPercent >= 0 ? '🟢' : '🔴'} **${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%**\n`;
+      msg += `📦 Total supply: **${supplyPercent.toFixed(2)}%**\n\n`;
+      msg += `📈 Market cap: **$${formatNumber(marketCap)}**\n`;
+      msg += `💧 Liquidity: **${formatNumber(liquidity)} PLS**\n\n`;
+      msg += `💰 **[${walletIndex}]** ${pnlPercent >= 0 ? '🟢' : '🔴'} **${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%**\n`;
+      msg += `Worth: **${formatNumber(worth)} PLS** Cost: **${formatNumber(cost)} PLS**\n`;
+      msg += `Tokens: **${formatNumber(tokens)}** (${supplyPercent.toFixed(2)}%)\n\n`;
+      msg += `[Contract](${config.explorerUrl}/address/${tokenAddress}) • [DEXScreener](https://dexscreener.com/pulsechain/${tokenAddress}) • [DEXTools](https://www.dextools.io/app/en/pulse/pair-explorer/${tokenAddress})\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
+
+      const keyboard = keyboards.tokenPositionKeyboard({
+        tokenAddress,
+        tokenSymbol,
+        walletIndex,
+        slippage: 'auto',
+      });
+
+      await this.bot.sendMessage(chatId, msg, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+        disable_web_page_preview: true,
+      });
+
+    } catch (error: any) {
+      console.error('Error showing token position:', error);
+      await this.bot.sendMessage(chatId,
+        `❌ Could not load token details.\n\nError: ${error.message}`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard }
       );
     }
   }

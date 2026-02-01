@@ -129,6 +129,22 @@ export declare class DtraderBot {
      */
     private generatePnLCard;
     /**
+     * Show positions menu (tracked tokens)
+     */
+    private showPositionsMenu;
+    /**
+     * Show pump.tires sniper settings (PulsonicBot style)
+     */
+    private showPumpSniperSettings;
+    /**
+     * Show quick sell menu for a token (PulsonicBot style)
+     */
+    private showQuickSellMenu;
+    /**
+     * Show token position details (PulsonicBot style)
+     */
+    private showTokenPosition;
+    /**
      * Stop the bot
      */
     stop(): Promise<void>;
