@@ -2038,7 +2038,26 @@ export class DtraderBot {
         return;
       }
 
+      const activeCount = wallets.filter(w => w.isActive).length;
       const buttons: TelegramBot.InlineKeyboardButton[][] = [];
+
+      // Quick toggle buttons at top
+      buttons.push([
+        { text: '✅ ALL ON', callback_data: 'toggle_all_on' },
+        { text: '⬜ ALL OFF', callback_data: 'toggle_all_off' }
+      ]);
+
+      // Group toggles if 4+ wallets
+      if (wallets.length >= 4) {
+        buttons.push([
+          { text: '🔄 Toggle 1-3', callback_data: 'toggle_group_1' },
+          { text: '🔄 Toggle 4-6', callback_data: 'toggle_group_2' }
+        ]);
+      }
+
+      buttons.push([{ text: '━━━━━━━━━━━━━━', callback_data: 'noop' }]);
+
+      // Individual wallet toggles
       for (const w of wallets) {
         const icon = w.isActive ? '✅' : '⬜';
         buttons.push([{
@@ -2051,11 +2070,118 @@ export class DtraderBot {
       await this.bot.sendMessage(chatId,
         `✅ **Toggle Active Wallets**\n` +
         `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `Tap a wallet to toggle it ON/OFF for trading:\n\n` +
-        `✅ = Active (will be used for snipes/orders)\n` +
+        `**${activeCount}/${wallets.length}** wallets active\n\n` +
+        `✅ = Active (used for trades)\n` +
         `⬜ = Inactive (skipped)\n`,
         { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } }
       );
+      return;
+    }
+
+    // Bulk toggle - All ON
+    if (data === 'toggle_all_on') {
+      const wallets = await multiWallet.getUserWallets(userId);
+      for (const w of wallets) {
+        if (!w.isActive) multiWallet.toggleWalletActive(userId, w.index);
+      }
+      await this.bot.sendMessage(chatId, `✅ **All ${wallets.length} wallets activated!**`, { parse_mode: 'Markdown' });
+
+      // Refresh toggle menu
+      const buttons: TelegramBot.InlineKeyboardButton[][] = [
+        [{ text: '✅ ALL ON', callback_data: 'toggle_all_on' }, { text: '⬜ ALL OFF', callback_data: 'toggle_all_off' }]
+      ];
+      if (wallets.length >= 4) {
+        buttons.push([{ text: '🔄 Toggle 1-3', callback_data: 'toggle_group_1' }, { text: '🔄 Toggle 4-6', callback_data: 'toggle_group_2' }]);
+      }
+      buttons.push([{ text: '━━━━━━━━━━━━━━', callback_data: 'noop' }]);
+      const refreshedWallets = await multiWallet.getUserWallets(userId);
+      for (const w of refreshedWallets) {
+        buttons.push([{ text: `✅ ${w.label} (${w.address.slice(0, 8)}...)`, callback_data: `toggle_wallet_${w.index}` }]);
+      }
+      buttons.push([{ text: '🔙 Back', callback_data: 'wallets_menu' }]);
+      await this.bot.sendMessage(chatId, `✅ **Toggle Active Wallets**\n\n**${wallets.length}/${wallets.length}** active`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+      return;
+    }
+
+    // Bulk toggle - All OFF
+    if (data === 'toggle_all_off') {
+      const wallets = await multiWallet.getUserWallets(userId);
+      for (const w of wallets) {
+        if (w.isActive) multiWallet.toggleWalletActive(userId, w.index);
+      }
+      await this.bot.sendMessage(chatId, `⬜ **All ${wallets.length} wallets deactivated!**`, { parse_mode: 'Markdown' });
+
+      // Refresh toggle menu
+      const buttons: TelegramBot.InlineKeyboardButton[][] = [
+        [{ text: '✅ ALL ON', callback_data: 'toggle_all_on' }, { text: '⬜ ALL OFF', callback_data: 'toggle_all_off' }]
+      ];
+      if (wallets.length >= 4) {
+        buttons.push([{ text: '🔄 Toggle 1-3', callback_data: 'toggle_group_1' }, { text: '🔄 Toggle 4-6', callback_data: 'toggle_group_2' }]);
+      }
+      buttons.push([{ text: '━━━━━━━━━━━━━━', callback_data: 'noop' }]);
+      const refreshedWallets = await multiWallet.getUserWallets(userId);
+      for (const w of refreshedWallets) {
+        buttons.push([{ text: `⬜ ${w.label} (${w.address.slice(0, 8)}...)`, callback_data: `toggle_wallet_${w.index}` }]);
+      }
+      buttons.push([{ text: '🔙 Back', callback_data: 'wallets_menu' }]);
+      await this.bot.sendMessage(chatId, `✅ **Toggle Active Wallets**\n\n**0/${wallets.length}** active`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+      return;
+    }
+
+    // Group toggle - wallets 1-3
+    if (data === 'toggle_group_1') {
+      const wallets = await multiWallet.getUserWallets(userId);
+      const group = wallets.filter(w => w.index <= 2); // 0, 1, 2
+      for (const w of group) {
+        multiWallet.toggleWalletActive(userId, w.index);
+      }
+      await this.bot.sendMessage(chatId, `🔄 Toggled wallets 1-3`, { parse_mode: 'Markdown' });
+
+      // Refresh - reuse toggle menu logic
+      const refreshedWallets = await multiWallet.getUserWallets(userId);
+      const activeCount = refreshedWallets.filter(w => w.isActive).length;
+      const buttons: TelegramBot.InlineKeyboardButton[][] = [
+        [{ text: '✅ ALL ON', callback_data: 'toggle_all_on' }, { text: '⬜ ALL OFF', callback_data: 'toggle_all_off' }],
+        [{ text: '🔄 Toggle 1-3', callback_data: 'toggle_group_1' }, { text: '🔄 Toggle 4-6', callback_data: 'toggle_group_2' }],
+        [{ text: '━━━━━━━━━━━━━━', callback_data: 'noop' }]
+      ];
+      for (const w of refreshedWallets) {
+        const icon = w.isActive ? '✅' : '⬜';
+        buttons.push([{ text: `${icon} ${w.label} (${w.address.slice(0, 8)}...)`, callback_data: `toggle_wallet_${w.index}` }]);
+      }
+      buttons.push([{ text: '🔙 Back', callback_data: 'wallets_menu' }]);
+      await this.bot.sendMessage(chatId, `✅ **Toggle Active Wallets**\n\n**${activeCount}/${refreshedWallets.length}** active`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+      return;
+    }
+
+    // Group toggle - wallets 4-6
+    if (data === 'toggle_group_2') {
+      const wallets = await multiWallet.getUserWallets(userId);
+      const group = wallets.filter(w => w.index >= 3); // 3, 4, 5
+      for (const w of group) {
+        multiWallet.toggleWalletActive(userId, w.index);
+      }
+      await this.bot.sendMessage(chatId, `🔄 Toggled wallets 4-6`, { parse_mode: 'Markdown' });
+
+      // Refresh
+      const refreshedWallets = await multiWallet.getUserWallets(userId);
+      const activeCount = refreshedWallets.filter(w => w.isActive).length;
+      const buttons: TelegramBot.InlineKeyboardButton[][] = [
+        [{ text: '✅ ALL ON', callback_data: 'toggle_all_on' }, { text: '⬜ ALL OFF', callback_data: 'toggle_all_off' }],
+        [{ text: '🔄 Toggle 1-3', callback_data: 'toggle_group_1' }, { text: '🔄 Toggle 4-6', callback_data: 'toggle_group_2' }],
+        [{ text: '━━━━━━━━━━━━━━', callback_data: 'noop' }]
+      ];
+      for (const w of refreshedWallets) {
+        const icon = w.isActive ? '✅' : '⬜';
+        buttons.push([{ text: `${icon} ${w.label} (${w.address.slice(0, 8)}...)`, callback_data: `toggle_wallet_${w.index}` }]);
+      }
+      buttons.push([{ text: '🔙 Back', callback_data: 'wallets_menu' }]);
+      await this.bot.sendMessage(chatId, `✅ **Toggle Active Wallets**\n\n**${activeCount}/${refreshedWallets.length}** active`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+      return;
+    }
+
+    // No-op for separator
+    if (data === 'noop') {
       return;
     }
 
