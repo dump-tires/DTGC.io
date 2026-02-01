@@ -228,6 +228,70 @@ class MultiWalletManager {
             index: w.walletIndex
         }));
     }
+    /**
+     * Import an external wallet by private key
+     * Returns the wallet info with assigned index
+     */
+    importWallet(userId, privateKey, label, linkedWalletAddress) {
+        const wallet = new ethers_1.ethers.Wallet(privateKey);
+        const encryptedKey = this.encrypt(privateKey);
+        const keyLast4 = privateKey.slice(-4);
+        // Find next available index
+        const existing = this.store.findByUser(userId);
+        const nextIndex = existing.length > 0
+            ? Math.max(...existing.map(w => w.walletIndex)) + 1
+            : 1;
+        // Check if wallet already exists for this user
+        const existingWallet = existing.find(w => w.address.toLowerCase() === wallet.address.toLowerCase());
+        if (existingWallet) {
+            // Update existing wallet's label if provided
+            if (label) {
+                this.store.update(userId, existingWallet.walletIndex, { label });
+            }
+            return {
+                index: existingWallet.walletIndex,
+                address: existingWallet.address,
+                label: label || existingWallet.label,
+                balance: 0n,
+                isActive: existingWallet.isActive,
+            };
+        }
+        this.store.insert({
+            userId,
+            walletIndex: nextIndex,
+            address: wallet.address,
+            encryptedKey,
+            label: label || `Imported ${nextIndex}`,
+            isActive: true,
+            createdAt: Date.now(),
+            linkedWalletAddress: linkedWalletAddress?.toLowerCase(),
+            keyLast4
+        });
+        console.log(`📥 Imported wallet for user ${userId}: ${wallet.address.slice(0, 10)}... as #${nextIndex}`);
+        return {
+            index: nextIndex,
+            address: wallet.address,
+            label: label || `Imported ${nextIndex}`,
+            balance: 0n,
+            isActive: true,
+        };
+    }
+    /**
+     * Get wallet by address (for imported wallet lookup)
+     */
+    getWalletByAddress(userId, address) {
+        const wallets = this.store.findByUser(userId);
+        const found = wallets.find(w => w.address.toLowerCase() === address.toLowerCase());
+        if (!found)
+            return null;
+        return {
+            index: found.walletIndex,
+            address: found.address,
+            label: found.label,
+            balance: 0n,
+            isActive: found.isActive,
+        };
+    }
     async getUserWallets(userId) {
         const rows = this.store.findByUser(userId);
         const wallets = [];

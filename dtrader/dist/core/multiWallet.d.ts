@@ -42,6 +42,15 @@ export declare class MultiWalletManager {
         keyLast4: string;
         index: number;
     }[];
+    /**
+     * Import an external wallet by private key
+     * Returns the wallet info with assigned index
+     */
+    importWallet(userId: string, privateKey: string, label?: string, linkedWalletAddress?: string): WalletInfo;
+    /**
+     * Get wallet by address (for imported wallet lookup)
+     */
+    getWalletByAddress(userId: string, address: string): WalletInfo | null;
     getUserWallets(userId: string): Promise<WalletInfo[]>;
     getWalletSigner(userId: string, index: number): Promise<ethers.Wallet | null>;
     getActiveWalletSigners(userId: string): Promise<ethers.Wallet[]>;

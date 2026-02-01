@@ -784,17 +784,18 @@ class DtraderBot {
         // /recover - Recover wallets using gated wallet address + last 4 of private key
         this.bot.onText(/\/recover/, async (msg) => {
             const chatId = msg.chat.id.toString();
-            const session = this.getSession(chatId);
-            session.pendingAction = 'recover_wallet';
             await this.bot.sendMessage(chatId, `🔐 **WALLET RECOVERY**\n` +
                 `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `To recover your snipe wallets, enter:\n\n` +
-                `1️⃣ Your **gated wallet address**\n` +
-                `2️⃣ **Last 4 characters** of any snipe wallet's private key\n\n` +
-                `**Format:** \`<wallet_address> <last4>\`\n\n` +
-                `**Example:**\n` +
-                `\`0x1234...abcd f3e9\`\n\n` +
-                `_Your snipe wallets are permanently linked to your gated wallet._`, { parse_mode: 'Markdown' });
+                `Choose your recovery method:`, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🤖 Bot Gated Wallet + Last 4', callback_data: 'recover_bot_wallet' }],
+                        [{ text: '⚜️ DTGC Gold Verified Wallet + Last 4', callback_data: 'recover_gold_wallet' }],
+                        [{ text: '❌ Cancel', callback_data: 'main_menu' }],
+                    ]
+                }
+            });
         });
         // Handle callback queries (button clicks)
         this.bot.on('callback_query', async (query) => {
@@ -1586,8 +1587,40 @@ class DtraderBot {
         }
         if (data === 'wallets_import') {
             session.pendingAction = 'import_wallet_key';
-            await this.bot.sendMessage(chatId, `📥 **Import Wallet**\n\n` +
-                `⚠️ Enter your private key (64 hex chars):`, { parse_mode: 'Markdown' });
+            await this.bot.sendMessage(chatId, `📥 **Import Wallet**\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `Enter your private key followed by a label:\n\n` +
+                `**Format:** \`<private_key> <label>\`\n\n` +
+                `**Example:**\n` +
+                `\`0x1234...abcd My Sniper\`\n\n` +
+                `_Label is optional - just paste key for default name._`, { parse_mode: 'Markdown' });
+            return;
+        }
+        // ═══════════════════════════════════════════════════════════════════════════
+        // WALLET RECOVERY OPTIONS
+        // ═══════════════════════════════════════════════════════════════════════════
+        if (data === 'recover_bot_wallet') {
+            session.pendingAction = 'recover_bot_wallet';
+            await this.bot.sendMessage(chatId, `🤖 **Recovery via Bot Gated Wallet**\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `Enter your **Bot Gated Wallet address** and the\n` +
+                `**last 4 characters** of any snipe wallet's private key:\n\n` +
+                `**Format:** \`<wallet_address> <last4>\`\n\n` +
+                `**Example:**\n` +
+                `\`0x1234567890abcdef... f3e9\`\n\n` +
+                `_This is the wallet you verified with $50+ DTGC._`, { parse_mode: 'Markdown' });
+            return;
+        }
+        if (data === 'recover_gold_wallet') {
+            session.pendingAction = 'recover_gold_wallet';
+            await this.bot.sendMessage(chatId, `⚜️ **Recovery via DTGC Gold Wallet**\n` +
+                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `Enter your **DTGC Gold Suite verified wallet** and the\n` +
+                `**last 4 characters** of any snipe wallet's private key:\n\n` +
+                `**Format:** \`<wallet_address> <last4>\`\n\n` +
+                `**Example:**\n` +
+                `\`0x1234567890abcdef... f3e9\`\n\n` +
+                `_This is the wallet you connected at dtgc.io/gold._`, { parse_mode: 'Markdown' });
             return;
         }
         // ═══════════════════════════════════════════════════════════════════════════
@@ -2017,13 +2050,14 @@ class DtraderBot {
         const session = this.getSession(chatId);
         if (!session.pendingAction)
             return;
-        // Wallet Recovery - parse address + last4 of private key
-        if (session.pendingAction === 'recover_wallet') {
+        // Wallet Recovery - parse address + last4 of private key (both methods)
+        if (session.pendingAction === 'recover_bot_wallet' || session.pendingAction === 'recover_gold_wallet') {
+            const recoveryType = session.pendingAction === 'recover_bot_wallet' ? 'Bot Gated' : 'DTGC Gold';
             session.pendingAction = undefined;
             // Parse input: "0x1234...abcd f3e9" or "0x1234abcd f3e9"
             const parts = text.trim().split(/\s+/);
             if (parts.length < 2) {
-                await this.bot.sendMessage(chatId, `❌ Invalid format. Please provide:\n\n\`<wallet_address> <last4>\`\n\nExample: \`0x1234...abcd f3e9\``, { parse_mode: 'Markdown' });
+                await this.bot.sendMessage(chatId, `❌ Invalid format. Please provide:\n\n\`<wallet_address> <last4>\`\n\nExample: \`0x1234...abcd f3e9\`\n\nTry /recover again.`, { parse_mode: 'Markdown' });
                 return;
             }
             const walletAddress = parts[0];
@@ -2036,7 +2070,7 @@ class DtraderBot {
                 await this.bot.sendMessage(chatId, '❌ Please provide exactly 4 characters from your private key. Try /recover again.');
                 return;
             }
-            await this.bot.sendMessage(chatId, '🔍 Searching for your wallets...');
+            await this.bot.sendMessage(chatId, `🔍 Searching via ${recoveryType} wallet...`);
             // Try to recover
             const result = multiWallet_1.multiWallet.recoverWallets(walletAddress, keyLast4);
             if (result) {
@@ -2049,23 +2083,26 @@ class DtraderBot {
                 jsonStore_1.LinkedWallets.link(userId, chatId, walletAddress, 0);
                 await this.bot.sendMessage(chatId, `✅ **WALLETS RECOVERED!**\n` +
                     `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                    `🔐 Found **${result.walletCount} wallets** linked to:\n` +
+                    `🔐 Found **${result.walletCount} wallets** via ${recoveryType}:\n` +
                     `\`${walletAddress.slice(0, 12)}...${walletAddress.slice(-8)}\`\n\n` +
                     `Your snipe wallets are now accessible!\n\n` +
-                    `Use /wallets to view them.`, { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard });
+                    `Use /wallets to view and rename them.`, { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard });
             }
             else {
-                // Show what wallets exist for this address (without giving away too much)
+                // Show what wallets exist for this address
                 const existingWallets = multiWallet_1.multiWallet.getWalletsForRecovery(walletAddress);
                 if (existingWallets.length > 0) {
                     await this.bot.sendMessage(chatId, `❌ **Recovery code doesn't match**\n\n` +
-                        `Found ${existingWallets.length} wallets linked to this address, but the last 4 characters don't match any of them.\n\n` +
-                        `💡 Try the last 4 chars of a different wallet's private key.`, { parse_mode: 'Markdown' });
+                        `Found ${existingWallets.length} wallets linked to this ${recoveryType} address, but the last 4 characters don't match.\n\n` +
+                        `💡 Try the last 4 chars of a different wallet's private key.\n\n` +
+                        `Use /recover to try again.`, { parse_mode: 'Markdown' });
                 }
                 else {
                     await this.bot.sendMessage(chatId, `❌ **No wallets found**\n\n` +
-                        `No snipe wallets are linked to this address.\n\n` +
-                        `💡 Make sure you're using the same gated wallet address you used when generating the wallets.`, { parse_mode: 'Markdown' });
+                        `No snipe wallets are linked to this ${recoveryType} address.\n\n` +
+                        `💡 Try the other recovery option:\n` +
+                        `• /recover → Choose different method\n\n` +
+                        `Make sure you're using the correct wallet address.`, { parse_mode: 'Markdown' });
                 }
             }
             return;
@@ -2280,20 +2317,35 @@ class DtraderBot {
                 `_You'll be notified of price changes._`, { parse_mode: 'Markdown', reply_markup: keyboards.snipeMenuKeyboard });
             return;
         }
-        // Import wallet private key
+        // Import wallet private key with optional label
         if (session.pendingAction === 'import_wallet_key') {
+            // Parse input: "0x1234...abcd My Label" or just "0x1234...abcd"
+            const parts = text.trim().split(/\s+/);
+            const keyPart = parts[0];
+            const labelPart = parts.slice(1).join(' ').slice(0, 20) || undefined; // Max 20 chars
             // Validate private key format (64 hex chars, optionally with 0x prefix)
-            const cleanKey = text.startsWith('0x') ? text.slice(2) : text;
+            const cleanKey = keyPart.startsWith('0x') ? keyPart.slice(2) : keyPart;
             if (!/^[a-fA-F0-9]{64}$/.test(cleanKey)) {
-                await this.bot.sendMessage(chatId, '❌ Invalid private key format. Must be 64 hex characters:');
+                await this.bot.sendMessage(chatId, `❌ Invalid private key format.\n\n` +
+                    `Must be 64 hex characters (with or without 0x prefix).\n\n` +
+                    `Try again with: \`<private_key> <label>\``, { parse_mode: 'Markdown' });
                 return;
             }
             try {
-                const wallet = new ethers_1.ethers.Wallet(text);
+                // Get linked wallet address for this user
+                const linkedWalletAddress = session.linkedWallet || jsonStore_1.LinkedWallets.getAddress(userId);
+                // Import and save to multiWallet store
+                const fullKey = keyPart.startsWith('0x') ? keyPart : `0x${keyPart}`;
+                const importedWallet = multiWallet_1.multiWallet.importWallet(userId, fullKey, labelPart, linkedWalletAddress);
                 session.pendingAction = undefined;
-                await this.bot.sendMessage(chatId, `✅ **Wallet Imported**\n\n` +
-                    `Address: \`${wallet.address}\`\n\n` +
-                    `⚠️ _Private key stored securely._`, { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard });
+                await this.bot.sendMessage(chatId, `✅ **Wallet Imported & Saved!**\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                    `📍 **Address:**\n\`${importedWallet.address}\`\n\n` +
+                    `🏷️ **Label:** ${importedWallet.label}\n` +
+                    `🔢 **Index:** #${importedWallet.index}\n` +
+                    `🔐 **Recovery Code:** \`${fullKey.slice(-4)}\`\n\n` +
+                    `${linkedWalletAddress ? `🔗 Linked to: \`${linkedWalletAddress.slice(0, 10)}...\`` : '⚠️ Not linked to a gated wallet yet'}\n\n` +
+                    `_Use /wallets to view all wallets or rename._`, { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard });
             }
             catch (e) {
                 await this.bot.sendMessage(chatId, '❌ Invalid private key. Try again:');
