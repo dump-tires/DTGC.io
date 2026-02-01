@@ -82,11 +82,17 @@ export interface LinkedWalletEntry {
     botKeyLast4?: string;
 }
 export declare const linkedWalletsStore: Store<LinkedWalletEntry>;
+declare function recoverVerificationFromVercel(vistoId: string, gatedWallet?: string): Promise<LinkedWalletEntry | null>;
 export declare const LinkedWallets: {
     /**
      * Save a linked wallet (with optional bot wallet linking)
+     * ALSO syncs to Vercel for permanent persistence!
      */
-    link: (vistoId: string, chatId: string, walletAddress: string, balanceUsd: number, botWalletAddress?: string, botKeyLast4?: string) => LinkedWalletEntry;
+    link: (vistoId: string, chatId: string, walletAddress: string, balanceUsd: number, botWalletAddress?: string, botKeyLast4?: string, username?: string) => LinkedWalletEntry;
+    /**
+     * Recover verification from Vercel cloud backup
+     */
+    recoverFromVercel: typeof recoverVerificationFromVercel;
     /**
      * Get bot wallet for a user
      */
@@ -95,13 +101,22 @@ export declare const LinkedWallets: {
         keyLast4: string;
     } | undefined;
     /**
-     * Get linked wallet for a user
+     * Get linked wallet for a user (sync version - checks local only)
      */
     get: (vistoId: string) => LinkedWalletEntry | undefined;
+    /**
+     * Get linked wallet with Vercel recovery if missing locally
+     * Use this for critical verification checks!
+     */
+    getWithRecovery: (vistoId: string) => Promise<LinkedWalletEntry | undefined>;
     /**
      * Check if a user has a valid linked wallet
      */
     hasValidLink: (vistoId: string) => boolean;
+    /**
+     * Check with Vercel recovery - async version for critical checks
+     */
+    hasValidLinkAsync: (vistoId: string) => Promise<boolean>;
     /**
      * Remove linked wallet
      */

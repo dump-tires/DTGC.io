@@ -153,9 +153,96 @@ export interface LinkedWalletEntry {
 
 export const linkedWalletsStore = createStore<LinkedWalletEntry>('linkedWallets');
 
+// Vercel sync for permanent persistence
+async function syncVerificationToVercel(entry: LinkedWalletEntry & { username?: string }): Promise<boolean> {
+  try {
+    const apiKey = process.env.BOT_TOKEN?.slice(-20) || '';
+    const response = await fetch('https://dtgc.io/api/verification-sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        telegramUserId: entry.id,
+        chatId: entry.chatId,
+        walletAddress: entry.walletAddress,
+        balanceUsd: entry.balanceUsd,
+        username: entry.username || null,
+        botWalletAddress: entry.botWalletAddress,
+        botKeyLast4: entry.botKeyLast4,
+      }),
+    });
+    if (response.ok) {
+      console.log(`☁️ [VERCEL] Synced verification for user ${entry.id}`);
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error(`❌ [VERCEL] Failed to sync verification:`, e);
+    return false;
+  }
+}
+
+async function recoverVerificationFromVercel(vistoId: string, gatedWallet?: string): Promise<LinkedWalletEntry | null> {
+  try {
+    const apiKey = process.env.BOT_TOKEN?.slice(-20) || '';
+    const queryParam = gatedWallet
+      ? `gatedWallet=${gatedWallet.toLowerCase()}`
+      : `telegramUserId=${vistoId}`;
+
+    const response = await fetch(`https://dtgc.io/api/verification-sync?${queryParam}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json() as {
+      success: boolean;
+      found: boolean;
+      telegramUserId?: string;
+      verification?: {
+        telegramUserId: string;
+        chatId: string;
+        walletAddress: string;
+        balanceUsd: number;
+        botWalletAddress?: string;
+        botKeyLast4?: string;
+        verifiedAt: number;
+        expiresAt: number;
+      };
+    };
+
+    if (!data.found || !data.verification) return null;
+
+    const v = data.verification;
+    const entry: LinkedWalletEntry = {
+      id: v.telegramUserId,
+      chatId: v.chatId,
+      walletAddress: v.walletAddress,
+      balanceUsd: v.balanceUsd,
+      botWalletAddress: v.botWalletAddress,
+      botKeyLast4: v.botKeyLast4,
+      verifiedAt: v.verifiedAt,
+      expiresAt: v.expiresAt,
+    };
+
+    // Save to local store
+    linkedWalletsStore.delete((e) => e.id === entry.id);
+    linkedWalletsStore.insert(entry);
+    console.log(`☁️ [VERCEL] Recovered verification for user ${entry.id}: ${entry.walletAddress.slice(0, 10)}...`);
+
+    return entry;
+  } catch (e) {
+    console.error(`❌ [VERCEL] Failed to recover verification:`, e);
+    return null;
+  }
+}
+
 export const LinkedWallets = {
   /**
    * Save a linked wallet (with optional bot wallet linking)
+   * ALSO syncs to Vercel for permanent persistence!
    */
   link: (
     vistoId: string,
@@ -163,7 +250,8 @@ export const LinkedWallets = {
     walletAddress: string,
     balanceUsd: number,
     botWalletAddress?: string,
-    botKeyLast4?: string
+    botKeyLast4?: string,
+    username?: string
   ): LinkedWalletEntry => {
     // Remove any existing entry for this user
     linkedWalletsStore.delete((e) => e.id === vistoId);
@@ -181,8 +269,17 @@ export const LinkedWallets = {
 
     linkedWalletsStore.insert(entry);
     console.log(`🔗 Linked wallet for user ${vistoId}: ${walletAddress.slice(0, 10)}...${botWalletAddress ? ` + bot wallet ${botWalletAddress.slice(0, 10)}...` : ''}`);
+
+    // Sync to Vercel for permanent persistence (non-blocking)
+    syncVerificationToVercel({ ...entry, username }).catch(() => {});
+
     return entry;
   },
+
+  /**
+   * Recover verification from Vercel cloud backup
+   */
+  recoverFromVercel: recoverVerificationFromVercel,
 
   /**
    * Get bot wallet for a user
@@ -196,14 +293,35 @@ export const LinkedWallets = {
   },
 
   /**
-   * Get linked wallet for a user
+   * Get linked wallet for a user (sync version - checks local only)
    */
   get: (vistoId: string): LinkedWalletEntry | undefined => {
     const entry = linkedWalletsStore.findOne((e) => e.id === vistoId);
     if (entry && entry.expiresAt > Date.now()) {
       return entry;
     }
-    // Expired or not found
+    // Expired or not found locally
+    return undefined;
+  },
+
+  /**
+   * Get linked wallet with Vercel recovery if missing locally
+   * Use this for critical verification checks!
+   */
+  getWithRecovery: async (vistoId: string): Promise<LinkedWalletEntry | undefined> => {
+    // First check local
+    const localEntry = linkedWalletsStore.findOne((e) => e.id === vistoId);
+    if (localEntry && localEntry.expiresAt > Date.now()) {
+      return localEntry;
+    }
+
+    // Try Vercel recovery
+    console.log(`🔍 Local verification missing for ${vistoId}, trying Vercel...`);
+    const recovered = await recoverVerificationFromVercel(vistoId);
+    if (recovered && recovered.expiresAt > Date.now()) {
+      return recovered;
+    }
+
     return undefined;
   },
 
@@ -212,6 +330,14 @@ export const LinkedWallets = {
    */
   hasValidLink: (vistoId: string): boolean => {
     const entry = LinkedWallets.get(vistoId);
+    return !!entry;
+  },
+
+  /**
+   * Check with Vercel recovery - async version for critical checks
+   */
+  hasValidLinkAsync: async (vistoId: string): Promise<boolean> => {
+    const entry = await LinkedWallets.getWithRecovery(vistoId);
     return !!entry;
   },
 

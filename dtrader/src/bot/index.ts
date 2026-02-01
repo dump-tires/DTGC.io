@@ -306,11 +306,27 @@ export class DtraderBot {
     }
 
     // Priority 1: Restore linked wallet from persistent storage if not in session
+    // CRITICAL: Try Vercel cloud backup if local storage is empty (Railway restart recovery)
     if (!session.linkedWallet) {
-      const persistedLink = LinkedWallets.get(userId);
+      let persistedLink = LinkedWallets.get(userId);
+
+      // If local is empty, try Vercel cloud backup
+      if (!persistedLink) {
+        console.log(`🔍 Local verification missing for ${userId}, trying Vercel cloud backup...`);
+        persistedLink = await LinkedWallets.recoverFromVercel(userId) || undefined;
+      }
+
       if (persistedLink) {
-        console.log(`🔗 Restored linked wallet from storage for user ${userId}`);
+        console.log(`🔗 Restored linked wallet for user ${userId}: ${persistedLink.walletAddress.slice(0, 10)}...`);
         session.linkedWallet = persistedLink.walletAddress;
+        session.botWalletAddress = persistedLink.botWalletAddress;
+
+        // Also recover multiwallets from Vercel if missing
+        const existingWallets = await multiWallet.getUserWallets(userId);
+        if (existingWallets.length === 0 && persistedLink.walletAddress) {
+          console.log(`🔍 Recovering snipe wallets from Vercel cloud backup...`);
+          await multiWallet.recoverFromVercel(userId, persistedLink.walletAddress);
+        }
 
         // REVERSE SYNC: Push local data back to Vercel API if it lost memory
         // This ensures Vercel always has the latest data even after cold starts
@@ -667,7 +683,21 @@ export class DtraderBot {
       const { wallet, isNew } = await walletManager.getOrCreateWallet(userId);
 
       // Check if user has linked wallet from persistent storage
-      const persistedLink = LinkedWallets.get(userId);
+      // CRITICAL: Try Vercel recovery if local is empty (Railway restart)
+      let persistedLink = LinkedWallets.get(userId);
+      if (!persistedLink) {
+        console.log(`🔍 [/start] Local verification missing for ${userId}, trying Vercel...`);
+        persistedLink = await LinkedWallets.recoverFromVercel(userId) || undefined;
+
+        // Also recover multiwallets if verification recovered
+        if (persistedLink) {
+          const existingWallets = await multiWallet.getUserWallets(userId);
+          if (existingWallets.length === 0) {
+            console.log(`🔍 [/start] Recovering snipe wallets from Vercel...`);
+            await multiWallet.recoverFromVercel(userId, persistedLink.walletAddress);
+          }
+        }
+      }
       const hasLinkedWallet = !!persistedLink;
 
       // Show compact welcome with menu immediately visible
@@ -682,7 +712,7 @@ export class DtraderBot {
         welcomeMsg += `👋 **Welcome back!**\n\n`;
       }
 
-      if (hasLinkedWallet) {
+      if (hasLinkedWallet && persistedLink) {
         welcomeMsg += `✅ **Wallet Linked:** \`${persistedLink.walletAddress.slice(0,8)}...\`\n`;
         welcomeMsg += `💰 Balance: ~$${persistedLink.balanceUsd}\n\n`;
       } else {
