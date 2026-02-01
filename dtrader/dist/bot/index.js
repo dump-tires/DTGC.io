@@ -2132,12 +2132,15 @@ class DtraderBot {
             // Log to trade history for persistent record
             jsonStore_1.TradeHistory.logInstaBondSnipe(userId, chatId, tokenAddress, snipeOrder.id, // Use order ID as symbol for now
             plsAmount.toString());
-            // Set up graduation snipe using watchToken with gas priority
+            // Set up graduation snipe using watchToken with gas priority and user info
             graduation_1.graduationSniper.watchToken(tokenAddress, {
                 amountPls: BigInt(plsAmount) * BigInt(10 ** 18),
                 slippage: session.settings.slippage,
                 gasLimit: session.settings.gasLimit,
                 gasPriceMultiplier: gasGwei >= 1 ? 10 : gasGwei >= 0.1 ? 5 : 2, // Higher multiplier for speed
+                userId: userId, // For wallet lookup
+                chatId: chatId, // For notifications
+                orderId: orderId, // For tracking
             });
             // Format amount display
             const amountDisplay = plsAmount >= 1_000_000
@@ -2389,8 +2392,73 @@ Hold $50+ of DTGC to trade
             }
         });
         graduation_1.graduationSniper.on('snipeReady', async (data) => {
-            // Execute the snipe for the user
-            // This would need the user's wallet - handled by the watcher
+            const { tokenAddress, pairInfo, userId, chatId, orderId, amountPls, slippage, gasLimit } = data;
+            console.log(`🎯 snipeReady event received for ${tokenAddress}`);
+            console.log(`   User: ${userId}, Chat: ${chatId}, Amount: ${amountPls ? ethers_1.ethers.formatEther(amountPls) : '?'} PLS`);
+            if (!userId || !chatId) {
+                console.log('❌ Missing user info in snipeReady event');
+                return;
+            }
+            // Get user's wallet
+            const wallet = await wallet_1.walletManager.getWallet(userId);
+            if (!wallet) {
+                console.log(`❌ No wallet found for user ${userId}`);
+                await this.bot.sendMessage(chatId, `❌ **Snipe Failed**\n\nNo wallet found. Generate one with /start first.`, { parse_mode: 'Markdown' });
+                return;
+            }
+            // Notify user that snipe is executing
+            await this.bot.sendMessage(chatId, `🚀 **EXECUTING SNIPE!**\n\n` +
+                `🎓 Token graduated to PulseX!\n` +
+                `📋 \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n\n` +
+                `⏳ Buying now...`, { parse_mode: 'Markdown' });
+            try {
+                // Execute the buy
+                const result = await pulsex_1.pulsex.executeBuy(wallet, tokenAddress, amountPls || BigInt(0), slippage || 15, // Higher default slippage for graduation snipes
+                gasLimit || 500000);
+                // Update order status
+                const session = this.getSession(chatId);
+                const order = session.snipeOrders.find(o => o.id === orderId);
+                if (order) {
+                    order.status = 'filled';
+                    order.filledAt = Date.now();
+                    order.txHash = result.txHash;
+                }
+                // Success message
+                await this.bot.sendMessage(chatId, `✅ **SNIPE SUCCESSFUL!**\n\n` +
+                    `🆔 Order: \`${orderId}\`\n` +
+                    `📋 Token: \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n` +
+                    `💰 Spent: ${ethers_1.ethers.formatEther(amountPls || BigInt(0))} PLS\n` +
+                    `🔗 [View TX](https://scan.pulsechain.com/tx/${result.txHash})\n\n` +
+                    `🎉 You're in early!`, {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboards.mainMenuKeyboard,
+                });
+                // Trade is already logged via the order tracking system
+                console.log(`📝 InstaBond snipe completed: ${orderId}, tx: ${result.txHash}`);
+            }
+            catch (error) {
+                console.error(`❌ Snipe execution failed:`, error);
+                // Update order status
+                const session = this.getSession(chatId);
+                const order = session.snipeOrders.find(o => o.id === orderId);
+                if (order) {
+                    order.status = 'cancelled';
+                }
+                await this.bot.sendMessage(chatId, `❌ **SNIPE FAILED**\n\n` +
+                    `🆔 Order: \`${orderId}\`\n` +
+                    `Error: ${error.message || 'Unknown error'}\n\n` +
+                    `_The token may have graduated but the buy failed. Try buying manually!_`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+            }
+        });
+        // Handle snipe failures
+        graduation_1.graduationSniper.on('snipeFailed', async (data) => {
+            const { tokenAddress, userId, chatId, orderId, error } = data;
+            if (chatId) {
+                await this.bot.sendMessage(chatId, `❌ **Snipe Setup Failed**\n\n` +
+                    `Order: \`${orderId}\`\n` +
+                    `Token: \`${tokenAddress?.slice(0, 12)}...${tokenAddress?.slice(-8)}\`\n` +
+                    `Error: ${error}`, { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard });
+            }
         });
         // Mempool sniper events
         mempool_1.mempoolSniper.on('executeSnipe', async (data) => {
@@ -2632,4 +2700,5 @@ Hold $50+ of DTGC to trade
     }
 }
 exports.DtraderBot = DtraderBot;
+// Trigger deploy 1769910879
 //# sourceMappingURL=index.js.map

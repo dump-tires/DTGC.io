@@ -41,6 +41,9 @@ interface SnipeConfig {
   gasPriceMultiplier: number;   // Gas price multiplier for priority
   autoSellPercent?: number;     // Auto-sell at X% profit (optional)
   maxBuyTax?: number;           // Max acceptable buy tax
+  userId?: string;              // Telegram user ID for wallet lookup
+  chatId?: string;              // Telegram chat ID for notifications
+  orderId?: string;             // Order ID for tracking
 }
 
 interface SnipeResult {
@@ -228,6 +231,7 @@ export class GraduationSniper extends EventEmitter {
   async executeSnipe(tokenAddress: string, snipeConfig: SnipeConfig): Promise<SnipeResult> {
     try {
       console.log(`🎯 Sniping ${tokenAddress}...`);
+      console.log(`   User: ${snipeConfig.userId}, Amount: ${ethers.formatEther(snipeConfig.amountPls)} PLS`);
       this.emit('sniping', tokenAddress);
 
       // Wait a tiny bit for liquidity to be fully added
@@ -236,6 +240,14 @@ export class GraduationSniper extends EventEmitter {
       // Get pair info to confirm liquidity exists
       const pairInfo = await pulsex.getPairInfo(tokenAddress);
       if (!pairInfo) {
+        console.log(`❌ Snipe failed: No liquidity pair found for ${tokenAddress}`);
+        this.emit('snipeFailed', {
+          tokenAddress,
+          userId: snipeConfig.userId,
+          chatId: snipeConfig.chatId,
+          orderId: snipeConfig.orderId,
+          error: 'No liquidity pair found',
+        });
         return {
           success: false,
           tokenAddress,
@@ -243,13 +255,23 @@ export class GraduationSniper extends EventEmitter {
         };
       }
 
-      // Execute the buy
-      // Note: We need the wallet here - this will be passed from the bot
+      console.log(`✅ Pair found: ${pairInfo.pairAddress}, executing buy...`);
+
+      // Emit snipeReady with all necessary info for the bot to execute
       this.emit('snipeReady', {
         tokenAddress,
         pairInfo,
         config: snipeConfig,
+        userId: snipeConfig.userId,
+        chatId: snipeConfig.chatId,
+        orderId: snipeConfig.orderId,
+        amountPls: snipeConfig.amountPls,
+        slippage: snipeConfig.slippage,
+        gasLimit: snipeConfig.gasLimit,
       });
+
+      // Remove from watchlist after triggering
+      this.watchedTokens.delete(tokenAddress.toLowerCase());
 
       return {
         success: true,
@@ -257,6 +279,14 @@ export class GraduationSniper extends EventEmitter {
         amountPls: ethers.formatEther(snipeConfig.amountPls),
       };
     } catch (error: any) {
+      console.error(`❌ Snipe error for ${tokenAddress}:`, error);
+      this.emit('snipeFailed', {
+        tokenAddress,
+        userId: snipeConfig.userId,
+        chatId: snipeConfig.chatId,
+        orderId: snipeConfig.orderId,
+        error: error.message,
+      });
       return {
         success: false,
         tokenAddress,

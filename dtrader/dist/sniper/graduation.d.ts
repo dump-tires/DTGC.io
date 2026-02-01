@@ -16,6 +16,9 @@ interface SnipeConfig {
     gasPriceMultiplier: number;
     autoSellPercent?: number;
     maxBuyTax?: number;
+    userId?: string;
+    chatId?: string;
+    orderId?: string;
 }
 interface SnipeResult {
     success: boolean;
