@@ -187,12 +187,11 @@ export class DtraderBot {
         { command: 'wins', description: '🏆 Probable Wins - Top Opportunities' },
         { command: 'buy', description: 'Buy a token (DEX)' },
         { command: 'sell', description: 'Sell a token (DEX)' },
-        { command: 'positions', description: 'Manage your positions' },
         { command: 'wallets', description: 'Manage your wallets' },
+        { command: 'recover', description: '🔐 Recover wallets (address + last4)' },
+        { command: 'positions', description: 'Manage your positions' },
         { command: 'pumptire', description: 'Go to pump.tires menu' },
         { command: 'pumpsnipe', description: 'Go to pump.tires sniper menu' },
-        { command: 'regroup', description: 'Moves tracked tokens to recent messages' },
-        { command: 'sellmenu', description: 'Quick sell menu for a token' },
         { command: 'pnl', description: 'Generate P&L card' },
         { command: 'settings', description: 'Bot settings' },
       ]);
@@ -997,6 +996,27 @@ export class DtraderBot {
       if (!await this.checkGate(chatId, userId)) return;
 
       await this.showProbableWins(chatId, userId);
+    });
+
+    // /recover - Recover wallets using gated wallet address + last 4 of private key
+    this.bot.onText(/\/recover/, async (msg) => {
+      const chatId = msg.chat.id.toString();
+      const session = this.getSession(chatId);
+
+      session.pendingAction = 'recover_wallet';
+
+      await this.bot.sendMessage(chatId,
+        `🔐 **WALLET RECOVERY**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `To recover your snipe wallets, enter:\n\n` +
+        `1️⃣ Your **gated wallet address**\n` +
+        `2️⃣ **Last 4 characters** of any snipe wallet's private key\n\n` +
+        `**Format:** \`<wallet_address> <last4>\`\n\n` +
+        `**Example:**\n` +
+        `\`0x1234...abcd f3e9\`\n\n` +
+        `_Your snipe wallets are permanently linked to your gated wallet._`,
+        { parse_mode: 'Markdown' }
+      );
     });
 
     // Handle callback queries (button clicks)
@@ -2487,6 +2507,80 @@ export class DtraderBot {
 
     if (!session.pendingAction) return;
 
+    // Wallet Recovery - parse address + last4 of private key
+    if (session.pendingAction === 'recover_wallet') {
+      session.pendingAction = undefined;
+
+      // Parse input: "0x1234...abcd f3e9" or "0x1234abcd f3e9"
+      const parts = text.trim().split(/\s+/);
+      if (parts.length < 2) {
+        await this.bot.sendMessage(chatId,
+          `❌ Invalid format. Please provide:\n\n\`<wallet_address> <last4>\`\n\nExample: \`0x1234...abcd f3e9\``,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      const walletAddress = parts[0];
+      const keyLast4 = parts[1];
+
+      if (!ethers.isAddress(walletAddress)) {
+        await this.bot.sendMessage(chatId, '❌ Invalid wallet address. Try /recover again.');
+        return;
+      }
+
+      if (keyLast4.length !== 4) {
+        await this.bot.sendMessage(chatId, '❌ Please provide exactly 4 characters from your private key. Try /recover again.');
+        return;
+      }
+
+      await this.bot.sendMessage(chatId, '🔍 Searching for your wallets...');
+
+      // Try to recover
+      const result = multiWallet.recoverWallets(walletAddress, keyLast4);
+
+      if (result) {
+        // Transfer ownership to current user
+        if (result.userId !== userId) {
+          multiWallet.transferWallets(result.userId, userId);
+        }
+
+        // Link the gated wallet to current session
+        session.linkedWallet = walletAddress.toLowerCase();
+        LinkedWallets.link(userId, chatId, walletAddress, 0);
+
+        await this.bot.sendMessage(chatId,
+          `✅ **WALLETS RECOVERED!**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+          `🔐 Found **${result.walletCount} wallets** linked to:\n` +
+          `\`${walletAddress.slice(0, 12)}...${walletAddress.slice(-8)}\`\n\n` +
+          `Your snipe wallets are now accessible!\n\n` +
+          `Use /wallets to view them.`,
+          { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+        );
+      } else {
+        // Show what wallets exist for this address (without giving away too much)
+        const existingWallets = multiWallet.getWalletsForRecovery(walletAddress);
+
+        if (existingWallets.length > 0) {
+          await this.bot.sendMessage(chatId,
+            `❌ **Recovery code doesn't match**\n\n` +
+            `Found ${existingWallets.length} wallets linked to this address, but the last 4 characters don't match any of them.\n\n` +
+            `💡 Try the last 4 chars of a different wallet's private key.`,
+            { parse_mode: 'Markdown' }
+          );
+        } else {
+          await this.bot.sendMessage(chatId,
+            `❌ **No wallets found**\n\n` +
+            `No snipe wallets are linked to this address.\n\n` +
+            `💡 Make sure you're using the same gated wallet address you used when generating the wallets.`,
+            { parse_mode: 'Markdown' }
+          );
+        }
+      }
+      return;
+    }
+
     // Token address inputs - with full DEXScreener breakdown
     if (session.pendingAction === 'buy_token_address') {
       if (!ethers.isAddress(text)) {
@@ -3479,25 +3573,48 @@ export class DtraderBot {
   /**
    * Generate 6 snipe wallets for multi-wallet sniping
    * Shows address AND private key for each wallet
+   * Links wallets to the user's gated wallet for recovery
    */
   private async generate6Wallets(chatId: string, userId: string): Promise<void> {
     await this.bot.sendMessage(chatId, '🔄 Generating 6 snipe wallets...');
 
-    const wallets: { index: number; address: string; privateKey: string }[] = [];
+    // Get linked/gated wallet address
+    const session = this.getSession(chatId);
+    const linkedWalletAddress = session.linkedWallet || LinkedWallets.getAddress(userId);
 
-    for (let i = 1; i <= 6; i++) {
-      const walletId = `${userId}_snipe_${i}`;
-      const { wallet, isNew } = await walletManager.getOrCreateWallet(walletId);
-      wallets.push({
-        index: i,
-        address: wallet.address,
-        privateKey: wallet.privateKey,
-      });
+    // Check if user already has wallets
+    const existingCount = multiWallet.getUserWalletCount(userId);
+    if (existingCount >= 6) {
+      await this.bot.sendMessage(chatId,
+        `⚠️ You already have 6 wallets generated!\n\nUse /wallets to view them.`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.walletsMenuKeyboard }
+      );
+      return;
+    }
+
+    // Generate wallets linked to gated wallet
+    const newWallets = await multiWallet.generateWallets(userId, linkedWalletAddress);
+
+    // Get private keys for display
+    const wallets: { index: number; address: string; privateKey: string; keyLast4: string }[] = [];
+    for (const w of newWallets) {
+      const pk = multiWallet.exportPrivateKey(userId, w.index);
+      if (pk) {
+        wallets.push({
+          index: w.index,
+          address: w.address,
+          privateKey: pk,
+          keyLast4: pk.slice(-4),
+        });
+      }
     }
 
     // Send header message
     let headerMsg = `✅ **6 SNIPE WALLETS GENERATED** ⚜️\n`;
     headerMsg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    if (linkedWalletAddress) {
+      headerMsg += `🔗 **Linked to:** \`${linkedWalletAddress.slice(0, 10)}...${linkedWalletAddress.slice(-6)}\`\n\n`;
+    }
     headerMsg += `⚠️ **KEEP THESE PRIVATE KEYS SAFE!**\n`;
     headerMsg += `_Anyone with your key can access your funds._\n\n`;
 
@@ -3506,19 +3623,24 @@ export class DtraderBot {
     // Send each wallet separately for easy copying
     for (const w of wallets) {
       const walletMsg =
-        `**━━━ WALLET ${w.index} ━━━**\n\n` +
+        `**━━━ SNIPER ${w.index} ━━━**\n\n` +
         `📍 **Address:**\n\`${w.address}\`\n\n` +
-        `🔑 **Private Key:**\n\`${w.privateKey}\`\n`;
+        `🔑 **Private Key:**\n\`${w.privateKey}\`\n\n` +
+        `🔐 **Recovery Code:** \`${w.keyLast4}\`\n`;
 
       await this.bot.sendMessage(chatId, walletMsg, { parse_mode: 'Markdown' });
     }
 
-    // Send footer with tips
+    // Send footer with tips and recovery info
     let footerMsg = `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     footerMsg += `💡 **Tips:**\n`;
     footerMsg += `• Send PLS to each wallet you want to snipe with\n`;
     footerMsg += `• Use 🎯 Sniper to multi-wallet snipe!\n`;
-    footerMsg += `• Import keys into MetaMask/Rabby for recovery\n\n`;
+    footerMsg += `• Import keys into MetaMask/Rabby for backup\n\n`;
+    footerMsg += `🔐 **WALLET RECOVERY:**\n`;
+    footerMsg += `_If you lose access, use /recover with:_\n`;
+    footerMsg += `• Your gated wallet address\n`;
+    footerMsg += `• Last 4 chars of any private key\n\n`;
     footerMsg += `⚜️ _This is the way._`;
 
     await this.bot.sendMessage(chatId, footerMsg, {

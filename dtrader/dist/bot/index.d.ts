@@ -47,6 +47,7 @@ export declare class DtraderBot {
     /**
      * Generate 6 snipe wallets for multi-wallet sniping
      * Shows address AND private key for each wallet
+     * Links wallets to the user's gated wallet for recovery
      */
     private generate6Wallets;
     /**

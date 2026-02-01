@@ -24,6 +24,8 @@ interface StoredWallet {
   label: string;
   isActive: boolean;
   createdAt: number;
+  linkedWalletAddress?: string; // The gated wallet address that owns these wallets
+  keyLast4?: string;            // Last 4 chars of private key for recovery
 }
 
 class MultiWalletStore {
@@ -64,6 +66,10 @@ class MultiWalletStore {
 
   countByUser(userId: string): number {
     return this.data.filter(w => w.userId === userId).length;
+  }
+
+  findAll(): StoredWallet[] {
+    return [...this.data];
   }
 
   insert(wallet: StoredWallet): void {
@@ -123,7 +129,7 @@ export class MultiWalletManager {
     return decrypted;
   }
 
-  async generateWallets(userId: string): Promise<WalletInfo[]> {
+  async generateWallets(userId: string, linkedWalletAddress?: string): Promise<WalletInfo[]> {
     const existing = this.store.countByUser(userId);
     if (existing >= 6) throw new Error('Maximum 6 wallets already generated');
 
@@ -132,31 +138,116 @@ export class MultiWalletManager {
     for (let i = existing + 1; i <= 6; i++) {
       const hdWallet = ethers.Wallet.createRandom();
       const encryptedKey = this.encrypt(hdWallet.privateKey);
+      const keyLast4 = hdWallet.privateKey.slice(-4); // Last 4 chars for recovery
 
       this.store.insert({
         userId,
         walletIndex: i,
         address: hdWallet.address,
         encryptedKey,
-        label: `Wallet ${i}`,
+        label: `Sniper ${i}`,
         isActive: true,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        linkedWalletAddress: linkedWalletAddress?.toLowerCase(),
+        keyLast4
       });
 
       wallets.push({
         index: i,
         address: hdWallet.address,
-        label: `Wallet ${i}`,
+        label: `Sniper ${i}`,
         balance: 0n,
         isActive: true,
       });
     }
 
+    console.log(`🔐 Generated ${wallets.length} wallets for user ${userId}${linkedWalletAddress ? ` linked to ${linkedWalletAddress.slice(0, 10)}...` : ''}`);
     return wallets;
   }
 
   getUserWalletCount(userId: string): number {
     return this.store.countByUser(userId);
+  }
+
+  /**
+   * Link existing wallets to a gated wallet address (called after gate verification)
+   */
+  linkWalletsToGatedWallet(userId: string, gatedWalletAddress: string): void {
+    const wallets = this.store.findByUser(userId);
+    for (const w of wallets) {
+      this.store.update(userId, w.walletIndex, {
+        linkedWalletAddress: gatedWalletAddress.toLowerCase()
+      });
+    }
+    console.log(`🔗 Linked ${wallets.length} wallets to gated wallet ${gatedWalletAddress.slice(0, 10)}...`);
+  }
+
+  /**
+   * Recover wallets using gated wallet address + last 4 digits of any wallet's private key
+   * Returns the userId if found, allowing the user to reclaim their wallets
+   */
+  recoverWallets(gatedWalletAddress: string, keyLast4: string): { userId: string; walletCount: number } | null {
+    const normalizedAddress = gatedWalletAddress.toLowerCase();
+    const normalizedKey = keyLast4.toLowerCase();
+
+    // Find all wallets linked to this gated address
+    const allWallets = this.store.findAll();
+    const matchingWallet = allWallets.find(w =>
+      w.linkedWalletAddress === normalizedAddress &&
+      w.keyLast4?.toLowerCase() === normalizedKey
+    );
+
+    if (matchingWallet) {
+      const userId = matchingWallet.userId;
+      const walletCount = this.store.countByUser(userId);
+      console.log(`🔓 Recovery successful for ${gatedWalletAddress.slice(0, 10)}... - Found ${walletCount} wallets`);
+      return { userId, walletCount };
+    }
+
+    return null;
+  }
+
+  /**
+   * Transfer wallet ownership to a new userId (for recovery)
+   */
+  transferWallets(fromUserId: string, toUserId: string): number {
+    const wallets = this.store.findByUser(fromUserId);
+    let transferred = 0;
+
+    for (const w of wallets) {
+      // Update the userId while keeping everything else
+      const allData = this.store.findAll();
+      const idx = allData.findIndex(wd => wd.userId === fromUserId && wd.walletIndex === w.walletIndex);
+      if (idx !== -1) {
+        allData[idx].userId = toUserId;
+        transferred++;
+      }
+    }
+
+    if (transferred > 0) {
+      // Force save
+      (this.store as any).data = this.store.findAll();
+      (this.store as any).save();
+      console.log(`📦 Transferred ${transferred} wallets from ${fromUserId} to ${toUserId}`);
+    }
+
+    return transferred;
+  }
+
+  /**
+   * Get wallets info for recovery display (shows addresses + last4 for verification)
+   */
+  getWalletsForRecovery(gatedWalletAddress: string): { address: string; keyLast4: string; index: number }[] {
+    const normalizedAddress = gatedWalletAddress.toLowerCase();
+    const allWallets = this.store.findAll();
+
+    return allWallets
+      .filter(w => w.linkedWalletAddress === normalizedAddress)
+      .map(w => ({
+        address: w.address,
+        keyLast4: w.keyLast4 || '????',
+        index: w.walletIndex
+      }));
   }
 
   async getUserWallets(userId: string): Promise<WalletInfo[]> {
