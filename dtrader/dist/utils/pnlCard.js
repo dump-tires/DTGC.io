@@ -69,7 +69,7 @@ function generatePnLMessage(data) {
     const isProfit = pnl >= 0;
     const sign = isProfit ? '+' : '';
     const emoji = isProfit ? '🏆' : '📉';
-    return `⚜️ *DTRADER P&L*\n━━━━━━━━━━━━━━━━━━\n\n${isProfit ? '🟢' : '🔴'} *$${data.tokenName}* \`...${data.contractAddress.slice(-4)}\`\n\n${emoji} *${isProfit ? 'PROFIT' : 'LOSS'}*\n\`${sign}${pct.toFixed(1)}%\`\n\`${sign}${formatNumber(pnl)} PLS\`\n\n_Powered by DTGC.io_`;
+    return `⚜️ *DTRADER SNIPER P&L*\n━━━━━━━━━━━━━━━━━━\n\n${isProfit ? '🟢' : '🔴'} *$${data.tokenName}* \`...${data.contractAddress.slice(-4)}\`\n\n${emoji} *${isProfit ? 'PROFIT' : 'LOSS'}*\n\`${sign}${pct.toFixed(1)}%\`\n\`${sign}${formatNumber(pnl)} PLS\`\n\n_Powered by dtgc.io | @DtraderSniper_`;
 }
 function calculatePnL(d) {
     const inv = d.buyPrice * d.amount;
@@ -234,9 +234,9 @@ async function generatePnLCardImage(summary, trades, username) {
     const fontWhite = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE);
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
-    // Header
+    // Header - ASCII safe (no emojis - Jimp fonts don't support them)
     image.print(fontWhite, 0, 20, {
-        text: '⚜️ DTG BOND BOT ⚜️',
+        text: ':: DTRADER SNIPER ::',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_TOP,
     }, width, 50);
@@ -271,34 +271,34 @@ async function generatePnLCardImage(summary, trades, username) {
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_TOP,
     }, width, 30);
-    // Best/Worst
+    // Best/Worst - ASCII safe
     if (summary.bestTrade) {
         image.print(fontSmall, 50, 320, {
-            text: `🏆 Best: ${summary.bestTrade.symbol} (+${summary.bestTrade.pnlPercent.toFixed(1)}%)`,
+            text: `[+] Best: ${summary.bestTrade.symbol} (+${summary.bestTrade.pnlPercent.toFixed(1)}%)`,
             alignmentX: Jimp.HORIZONTAL_ALIGN_LEFT,
             alignmentY: Jimp.VERTICAL_ALIGN_TOP,
         }, width / 2, 30);
     }
     if (summary.worstTrade) {
         image.print(fontSmall, width / 2, 320, {
-            text: `📉 Worst: ${summary.worstTrade.symbol} (${summary.worstTrade.pnlPercent.toFixed(1)}%)`,
+            text: `[-] Worst: ${summary.worstTrade.symbol} (${summary.worstTrade.pnlPercent.toFixed(1)}%)`,
             alignmentX: Jimp.HORIZONTAL_ALIGN_RIGHT,
             alignmentY: Jimp.VERTICAL_ALIGN_TOP,
         }, width / 2 - 50, 30);
     }
-    // Recent trades header
+    // Recent trades header - ASCII safe
     image.print(fontWhite, 0, 370, {
-        text: '━━━ Recent Trades ━━━',
+        text: '--- Recent Trades ---',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_TOP,
     }, width, 40);
-    // List trades
+    // List trades - ASCII safe markers
     const displayTrades = trades.slice(0, 4);
     displayTrades.forEach((trade, i) => {
         const y = 410 + (i * 35);
         const tradeSign = trade.isWin ? '+' : '';
-        const emoji = trade.isWin ? '🟢' : '🔴';
-        const tradeText = `${emoji} ${trade.symbol}: ${tradeSign}${trade.pnlPercent.toFixed(1)}% (${tradeSign}${formatNumber(trade.pnlPls)} PLS)`;
+        const marker = trade.isWin ? '[W]' : '[L]';
+        const tradeText = `${marker} ${trade.symbol}: ${tradeSign}${trade.pnlPercent.toFixed(1)}% (${tradeSign}${formatNumber(trade.pnlPls)} PLS)`;
         image.print(fontSmall, 0, y, {
             text: tradeText,
             alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
@@ -319,7 +319,7 @@ async function generatePnLCardImage(summary, trades, username) {
         hour: '2-digit', minute: '2-digit'
     });
     image.print(fontSmall, 0, height - 40, {
-        text: `dtgc.io/gold | @DTGBondBot | ${dateStr}`,
+        text: `dtgc.io | @DtraderSniper | ${dateStr}`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_TOP,
     }, width, 30);
@@ -333,7 +333,7 @@ function generatePnLTextCard(summary, trades, username) {
     const isProfit = summary.totalPnlPls >= 0;
     const sign = isProfit ? '+' : '';
     const winRate = summary.totalTrades > 0 ? (summary.wins / summary.totalTrades * 100) : 0;
-    let text = `⚜️ **DTG BOND BOT P&L CARD** ⚜️\n`;
+    let text = `⚜️ **DTRADER SNIPER P&L** ⚜️\n`;
     text += `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     if (username) {
         text += `👤 @${username}\n\n`;
@@ -365,7 +365,7 @@ function generatePnLTextCard(summary, trades, username) {
         });
     }
     text += `\n━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `🌐 dtgc.io/gold | @DTGBondBot`;
+    text += `🌐 dtgc.io | @DtraderSniper`;
     return text;
 }
 /**
@@ -386,9 +386,9 @@ async function generateSingleTradeCard(symbol, entryPls, exitPls, tokensAmount, 
     const fontWhite = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE);
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
-    // Header
+    // Header - ASCII safe
     image.print(fontWhite, 0, 20, {
-        text: '⚜️ DTG BOND BOT',
+        text: ':: DTRADER SNIPER ::',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 50);
     // Token
@@ -417,7 +417,7 @@ async function generateSingleTradeCard(symbol, entryPls, exitPls, tokensAmount, 
     }, width, 30);
     // Footer
     image.print(fontSmall, 0, height - 30, {
-        text: 'dtgc.io/gold | @DTGBondBot',
+        text: 'dtgc.io | @DtraderSniper',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 30);
     return image.getBufferAsync(Jimp.MIME_PNG);
@@ -477,23 +477,23 @@ async function generateVictoryCard(data) {
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
     const fontMedium = await Jimp.loadFont(Jimp.FONT_SANS_32_WHITE);
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE);
-    // Type emoji and text
+    // Type markers - ASCII safe (no emojis)
     const typeConfig = {
-        snipe: { emoji: '🎯', title: 'SNIPE VICTORY' },
-        instabond: { emoji: '🔥', title: 'INSTABOND WIN' },
-        limit_buy: { emoji: '📈', title: 'LIMIT BUY FILLED' },
-        limit_sell: { emoji: '📉', title: 'LIMIT SELL FILLED' },
-        take_profit: { emoji: '💰', title: 'TAKE PROFIT HIT' },
+        snipe: { marker: '[>]', title: 'SNIPE VICTORY' },
+        instabond: { marker: '[*]', title: 'INSTABOND WIN' },
+        limit_buy: { marker: '[+]', title: 'LIMIT BUY FILLED' },
+        limit_sell: { marker: '[-]', title: 'LIMIT SELL FILLED' },
+        take_profit: { marker: '[$]', title: 'TAKE PROFIT HIT' },
     };
     const config = typeConfig[data.type] || typeConfig.snipe;
-    // Header - "laser etched" style
+    // Header - "laser etched" style - ASCII safe
     image.print(fontMedium, 0, 30, {
-        text: '⚜️ DTG BOND BOT ⚜️',
+        text: ':: DTRADER SNIPER ::',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 50);
-    // Victory type
+    // Victory type - ASCII safe
     image.print(fontLarge, 0, 90, {
-        text: `${config.emoji} ${config.title}`,
+        text: `${config.marker} ${config.title}`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 80);
     // Token symbol (large)
@@ -503,9 +503,9 @@ async function generateVictoryCard(data) {
     }, width, 80);
     // Stats section - bottom portion with dark overlay
     const statsY = height - 380;
-    // Draw "laser etched" line
+    // Draw "laser etched" line - ASCII safe
     image.print(fontSmall, 0, statsY, {
-        text: '━━━━━━━━━ TRADE STATS ━━━━━━━━━',
+        text: '--------- TRADE STATS ---------',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 30);
     // Stats grid
@@ -549,11 +549,11 @@ async function generateVictoryCard(data) {
         hour: '2-digit', minute: '2-digit'
     });
     image.print(fontSmall, 0, height - 60, {
-        text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        text: '================================',
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 20);
     image.print(fontSmall, 0, height - 35, {
-        text: `dtgc.io/gold | @DTGBondBot | ${dateStr}`,
+        text: `dtgc.io | @DtraderSniper | ${dateStr}`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
     }, width, 30);
     // Username watermark if provided
@@ -576,7 +576,7 @@ function generateVictoryTextCard(data) {
     const config = typeConfig[data.type] || typeConfig.snipe;
     let text = `🏆🎊 **${config.emoji} ${config.title}** 🎊🏆\n`;
     text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    text += `⚜️ **DTG BOND BOT** ⚜️\n\n`;
+    text += `⚜️ **DTRADER SNIPER** ⚜️\n\n`;
     text += `🪙 **$${data.tokenSymbol}**\n`;
     text += `📋 \`${data.tokenAddress}\`\n\n`;
     text += `━━━ TRADE STATS ━━━\n`;
@@ -599,7 +599,7 @@ function generateVictoryTextCard(data) {
         text += `\n🔗 [View TX](https://scan.pulsechain.com/tx/${data.txHash})\n`;
     }
     text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `🌐 dtgc.io/gold | @DTGBondBot`;
+    text += `🌐 dtgc.io | @DtraderSniper`;
     return text;
 }
 //# sourceMappingURL=pnlCard.js.map
