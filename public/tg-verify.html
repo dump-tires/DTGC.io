@@ -5,7 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>DTGC Wallet Verification</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+  <!-- Ethers.js v5 with fallback CDNs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"
+          integrity="sha512-FDcVY+g7vc5CXANbrTSg1K5qLyriCsGDYCE02Li1tXEYdNQPvLPHNE+rT2Mjei8N7fZbe0WLhw27j2SrGRpdMg=="
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"
+          onerror="loadEthersFallback()"></script>
+  <script>
+    // Fallback loader if primary CDN fails
+    function loadEthersFallback() {
+      console.log('Primary ethers CDN failed, trying fallback...');
+      var script = document.createElement('script');
+      script.src = 'https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
+      script.onerror = function() {
+        console.error('All ethers CDNs failed');
+        alert('Failed to load required libraries. Please try again later.');
+      };
+      document.head.appendChild(script);
+    }
+    // Check if ethers loaded after a short delay
+    setTimeout(function() {
+      if (typeof ethers === 'undefined') {
+        console.log('Ethers not found after load, trying fallback');
+        loadEthersFallback();
+      }
+    }, 1000);
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -255,26 +280,51 @@
         return;
       }
 
+      // Check if ethers loaded
+      if (typeof ethers === 'undefined') {
+        alert('Web3 library still loading. Please wait a moment and try again.');
+        return;
+      }
+
       // Show verifying state
       document.getElementById('step-connect').classList.add('hidden');
       document.getElementById('step-verifying').classList.remove('hidden');
 
       try {
-        // Check balance
+        // Check balance - first try via API to avoid RPC issues
         document.getElementById('verify-status').textContent = 'Checking DTGC balance...';
 
-        const provider = new ethers.providers.JsonRpcProvider(PULSECHAIN_RPC);
-        const dtgcContract = new ethers.Contract(DTGC_ADDRESS, DTGC_ABI, provider);
-        const balance = await dtgcContract.balanceOf(address);
-        const dtgcBalance = parseFloat(ethers.utils.formatEther(balance));
+        let dtgcBalance = 0;
+        let dtgcPrice = 0;
+        let usdValue = 0;
+
+        // Try RPC first
+        try {
+          const provider = new ethers.providers.JsonRpcProvider(PULSECHAIN_RPC);
+          const dtgcContract = new ethers.Contract(DTGC_ADDRESS, DTGC_ABI, provider);
+          const balance = await dtgcContract.balanceOf(address);
+          dtgcBalance = parseFloat(ethers.utils.formatEther(balance));
+        } catch (rpcError) {
+          console.log('Primary RPC failed, trying backup...', rpcError);
+          // Try backup RPC
+          try {
+            const backupProvider = new ethers.providers.JsonRpcProvider('https://pulsechain.publicnode.com');
+            const dtgcContract = new ethers.Contract(DTGC_ADDRESS, DTGC_ABI, backupProvider);
+            const balance = await dtgcContract.balanceOf(address);
+            dtgcBalance = parseFloat(ethers.utils.formatEther(balance));
+          } catch (backupError) {
+            console.error('Backup RPC also failed:', backupError);
+            throw new Error('Unable to connect to PulseChain. Please try again.');
+          }
+        }
 
         // Get price
         document.getElementById('verify-status').textContent = 'Getting current price...';
 
         const priceResponse = await fetch('https://api.dexscreener.com/latest/dex/tokens/' + DTGC_ADDRESS);
         const priceData = await priceResponse.json();
-        const dtgcPrice = parseFloat(priceData.pairs?.[0]?.priceUsd || 0);
-        const usdValue = dtgcBalance * dtgcPrice;
+        dtgcPrice = parseFloat(priceData.pairs?.[0]?.priceUsd || 0);
+        usdValue = dtgcBalance * dtgcPrice;
 
         // Store verification
         document.getElementById('verify-status').textContent = 'Storing verification...';
