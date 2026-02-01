@@ -1107,9 +1107,33 @@ class DtraderBot {
         }
         // Wallets menu - show wallet info with import options
         if (data === 'wallets_menu') {
-            const gatedWallet = session.linkedWallet || jsonStore_1.LinkedWallets.getAddress(userId);
-            const linkedEntry = jsonStore_1.LinkedWallets.get(userId);
-            const botWallet = linkedEntry?.botWalletAddress || session.botWalletAddress;
+            // First try to sync from Vercel API if no local gate wallet
+            let gatedWallet = session.linkedWallet || jsonStore_1.LinkedWallets.getAddress(userId);
+            let botWallet = jsonStore_1.LinkedWallets.get(userId)?.botWalletAddress || session.botWalletAddress;
+            // If no local data, fetch from Vercel API
+            if (!gatedWallet) {
+                try {
+                    const verifyResponse = await fetch(`https://dtgc.io/api/tg-verify?telegramUserId=${userId}`);
+                    const verifyData = await verifyResponse.json();
+                    if (verifyData.verified && verifyData.walletAddress) {
+                        gatedWallet = verifyData.walletAddress;
+                        session.linkedWallet = gatedWallet;
+                        session.gateVerified = true;
+                        if (verifyData.botWalletAddress) {
+                            botWallet = verifyData.botWalletAddress;
+                            session.botWalletAddress = botWallet;
+                        }
+                        // Persist locally so we don't need to fetch again
+                        jsonStore_1.LinkedWallets.link(userId, chatId, gatedWallet, verifyData.balanceUsd || 0, verifyData.botWalletAddress, verifyData.botKeyLast4);
+                        // Also link any existing wallets to this gated wallet
+                        multiWallet_1.multiWallet.linkWalletsToGatedWallet(userId, gatedWallet);
+                        console.log(`🔗 Synced wallet from API: ${gatedWallet.slice(0, 10)}...${botWallet ? ` + bot ${botWallet.slice(0, 10)}...` : ''}`);
+                    }
+                }
+                catch (e) {
+                    console.log(`[wallets_menu] API sync failed`);
+                }
+            }
             const snipeWallets = await multiWallet_1.multiWallet.getUserWallets(userId);
             let msg = `👛 **Wallet Management**\n`;
             msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
