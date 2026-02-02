@@ -734,6 +734,8 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const [lpLoading, setLpLoading] = useState(false);
   const [pairAddress, setPairAddress] = useState(null);
   const [pairReserves, setPairReserves] = useState(null);
+  const [pairTotalSupply, setPairTotalSupply] = useState(null); // Total LP tokens in existence
+  const [estimatedPoolShare, setEstimatedPoolShare] = useState(null); // % of pool after adding
   const [showLpToken0Select, setShowLpToken0Select] = useState(false);
   const [showLpToken1Select, setShowLpToken1Select] = useState(false);
 
@@ -2046,21 +2048,28 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       
       if (lpAddr && lpAddr !== ethers.ZeroAddress) {
         setPairAddress(lpAddr);
-        
+
         try {
           const pairContract = new ethers.Contract(lpAddr, PAIR_ABI, provider);
-          const [reserves, pairToken0] = await Promise.all([pairContract.getReserves(), pairContract.token0()]);
+          const [reserves, pairToken0, totalSupply] = await Promise.all([
+            pairContract.getReserves(),
+            pairContract.token0(),
+            pairContract.totalSupply()
+          ]);
           const isToken0First = pairToken0.toLowerCase() === addr0.toLowerCase();
           setPairReserves({ reserve0: isToken0First ? reserves[0] : reserves[1], reserve1: isToken0First ? reserves[1] : reserves[0] });
-          console.log('Reserves:', reserves[0].toString(), reserves[1].toString());
+          setPairTotalSupply(totalSupply);
+          console.log('Reserves:', reserves[0].toString(), reserves[1].toString(), 'Total LP:', totalSupply.toString());
         } catch (e) {
           console.log('Reserve fetch error:', e.message);
           setPairReserves(null);
+          setPairTotalSupply(null);
         }
       } else {
         console.log('No pair found on V1 or V2');
-        setPairAddress(null); 
+        setPairAddress(null);
         setPairReserves(null);
+        setPairTotalSupply(null);
       }
     } catch (err) {
       console.error('Pair fetch error:', err);
@@ -2071,15 +2080,26 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   useEffect(() => { fetchPairInfo(); }, [fetchPairInfo]);
 
   const calculateLpAmount1 = useCallback((amount0) => {
-    if (!pairReserves || !amount0 || parseFloat(amount0) <= 0) { setLpAmount1(''); return; }
+    if (!pairReserves || !amount0 || parseFloat(amount0) <= 0) { setLpAmount1(''); setEstimatedPoolShare(null); return; }
     try {
       const token0 = TOKENS[lpToken0];
       const token1 = TOKENS[lpToken1];
       const amount0Wei = ethers.parseUnits(amount0, token0.decimals);
       const amount1Wei = (amount0Wei * pairReserves.reserve1) / pairReserves.reserve0;
       setLpAmount1(parseFloat(ethers.formatUnits(amount1Wei, token1.decimals)).toFixed(6));
-    } catch { setLpAmount1(''); }
-  }, [pairReserves, lpToken0, lpToken1]);
+
+      // Calculate estimated pool share after adding liquidity
+      // LP tokens minted = min(amount0 * totalSupply / reserve0, amount1 * totalSupply / reserve1)
+      if (pairTotalSupply && pairTotalSupply > 0n) {
+        const lpTokensToMint = (amount0Wei * pairTotalSupply) / pairReserves.reserve0;
+        const newTotalSupply = pairTotalSupply + lpTokensToMint;
+        const sharePercent = Number(lpTokensToMint * 10000n / newTotalSupply) / 100;
+        setEstimatedPoolShare(sharePercent);
+      } else {
+        setEstimatedPoolShare(null);
+      }
+    } catch { setLpAmount1(''); setEstimatedPoolShare(null); }
+  }, [pairReserves, pairTotalSupply, lpToken0, lpToken1]);
 
   useEffect(() => { const timer = setTimeout(() => { if (lpAmount0) calculateLpAmount1(lpAmount0); }, 300); return () => clearTimeout(timer); }, [lpAmount0, calculateLpAmount1]);
 
@@ -4035,7 +4055,19 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 </a>
               </div>
             )}
-            {lpAmount0 && lpAmount1 && (<div style={{ ...styles.infoRow, borderBottom: 'none' }}><span style={{ color: '#888' }}>Total Value</span><span style={{ color: '#4CAF50', fontWeight: 700 }}>{formatUSD((parseFloat(lpAmount0) * (livePrices[lpToken0] || 0)) + (parseFloat(lpAmount1) * (livePrices[lpToken1] || 0)))}</span></div>)}
+            {lpAmount0 && lpAmount1 && (<div style={styles.infoRow}><span style={{ color: '#888' }}>Total Value</span><span style={{ color: '#4CAF50', fontWeight: 700 }}>{formatUSD((parseFloat(lpAmount0) * (livePrices[lpToken0] || 0)) + (parseFloat(lpAmount1) * (livePrices[lpToken1] || 0)))}</span></div>)}
+            {estimatedPoolShare !== null && pairAddress && (
+              <div style={{ ...styles.infoRow, borderBottom: 'none', background: 'rgba(76,175,80,0.1)', borderRadius: '6px', padding: '8px', marginTop: '8px' }}>
+                <span style={{ color: '#4CAF50' }}>📊 Your Pool Share After</span>
+                <span style={{ color: '#4CAF50', fontWeight: 700, fontSize: '1rem' }}>{estimatedPoolShare.toFixed(2)}%</span>
+              </div>
+            )}
+            {!pairAddress && lpAmount0 && lpAmount1 && (
+              <div style={{ ...styles.infoRow, borderBottom: 'none', background: 'rgba(255,152,0,0.1)', borderRadius: '6px', padding: '8px', marginTop: '8px' }}>
+                <span style={{ color: '#FF9800' }}>🆕 New Pool</span>
+                <span style={{ color: '#FF9800', fontWeight: 700 }}>100% (Creator)</span>
+              </div>
+            )}
           </div>
           
           <button style={{ ...styles.swapButton, ...(!userAddress || !lpAmount0 || !lpAmount1 || lpLoading ? styles.swapButtonDisabled : {}) }} onClick={addLiquidity} disabled={!userAddress || !lpAmount0 || !lpAmount1 || lpLoading}>
