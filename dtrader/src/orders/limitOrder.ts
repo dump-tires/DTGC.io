@@ -20,7 +20,7 @@ import { EventEmitter } from 'events';
  */
 
 type OrderType = 'limit_buy' | 'limit_sell' | 'stop_loss' | 'take_profit' | 'dca';
-type OrderStatus = 'pending' | 'active' | 'filled' | 'cancelled' | 'expired' | 'failed';
+type OrderStatus = 'pending' | 'active' | 'executing' | 'filled' | 'cancelled' | 'expired' | 'failed';
 
 interface LimitOrder {
   id: string;
@@ -483,7 +483,9 @@ export class LimitOrderEngine extends EventEmitter {
         console.log(`   Should execute: ${shouldExec ? '✅ YES' : '❌ NO'}`);
 
         if (shouldExec) {
-          console.log(`🎯 [LIMIT] TRIGGERING order ${order.id}!`);
+          // IMMEDIATELY mark as executing to prevent duplicate triggers
+          this.orderStore.update(order.id, { status: 'executing' });
+          console.log(`🎯 [LIMIT] TRIGGERING order ${order.id}! (marked as executing)`);
           this.emit('orderTriggered', { order, priceData });
         }
       }
@@ -528,11 +530,25 @@ export class LimitOrderEngine extends EventEmitter {
   /**
    * Mark order as failed
    */
-  markOrderFailed(orderId: string, error: string): void {
+  markOrderFailed(orderId: string, error: string, retry: boolean = false): void {
     const order = this.orderStore.findById(orderId);
-    this.orderStore.update(orderId, { status: 'failed', error });
+    // If retry is true, reset to active so it can trigger again
+    const newStatus = retry ? 'active' : 'failed';
+    this.orderStore.update(orderId, { status: newStatus, error });
     // Sync to Vercel backup
     if (order) this.syncToVercel(order.userId).catch(() => {});
+  }
+
+  /**
+   * Reset order to active (for retry after failure)
+   */
+  resetOrder(orderId: string): boolean {
+    const order = this.orderStore.findById(orderId);
+    if (order && (order.status === 'executing' || order.status === 'failed')) {
+      this.orderStore.update(orderId, { status: 'active', error: undefined });
+      return true;
+    }
+    return false;
   }
 
   /**

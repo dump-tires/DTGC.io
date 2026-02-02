@@ -385,7 +385,9 @@ class LimitOrderEngine extends events_1.EventEmitter {
                 const shouldExec = this.shouldExecute(order, priceData.priceInPls);
                 console.log(`   Should execute: ${shouldExec ? '✅ YES' : '❌ NO'}`);
                 if (shouldExec) {
-                    console.log(`🎯 [LIMIT] TRIGGERING order ${order.id}!`);
+                    // IMMEDIATELY mark as executing to prevent duplicate triggers
+                    this.orderStore.update(order.id, { status: 'executing' });
+                    console.log(`🎯 [LIMIT] TRIGGERING order ${order.id}! (marked as executing)`);
                     this.emit('orderTriggered', { order, priceData });
                 }
             }
@@ -426,12 +428,25 @@ class LimitOrderEngine extends events_1.EventEmitter {
     /**
      * Mark order as failed
      */
-    markOrderFailed(orderId, error) {
+    markOrderFailed(orderId, error, retry = false) {
         const order = this.orderStore.findById(orderId);
-        this.orderStore.update(orderId, { status: 'failed', error });
+        // If retry is true, reset to active so it can trigger again
+        const newStatus = retry ? 'active' : 'failed';
+        this.orderStore.update(orderId, { status: newStatus, error });
         // Sync to Vercel backup
         if (order)
             this.syncToVercel(order.userId).catch(() => { });
+    }
+    /**
+     * Reset order to active (for retry after failure)
+     */
+    resetOrder(orderId) {
+        const order = this.orderStore.findById(orderId);
+        if (order && (order.status === 'executing' || order.status === 'failed')) {
+            this.orderStore.update(orderId, { status: 'active', error: undefined });
+            return true;
+        }
+        return false;
     }
     /**
      * Update DCA after successful buy

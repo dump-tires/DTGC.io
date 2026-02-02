@@ -13,7 +13,7 @@ import { EventEmitter } from 'events';
  * - Trailing stops
  */
 type OrderType = 'limit_buy' | 'limit_sell' | 'stop_loss' | 'take_profit' | 'dca';
-type OrderStatus = 'pending' | 'active' | 'filled' | 'cancelled' | 'expired' | 'failed';
+type OrderStatus = 'pending' | 'active' | 'executing' | 'filled' | 'cancelled' | 'expired' | 'failed';
 interface LimitOrder {
     id: string;
     userId: string;
@@ -131,7 +131,11 @@ export declare class LimitOrderEngine extends EventEmitter {
     /**
      * Mark order as failed
      */
-    markOrderFailed(orderId: string, error: string): void;
+    markOrderFailed(orderId: string, error: string, retry?: boolean): void;
+    /**
+     * Reset order to active (for retry after failure)
+     */
+    resetOrder(orderId: string): boolean;
     /**
      * Update DCA after successful buy
      */
