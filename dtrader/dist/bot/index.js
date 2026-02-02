@@ -2544,6 +2544,131 @@ class DtraderBot {
             });
             return;
         }
+        // ═══════════════════════════════════════════════════════════════════════
+        // 🎯 QUICK LIMIT ORDER PRESETS - Fast limit order creation
+        // ═══════════════════════════════════════════════════════════════════════
+        // Quick Limit Buy at X% below current price (e.g., qlimit_buy_10_0x95B3...)
+        if (data.startsWith('qlimit_buy_') && !data.includes('custom')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const parts = data.replace('qlimit_buy_', '').split('_');
+            const percent = parseInt(parts[0]);
+            const shortAddr = parts[1];
+            // Find full token address from session or recent activity
+            const tokenAddress = session.pendingToken ||
+                session.snipeOrders.find(o => o.tokenAddress.startsWith(shortAddr))?.tokenAddress || '';
+            if (!tokenAddress) {
+                await this.bot.sendMessage(chatId, '❌ Token not found. Please start from token menu.');
+                return;
+            }
+            // Get current price using limit order engine (it has priceInPls)
+            const priceData = await limitOrder_1.limitOrderEngine.getTokenPrice(tokenAddress);
+            if (!priceData || !priceData.priceInPls) {
+                await this.bot.sendMessage(chatId, '❌ Could not get token price. Try again.');
+                return;
+            }
+            const currentPrice = priceData.priceInPls;
+            const targetPrice = currentPrice - (currentPrice * BigInt(percent) / BigInt(100));
+            session.pendingToken = tokenAddress;
+            session.pendingPrice = targetPrice.toString();
+            session.pendingAction = 'limit_buy_amount';
+            session.pendingOrderType = 'limit_buy';
+            const currentPriceStr = ethers_1.ethers.formatEther(currentPrice);
+            const targetPriceStr = ethers_1.ethers.formatEther(targetPrice);
+            await this.bot.sendMessage(chatId, `✅ **Limit Buy Target Set**\n\n` +
+                `📊 Current: ${parseFloat(currentPriceStr).toFixed(12)} PLS\n` +
+                `🎯 Target: ${parseFloat(targetPriceStr).toFixed(12)} PLS (-${percent}%)\n\n` +
+                `💰 Enter PLS amount to spend (per wallet):`, { parse_mode: 'Markdown' });
+            return;
+        }
+        // Quick Limit Sell / Take Profit at X% above current price
+        if (data.startsWith('qlimit_sell_') && !data.includes('custom')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const parts = data.replace('qlimit_sell_', '').split('_');
+            const percent = parseInt(parts[0]);
+            const shortAddr = parts[1];
+            const tokenAddress = session.pendingToken ||
+                session.snipeOrders.find(o => o.tokenAddress.startsWith(shortAddr))?.tokenAddress || '';
+            if (!tokenAddress) {
+                await this.bot.sendMessage(chatId, '❌ Token not found. Please start from token menu.');
+                return;
+            }
+            const priceData = await limitOrder_1.limitOrderEngine.getTokenPrice(tokenAddress);
+            if (!priceData || !priceData.priceInPls) {
+                await this.bot.sendMessage(chatId, '❌ Could not get token price. Try again.');
+                return;
+            }
+            const currentPrice = priceData.priceInPls;
+            const targetPrice = currentPrice + (currentPrice * BigInt(percent) / BigInt(100));
+            session.pendingToken = tokenAddress;
+            session.pendingPrice = targetPrice.toString();
+            session.pendingAction = 'limit_sell_amount';
+            session.pendingOrderType = 'limit_sell';
+            const currentPriceStr = ethers_1.ethers.formatEther(currentPrice);
+            const targetPriceStr = ethers_1.ethers.formatEther(targetPrice);
+            const multiplier = (100 + percent) / 100;
+            await this.bot.sendMessage(chatId, `✅ **Limit Sell / Take Profit Target Set**\n\n` +
+                `📊 Current: ${parseFloat(currentPriceStr).toFixed(12)} PLS\n` +
+                `🎯 Target: ${parseFloat(targetPriceStr).toFixed(12)} PLS (+${percent}% = ${multiplier.toFixed(1)}x)\n\n` +
+                `💰 Enter token amount to sell (or % like "50%"):`, { parse_mode: 'Markdown' });
+            return;
+        }
+        // InstaBond Take Profit preset (set auto-sell % for snipes)
+        if (data.startsWith('instabond_tp_') && !data.includes('custom') && !data.includes('none')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const parts = data.replace('instabond_tp_', '').split('_');
+            const percent = parseInt(parts[0]);
+            const shortAddr = parts[1];
+            // Store take profit setting in session for next snipe
+            session.settings.defaultTakeProfit = percent;
+            session.settings.defaultSellPercent = percent >= 100 ? 50 : 100; // Sell 50% at 2x+, 100% at lower
+            await this.bot.sendMessage(chatId, `✅ **InstaBond Take-Profit Set**\n\n` +
+                `🎯 Auto-sell at: **+${percent}%** (${((100 + percent) / 100).toFixed(1)}x)\n` +
+                `💰 Sell amount: ${session.settings.defaultSellPercent}% of tokens\n\n` +
+                `_All future InstaBond snipes will auto-set this take profit!_\n\n` +
+                `💡 At +100% (2x), selling 50% recovers your initial investment!`, { parse_mode: 'Markdown', reply_markup: keyboards.pumpMenuKeyboard });
+            return;
+        }
+        // Disable InstaBond auto take-profit
+        if (data.startsWith('instabond_tp_none_')) {
+            session.settings.defaultTakeProfit = undefined;
+            await this.bot.sendMessage(chatId, `❌ **Auto Take-Profit Disabled**\n\n_You'll set take profit manually after each snipe._`, { parse_mode: 'Markdown', reply_markup: keyboards.pumpMenuKeyboard });
+            return;
+        }
+        // Show quick limit buy keyboard for a token (from position keyboard)
+        if (data.startsWith('pos_limit_buy_')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const shortAddr = data.replace('pos_limit_buy_', '');
+            const tokenAddress = session.pendingToken ||
+                session.snipeOrders.find(o => o.tokenAddress.slice(0, 8) === shortAddr)?.tokenAddress || '';
+            if (tokenAddress) {
+                session.pendingToken = tokenAddress;
+                await this.bot.sendMessage(chatId, '🟢 **Quick Limit Buy**\n\n_Select target price below current:_', {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboards.quickLimitBuyKeyboard(tokenAddress),
+                });
+            }
+            return;
+        }
+        // Show quick limit sell keyboard for a token (from position keyboard)
+        if (data.startsWith('pos_limit_sell_')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const shortAddr = data.replace('pos_limit_sell_', '');
+            const tokenAddress = session.pendingToken ||
+                session.snipeOrders.find(o => o.tokenAddress.slice(0, 8) === shortAddr)?.tokenAddress || '';
+            if (tokenAddress) {
+                session.pendingToken = tokenAddress;
+                await this.bot.sendMessage(chatId, '🔴 **Quick Limit Sell / Take Profit**\n\n_Select target price above current:_', {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboards.quickLimitSellKeyboard(tokenAddress),
+                });
+            }
+            return;
+        }
         // Order actions
         if (data === 'order_limit_buy') {
             if (!await this.checkGate(chatId, userId))
@@ -4401,8 +4526,9 @@ class DtraderBot {
             const gasGwei = GAS_GWEI[gasPriority];
             const gasLabel = GAS_LABELS[gasPriority];
             const gasPriceWei = BigInt(Math.floor(gasGwei * 1e9)); // Convert Gwei to Wei
-            // Create snipe order ticket
+            // Create snipe order ticket with auto take-profit if configured
             const orderId = `SNP-${Date.now().toString(36).toUpperCase()}`;
+            const hasTakeProfit = !!(session.settings.defaultTakeProfit && session.settings.defaultTakeProfit > 0);
             const snipeOrder = {
                 id: orderId,
                 tokenAddress,
@@ -4413,6 +4539,11 @@ class DtraderBot {
                 gasGwei,
                 status: 'pending',
                 createdAt: Date.now(),
+                // Auto take-profit settings (if configured)
+                takeProfitEnabled: hasTakeProfit,
+                takeProfitPercent: session.settings.defaultTakeProfit,
+                sellPercent: session.settings.defaultSellPercent || (hasTakeProfit && session.settings.defaultTakeProfit >= 100 ? 50 : 100),
+                takeProfitStatus: hasTakeProfit ? 'active' : undefined,
             };
             // Store the order
             session.snipeOrders.push(snipeOrder);
@@ -4433,6 +4564,12 @@ class DtraderBot {
             const amountDisplay = plsAmount >= 1_000_000
                 ? `${(plsAmount / 1_000_000).toFixed(0)}M PLS`
                 : `${(plsAmount / 1_000).toFixed(0)}K PLS`;
+            // Take profit info for receipt
+            const tpInfo = hasTakeProfit
+                ? `\n━━━ TAKE PROFIT ━━━\n` +
+                    `🎯 Trigger: **+${snipeOrder.takeProfitPercent}%** (${((100 + (snipeOrder.takeProfitPercent || 0)) / 100).toFixed(1)}x)\n` +
+                    `💰 Sell: ${snipeOrder.sellPercent}% of tokens\n`
+                : '';
             // InstaBond Snipe Receipt
             const receiptMsg = `✅ **INSTABOND SNIPE ARMED!**\n\n` +
                 `━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -4444,10 +4581,11 @@ class DtraderBot {
                 `💰 Amount: **${amountDisplay}**\n` +
                 `👛 Wallet: ${walletLabel}\n` +
                 `⛽ Gas: ${gasLabel} (${gasGwei} Gwei)\n` +
-                `🔧 Slippage: ${session.settings.slippage}%\n\n` +
-                `━━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `⚜️ **Auto-executes when token graduates to PulseX!**\n\n` +
-                `💡 Set a **Limit Bond Sell** below to auto-take profit!`;
+                `🔧 Slippage: ${session.settings.slippage}%\n` +
+                tpInfo +
+                `\n━━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `⚜️ **Auto-executes when token graduates to PulseX!**` +
+                (hasTakeProfit ? `\n📈 **Auto take-profit will trigger at +${snipeOrder.takeProfitPercent}%!**` : `\n\n💡 Set a **Limit Bond Sell** below to auto-take profit!`);
             // Send receipt message
             await this.bot.sendMessage(chatId, receiptMsg, {
                 parse_mode: 'Markdown',
@@ -4786,6 +4924,37 @@ Hold $50+ of DTGC to trade
                 }
                 // Trade is already logged via the order tracking system
                 console.log(`📝 InstaBond snipe completed: ${orderId}, tx: ${result.txHash}, pair: ${pairAddress}`);
+                // 🎯 AUTO TAKE-PROFIT: Create limit sell order if configured
+                if (order?.takeProfitEnabled && order.takeProfitPercent && order.takeProfitPercent > 0) {
+                    try {
+                        // Get current price as entry price using limit order engine
+                        const priceData = await limitOrder_1.limitOrderEngine.getTokenPrice(tokenAddress);
+                        if (priceData && result.amountOut) {
+                            const entryPrice = priceData.priceInPls || BigInt(0);
+                            const targetPrice = entryPrice + (entryPrice * BigInt(order.takeProfitPercent) / BigInt(100));
+                            const sellAmount = BigInt(Math.floor(parseFloat(result.amountOut) * (order.sellPercent || 100) / 100));
+                            // Create limit sell order for take profit
+                            const tpOrder = await limitOrder_1.limitOrderEngine.createOrder({
+                                userId,
+                                walletAddress: wallet.address,
+                                tokenAddress,
+                                orderType: 'take_profit',
+                                targetPrice,
+                                amount: sellAmount,
+                                slippage: session.settings.slippage,
+                            });
+                            console.log(`🎯 Auto Take-Profit created: ${tpOrder.id} at +${order.takeProfitPercent}%`);
+                            await this.bot.sendMessage(chatId, `📈 **Auto Take-Profit Set!**\n\n` +
+                                `🎯 Trigger: +${order.takeProfitPercent}% (${((order.takeProfitPercent + 100) / 100).toFixed(1)}x)\n` +
+                                `💰 Sell: ${order.sellPercent || 100}% of tokens\n` +
+                                `🆔 Order: \`${tpOrder.id}\`\n\n` +
+                                `_Will auto-sell when price reaches target!_`, { parse_mode: 'Markdown' });
+                        }
+                    }
+                    catch (tpError) {
+                        console.error('Failed to create auto take-profit:', tpError);
+                    }
+                }
             }
             catch (error) {
                 console.error(`❌ Snipe execution failed:`, error);

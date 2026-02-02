@@ -65,4 +65,20 @@ export interface SniperSettingsData {
 export declare const pumpSniperSettingsKeyboard: (data: SniperSettingsData) => TelegramBot.InlineKeyboardMarkup;
 export declare const positionsMenuKeyboard: TelegramBot.InlineKeyboardMarkup;
 export declare const quickSellMenuKeyboard: (tokenAddress: string, tokenSymbol: string) => TelegramBot.InlineKeyboardMarkup;
+/**
+ * Quick Limit Buy presets - set buy triggers at % below current price
+ */
+export declare const quickLimitBuyKeyboard: (tokenAddress: string) => TelegramBot.InlineKeyboardMarkup;
+/**
+ * Quick Limit Sell / Take Profit presets - set sell triggers at % above current price
+ */
+export declare const quickLimitSellKeyboard: (tokenAddress: string) => TelegramBot.InlineKeyboardMarkup;
+/**
+ * InstaBond Auto-Sell Settings - set take profit after bonding
+ */
+export declare const instabondAutoSellKeyboard: (tokenAddress?: string) => TelegramBot.InlineKeyboardMarkup;
+/**
+ * InstaBond Snipe Confirmation with auto-sell options
+ */
+export declare const instabondSnipeConfirmKeyboard: (tokenAddress: string, takeProfitPercent?: number) => TelegramBot.InlineKeyboardMarkup;
 //# sourceMappingURL=keyboards.d.ts.map

@@ -734,3 +734,134 @@ export const quickSellMenuKeyboard = (tokenAddress: string, tokenSymbol: string)
     ],
   };
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯 QUICK LIMIT ORDER PRESETS
+// Fast limit order creation with preset percentages
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Quick Limit Buy presets - set buy triggers at % below current price
+ */
+export const quickLimitBuyKeyboard = (tokenAddress: string): TelegramBot.InlineKeyboardMarkup => {
+  const shortAddr = tokenAddress.slice(0, 8);
+
+  return {
+    inline_keyboard: [
+      [
+        { text: '📉 LIMIT BUY - Set Target Below Current', callback_data: 'noop' },
+      ],
+      [
+        { text: '-2%', callback_data: `qlimit_buy_2_${shortAddr}` },
+        { text: '-5%', callback_data: `qlimit_buy_5_${shortAddr}` },
+        { text: '-10%', callback_data: `qlimit_buy_10_${shortAddr}` },
+      ],
+      [
+        { text: '-15%', callback_data: `qlimit_buy_15_${shortAddr}` },
+        { text: '-20%', callback_data: `qlimit_buy_20_${shortAddr}` },
+        { text: '-25%', callback_data: `qlimit_buy_25_${shortAddr}` },
+      ],
+      [
+        { text: '-30%', callback_data: `qlimit_buy_30_${shortAddr}` },
+        { text: '-40%', callback_data: `qlimit_buy_40_${shortAddr}` },
+        { text: '-50%', callback_data: `qlimit_buy_50_${shortAddr}` },
+      ],
+      [
+        { text: '📝 Custom %', callback_data: `qlimit_buy_custom_${shortAddr}` },
+      ],
+      [
+        { text: '❌ Cancel', callback_data: 'main_menu' },
+      ],
+    ],
+  };
+};
+
+/**
+ * Quick Limit Sell / Take Profit presets - set sell triggers at % above current price
+ */
+export const quickLimitSellKeyboard = (tokenAddress: string): TelegramBot.InlineKeyboardMarkup => {
+  const shortAddr = tokenAddress.slice(0, 8);
+
+  return {
+    inline_keyboard: [
+      [
+        { text: '📈 LIMIT SELL / TAKE PROFIT - Set Target Above', callback_data: 'noop' },
+      ],
+      [
+        { text: '+25%', callback_data: `qlimit_sell_25_${shortAddr}` },
+        { text: '+50%', callback_data: `qlimit_sell_50_${shortAddr}` },
+        { text: '+75%', callback_data: `qlimit_sell_75_${shortAddr}` },
+      ],
+      [
+        { text: '+100% (2x)', callback_data: `qlimit_sell_100_${shortAddr}` },
+        { text: '+150%', callback_data: `qlimit_sell_150_${shortAddr}` },
+        { text: '+200% (3x)', callback_data: `qlimit_sell_200_${shortAddr}` },
+      ],
+      [
+        { text: '+300% (4x)', callback_data: `qlimit_sell_300_${shortAddr}` },
+        { text: '+500% (6x)', callback_data: `qlimit_sell_500_${shortAddr}` },
+        { text: '+1000% (11x)', callback_data: `qlimit_sell_1000_${shortAddr}` },
+      ],
+      [
+        { text: '📝 Custom %', callback_data: `qlimit_sell_custom_${shortAddr}` },
+      ],
+      [
+        { text: '❌ Cancel', callback_data: 'main_menu' },
+      ],
+    ],
+  };
+};
+
+/**
+ * InstaBond Auto-Sell Settings - set take profit after bonding
+ */
+export const instabondAutoSellKeyboard = (tokenAddress?: string): TelegramBot.InlineKeyboardMarkup => {
+  const shortAddr = tokenAddress ? tokenAddress.slice(0, 8) : 'all';
+
+  return {
+    inline_keyboard: [
+      [
+        { text: '🎓 AUTO TAKE-PROFIT AFTER BONDING', callback_data: 'noop' },
+      ],
+      [
+        { text: '✅ +25%', callback_data: `instabond_tp_25_${shortAddr}` },
+        { text: '✅ +50%', callback_data: `instabond_tp_50_${shortAddr}` },
+        { text: '✅ +100%', callback_data: `instabond_tp_100_${shortAddr}` },
+      ],
+      [
+        { text: '✅ +200%', callback_data: `instabond_tp_200_${shortAddr}` },
+        { text: '✅ +300%', callback_data: `instabond_tp_300_${shortAddr}` },
+        { text: '✅ +500%', callback_data: `instabond_tp_500_${shortAddr}` },
+      ],
+      [
+        { text: '📝 Custom %', callback_data: `instabond_tp_custom_${shortAddr}` },
+        { text: '❌ No Auto-Sell', callback_data: `instabond_tp_none_${shortAddr}` },
+      ],
+      [
+        { text: '🔙 Back', callback_data: 'pump_menu' },
+      ],
+    ],
+  };
+};
+
+/**
+ * InstaBond Snipe Confirmation with auto-sell options
+ */
+export const instabondSnipeConfirmKeyboard = (tokenAddress: string, takeProfitPercent?: number): TelegramBot.InlineKeyboardMarkup => {
+  const shortAddr = tokenAddress.slice(0, 8);
+  const tpText = takeProfitPercent ? `+${takeProfitPercent}%` : 'None';
+
+  return {
+    inline_keyboard: [
+      [
+        { text: `🎯 Take Profit: ${tpText}`, callback_data: `instabond_set_tp_${shortAddr}` },
+      ],
+      [
+        { text: '🚀 CONFIRM INSTABOND SNIPE', callback_data: `instabond_confirm_${shortAddr}` },
+      ],
+      [
+        { text: '❌ Cancel', callback_data: 'pump_menu' },
+      ],
+    ],
+  };
+};
