@@ -52,6 +52,9 @@ const CONFIG = {
   SLIPPAGE_BPS: 300,
   DEADLINE_MINUTES: 20,
   EXPLORER: 'https://scan.pulsechain.com',
+
+  // InstaBond API (dtrader backend)
+  INSTABOND_API: process.env.REACT_APP_INSTABOND_API || 'https://dtgc-bot.railway.app/api',
 };
 
 // Helper to get token logo from gib.show - PulseChain token images
@@ -766,6 +769,10 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   });
   const [sniperExecuting, setSniperExecuting] = useState(false);
 
+  // InstaBond orders from backend API
+  const [instaBondOrders, setInstaBondOrders] = useState([]);
+  const [instaBondPolling, setInstaBondPolling] = useState(null);
+
   // Balances for all tokens
   const [balances, setBalances] = useState({});
 
@@ -1181,6 +1188,160 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   useEffect(() => {
     if (userAddress && provider) fetchAllBalances();
   }, [userAddress, provider, fetchAllBalances]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔥 INSTABOND API INTEGRATION - Real graduation sniping via backend
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Fetch InstaBond orders from backend
+  const fetchInstaBondOrders = useCallback(async () => {
+    if (!userAddress) return;
+    try {
+      const response = await fetch(`${CONFIG.INSTABOND_API}/instabond/${userAddress}`);
+      if (response.ok) {
+        const data = await response.json();
+        setInstaBondOrders(data.orders || []);
+      }
+    } catch (err) {
+      console.log('InstaBond API not available:', err.message);
+    }
+  }, [userAddress]);
+
+  // Create InstaBond order via backend API
+  const createInstaBondOrder = async (tokenAddress, tokenSymbol, amountPls, takeProfitPercent) => {
+    if (!userAddress || !signer) {
+      showToastMsg('❌ Connect wallet first', 'error');
+      return null;
+    }
+
+    try {
+      // Sign message to prove wallet ownership
+      const timestamp = Date.now();
+      const message = `DTGC InstaBond Order\n\nWallet: ${userAddress}\nToken: ${tokenAddress}\nAmount: ${amountPls} PLS\nTP: +${takeProfitPercent}%\nTimestamp: ${timestamp}`;
+
+      showToastMsg('✍️ Sign message to arm InstaBond...', 'info');
+      const signature = await signer.signMessage(message);
+
+      // Call backend API
+      const response = await fetch(`${CONFIG.INSTABOND_API}/instabond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: userAddress,
+          tokenAddress,
+          tokenSymbol,
+          amountPls,
+          takeProfitPercent,
+          signature,
+          message,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showToastMsg(`🎯 InstaBond ARMED! Watching for graduation...`, 'success');
+        fetchInstaBondOrders(); // Refresh orders
+        return data.order;
+      } else {
+        throw new Error(data.error || 'Failed to create InstaBond');
+      }
+    } catch (err) {
+      console.error('InstaBond creation error:', err);
+      showToastMsg(`❌ ${err.message}`, 'error');
+      return null;
+    }
+  };
+
+  // Cancel InstaBond order
+  const cancelInstaBondOrder = async (orderId) => {
+    try {
+      const response = await fetch(`${CONFIG.INSTABOND_API}/instabond/${orderId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToastMsg('❌ InstaBond cancelled', 'info');
+        fetchInstaBondOrders();
+      }
+    } catch (err) {
+      showToastMsg(`❌ ${err.message}`, 'error');
+    }
+  };
+
+  // Poll for InstaBond order updates
+  useEffect(() => {
+    if (userAddress && activeTab === 'sniper') {
+      fetchInstaBondOrders();
+      const interval = setInterval(fetchInstaBondOrders, 5000); // Poll every 5s
+      setInstaBondPolling(interval);
+      return () => clearInterval(interval);
+    } else if (instaBondPolling) {
+      clearInterval(instaBondPolling);
+      setInstaBondPolling(null);
+    }
+  }, [userAddress, activeTab, fetchInstaBondOrders]);
+
+  // Execute InstaBond buy when graduation detected (called by polling)
+  const executeInstaBondBuy = async (order) => {
+    if (!signer || order.status !== 'buying') return;
+
+    try {
+      showToastMsg(`🚀 Token graduated! Executing buy...`, 'info');
+      setSniperExecuting(true);
+
+      const inputAmount = ethers.parseEther(order.amountPls);
+      const growthFee = inputAmount * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+      const swapAmount = inputAmount - growthFee;
+
+      const path = [CONFIG.WPLS.toLowerCase(), order.tokenAddress.toLowerCase()];
+      const deadline = Math.floor(Date.now() / 1000) + (CONFIG.DEADLINE_MINUTES * 60);
+      const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, signer);
+
+      // Send growth fee
+      const feeTx = await signer.sendTransaction({
+        to: CONFIG.GROWTH_ENGINE_WALLET,
+        value: growthFee,
+      });
+      await feeTx.wait();
+
+      // Execute swap with high slippage for new tokens
+      const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(
+        0, // Accept any amount for graduation snipes
+        path,
+        userAddress,
+        deadline,
+        { value: swapAmount }
+      );
+      const receipt = await tx.wait();
+
+      showToastMsg(`✅ InstaBond BUY executed! TX: ${receipt.hash.slice(0, 10)}...`, 'success');
+
+      // Update order status via API
+      await fetch(`${CONFIG.INSTABOND_API}/instabond/order/${order.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'holding',
+          buyTxHash: receipt.hash,
+        }),
+      });
+
+      fetchInstaBondOrders();
+      fetchAllBalances();
+    } catch (err) {
+      console.error('InstaBond buy error:', err);
+      showToastMsg(`❌ Buy failed: ${err.reason || err.message}`, 'error');
+    }
+    setSniperExecuting(false);
+  };
+
+  // Check for orders that need execution
+  useEffect(() => {
+    const buyingOrder = instaBondOrders.find(o => o.status === 'buying');
+    if (buyingOrder && !sniperExecuting) {
+      executeInstaBondBuy(buyingOrder);
+    }
+  }, [instaBondOrders, sniperExecuting]);
 
   // Wallet scanner - FAST approach like Zapper X (prioritize PulseScan API)
   const scanWalletTokens = useCallback(async () => {
@@ -3249,13 +3410,110 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             </div>
           )}
 
+          {/* Active InstaBond Orders */}
+          {instaBondOrders.length > 0 && (
+            <div style={{ ...styles.card, marginBottom: '16px', background: 'linear-gradient(135deg, rgba(255,87,34,0.1), rgba(255,152,0,0.1))' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ color: '#FF5722', fontWeight: 700, fontSize: '0.85rem' }}>🔥 Active InstaBonds</span>
+                <span style={{ color: '#888', fontSize: '0.7rem' }}>{instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length} armed</span>
+              </div>
+              {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).slice(0, 3).map(order => (
+                <div key={order.id} style={{
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  marginBottom: '8px',
+                  border: order.status === 'buying' ? '1px solid #4CAF50' : '1px solid rgba(255,87,34,0.3)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>
+                        {order.tokenSymbol || order.tokenAddress.slice(0, 10) + '...'}
+                      </div>
+                      <div style={{ color: '#888', fontSize: '0.65rem' }}>
+                        {order.amountPls} PLS → +{order.takeProfitPercent}% TP
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        color: order.status === 'buying' ? '#4CAF50' : order.status === 'watching' ? '#FF9800' : '#888',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}>
+                        {order.status === 'armed' && '⏳ Armed'}
+                        {order.status === 'watching' && '👀 Watching'}
+                        {order.status === 'buying' && '🚀 BUYING!'}
+                        {order.status === 'holding' && '💎 Holding'}
+                        {order.status === 'selling' && '📉 Selling'}
+                      </div>
+                      <button
+                        onClick={() => cancelInstaBondOrder(order.id)}
+                        style={{
+                          background: 'rgba(244,67,54,0.2)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          color: '#F44336',
+                          fontSize: '0.6rem',
+                          cursor: 'pointer',
+                          marginTop: '4px',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-            {/* SNIPE (Buy) Button */}
+            {/* SNIPE (Buy) / ARM INSTABOND Button */}
             <button
               onClick={async () => {
                 if (!sniperToken || !sniperPlsAmount || !userAddress || !signer) return;
                 setSniperExecuting(true);
+
+                // ═══════════════════════════════════════════════════════════════
+                // INSTABOND MODE - ARM via backend API (graduation snipe + auto TP)
+                // ═══════════════════════════════════════════════════════════════
+                if (sniperLimitType === 'instabond') {
+                  showToastMsg(`🔥 Arming InstaBond for ${sniperToken.symbol}...`, 'info');
+                  try {
+                    const order = await createInstaBondOrder(
+                      getAddr(sniperToken.address),
+                      sniperToken.symbol,
+                      sniperPlsAmount,
+                      parseInt(sniperLimitPrice)
+                    );
+                    if (order) {
+                      // Record in local trades
+                      const trade = {
+                        id: order.id,
+                        type: 'instabond',
+                        token: sniperToken.symbol,
+                        tokenAddress: sniperToken.address,
+                        plsAmount: parseFloat(sniperPlsAmount),
+                        takeProfitPercent: parseInt(sniperLimitPrice),
+                        status: 'armed',
+                        timestamp: new Date().toISOString(),
+                      };
+                      const updatedTrades = [...sniperTrades, trade];
+                      setSniperTrades(updatedTrades);
+                      localStorage.setItem('dtgc-sniper-trades', JSON.stringify(updatedTrades));
+                    }
+                  } catch (err) {
+                    showToastMsg(`❌ ${err.message}`, 'error');
+                  }
+                  setSniperExecuting(false);
+                  return;
+                }
+
+                // ═══════════════════════════════════════════════════════════════
+                // MARKET SNIPE MODE - Immediate swap via PulseX
+                // ═══════════════════════════════════════════════════════════════
                 showToastMsg(`🎯 Sniping ${sniperToken.symbol}...`, 'info');
 
                 try {

@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { DtraderBot } from './bot';
+import { startInstaBondApi } from './api/instabondApi';
 
 console.log(`
 ╔═══════════════════════════════════════════════════╗
@@ -62,6 +63,12 @@ setTimeout(() => {
         !error.message.includes('ETELEGRAM')) {
       process.exit(1);
     }
+  });
+
+  // Start the InstaBond API for web UI integration
+  const API_PORT = parseInt(process.env.INSTABOND_API_PORT || '3847');
+  startInstaBondApi(API_PORT).then(() => {
+    console.log(`🌐 InstaBond Web API: http://localhost:${API_PORT}/api/instabond`);
   });
 
   bot.start().then(() => {

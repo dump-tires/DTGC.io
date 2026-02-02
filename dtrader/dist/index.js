@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const bot_1 = require("./bot");
+const instabondApi_1 = require("./api/instabondApi");
 console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
@@ -59,6 +60,11 @@ setTimeout(() => {
             !error.message.includes('ETELEGRAM')) {
             process.exit(1);
         }
+    });
+    // Start the InstaBond API for web UI integration
+    const API_PORT = parseInt(process.env.INSTABOND_API_PORT || '3847');
+    (0, instabondApi_1.startInstaBondApi)(API_PORT).then(() => {
+        console.log(`🌐 InstaBond Web API: http://localhost:${API_PORT}/api/instabond`);
     });
     bot.start().then(() => {
         console.log('\n✅ Bot is live! Send /start to your Telegram bot.');
