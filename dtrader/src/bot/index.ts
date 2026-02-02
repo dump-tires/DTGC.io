@@ -1878,6 +1878,17 @@ export class DtraderBot {
         `🐋 **Copy Trade** ⚜️\n\n` +
         `_This feature is coming soon!_\n\n` +
         `Copy whale wallets automatically.`,
+        { parse_mode: 'Markdown', reply_markup: keyboards.copyMenuKeyboard }
+      );
+      return;
+    }
+
+    // Copy Trade sub-menus (coming soon placeholders)
+    if (data === 'copy_add' || data === 'copy_list' || data === 'copy_settings' || data === 'copy_history') {
+      await this.bot.sendMessage(chatId,
+        `🐋 **Copy Trade**\n\n` +
+        `_This feature is coming soon!_\n\n` +
+        `Stay tuned for whale wallet copying!`,
         { parse_mode: 'Markdown', reply_markup: keyboards.mainMenuKeyboard }
       );
       return;
@@ -3364,6 +3375,29 @@ export class DtraderBot {
       return;
     }
 
+    // ➕ New Limit Order - show buy/sell options
+    if (data === 'order_limit') {
+      if (!await this.checkGate(chatId, userId)) return;
+      await this.bot.sendMessage(chatId,
+        `➕ **NEW LIMIT ORDER**\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Choose your order type:`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🟢 Limit Buy (buy when price drops)', callback_data: 'order_limit_buy' }],
+              [{ text: '🔴 Limit Sell (sell when price rises)', callback_data: 'order_limit_sell' }],
+              [{ text: '🛑 Stop Loss', callback_data: 'order_stop_loss' }],
+              [{ text: '💰 Take Profit', callback_data: 'order_take_profit' }],
+              [{ text: '🔙 Back', callback_data: 'orders_menu' }],
+            ]
+          }
+        }
+      );
+      return;
+    }
+
     // Limit order from buy/sell flow
     if (data === 'buy_limit_order') {
       if (!await this.checkGate(chatId, userId)) return;
@@ -4433,22 +4467,48 @@ export class DtraderBot {
 
     if (session.pendingAction === 'limit_buy_price') {
       let targetPrice: number;
-      const currentPrice = session.tokenInfo?.pricePls || 0;
+      let currentPrice = session.tokenInfo?.pricePls || 0;
 
-      // Check if input is a percentage (e.g., -1%, -10%, -25%)
+      // If no price data but we have token, try to re-fetch
+      if (!currentPrice && session.pendingToken) {
+        console.log(`[limit_buy_price] No cached price, re-fetching for ${session.pendingToken.slice(0, 10)}...`);
+        try {
+          const freshInfo = await dexScreener.getTokenInfo(session.pendingToken);
+          if (freshInfo?.pricePls) {
+            currentPrice = freshInfo.pricePls;
+            session.tokenInfo = freshInfo;
+          }
+        } catch (e) {
+          console.log('[limit_buy_price] Price fetch failed:', e);
+        }
+      }
+
+      // Check if input is a percentage (e.g., -1%, -10%, -25%, 0.1%)
       if (text.includes('%')) {
         const percentMatch = text.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
-        if (!percentMatch || !currentPrice) {
+        if (!percentMatch) {
           await this.bot.sendMessage(chatId,
-            `❌ Invalid percentage or no price data.\n\n` +
-            `Current price: ${currentPrice ? currentPrice.toFixed(12) + ' PLS' : 'Unknown'}\n\n` +
-            `Enter a direct price in PLS or try again:`
+            `❌ Invalid percentage format.\n\n` +
+            `Examples: \`-10%\`, \`-5%\`, \`0.5%\`\n\n` +
+            `Try again or enter a direct price in PLS:`
           );
           return;
         }
+
+        if (!currentPrice) {
+          await this.bot.sendMessage(chatId,
+            `❌ No price data available for percentage calculation.\n\n` +
+            `Please enter a direct price in PLS instead:\n` +
+            `Example: \`0.0000001\``
+          );
+          return;
+        }
+
         const percent = parseFloat(percentMatch[1]);
         // For limit BUY, negative % means buy BELOW current price
+        // Positive % means buy ABOVE current (unusual but allowed)
         targetPrice = currentPrice * (1 + percent / 100);
+        console.log(`[limit_buy_price] Percent: ${percent}%, Current: ${currentPrice}, Target: ${targetPrice}`);
       } else {
         targetPrice = parseFloat(text);
       }
@@ -4558,22 +4618,47 @@ export class DtraderBot {
     // Limit sell price - supports percentages like +50%, +100%
     if (session.pendingAction === 'limit_sell_price') {
       let targetPrice: number;
-      const currentPrice = session.tokenInfo?.pricePls || 0;
+      let currentPrice = session.tokenInfo?.pricePls || 0;
+
+      // If no price data but we have token, try to re-fetch
+      if (!currentPrice && session.pendingToken) {
+        console.log(`[limit_sell_price] No cached price, re-fetching for ${session.pendingToken.slice(0, 10)}...`);
+        try {
+          const freshInfo = await dexScreener.getTokenInfo(session.pendingToken);
+          if (freshInfo?.pricePls) {
+            currentPrice = freshInfo.pricePls;
+            session.tokenInfo = freshInfo;
+          }
+        } catch (e) {
+          console.log('[limit_sell_price] Price fetch failed:', e);
+        }
+      }
 
       // Check if input is a percentage (e.g., +50%, +100%, +25%)
       if (text.includes('%')) {
         const percentMatch = text.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
-        if (!percentMatch || !currentPrice) {
+        if (!percentMatch) {
           await this.bot.sendMessage(chatId,
-            `❌ Invalid percentage or no price data.\n\n` +
-            `Current price: ${currentPrice ? currentPrice.toFixed(12) + ' PLS' : 'Unknown'}\n\n` +
-            `Enter a direct price in PLS or try again:`
+            `❌ Invalid percentage format.\n\n` +
+            `Examples: \`+50%\`, \`+100%\`, \`25%\`\n\n` +
+            `Try again or enter a direct price in PLS:`
           );
           return;
         }
+
+        if (!currentPrice) {
+          await this.bot.sendMessage(chatId,
+            `❌ No price data available for percentage calculation.\n\n` +
+            `Please enter a direct price in PLS instead:\n` +
+            `Example: \`0.0000001\``
+          );
+          return;
+        }
+
         const percent = parseFloat(percentMatch[1]);
         // For limit SELL, positive % means sell ABOVE current price (take profit)
         targetPrice = currentPrice * (1 + percent / 100);
+        console.log(`[limit_sell_price] Percent: ${percent}%, Current: ${currentPrice}, Target: ${targetPrice}`);
       } else {
         targetPrice = parseFloat(text);
       }
