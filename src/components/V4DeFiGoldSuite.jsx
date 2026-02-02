@@ -2593,6 +2593,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           { id: 'wins', icon: '🏆', label: 'Wins' },
           { id: 'sniper', icon: '🎯', label: 'Snipe' },
           { id: 'portfolio', icon: '📊', label: 'Port' },
+          { id: 'create-lp', icon: '💧', label: 'LP' },
           { id: 'instabond', icon: '🔥', label: 'Bond' },
         ].map((tab) => (
           <button
