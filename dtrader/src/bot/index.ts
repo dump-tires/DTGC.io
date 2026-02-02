@@ -4323,7 +4323,18 @@ export class DtraderBot {
       session.pendingOrderType = 'limit_buy';
 
       // ALWAYS show wallet selection with balances
-      const wallets = await multiWallet.getUserWallets(userId);
+      let wallets = await multiWallet.getUserWallets(userId);
+
+      // If no local wallets, try to recover from Vercel cloud backup
+      if (wallets.length === 0) {
+        console.log(`🔍 [LIMIT] No local wallets for ${userId}, trying Vercel recovery...`);
+        const linkedWallet = session.linkedWallet;
+        const recovery = await multiWallet.recoverFromVercel(userId, linkedWallet);
+        if (recovery.recovered > 0) {
+          console.log(`✅ [LIMIT] Recovered ${recovery.recovered} wallets from Vercel for ${userId}`);
+          wallets = recovery.wallets;
+        }
+      }
 
       if (wallets.length === 0) {
         await this.bot.sendMessage(chatId,
@@ -4607,7 +4618,18 @@ export class DtraderBot {
       session.pendingOrderType = 'limit_sell';
 
       // ALWAYS show wallet selection with balances
-      const wallets = await multiWallet.getUserWallets(userId);
+      let wallets = await multiWallet.getUserWallets(userId);
+
+      // If no local wallets, try to recover from Vercel cloud backup
+      if (wallets.length === 0) {
+        console.log(`🔍 [LIMIT] No local wallets for ${userId}, trying Vercel recovery...`);
+        const linkedWallet = session.linkedWallet;
+        const recovery = await multiWallet.recoverFromVercel(userId, linkedWallet);
+        if (recovery.recovered > 0) {
+          console.log(`✅ [LIMIT] Recovered ${recovery.recovered} wallets from Vercel for ${userId}`);
+          wallets = recovery.wallets;
+        }
+      }
 
       if (wallets.length === 0) {
         await this.bot.sendMessage(chatId,
