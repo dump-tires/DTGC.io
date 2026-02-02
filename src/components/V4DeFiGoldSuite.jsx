@@ -24,7 +24,10 @@ import { ethers } from 'ethers';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CONFIG = {
-  RPC_URL: 'https://pulsechain.publicnode.com',
+  // RPC endpoints - Primary is Hetzner node for best reliability, fallback to public RPC
+  RPC_URL: 'https://rpc.pulsechain.com', // Public fallback
+  RPC_HETZNER: 'https://65.109.68.172:8545', // Private Hetzner node (use for backend/server)
+  RPC_ENDPOINTS: ['https://rpc.pulsechain.com', 'https://pulsechain.publicnode.com'], // Fallback chain
   ROUTER: '0x165C3410fC91EF562C50559f7d2289fEbed552d9',
   ROUTER_V2: '0x636f6407B90661b73b1C0F7e24F4C79f624d0738',
   FACTORY: '0x1715a3E4A142d8b698131108995174F37aEBA10D',
@@ -3251,32 +3254,94 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             {/* SNIPE (Buy) Button */}
             <button
               onClick={async () => {
-                if (!sniperToken || !sniperPlsAmount || !userAddress) return;
+                if (!sniperToken || !sniperPlsAmount || !userAddress || !signer) return;
                 setSniperExecuting(true);
                 showToastMsg(`🎯 Sniping ${sniperToken.symbol}...`, 'info');
 
-                // Simulate snipe for now - would integrate with router
                 try {
+                  // Real swap execution via PulseX Router
+                  const tokenAddress = getAddr(sniperToken.address);
+                  const inputAmount = ethers.parseEther(sniperPlsAmount);
+
+                  // Calculate 1% Growth Engine fee from input PLS
+                  const growthFee = inputAmount * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+                  const swapAmount = inputAmount - growthFee;
+
+                  // Path: WPLS -> Token
+                  const path = [CONFIG.WPLS.toLowerCase(), tokenAddress.toLowerCase()];
+
+                  // Deadline: 20 minutes from now
+                  const deadline = Math.floor(Date.now() / 1000) + (CONFIG.DEADLINE_MINUTES * 60);
+
+                  // Use high slippage for new tokens (10%)
+                  const slippageBps = 1000;
+
+                  // Get quote first to calculate amountOutMin
+                  const router = new ethers.Contract(CONFIG.ROUTER, ROUTER_ABI, signer);
+                  let amountOutMin = 0n;
+                  try {
+                    const amounts = await router.getAmountsOut(swapAmount, path);
+                    amountOutMin = amounts[1] * BigInt(10000 - slippageBps) / 10000n;
+                  } catch (e) {
+                    console.log('Quote failed, using 0 min output:', e.message);
+                    amountOutMin = 0n; // Accept any amount for new tokens
+                  }
+
+                  // Send 1% to Growth Engine first
+                  showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+                  const feeTx = await signer.sendTransaction({
+                    to: CONFIG.GROWTH_ENGINE_WALLET,
+                    value: growthFee,
+                  });
+                  await feeTx.wait();
+
+                  // Execute swap: PLS -> Token
+                  showToastMsg(`🔄 Swapping ${sniperPlsAmount} PLS for ${sniperToken.symbol}...`, 'info');
+                  const tx = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(
+                    amountOutMin,
+                    path,
+                    userAddress,
+                    deadline,
+                    { value: swapAmount }
+                  );
+                  const receipt = await tx.wait();
+
+                  // Get token balance after swap
+                  const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+                  const tokenBalance = await tokenContract.balanceOf(userAddress);
+                  const tokenDecimals = sniperToken.decimals || 18;
+                  const tokensReceived = Number(ethers.formatUnits(tokenBalance, tokenDecimals));
+
+                  // Calculate entry price
+                  const entryPrice = tokensReceived > 0 ? parseFloat(sniperPlsAmount) / tokensReceived : 0;
+
+                  // Record the trade
                   const trade = {
                     id: Date.now(),
                     type: 'buy',
                     token: sniperToken.symbol,
                     tokenAddress: sniperToken.address,
                     plsAmount: parseFloat(sniperPlsAmount),
-                    tokensReceived: parseFloat(sniperPlsAmount) * (livePrices.PLS || 0.0000159) / 0.00001, // Simulated
-                    entryPrice: 0.00001,
-                    currentPrice: 0.00001,
+                    tokensReceived: tokensReceived,
+                    entryPrice: entryPrice,
+                    currentPrice: entryPrice,
                     timestamp: new Date().toISOString(),
                     orderType: sniperLimitType,
                     limitPrice: sniperLimitPrice || null,
+                    txHash: receipt.hash,
                   };
 
                   const updatedTrades = [...sniperTrades, trade];
                   setSniperTrades(updatedTrades);
                   localStorage.setItem('dtgc-sniper-trades', JSON.stringify(updatedTrades));
-                  showToastMsg(`✅ Sniped ${sniperToken.symbol}!`, 'success');
+
+                  showToastMsg(`✅ Sniped ${sniperToken.symbol}! TX: ${receipt.hash.slice(0, 10)}...`, 'success');
+
+                  // Refresh balances
+                  fetchAllBalances();
                 } catch (err) {
-                  showToastMsg(`❌ Snipe failed: ${err.message}`, 'error');
+                  console.error('Snipe error:', err);
+                  showToastMsg(`❌ Snipe failed: ${err.reason || err.message}`, 'error');
                 }
                 setSniperExecuting(false);
               }}
@@ -3303,29 +3368,106 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             {/* SELL Button */}
             <button
               onClick={async () => {
-                if (!sniperToken || !userAddress) return;
+                if (!sniperToken || !userAddress || !signer) return;
                 setSniperExecuting(true);
                 showToastMsg(`📉 Selling ${sniperToken.symbol}...`, 'info');
 
                 try {
-                  const balance = balances[sniperToken.symbol] || 0;
+                  const tokenAddress = getAddr(sniperToken.address);
+                  const tokenDecimals = sniperToken.decimals || 18;
+
+                  // Get actual token balance
+                  const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+                  const tokenBalance = await tokenContract.balanceOf(userAddress);
+
+                  if (tokenBalance === 0n) {
+                    showToastMsg(`❌ No ${sniperToken.symbol} to sell`, 'error');
+                    setSniperExecuting(false);
+                    return;
+                  }
+
+                  // Approve router if needed
+                  const routerAddress = CONFIG.ROUTER;
+                  const allowance = await tokenContract.allowance(userAddress, routerAddress);
+                  if (allowance < tokenBalance) {
+                    showToastMsg(`🔓 Approving ${sniperToken.symbol}...`, 'info');
+                    const approveTx = await tokenContract.approve(routerAddress, ethers.MaxUint256);
+                    await approveTx.wait();
+                  }
+
+                  // Path: Token -> WPLS
+                  const path = [tokenAddress.toLowerCase(), CONFIG.WPLS.toLowerCase()];
+
+                  // Deadline: 20 minutes from now
+                  const deadline = Math.floor(Date.now() / 1000) + (CONFIG.DEADLINE_MINUTES * 60);
+
+                  // Use high slippage for new tokens (10%)
+                  const slippageBps = 1000;
+
+                  // Get quote
+                  const router = new ethers.Contract(routerAddress, ROUTER_ABI, signer);
+                  let amountOutMin = 0n;
+                  try {
+                    const amounts = await router.getAmountsOut(tokenBalance, path);
+                    amountOutMin = amounts[1] * BigInt(10000 - slippageBps) / 10000n;
+                  } catch (e) {
+                    console.log('Quote failed, using 0 min output:', e.message);
+                    amountOutMin = 0n;
+                  }
+
+                  // Execute swap: Token -> PLS
+                  showToastMsg(`🔄 Selling ${ethers.formatUnits(tokenBalance, tokenDecimals)} ${sniperToken.symbol}...`, 'info');
+                  const tx = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+                    tokenBalance,
+                    amountOutMin,
+                    path,
+                    userAddress,
+                    deadline
+                  );
+                  const receipt = await tx.wait();
+
+                  // Calculate PLS received (approximate from amountOutMin)
+                  const plsReceived = Number(ethers.formatEther(amountOutMin));
+                  const tokensSold = Number(ethers.formatUnits(tokenBalance, tokenDecimals));
+
+                  // After swap, send 1% of received PLS to Growth Engine
+                  const growthFee = amountOutMin * BigInt(CONFIG.GROWTH_ENGINE_FEE_BPS) / 10000n;
+                  if (growthFee > 0n) {
+                    try {
+                      showToastMsg('🌱 Sending 1% to Growth Engine...', 'info');
+                      const feeTx = await signer.sendTransaction({
+                        to: CONFIG.GROWTH_ENGINE_WALLET,
+                        value: growthFee,
+                      });
+                      await feeTx.wait();
+                    } catch (feeErr) {
+                      console.warn('Growth fee transfer failed:', feeErr.message);
+                    }
+                  }
+
+                  // Record the trade
                   const trade = {
                     id: Date.now(),
                     type: 'sell',
                     token: sniperToken.symbol,
                     tokenAddress: sniperToken.address,
-                    tokensSold: balance,
-                    plsReceived: balance * 0.00001 / (livePrices.PLS || 0.0000159), // Simulated
-                    exitPrice: 0.00001,
+                    tokensSold: tokensSold,
+                    plsReceived: plsReceived,
+                    exitPrice: tokensSold > 0 ? plsReceived / tokensSold : 0,
                     timestamp: new Date().toISOString(),
+                    txHash: receipt.hash,
                   };
 
                   const updatedTrades = [...sniperTrades, trade];
                   setSniperTrades(updatedTrades);
                   localStorage.setItem('dtgc-sniper-trades', JSON.stringify(updatedTrades));
-                  showToastMsg(`✅ Sold ${sniperToken.symbol}!`, 'success');
+                  showToastMsg(`✅ Sold ${sniperToken.symbol}! TX: ${receipt.hash.slice(0, 10)}...`, 'success');
+
+                  // Refresh balances
+                  fetchAllBalances();
                 } catch (err) {
-                  showToastMsg(`❌ Sell failed: ${err.message}`, 'error');
+                  console.error('Sell error:', err);
+                  showToastMsg(`❌ Sell failed: ${err.reason || err.message}`, 'error');
                 }
                 setSniperExecuting(false);
               }}
