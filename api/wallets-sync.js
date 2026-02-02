@@ -1,41 +1,61 @@
 /**
  * Wallet Sync API - Persistent storage for snipe wallets
  *
- * This is the SOURCE OF TRUTH for wallet data.
- * Railway bot syncs here on every wallet import/update.
- * Recovery pulls from here, not Railway's filesystem.
+ * FIXED: Now uses Vercel KV for real persistence!
+ * Previously used /tmp which was ephemeral.
  *
  * POST: Save/update wallets for a user (keyed by gatedWallet)
  * GET: Retrieve wallets for a user
  */
 
-import fs from 'fs';
+import { kv } from '@vercel/kv';
 
-// In-memory store with file backup
-const walletsStore = new Map();
+// Fallback in-memory store (for local dev or if KV unavailable)
+const memoryStore = new Map();
 
-// Storage file for persistence across warm instances
-const STORAGE_FILE = '/tmp/dtgc-wallets-sync.json';
+// KV key prefix
+const KV_PREFIX = 'wallets:';
 
-// Load from file on cold start
-try {
-  if (fs.existsSync(STORAGE_FILE)) {
-    const data = JSON.parse(fs.readFileSync(STORAGE_FILE, 'utf-8'));
-    Object.entries(data).forEach(([k, v]) => walletsStore.set(k, v));
-    console.log(`[wallets-sync] Loaded wallets for ${walletsStore.size} users`);
+async function getFromKV(key) {
+  try {
+    if (process.env.KV_REST_API_URL) {
+      const data = await kv.get(`${KV_PREFIX}${key}`);
+      return data;
+    }
+  } catch (e) {
+    console.error('[wallets-sync] KV get error:', e.message);
   }
-} catch (e) {
-  console.log('[wallets-sync] No existing storage found');
+  // Fallback to memory
+  return memoryStore.get(key) || null;
 }
 
-// Save to file
-function saveToStorage() {
+async function setToKV(key, value) {
   try {
-    const data = Object.fromEntries(walletsStore);
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2));
+    if (process.env.KV_REST_API_URL) {
+      // Store with 1 year TTL (can be extended)
+      await kv.set(`${KV_PREFIX}${key}`, value, { ex: 31536000 });
+      console.log(`[wallets-sync] Saved to KV: ${key}`);
+      return true;
+    }
   } catch (e) {
-    console.error('[wallets-sync] Failed to save:', e);
+    console.error('[wallets-sync] KV set error:', e.message);
   }
+  // Fallback to memory
+  memoryStore.set(key, value);
+  return false;
+}
+
+async function deleteFromKV(key) {
+  try {
+    if (process.env.KV_REST_API_URL) {
+      await kv.del(`${KV_PREFIX}${key}`);
+      return true;
+    }
+  } catch (e) {
+    console.error('[wallets-sync] KV delete error:', e.message);
+  }
+  memoryStore.delete(key);
+  return false;
 }
 
 export default async function handler(req, res) {
@@ -66,7 +86,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'gatedWallet or telegramUserId required' });
     }
 
-    const userData = walletsStore.get(userKey);
+    const userData = await getFromKV(userKey);
 
     if (!userData) {
       return res.status(200).json({
@@ -74,6 +94,7 @@ export default async function handler(req, res) {
         found: false,
         wallets: [],
         syncedAt: null,
+        storage: process.env.KV_REST_API_URL ? 'kv' : 'memory',
       });
     }
 
@@ -85,6 +106,7 @@ export default async function handler(req, res) {
       wallets: userData.wallets || [],
       walletCount: userData.wallets?.length || 0,
       syncedAt: userData.syncedAt,
+      storage: process.env.KV_REST_API_URL ? 'kv' : 'memory',
     });
   }
 
@@ -120,12 +142,11 @@ export default async function handler(req, res) {
     };
 
     // Store by both keys for easy lookup
-    if (gated) walletsStore.set(gated.toLowerCase(), updated);
-    if (tgId) walletsStore.set(tgId, updated);
+    let savedToKV = false;
+    if (gated) savedToKV = await setToKV(gated.toLowerCase(), updated) || savedToKV;
+    if (tgId) savedToKV = await setToKV(tgId, updated) || savedToKV;
 
-    saveToStorage();
-
-    console.log(`[wallets-sync] Saved ${updated.wallets.length} wallets for ${gated || tgId}`);
+    console.log(`[wallets-sync] Saved ${updated.wallets.length} wallets for ${gated || tgId} (KV: ${savedToKV})`);
 
     return res.status(200).json({
       success: true,
@@ -133,6 +154,7 @@ export default async function handler(req, res) {
       telegramUserId: tgId,
       walletCount: updated.wallets.length,
       syncedAt: updated.syncedAt,
+      storage: savedToKV ? 'kv' : 'memory',
     });
   }
 
@@ -142,8 +164,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'gatedWallet or telegramUserId required' });
     }
 
-    walletsStore.delete(userKey);
-    saveToStorage();
+    await deleteFromKV(userKey);
 
     return res.status(200).json({
       success: true,
