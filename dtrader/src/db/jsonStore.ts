@@ -654,3 +654,221 @@ function formatPls(value: string | number): string {
   if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
   return num.toFixed(2);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INSTABOND SNIPE ORDERS - PERSISTENT STORAGE (survives bot restarts!)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface PersistentSnipeOrder {
+  id: string;
+  vistoId: string;              // Telegram user ID
+  chatId: string;               // Telegram chat ID
+  tokenAddress: string;
+  tokenName?: string;
+  tokenSymbol?: string;
+  walletId: string;
+  walletAddress: string;
+  amountPls: string;            // Stored as string for BigInt compat
+  gasPriority: 'normal' | 'fast' | 'turbo' | 'max';
+  gasGwei: number;
+  status: 'pending' | 'triggered' | 'filled' | 'cancelled' | 'failed';
+  createdAt: number;
+  filledAt?: number;
+  txHash?: string;
+  tokensReceived?: string;
+  entryPrice?: number;
+  // Take Profit settings
+  takeProfitEnabled: boolean;
+  takeProfitPercent?: number;
+  sellPercent?: number;
+  takeProfitStatus?: 'active' | 'triggered' | 'filled' | 'cancelled';
+  sellTxHash?: string;
+  tokensSold?: string;
+  sellProfitPls?: number;
+  // Error tracking
+  error?: string;
+  retryCount?: number;
+}
+
+export const snipeOrdersStore = createStore<PersistentSnipeOrder>('snipeOrders');
+
+export const SnipeOrders = {
+  /**
+   * Create a new snipe order (PERSISTED!)
+   */
+  create: (order: Omit<PersistentSnipeOrder, 'id' | 'createdAt' | 'status'>): PersistentSnipeOrder => {
+    const newOrder: PersistentSnipeOrder = {
+      ...order,
+      id: `SNP-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      status: 'pending',
+      createdAt: Date.now(),
+    };
+    snipeOrdersStore.insert(newOrder);
+    console.log(`💾 [PERSIST] Created snipe order ${newOrder.id} for ${order.tokenSymbol || order.tokenAddress.slice(0, 10)}`);
+    return newOrder;
+  },
+
+  /**
+   * Get order by ID
+   */
+  get: (orderId: string): PersistentSnipeOrder | undefined => {
+    return snipeOrdersStore.findOne((o) => o.id === orderId);
+  },
+
+  /**
+   * Get all pending orders for a user
+   */
+  getPending: (vistoId: string): PersistentSnipeOrder[] => {
+    return snipeOrdersStore.findMany((o) =>
+      o.vistoId === vistoId && o.status === 'pending'
+    ).sort((a, b) => b.createdAt - a.createdAt);
+  },
+
+  /**
+   * Get all orders for a user
+   */
+  getAll: (vistoId: string): PersistentSnipeOrder[] => {
+    return snipeOrdersStore.findMany((o) => o.vistoId === vistoId)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  },
+
+  /**
+   * Get ALL pending orders (for graduation sniper to load on startup)
+   */
+  getAllPending: (): PersistentSnipeOrder[] => {
+    return snipeOrdersStore.findMany((o) => o.status === 'pending');
+  },
+
+  /**
+   * Update order status
+   */
+  updateStatus: (
+    orderId: string,
+    status: PersistentSnipeOrder['status'],
+    details?: Partial<PersistentSnipeOrder>
+  ): void => {
+    snipeOrdersStore.update(
+      (o) => o.id === orderId,
+      { status, ...details }
+    );
+    console.log(`💾 [PERSIST] Updated order ${orderId} -> ${status}`);
+  },
+
+  /**
+   * Mark as filled with execution details
+   */
+  markFilled: (
+    orderId: string,
+    txHash: string,
+    tokensReceived: string,
+    entryPrice?: number
+  ): void => {
+    snipeOrdersStore.update(
+      (o) => o.id === orderId,
+      {
+        status: 'filled',
+        filledAt: Date.now(),
+        txHash,
+        tokensReceived,
+        entryPrice,
+        takeProfitStatus: 'active', // Activate take profit monitoring
+      }
+    );
+    console.log(`💾 [PERSIST] Order ${orderId} FILLED! TX: ${txHash.slice(0, 12)}...`);
+  },
+
+  /**
+   * Mark take profit as triggered/filled
+   */
+  markTakeProfitFilled: (
+    orderId: string,
+    sellTxHash: string,
+    tokensSold: string,
+    profitPls: number
+  ): void => {
+    snipeOrdersStore.update(
+      (o) => o.id === orderId,
+      {
+        takeProfitStatus: 'filled',
+        sellTxHash,
+        tokensSold,
+        sellProfitPls: profitPls,
+      }
+    );
+    console.log(`💾 [PERSIST] Order ${orderId} Take Profit FILLED! Profit: ${profitPls} PLS`);
+  },
+
+  /**
+   * Cancel an order
+   */
+  cancel: (orderId: string): boolean => {
+    const order = snipeOrdersStore.findOne((o) => o.id === orderId);
+    if (order && order.status === 'pending') {
+      snipeOrdersStore.update(
+        (o) => o.id === orderId,
+        { status: 'cancelled' }
+      );
+      console.log(`💾 [PERSIST] Order ${orderId} CANCELLED`);
+      return true;
+    }
+    return false;
+  },
+
+  /**
+   * Mark as failed with error
+   */
+  markFailed: (orderId: string, error: string): void => {
+    snipeOrdersStore.update(
+      (o) => o.id === orderId,
+      { status: 'failed', error }
+    );
+    console.log(`💾 [PERSIST] Order ${orderId} FAILED: ${error}`);
+  },
+
+  /**
+   * Get stats for a user
+   */
+  getStats: (vistoId: string): { pending: number; filled: number; cancelled: number; failed: number } => {
+    const orders = snipeOrdersStore.findMany((o) => o.vistoId === vistoId);
+    return {
+      pending: orders.filter(o => o.status === 'pending').length,
+      filled: orders.filter(o => o.status === 'filled').length,
+      cancelled: orders.filter(o => o.status === 'cancelled').length,
+      failed: orders.filter(o => o.status === 'failed').length,
+    };
+  },
+
+  /**
+   * Recover orders into graduation sniper on startup
+   */
+  recoverToSniper: async (graduationSniper: any): Promise<number> => {
+    const pendingOrders = SnipeOrders.getAllPending();
+    let recovered = 0;
+
+    for (const order of pendingOrders) {
+      try {
+        const { ethers } = await import('ethers');
+        graduationSniper.watchToken(order.tokenAddress, {
+          amountPls: ethers.parseEther(order.amountPls),
+          slippage: 15,
+          gasLimit: 500000,
+          gasPriceMultiplier: order.gasGwei / 0.01,
+          autoSellPercent: order.sellPercent,
+          userId: order.vistoId,
+          chatId: order.chatId,
+          orderId: order.id,
+        });
+        recovered++;
+        console.log(`🔄 [RECOVER] Restored order ${order.id} for ${order.tokenSymbol || order.tokenAddress.slice(0, 10)}`);
+      } catch (e) {
+        console.error(`❌ [RECOVER] Failed to restore order ${order.id}:`, e);
+      }
+    }
+
+    if (recovered > 0) {
+      console.log(`✅ [RECOVER] Restored ${recovered} pending snipe orders from disk`);
+    }
+
+    return recovered;
+  },
+};

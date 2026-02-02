@@ -861,6 +861,52 @@ class DtraderBot {
                 return;
             await this.showPumpSniperSettings(chatId, userId);
         });
+        // /checkgrad <token> - Check graduation progress of a pump.tires token
+        this.bot.onText(/\/checkgrad\s*(.*)/, async (msg, match) => {
+            const chatId = msg.chat.id.toString();
+            const userId = msg.from?.id.toString() || '';
+            let tokenAddress = match?.[1]?.trim();
+            if (!await this.checkGate(chatId, userId))
+                return;
+            // If no token provided, check user's pending orders
+            if (!tokenAddress) {
+                const pendingOrders = jsonStore_1.SnipeOrders.getPending(userId);
+                if (pendingOrders.length === 0) {
+                    await this.bot.sendMessage(chatId, `📊 **Check Graduation Progress**\n\n` +
+                        `Usage: \`/checkgrad <token_address>\`\n\n` +
+                        `You have no pending InstaBond orders.\n` +
+                        `Use /snipe to create one!`, { parse_mode: 'Markdown' });
+                    return;
+                }
+                // Show all pending orders with check buttons
+                let msg = `📊 **Your Pending InstaBonds**\n`;
+                msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                const buttons = [];
+                for (const order of pendingOrders.slice(0, 5)) {
+                    msg += `🎯 **${order.id}**\n`;
+                    msg += `📋 \`${order.tokenAddress.slice(0, 12)}...${order.tokenAddress.slice(-6)}\`\n`;
+                    msg += `💰 ${order.amountPls} PLS → TP: +${order.takeProfitPercent || 0}%\n\n`;
+                    buttons.push([
+                        { text: `📊 Check ${order.id}`, callback_data: `checkgrad_${order.tokenAddress}` }
+                    ]);
+                }
+                msg += `\n_Click to check graduation progress:_`;
+                await this.bot.sendMessage(chatId, msg, {
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: buttons },
+                });
+                return;
+            }
+            // Clean token address
+            if (tokenAddress.startsWith('0x') && tokenAddress.length >= 40) {
+                tokenAddress = tokenAddress.slice(0, 42);
+            }
+            else {
+                await this.bot.sendMessage(chatId, `❌ Invalid token address. Use format: \`0x...\``, { parse_mode: 'Markdown' });
+                return;
+            }
+            await this.checkGraduationProgress(chatId, tokenAddress);
+        });
         // /regroup - Moves tracked tokens to recent messages
         this.bot.onText(/\/regroup/, async (msg) => {
             const chatId = msg.chat.id.toString();
@@ -1311,6 +1357,14 @@ class DtraderBot {
         // View all wallet addresses
         if (data === 'wallets_addresses') {
             await this.showAllWalletAddresses(chatId, userId);
+            return;
+        }
+        // Check graduation progress callback
+        if (data.startsWith('checkgrad_')) {
+            if (!await this.checkGate(chatId, userId))
+                return;
+            const tokenAddress = data.replace('checkgrad_', '');
+            await this.checkGraduationProgress(chatId, tokenAddress);
             return;
         }
         // Multi-wallet snipe selection
@@ -4615,8 +4669,24 @@ class DtraderBot {
                 sellPercent: session.settings.defaultSellPercent || (hasTakeProfit && session.settings.defaultTakeProfit >= 100 ? 50 : 100),
                 takeProfitStatus: hasTakeProfit ? 'active' : undefined,
             };
-            // Store the order
+            // Store the order in session (for quick access)
             session.snipeOrders.push(snipeOrder);
+            // 💾 PERSIST to disk (survives bot restarts!)
+            jsonStore_1.SnipeOrders.create({
+                vistoId: userId,
+                chatId: chatId,
+                tokenAddress,
+                tokenName: snipeOrder.tokenName,
+                tokenSymbol: snipeOrder.tokenSymbol,
+                walletId,
+                walletAddress,
+                amountPls: plsAmount.toString(),
+                gasPriority,
+                gasGwei,
+                takeProfitEnabled: hasTakeProfit,
+                takeProfitPercent: snipeOrder.takeProfitPercent,
+                sellPercent: snipeOrder.sellPercent,
+            });
             // Log to trade history for persistent record
             jsonStore_1.TradeHistory.logInstaBondSnipe(userId, chatId, tokenAddress, snipeOrder.id, // Use order ID as symbol for now
             plsAmount.toString());
@@ -5256,11 +5326,120 @@ Hold $50+ of DTGC to trade
     /**
      * Start the bot
      */
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📊 GRADUATION PROGRESS CHECKER
+    // ═══════════════════════════════════════════════════════════════════════════
+    async checkGraduationProgress(chatId, tokenAddress) {
+        try {
+            await this.bot.sendMessage(chatId, `🔍 **Checking graduation progress...**\n\n` +
+                `📋 \`${tokenAddress}\``, { parse_mode: 'Markdown' });
+            // Get token state from graduation sniper
+            const state = await graduation_1.graduationSniper.getTokenState(tokenAddress);
+            if (!state) {
+                // Token might not be on pump.tires or already graduated
+                // Check if it has a PulseX pair
+                const pairInfo = await pulsex_1.pulsex.getPairInfo(tokenAddress);
+                if (pairInfo && pairInfo.pairAddress !== ethers_1.ethers.ZeroAddress) {
+                    await this.bot.sendMessage(chatId, `✅ **Token Already Graduated!**\n\n` +
+                        `📋 \`${tokenAddress}\`\n\n` +
+                        `🎓 This token is already on PulseX!\n` +
+                        `🔗 Pair: \`${pairInfo.pairAddress.slice(0, 12)}...\`\n\n` +
+                        `_You can trade it directly on PulseX or use /buy_`, {
+                        parse_mode: 'Markdown',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '💰 Buy Now', callback_data: `buy_token_${tokenAddress}` }],
+                                [{ text: '📊 Trade on PulseX', url: `https://app.pulsex.com/swap?outputCurrency=${tokenAddress}` }],
+                                [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+                            ],
+                        },
+                    });
+                    return;
+                }
+                await this.bot.sendMessage(chatId, `❌ **Token Not Found on Bonding Curve**\n\n` +
+                    `📋 \`${tokenAddress}\`\n\n` +
+                    `This token is not on pump.tires bonding curve.\n` +
+                    `It may be on a different platform or already graduated.\n\n` +
+                    `_Try checking the token address or use /buy for direct purchase._`, { parse_mode: 'Markdown' });
+                return;
+            }
+            // Format graduation progress
+            const progressBar = this.createProgressBar(state.percentToGraduation);
+            const plsRaisedFormatted = (Number(state.plsRaised) / 1e18).toLocaleString();
+            const threshold = 200_000_000; // 200M PLS
+            const remaining = threshold - (Number(state.plsRaised) / 1e18);
+            const remainingFormatted = remaining > 0 ? remaining.toLocaleString() : '0';
+            let statusEmoji = '⏳';
+            let statusText = 'On Bonding Curve';
+            if (state.graduated) {
+                statusEmoji = '🎓';
+                statusText = 'GRADUATED!';
+            }
+            else if (state.percentToGraduation >= 90) {
+                statusEmoji = '🔥';
+                statusText = 'ALMOST THERE!';
+            }
+            else if (state.percentToGraduation >= 50) {
+                statusEmoji = '📈';
+                statusText = 'Halfway There';
+            }
+            let msg = `📊 **GRADUATION PROGRESS**\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            msg += `🪙 **${state.name}** (${state.symbol})\n`;
+            msg += `📋 \`${state.address.slice(0, 16)}...${state.address.slice(-8)}\`\n\n`;
+            msg += `${progressBar}\n`;
+            msg += `📊 **${state.percentToGraduation.toFixed(2)}%** to graduation\n\n`;
+            msg += `💰 Raised: **${plsRaisedFormatted} PLS**\n`;
+            msg += `🎯 Target: **200,000,000 PLS**\n`;
+            msg += `📉 Remaining: **${remainingFormatted} PLS**\n\n`;
+            msg += `${statusEmoji} Status: **${statusText}**\n`;
+            if (state.pairAddress) {
+                msg += `\n🔗 Pair: \`${state.pairAddress.slice(0, 16)}...\``;
+            }
+            const buttons = [];
+            if (state.graduated) {
+                buttons.push([{ text: '💰 Buy Now!', callback_data: `buy_token_${tokenAddress}` }]);
+                buttons.push([{ text: '📊 Trade on PulseX', url: `https://app.pulsex.com/swap?outputCurrency=${tokenAddress}` }]);
+            }
+            else {
+                // Check if user has a pending order for this token
+                const existingOrder = jsonStore_1.SnipeOrders.getAllPending().find(o => o.tokenAddress.toLowerCase() === tokenAddress.toLowerCase());
+                if (existingOrder) {
+                    buttons.push([{ text: `✅ InstaBond Armed (${existingOrder.id})`, callback_data: 'snipe_list' }]);
+                }
+                else {
+                    buttons.push([{ text: '🎯 Arm InstaBond Snipe', callback_data: `snipe_create_${tokenAddress}` }]);
+                }
+            }
+            buttons.push([{ text: '🔄 Refresh', callback_data: `checkgrad_${tokenAddress}` }]);
+            buttons.push([{ text: '🏠 Main Menu', callback_data: 'main_menu' }]);
+            await this.bot.sendMessage(chatId, msg, {
+                parse_mode: 'Markdown',
+                reply_markup: { inline_keyboard: buttons },
+            });
+        }
+        catch (error) {
+            console.error('Check graduation error:', error);
+            await this.bot.sendMessage(chatId, `❌ **Error checking graduation**\n\n${error.message}`, { parse_mode: 'Markdown' });
+        }
+    }
+    createProgressBar(percent) {
+        const filled = Math.floor(percent / 5);
+        const empty = 20 - filled;
+        const filledChar = '█';
+        const emptyChar = '░';
+        return `\`[${filledChar.repeat(filled)}${emptyChar.repeat(empty)}]\``;
+    }
     async start() {
         console.log('🚀 Starting @DTGBondBot...');
         // Connect snipers
         await graduation_1.graduationSniper.connect();
         await graduation_1.graduationSniper.startListening();
+        // 🔄 RECOVER PENDING SNIPE ORDERS FROM DISK (survives restarts!)
+        const recoveredCount = await jsonStore_1.SnipeOrders.recoverToSniper(graduation_1.graduationSniper);
+        if (recoveredCount > 0) {
+            console.log(`🔄 Recovered ${recoveredCount} pending InstaBond orders from disk!`);
+        }
         await mempool_1.mempoolSniper.connect();
         await mempool_1.mempoolSniper.start();
         // Start order engine

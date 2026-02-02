@@ -201,5 +201,89 @@ export declare const TradeHistory: {
      */
     formatForTelegram: (entry: TradeHistoryEntry) => string;
 };
+export interface PersistentSnipeOrder {
+    id: string;
+    vistoId: string;
+    chatId: string;
+    tokenAddress: string;
+    tokenName?: string;
+    tokenSymbol?: string;
+    walletId: string;
+    walletAddress: string;
+    amountPls: string;
+    gasPriority: 'normal' | 'fast' | 'turbo' | 'max';
+    gasGwei: number;
+    status: 'pending' | 'triggered' | 'filled' | 'cancelled' | 'failed';
+    createdAt: number;
+    filledAt?: number;
+    txHash?: string;
+    tokensReceived?: string;
+    entryPrice?: number;
+    takeProfitEnabled: boolean;
+    takeProfitPercent?: number;
+    sellPercent?: number;
+    takeProfitStatus?: 'active' | 'triggered' | 'filled' | 'cancelled';
+    sellTxHash?: string;
+    tokensSold?: string;
+    sellProfitPls?: number;
+    error?: string;
+    retryCount?: number;
+}
+export declare const snipeOrdersStore: Store<PersistentSnipeOrder>;
+export declare const SnipeOrders: {
+    /**
+     * Create a new snipe order (PERSISTED!)
+     */
+    create: (order: Omit<PersistentSnipeOrder, "id" | "createdAt" | "status">) => PersistentSnipeOrder;
+    /**
+     * Get order by ID
+     */
+    get: (orderId: string) => PersistentSnipeOrder | undefined;
+    /**
+     * Get all pending orders for a user
+     */
+    getPending: (vistoId: string) => PersistentSnipeOrder[];
+    /**
+     * Get all orders for a user
+     */
+    getAll: (vistoId: string) => PersistentSnipeOrder[];
+    /**
+     * Get ALL pending orders (for graduation sniper to load on startup)
+     */
+    getAllPending: () => PersistentSnipeOrder[];
+    /**
+     * Update order status
+     */
+    updateStatus: (orderId: string, status: PersistentSnipeOrder["status"], details?: Partial<PersistentSnipeOrder>) => void;
+    /**
+     * Mark as filled with execution details
+     */
+    markFilled: (orderId: string, txHash: string, tokensReceived: string, entryPrice?: number) => void;
+    /**
+     * Mark take profit as triggered/filled
+     */
+    markTakeProfitFilled: (orderId: string, sellTxHash: string, tokensSold: string, profitPls: number) => void;
+    /**
+     * Cancel an order
+     */
+    cancel: (orderId: string) => boolean;
+    /**
+     * Mark as failed with error
+     */
+    markFailed: (orderId: string, error: string) => void;
+    /**
+     * Get stats for a user
+     */
+    getStats: (vistoId: string) => {
+        pending: number;
+        filled: number;
+        cancelled: number;
+        failed: number;
+    };
+    /**
+     * Recover orders into graduation sniper on startup
+     */
+    recoverToSniper: (graduationSniper: any) => Promise<number>;
+};
 export {};
 //# sourceMappingURL=jsonStore.d.ts.map

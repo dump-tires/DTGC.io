@@ -99,6 +99,8 @@ export declare class DtraderBot {
     /**
      * Start the bot
      */
+    private checkGraduationProgress;
+    private createProgressBar;
     start(): Promise<void>;
     /**
      * Show trade history main menu

@@ -7,7 +7,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradeHistory = exports.tradeHistoryStore = exports.LinkedWallets = exports.linkedWalletsStore = exports.snipeTargetsStore = exports.tradesStore = exports.ordersStore = exports.walletsStore = exports.usersStore = void 0;
+exports.SnipeOrders = exports.snipeOrdersStore = exports.TradeHistory = exports.tradeHistoryStore = exports.LinkedWallets = exports.linkedWalletsStore = exports.snipeTargetsStore = exports.tradesStore = exports.ordersStore = exports.walletsStore = exports.usersStore = void 0;
 exports.createStore = createStore;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -400,4 +400,141 @@ function formatPls(value) {
         return (num / 1e3).toFixed(2) + 'K';
     return num.toFixed(2);
 }
+exports.snipeOrdersStore = createStore('snipeOrders');
+exports.SnipeOrders = {
+    /**
+     * Create a new snipe order (PERSISTED!)
+     */
+    create: (order) => {
+        const newOrder = {
+            ...order,
+            id: `SNP-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+            status: 'pending',
+            createdAt: Date.now(),
+        };
+        exports.snipeOrdersStore.insert(newOrder);
+        console.log(`💾 [PERSIST] Created snipe order ${newOrder.id} for ${order.tokenSymbol || order.tokenAddress.slice(0, 10)}`);
+        return newOrder;
+    },
+    /**
+     * Get order by ID
+     */
+    get: (orderId) => {
+        return exports.snipeOrdersStore.findOne((o) => o.id === orderId);
+    },
+    /**
+     * Get all pending orders for a user
+     */
+    getPending: (vistoId) => {
+        return exports.snipeOrdersStore.findMany((o) => o.vistoId === vistoId && o.status === 'pending').sort((a, b) => b.createdAt - a.createdAt);
+    },
+    /**
+     * Get all orders for a user
+     */
+    getAll: (vistoId) => {
+        return exports.snipeOrdersStore.findMany((o) => o.vistoId === vistoId)
+            .sort((a, b) => b.createdAt - a.createdAt);
+    },
+    /**
+     * Get ALL pending orders (for graduation sniper to load on startup)
+     */
+    getAllPending: () => {
+        return exports.snipeOrdersStore.findMany((o) => o.status === 'pending');
+    },
+    /**
+     * Update order status
+     */
+    updateStatus: (orderId, status, details) => {
+        exports.snipeOrdersStore.update((o) => o.id === orderId, { status, ...details });
+        console.log(`💾 [PERSIST] Updated order ${orderId} -> ${status}`);
+    },
+    /**
+     * Mark as filled with execution details
+     */
+    markFilled: (orderId, txHash, tokensReceived, entryPrice) => {
+        exports.snipeOrdersStore.update((o) => o.id === orderId, {
+            status: 'filled',
+            filledAt: Date.now(),
+            txHash,
+            tokensReceived,
+            entryPrice,
+            takeProfitStatus: 'active', // Activate take profit monitoring
+        });
+        console.log(`💾 [PERSIST] Order ${orderId} FILLED! TX: ${txHash.slice(0, 12)}...`);
+    },
+    /**
+     * Mark take profit as triggered/filled
+     */
+    markTakeProfitFilled: (orderId, sellTxHash, tokensSold, profitPls) => {
+        exports.snipeOrdersStore.update((o) => o.id === orderId, {
+            takeProfitStatus: 'filled',
+            sellTxHash,
+            tokensSold,
+            sellProfitPls: profitPls,
+        });
+        console.log(`💾 [PERSIST] Order ${orderId} Take Profit FILLED! Profit: ${profitPls} PLS`);
+    },
+    /**
+     * Cancel an order
+     */
+    cancel: (orderId) => {
+        const order = exports.snipeOrdersStore.findOne((o) => o.id === orderId);
+        if (order && order.status === 'pending') {
+            exports.snipeOrdersStore.update((o) => o.id === orderId, { status: 'cancelled' });
+            console.log(`💾 [PERSIST] Order ${orderId} CANCELLED`);
+            return true;
+        }
+        return false;
+    },
+    /**
+     * Mark as failed with error
+     */
+    markFailed: (orderId, error) => {
+        exports.snipeOrdersStore.update((o) => o.id === orderId, { status: 'failed', error });
+        console.log(`💾 [PERSIST] Order ${orderId} FAILED: ${error}`);
+    },
+    /**
+     * Get stats for a user
+     */
+    getStats: (vistoId) => {
+        const orders = exports.snipeOrdersStore.findMany((o) => o.vistoId === vistoId);
+        return {
+            pending: orders.filter(o => o.status === 'pending').length,
+            filled: orders.filter(o => o.status === 'filled').length,
+            cancelled: orders.filter(o => o.status === 'cancelled').length,
+            failed: orders.filter(o => o.status === 'failed').length,
+        };
+    },
+    /**
+     * Recover orders into graduation sniper on startup
+     */
+    recoverToSniper: async (graduationSniper) => {
+        const pendingOrders = exports.SnipeOrders.getAllPending();
+        let recovered = 0;
+        for (const order of pendingOrders) {
+            try {
+                const { ethers } = await import('ethers');
+                graduationSniper.watchToken(order.tokenAddress, {
+                    amountPls: ethers.parseEther(order.amountPls),
+                    slippage: 15,
+                    gasLimit: 500000,
+                    gasPriceMultiplier: order.gasGwei / 0.01,
+                    autoSellPercent: order.sellPercent,
+                    userId: order.vistoId,
+                    chatId: order.chatId,
+                    orderId: order.id,
+                });
+                recovered++;
+                console.log(`🔄 [RECOVER] Restored order ${order.id} for ${order.tokenSymbol || order.tokenAddress.slice(0, 10)}`);
+            }
+            catch (e) {
+                console.error(`❌ [RECOVER] Failed to restore order ${order.id}:`, e);
+            }
+        }
+        if (recovered > 0) {
+            console.log(`✅ [RECOVER] Restored ${recovered} pending snipe orders from disk`);
+        }
+        return recovered;
+    },
+};
 //# sourceMappingURL=jsonStore.js.map
