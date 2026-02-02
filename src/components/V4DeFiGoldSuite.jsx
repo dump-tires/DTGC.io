@@ -1711,13 +1711,53 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     setWinsLoading(true);
     setWinsError(null);
 
-    try {
-      const response = await fetch(`${DEXSCREENER_API}/dex/search?q=pulsechain`);
-      if (!response.ok) throw new Error(`API returned ${response.status}`);
+    // Excluded addresses (native tokens, stablecoins, wrapped tokens)
+    const EXCLUDED_TOKENS = new Set([
+      '0xa1077a294dde1b09bb078844df40758a5d0f9a27', // WPLS
+      '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d', // INC
+      '0x0cb6f5a34ad42ec934882a05265a7d5f59b51a2f', // DAI from ETH
+      '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07', // USDC from ETH
+      '0xefD766cCb38EaF1dfd701853BFCe31359239F305', // DAI
+    ].map(a => a.toLowerCase()));
 
-      const data = await response.json();
-      const pairs = (data.pairs || []).filter(
-        p => p.chainId === 'pulsechain' && (p.liquidity?.usd || 0) > 10000
+    try {
+      // Use trending tokens endpoint for better diversity
+      const response = await fetch(`${DEXSCREENER_API}/token-boosts/top/v1`);
+      let pairs = [];
+
+      if (response.ok) {
+        const boosts = await response.json();
+        // Filter for PulseChain tokens
+        const pulsechainBoosts = (boosts || []).filter(b => b.chainId === 'pulsechain');
+
+        // Fetch details for each boosted token
+        for (const boost of pulsechainBoosts.slice(0, 20)) {
+          try {
+            const tokenResp = await fetch(`${DEXSCREENER_API}/tokens/pulsechain/${boost.tokenAddress}`);
+            if (tokenResp.ok) {
+              const tokenData = await tokenResp.json();
+              if (tokenData.pairs?.length > 0) {
+                pairs.push(tokenData.pairs[0]);
+              }
+            }
+          } catch (e) { /* skip failed tokens */ }
+        }
+      }
+
+      // Fallback to search if boosts didn't return enough
+      if (pairs.length < 5) {
+        const searchResp = await fetch(`${DEXSCREENER_API}/dex/search?q=pulsechain`);
+        if (searchResp.ok) {
+          const data = await searchResp.json();
+          pairs = [...pairs, ...(data.pairs || [])];
+        }
+      }
+
+      // Filter for PulseChain, good liquidity, and exclude native tokens
+      pairs = pairs.filter(p =>
+        p.chainId === 'pulsechain' &&
+        (p.liquidity?.usd || 0) > 5000 &&
+        !EXCLUDED_TOKENS.has(p.baseToken?.address?.toLowerCase())
       );
 
       pairs.sort((a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
@@ -1727,7 +1767,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
       for (const pair of pairs) {
         const addr = pair.baseToken?.address?.toLowerCase();
-        if (!addr || seen.has(addr)) continue;
+        if (!addr || seen.has(addr) || EXCLUDED_TOKENS.has(addr)) continue;
         seen.add(addr);
 
         const { score, reasons } = calculateWinScore(pair);
