@@ -777,6 +777,23 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   const [instaBondOrders, setInstaBondOrders] = useState([]);
   const [instaBondPolling, setInstaBondPolling] = useState(null);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔥 BOND TAB - InstaBond Setup State (single-click snipe from token list)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [selectedBondToken, setSelectedBondToken] = useState(null); // Token selected for snipe setup
+  const [bondSnipeAmount, setBondSnipeAmount] = useState(''); // PLS amount to spend
+  const [bondTakeProfit, setBondTakeProfit] = useState('100'); // Take profit % (default 100% = 2x)
+  const [bondGasPriority, setBondGasPriority] = useState('fast'); // normal/fast/turbo/max
+  const [bondSnipeArming, setBondSnipeArming] = useState(false); // Loading state for arming
+
+  // Gas priority presets (Gwei values for PulseChain)
+  const GAS_PRIORITIES = {
+    normal: { label: '🐢 Normal', gwei: 30000, desc: 'Standard speed' },
+    fast: { label: '🚀 Fast', gwei: 50000, desc: 'Recommended' },
+    turbo: { label: '⚡ Turbo', gwei: 80000, desc: 'Priority' },
+    max: { label: '🔥 MAX', gwei: 150000, desc: 'Front-run protection' },
+  };
+
   // Balances for all tokens
   const [balances, setBalances] = useState({});
 
@@ -1272,9 +1289,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     }
   };
 
-  // Poll for InstaBond order updates
+  // Poll for InstaBond order updates (both Snipe and Bond tabs)
   useEffect(() => {
-    if (userAddress && activeTab === 'sniper') {
+    if (userAddress && (activeTab === 'sniper' || activeTab === 'instabond')) {
       fetchInstaBondOrders();
       const interval = setInterval(fetchInstaBondOrders, 5000); // Poll every 5s
       setInstaBondPolling(interval);
@@ -4106,12 +4123,82 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
           <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
             <div style={{ color: '#888', fontSize: '0.8rem', marginBottom: '8px' }}>
-              Top 10 tokens closest to graduation (800M = 100%)
+              Top 10 tokens closest to graduation (800M = 100%) • Click <span style={{ color: '#4CAF50', fontWeight: 600 }}>🎯 SNIPE</span> to arm InstaBond
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <a href="https://pump.tires" target="_blank" rel="noopener noreferrer" style={{ color: '#4CAF50', fontSize: '0.75rem' }}>🌐 pump.tires →</a>
             </div>
           </div>
+
+          {/* ═══════════════════════════════════════════════════════════════
+              ACTIVE INSTABOND ORDERS - Shows armed snipes waiting for graduation
+          ═══════════════════════════════════════════════════════════════ */}
+          {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length > 0 && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255,87,34,0.15), rgba(255,152,0,0.1))',
+              borderRadius: '12px',
+              padding: '12px',
+              marginBottom: '16px',
+              border: '1px solid rgba(255,87,34,0.3)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ color: '#FF5722', fontWeight: 700, fontSize: '0.9rem' }}>
+                  🔥 Your Armed Snipes ({instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length})
+                </span>
+                <span style={{ color: '#888', fontSize: '0.65rem' }}>Auto-polling every 5s</span>
+              </div>
+              {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).slice(0, 5).map(order => (
+                <div key={order.id} style={{
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  marginBottom: '6px',
+                  border: order.status === 'buying' ? '1px solid #4CAF50' : '1px solid rgba(255,87,34,0.3)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>
+                        {order.tokenSymbol || order.tokenAddress?.slice(0, 10) + '...'}
+                      </div>
+                      <div style={{ color: '#888', fontSize: '0.65rem' }}>
+                        {parseFloat(order.amountPls || '0').toLocaleString()} PLS → +{order.takeProfitPercent || 100}% TP
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        background: order.status === 'buying' ? 'rgba(76,175,80,0.3)' : order.status === 'watching' ? 'rgba(255,152,0,0.3)' : 'rgba(255,255,255,0.1)',
+                        color: order.status === 'buying' ? '#4CAF50' : order.status === 'watching' ? '#FF9800' : '#888',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}>
+                        {order.status === 'armed' && '⏳ Armed'}
+                        {order.status === 'watching' && '👀 Watching'}
+                        {order.status === 'buying' && '🚀 BUYING!'}
+                        {order.status === 'holding' && '💎 Holding'}
+                        {order.status === 'selling' && '📉 Selling'}
+                      </div>
+                      <button
+                        onClick={() => cancelInstaBondOrder(order.id)}
+                        style={{
+                          background: 'rgba(244,67,54,0.2)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          color: '#F44336',
+                          fontSize: '0.65rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Scrollable token list */}
           <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
@@ -4241,7 +4328,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                     }} />
                   </div>
 
-                  {/* Actions */}
+                  {/* Actions - Single Click Snipe Setup */}
                   <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                     <button
                       onClick={() => {
@@ -4259,7 +4346,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                         fontSize: '0.7rem',
                       }}
                     >
-                      📋 Copy CA
+                      📋 CA
                     </button>
                     <a
                       href={`https://pump.tires/token/${token.address}`}
@@ -4267,20 +4354,214 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                       rel="noopener noreferrer"
                       style={{
                         flex: 1,
-                        background: 'rgba(212,175,55,0.2)',
+                        background: 'rgba(255,255,255,0.1)',
                         border: 'none',
                         borderRadius: '6px',
                         padding: '6px',
-                        color: '#D4AF37',
+                        color: '#888',
                         cursor: 'pointer',
                         fontSize: '0.7rem',
                         textAlign: 'center',
                         textDecoration: 'none',
                       }}
                     >
-                      🔥 View on pump.tires
+                      🌐 View
                     </a>
+                    <button
+                      onClick={() => setSelectedBondToken(selectedBondToken?.address === token.address ? null : token)}
+                      style={{
+                        flex: 2,
+                        background: selectedBondToken?.address === token.address
+                          ? 'linear-gradient(135deg, rgba(255,87,34,0.4), rgba(255,152,0,0.4))'
+                          : 'linear-gradient(135deg, rgba(76,175,80,0.3), rgba(76,175,80,0.2))',
+                        border: selectedBondToken?.address === token.address
+                          ? '1px solid #FF5722'
+                          : '1px solid rgba(76,175,80,0.5)',
+                        borderRadius: '6px',
+                        padding: '6px',
+                        color: selectedBondToken?.address === token.address ? '#FF5722' : '#4CAF50',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {selectedBondToken?.address === token.address ? '✕ Close' : '🎯 SNIPE'}
+                    </button>
                   </div>
+
+                  {/* ═══════════════════════════════════════════════════════════════
+                      INLINE INSTABOND SETUP FORM - Shows when token is selected
+                  ═══════════════════════════════════════════════════════════════ */}
+                  {selectedBondToken?.address === token.address && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, rgba(255,87,34,0.15), rgba(0,0,0,0.4))',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255,87,34,0.4)',
+                    }}>
+                      <div style={{ color: '#FF5722', fontWeight: 700, fontSize: '0.85rem', marginBottom: '10px' }}>
+                        🔥 InstaBond Snipe Setup
+                      </div>
+
+                      {/* PLS Amount Input */}
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '4px' }}>💰 PLS Amount to Spend:</div>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            placeholder="10000000"
+                            value={bondSnipeAmount}
+                            onChange={(e) => setBondSnipeAmount(e.target.value)}
+                            style={{
+                              flex: 1,
+                              background: 'rgba(0,0,0,0.4)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              borderRadius: '6px',
+                              padding: '8px 10px',
+                              color: '#fff',
+                              fontSize: '0.85rem',
+                            }}
+                          />
+                          <span style={{ color: '#888', fontSize: '0.75rem' }}>PLS</span>
+                        </div>
+                        {/* Quick amount buttons */}
+                        <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                          {['1M', '5M', '10M', '25M', '50M'].map(amt => {
+                            const val = amt === '1M' ? '1000000' : amt === '5M' ? '5000000' : amt === '10M' ? '10000000' : amt === '25M' ? '25000000' : '50000000';
+                            return (
+                              <button
+                                key={amt}
+                                onClick={() => setBondSnipeAmount(val)}
+                                style={{
+                                  flex: 1,
+                                  background: bondSnipeAmount === val ? 'rgba(255,87,34,0.3)' : 'rgba(255,255,255,0.05)',
+                                  border: bondSnipeAmount === val ? '1px solid #FF5722' : '1px solid rgba(255,255,255,0.1)',
+                                  borderRadius: '4px',
+                                  padding: '4px',
+                                  color: bondSnipeAmount === val ? '#FF5722' : '#888',
+                                  cursor: 'pointer',
+                                  fontSize: '0.65rem',
+                                }}
+                              >
+                                {amt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Gas Priority Selection */}
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '4px' }}>⛽ Gas Priority:</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+                          {Object.entries(GAS_PRIORITIES).map(([key, { label, desc }]) => (
+                            <button
+                              key={key}
+                              onClick={() => setBondGasPriority(key)}
+                              style={{
+                                padding: '6px 4px',
+                                background: bondGasPriority === key ? 'rgba(255,87,34,0.3)' : 'rgba(255,255,255,0.05)',
+                                border: bondGasPriority === key ? '1px solid #FF5722' : '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                textAlign: 'center',
+                              }}
+                            >
+                              <div style={{ color: bondGasPriority === key ? '#FF5722' : '#fff', fontSize: '0.7rem', fontWeight: 600 }}>{label}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Take Profit % Selection */}
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '4px' }}>🎯 Take Profit at:</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                          {[
+                            { pct: '50', label: '+50%', mult: '1.5x' },
+                            { pct: '100', label: '+100%', mult: '2x', star: true },
+                            { pct: '200', label: '+200%', mult: '3x' },
+                            { pct: '300', label: '+300%', mult: '4x' },
+                            { pct: '500', label: '+500%', mult: '6x' },
+                            { pct: '1000', label: '+1000%', mult: '11x' },
+                          ].map(opt => (
+                            <button
+                              key={opt.pct}
+                              onClick={() => setBondTakeProfit(opt.pct)}
+                              style={{
+                                padding: '6px 4px',
+                                background: bondTakeProfit === opt.pct ? 'rgba(76,175,80,0.3)' : 'rgba(255,255,255,0.05)',
+                                border: bondTakeProfit === opt.pct ? '1px solid #4CAF50' : '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                textAlign: 'center',
+                              }}
+                            >
+                              <div style={{ color: bondTakeProfit === opt.pct ? '#4CAF50' : '#fff', fontSize: '0.75rem', fontWeight: 600 }}>{opt.label}</div>
+                              <div style={{ color: '#888', fontSize: '0.55rem' }}>{opt.mult}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ marginTop: '6px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
+                          <span style={{ color: '#888', fontSize: '0.65rem' }}>Auto-sell </span>
+                          <span style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.8rem' }}>
+                            {(100 / (1 + parseInt(bondTakeProfit || '100') / 100)).toFixed(1)}%
+                          </span>
+                          <span style={{ color: '#888', fontSize: '0.65rem' }}> to recover 100% initial</span>
+                        </div>
+                      </div>
+
+                      {/* ARM INSTABOND Button */}
+                      <button
+                        onClick={async () => {
+                          if (!bondSnipeAmount || !userAddress || !signer) {
+                            showToastMsg('⚠️ Enter amount and connect wallet', 'error');
+                            return;
+                          }
+                          setBondSnipeArming(true);
+                          try {
+                            const order = await createInstaBondOrder(
+                              token.address,
+                              token.symbol,
+                              bondSnipeAmount,
+                              parseInt(bondTakeProfit || '100')
+                            );
+                            if (order) {
+                              showToastMsg(`🎯 InstaBond ARMED for ${token.symbol}! Watching for graduation...`, 'success');
+                              setSelectedBondToken(null);
+                              setBondSnipeAmount('');
+                            }
+                          } catch (err) {
+                            showToastMsg(`❌ ${err.message || 'Failed to arm InstaBond'}`, 'error');
+                          } finally {
+                            setBondSnipeArming(false);
+                          }
+                        }}
+                        disabled={!bondSnipeAmount || bondSnipeArming}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: bondSnipeAmount && !bondSnipeArming
+                            ? 'linear-gradient(135deg, #FF5722, #FF9800)'
+                            : 'rgba(255,255,255,0.1)',
+                          border: 'none',
+                          borderRadius: '8px',
+                          color: bondSnipeAmount && !bondSnipeArming ? '#fff' : '#666',
+                          fontWeight: 700,
+                          fontSize: '0.9rem',
+                          cursor: bondSnipeAmount && !bondSnipeArming ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        {bondSnipeArming ? '⏳ Arming...' : `🔥 ARM INSTABOND - ${token.symbol}`}
+                      </button>
+
+                      {/* Info */}
+                      <div style={{ marginTop: '8px', color: '#666', fontSize: '0.6rem', textAlign: 'center' }}>
+                        Signs message to arm snipe • Buys at graduation • Auto-sells at TP
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}
