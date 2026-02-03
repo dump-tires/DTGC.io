@@ -312,4 +312,4 @@ export default async function handler(req, res) {
 
 // Export helper functions for other modules
 export { getFromKV, setToKV, scanByWallet };
-// Upgraded to KV storage Mon Feb 3 2026
+// Upgraded to KV storage Mon Feb 2 2026 9:42pm EST
