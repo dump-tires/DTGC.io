@@ -55,11 +55,11 @@ export declare class DtraderBot {
      */
     private exportAllWallets;
     /**
-     * Show all wallet balances
+     * Show all wallet balances (FIXED: Uses multiWallet system, shows DTGC + pending orders)
      */
     private showWalletBalances;
     /**
-     * Show all wallet addresses (quick view)
+     * Show all wallet addresses (quick view) - FIXED: Uses multiWallet system
      */
     private showAllWalletAddresses;
     /**

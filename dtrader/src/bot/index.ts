@@ -5581,44 +5581,88 @@ export class DtraderBot {
   }
 
   /**
-   * Show all wallet balances
+   * Show all wallet balances (FIXED: Uses multiWallet system, shows DTGC + pending orders)
    */
   private async showWalletBalances(chatId: string, userId: string): Promise<void> {
     await this.bot.sendMessage(chatId, '💰 Fetching wallet balances...');
 
     const session = this.getSession(chatId);
+    const DTGC_TOKEN = config.tokenGate.dtgc;
+
+    // Get pending orders count per wallet
+    const pendingOrders = SnipeOrders.getPending(userId);
+    const ordersByWallet: Record<string, number> = {};
+    for (const order of pendingOrders) {
+      const addr = order.walletAddress?.toLowerCase() || '';
+      ordersByWallet[addr] = (ordersByWallet[addr] || 0) + 1;
+    }
+
     let msg = `💰 **WALLET BALANCES** ⚜️\n`;
     msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // Get linked wallet balance
+    // ═══════════════════════════════════════════════════════════════
+    // GOLD GATE WALLET (Linked Wallet with $50 DTGC)
+    // ═══════════════════════════════════════════════════════════════
     if (session.linkedWallet) {
       try {
-        const { formatted } = await walletManager.getPlsBalance(session.linkedWallet);
-        msg += `🔗 **Linked Wallet**\n`;
+        const { formatted: plsBal } = await walletManager.getPlsBalance(session.linkedWallet);
+        const { balanceFormatted: dtgcBal } = await walletManager.getTokenBalance(session.linkedWallet, DTGC_TOKEN);
+        const orders = ordersByWallet[session.linkedWallet.toLowerCase()] || 0;
+        msg += `🔗 **Gold Gate Wallet**\n`;
         msg += `\`${session.linkedWallet.slice(0, 10)}...${session.linkedWallet.slice(-6)}\`\n`;
-        msg += `💎 ${parseFloat(formatted).toFixed(2)} PLS\n\n`;
-      } catch {}
+        msg += `💎 ${parseFloat(plsBal).toLocaleString(undefined, {maximumFractionDigits: 0})} PLS\n`;
+        msg += `🪙 ${parseFloat(dtgcBal).toLocaleString(undefined, {maximumFractionDigits: 0})} DTGC\n`;
+        if (orders > 0) msg += `📋 ${orders} pending order${orders > 1 ? 's' : ''}\n`;
+        msg += `\n`;
+      } catch (e) {
+        console.log('[Balances] Gold wallet error:', e);
+      }
     }
 
-    // Get bot wallet balance
+    // ═══════════════════════════════════════════════════════════════
+    // SNIPE WALLETS (from multiWallet system - the CORRECT wallets)
+    // ═══════════════════════════════════════════════════════════════
     try {
-      const { wallet } = await walletManager.getOrCreateWallet(userId);
-      const { formatted } = await walletManager.getPlsBalance(wallet.address);
-      msg += `🤖 **Bot Wallet**\n`;
-      msg += `\`${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}\`\n`;
-      msg += `💎 ${parseFloat(formatted).toFixed(2)} PLS\n\n`;
-    } catch {}
+      const snipeWallets = await multiWallet.getUserWallets(userId);
 
-    // Get 6 snipe wallet balances
-    for (let i = 1; i <= 6; i++) {
-      try {
-        const walletId = `${userId}_snipe_${i}`;
-        const { wallet } = await walletManager.getOrCreateWallet(walletId);
-        const { formatted } = await walletManager.getPlsBalance(wallet.address);
-        msg += `🎯 **Snipe W${i}**\n`;
-        msg += `\`${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}\`\n`;
-        msg += `💎 ${parseFloat(formatted).toFixed(2)} PLS\n\n`;
-      } catch {}
+      if (snipeWallets.length === 0) {
+        msg += `⚠️ No snipe wallets found.\n`;
+        msg += `Use "Generate 6 New" to create wallets.\n\n`;
+      } else {
+        for (const w of snipeWallets) {
+          try {
+            const { formatted: plsBal } = await walletManager.getPlsBalance(w.address);
+            const { balanceFormatted: dtgcBal } = await walletManager.getTokenBalance(w.address, DTGC_TOKEN);
+            const orders = ordersByWallet[w.address.toLowerCase()] || 0;
+            const activeIcon = w.isActive ? '✅' : '⬜';
+
+            msg += `${activeIcon} **${w.label || `Snipe W${w.index}`}**\n`;
+            msg += `\`${w.address.slice(0, 10)}...${w.address.slice(-6)}\`\n`;
+            msg += `💎 ${parseFloat(plsBal).toLocaleString(undefined, {maximumFractionDigits: 0})} PLS`;
+
+            const dtgcNum = parseFloat(dtgcBal);
+            if (dtgcNum > 0) {
+              msg += ` | 🪙 ${dtgcNum.toLocaleString(undefined, {maximumFractionDigits: 0})} DTGC`;
+            }
+            if (orders > 0) {
+              msg += ` | 📋 ${orders}`;
+            }
+            msg += `\n\n`;
+          } catch (e) {
+            msg += `🎯 **${w.label || `Snipe W${w.index}`}** - ⚠️ Error\n\n`;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[Balances] Snipe wallets error:', e);
+      msg += `⚠️ Could not load snipe wallets\n\n`;
+    }
+
+    // Summary
+    const totalOrders = pendingOrders.length;
+    if (totalOrders > 0) {
+      msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `📊 **${totalOrders} total pending order${totalOrders > 1 ? 's' : ''}**\n`;
     }
 
     await this.bot.sendMessage(chatId, msg, {
@@ -5628,34 +5672,35 @@ export class DtraderBot {
   }
 
   /**
-   * Show all wallet addresses (quick view)
+   * Show all wallet addresses (quick view) - FIXED: Uses multiWallet system
    */
   private async showAllWalletAddresses(chatId: string, userId: string): Promise<void> {
     const session = this.getSession(chatId);
     let msg = `📋 **ALL WALLET ADDRESSES** ⚜️\n`;
     msg += `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // Linked wallet
+    // Gold Gate Wallet (Linked wallet)
     if (session.linkedWallet) {
-      msg += `🔗 Linked: \`${session.linkedWallet}\`\n\n`;
+      msg += `🔗 **Gold Gate:** \`${session.linkedWallet}\`\n\n`;
     }
 
-    // Bot wallet
+    // Snipe wallets from multiWallet system (CORRECT wallets)
     try {
-      const { wallet } = await walletManager.getOrCreateWallet(userId);
-      msg += `🤖 Bot: \`${wallet.address}\`\n\n`;
-    } catch {}
+      const snipeWallets = await multiWallet.getUserWallets(userId);
 
-    // 6 snipe wallets
-    for (let i = 1; i <= 6; i++) {
-      try {
-        const walletId = `${userId}_snipe_${i}`;
-        const { wallet } = await walletManager.getOrCreateWallet(walletId);
-        msg += `🎯 W${i}: \`${wallet.address}\`\n`;
-      } catch {}
+      if (snipeWallets.length === 0) {
+        msg += `⚠️ No snipe wallets. Use "Generate 6 New".\n`;
+      } else {
+        for (const w of snipeWallets) {
+          const activeIcon = w.isActive ? '✅' : '⬜';
+          msg += `${activeIcon} **${w.label || `W${w.index}`}:** \`${w.address}\`\n`;
+        }
+      }
+    } catch (e) {
+      msg += `⚠️ Could not load wallets\n`;
     }
 
-    msg += `\n_Click to copy, send PLS to fund._`;
+    msg += `\n_Tap address to copy, send PLS to fund._`;
 
     await this.bot.sendMessage(chatId, msg, {
       parse_mode: 'Markdown',
@@ -6213,12 +6258,27 @@ Hold $50+ of DTGC to trade
         return;
       }
 
-      // Get user's wallet
-      const wallet = await walletManager.getWallet(userId);
-      if (!wallet) {
-        console.log(`❌ No wallet found for user ${userId}`);
+      // ═══════════════════════════════════════════════════════════════
+      // FIXED: Use multiWallet system (correct wallets) instead of old walletManager
+      // ═══════════════════════════════════════════════════════════════
+      const userWallets = await multiWallet.getUserWallets(userId);
+      const activeWallet = userWallets.find(w => w.isActive) || userWallets[0];
+
+      if (!activeWallet) {
+        console.log(`❌ No snipe wallet found for user ${userId}`);
         await this.bot.sendMessage(chatId,
-          `❌ **Snipe Failed**\n\nNo wallet found. Generate one with /start first.`,
+          `❌ **Snipe Failed**\n\nNo snipe wallet found. Generate wallets first with /wallets → Generate 6 New.`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+
+      // Get the wallet signer
+      const wallet = await multiWallet.getWalletSigner(userId, activeWallet.index);
+      if (!wallet) {
+        console.log(`❌ Could not get signer for wallet ${activeWallet.index}`);
+        await this.bot.sendMessage(chatId,
+          `❌ **Snipe Failed**\n\nCould not access wallet ${activeWallet.label}.`,
           { parse_mode: 'Markdown' }
         );
         return;
@@ -6228,13 +6288,14 @@ Hold $50+ of DTGC to trade
       await this.bot.sendMessage(chatId,
         `🚀 **EXECUTING SNIPE!**\n\n` +
         `🎓 Token graduated to PulseX!\n` +
-        `📋 \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n\n` +
+        `📋 \`${tokenAddress.slice(0, 12)}...${tokenAddress.slice(-8)}\`\n` +
+        `👛 Using: **${activeWallet.label}**\n\n` +
         `⏳ Buying now...`,
         { parse_mode: 'Markdown' }
       );
 
       try {
-        // Execute the buy
+        // Execute the buy using the correct snipe wallet
         const result = await pulsex.executeBuy(
           wallet,
           tokenAddress,
@@ -6393,10 +6454,16 @@ Hold $50+ of DTGC to trade
       }
     });
 
-    // Mempool sniper events
+    // Mempool sniper events - FIXED: Use multiWallet system
     mempoolSniper.on('executeSnipe', async (data) => {
       const { target, pairInfo } = data;
-      const wallet = await walletManager.getWallet(target.userId);
+
+      // Get user's snipe wallet from multiWallet (correct system)
+      const userWallets = await multiWallet.getUserWallets(target.userId);
+      const activeWallet = userWallets.find(w => w.isActive) || userWallets[0];
+      if (!activeWallet) return;
+
+      const wallet = await multiWallet.getWalletSigner(target.userId, activeWallet.index);
       if (!wallet) return;
 
       const result = await pulsex.executeBuy(
@@ -6410,8 +6477,9 @@ Hold $50+ of DTGC to trade
       // Find user's chat
       for (const [chatId, session] of this.sessions) {
         if (session.gateVerified) {
-          const userWallet = await walletManager.getWallet(chatId);
-          if (userWallet?.address === wallet.address) {
+          const chatWallets = await multiWallet.getUserWallets(chatId);
+          const chatActiveWallet = chatWallets.find(w => w.isActive) || chatWallets[0];
+          if (chatActiveWallet?.address === activeWallet.address) {
             if (result.success) {
               await this.bot.sendMessage(chatId,
                 `🎯 **SNIPE EXECUTED!**\n\n` +
