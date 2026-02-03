@@ -438,6 +438,9 @@ export const tradeHistoryStore = createStore<TradeHistoryEntry>('tradeHistory');
 export const TradeHistory = {
   /**
    * Log a new InstaBond snipe order
+   * @param gatedWalletAddress - The verified $50 DTGC wallet address that authorized this trade
+   * @param snipeWalletAddress - The bot wallet address executing the trade
+   * @param snipeWalletIndex - The wallet slot (1-6)
    */
   logInstaBondSnipe: (
     vistoId: string,
@@ -446,7 +449,10 @@ export const TradeHistory = {
     tokenSymbol: string,
     amountPls: string,
     sellPercent?: number,
-    sellMultiplier?: number
+    sellMultiplier?: number,
+    gatedWalletAddress?: string,
+    snipeWalletAddress?: string,
+    snipeWalletIndex?: number
   ): TradeHistoryEntry => {
     const entry: TradeHistoryEntry = {
       id: `ib_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -458,6 +464,10 @@ export const TradeHistory = {
       tokenSymbol,
       amountPls,
       triggerCondition: 'graduation (200M PLS bonding curve)',
+      // Link to verification wallet for audit trail
+      gatedWalletAddress: gatedWalletAddress?.toLowerCase(),
+      snipeWalletAddress: snipeWalletAddress?.toLowerCase(),
+      snipeWalletIndex,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       notes: sellPercent && sellMultiplier
@@ -471,6 +481,9 @@ export const TradeHistory = {
 
   /**
    * Log a limit order (buy/sell/take profit/stop loss)
+   * @param gatedWalletAddress - The verified $50 DTGC wallet address that authorized this trade
+   * @param snipeWalletAddress - The bot wallet address executing the trade
+   * @param snipeWalletIndex - The wallet slot (1-6)
    */
   logLimitOrder: (
     vistoId: string,
@@ -480,7 +493,10 @@ export const TradeHistory = {
     tokenSymbol: string,
     amountPls: string,
     targetPrice: string,
-    linkedOrderId?: string
+    linkedOrderId?: string,
+    gatedWalletAddress?: string,
+    snipeWalletAddress?: string,
+    snipeWalletIndex?: number
   ): TradeHistoryEntry => {
     const entry: TradeHistoryEntry = {
       id: `lo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -493,6 +509,10 @@ export const TradeHistory = {
       amountPls,
       targetPrice,
       linkedOrderId,
+      // Link to verification wallet for audit trail
+      gatedWalletAddress: gatedWalletAddress?.toLowerCase(),
+      snipeWalletAddress: snipeWalletAddress?.toLowerCase(),
+      snipeWalletIndex,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -644,6 +664,93 @@ export const TradeHistory = {
 
     return msg;
   },
+
+  /**
+   * Log a market trade (direct buy/sell)
+   * @param gatedWalletAddress - The verified $50 DTGC wallet address that authorized this trade
+   */
+  logMarketTrade: (
+    vistoId: string,
+    chatId: string,
+    type: 'market_buy' | 'market_sell',
+    tokenAddress: string,
+    tokenSymbol: string,
+    amountPls: string,
+    executedPrice?: string,
+    txHash?: string,
+    gatedWalletAddress?: string,
+    snipeWalletAddress?: string,
+    snipeWalletIndex?: number
+  ): TradeHistoryEntry => {
+    const entry: TradeHistoryEntry = {
+      id: `mt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      vistoId,
+      chatId,
+      type,
+      status: txHash ? 'completed' : 'pending',
+      tokenAddress,
+      tokenSymbol,
+      amountPls,
+      executedPrice,
+      txHash,
+      gatedWalletAddress: gatedWalletAddress?.toLowerCase(),
+      snipeWalletAddress: snipeWalletAddress?.toLowerCase(),
+      snipeWalletIndex,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      executedAt: txHash ? Date.now() : undefined,
+    };
+
+    tradeHistoryStore.insert(entry);
+    return entry;
+  },
+
+  /**
+   * Get trade history by gated wallet address (for auditing)
+   * Returns all trades authorized by a specific verification wallet
+   */
+  getByGatedWallet: (gatedWalletAddress: string, limit: number = 100): TradeHistoryEntry[] => {
+    const normalizedAddress = gatedWalletAddress.toLowerCase();
+    return tradeHistoryStore
+      .findMany((e) => e.gatedWalletAddress === normalizedAddress)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  },
+
+  /**
+   * Get trade history by snipe wallet address
+   * Returns all trades executed by a specific snipe wallet
+   */
+  getBySnipeWallet: (snipeWalletAddress: string, limit: number = 100): TradeHistoryEntry[] => {
+    const normalizedAddress = snipeWalletAddress.toLowerCase();
+    return tradeHistoryStore
+      .findMany((e) => e.snipeWalletAddress === normalizedAddress)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  },
+
+  /**
+   * Link existing trades to a gated wallet (migration helper)
+   * Useful for associating older trades with newly verified wallets
+   */
+  linkTradesToGatedWallet: (vistoId: string, gatedWalletAddress: string): number => {
+    const normalizedAddress = gatedWalletAddress.toLowerCase();
+    const unlinkedTrades = tradeHistoryStore.findMany(
+      (e) => e.vistoId === vistoId && !e.gatedWalletAddress
+    );
+
+    let count = 0;
+    for (const trade of unlinkedTrades) {
+      tradeHistoryStore.update(
+        (e) => e.id === trade.id,
+        { gatedWalletAddress: normalizedAddress, updatedAt: Date.now() }
+      );
+      count++;
+    }
+
+    console.log(`[TradeHistory] Linked ${count} trades to gated wallet ${normalizedAddress.slice(0, 10)}...`);
+    return count;
+  },
 };
 
 // Helper to format PLS numbers
@@ -677,6 +784,9 @@ export interface PersistentSnipeOrder {
   txHash?: string;
   tokensReceived?: string;
   entryPrice?: number;
+  // Wallet linking - ties order to verification wallet for audit
+  gatedWalletAddress?: string;  // $50 DTGC verification wallet
+  snipeWalletIndex?: number;    // Which slot (1-6)
   // Take Profit settings
   takeProfitEnabled: boolean;
   takeProfitPercent?: number;

@@ -163,12 +163,18 @@ export declare const tradeHistoryStore: Store<TradeHistoryEntry>;
 export declare const TradeHistory: {
     /**
      * Log a new InstaBond snipe order
+     * @param gatedWalletAddress - The verified $50 DTGC wallet address that authorized this trade
+     * @param snipeWalletAddress - The bot wallet address executing the trade
+     * @param snipeWalletIndex - The wallet slot (1-6)
      */
-    logInstaBondSnipe: (vistoId: string, chatId: string, tokenAddress: string, tokenSymbol: string, amountPls: string, sellPercent?: number, sellMultiplier?: number) => TradeHistoryEntry;
+    logInstaBondSnipe: (vistoId: string, chatId: string, tokenAddress: string, tokenSymbol: string, amountPls: string, sellPercent?: number, sellMultiplier?: number, gatedWalletAddress?: string, snipeWalletAddress?: string, snipeWalletIndex?: number) => TradeHistoryEntry;
     /**
      * Log a limit order (buy/sell/take profit/stop loss)
+     * @param gatedWalletAddress - The verified $50 DTGC wallet address that authorized this trade
+     * @param snipeWalletAddress - The bot wallet address executing the trade
+     * @param snipeWalletIndex - The wallet slot (1-6)
      */
-    logLimitOrder: (vistoId: string, chatId: string, type: "limit_buy" | "limit_sell" | "stop_loss" | "take_profit", tokenAddress: string, tokenSymbol: string, amountPls: string, targetPrice: string, linkedOrderId?: string) => TradeHistoryEntry;
+    logLimitOrder: (vistoId: string, chatId: string, type: "limit_buy" | "limit_sell" | "stop_loss" | "take_profit", tokenAddress: string, tokenSymbol: string, amountPls: string, targetPrice: string, linkedOrderId?: string, gatedWalletAddress?: string, snipeWalletAddress?: string, snipeWalletIndex?: number) => TradeHistoryEntry;
     /**
      * Update order status
      */
@@ -200,6 +206,26 @@ export declare const TradeHistory: {
      * Format order for Telegram display
      */
     formatForTelegram: (entry: TradeHistoryEntry) => string;
+    /**
+     * Log a market trade (direct buy/sell)
+     * @param gatedWalletAddress - The verified $50 DTGC wallet address that authorized this trade
+     */
+    logMarketTrade: (vistoId: string, chatId: string, type: "market_buy" | "market_sell", tokenAddress: string, tokenSymbol: string, amountPls: string, executedPrice?: string, txHash?: string, gatedWalletAddress?: string, snipeWalletAddress?: string, snipeWalletIndex?: number) => TradeHistoryEntry;
+    /**
+     * Get trade history by gated wallet address (for auditing)
+     * Returns all trades authorized by a specific verification wallet
+     */
+    getByGatedWallet: (gatedWalletAddress: string, limit?: number) => TradeHistoryEntry[];
+    /**
+     * Get trade history by snipe wallet address
+     * Returns all trades executed by a specific snipe wallet
+     */
+    getBySnipeWallet: (snipeWalletAddress: string, limit?: number) => TradeHistoryEntry[];
+    /**
+     * Link existing trades to a gated wallet (migration helper)
+     * Useful for associating older trades with newly verified wallets
+     */
+    linkTradesToGatedWallet: (vistoId: string, gatedWalletAddress: string) => number;
 };
 export interface PersistentSnipeOrder {
     id: string;
@@ -219,6 +245,8 @@ export interface PersistentSnipeOrder {
     txHash?: string;
     tokensReceived?: string;
     entryPrice?: number;
+    gatedWalletAddress?: string;
+    snipeWalletIndex?: number;
     takeProfitEnabled: boolean;
     takeProfitPercent?: number;
     sellPercent?: number;
