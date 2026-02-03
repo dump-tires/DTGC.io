@@ -1,17 +1,17 @@
 /**
  * Unified Wallet Verification API
  *
+ * FIXED: Now uses Vercel KV for real persistence!
+ * Previously used /tmp which was ephemeral and lost data on restart.
+ *
  * Works with:
  * - Telegram Mini App (tg-verify.html)
  * - Gold Suite website (dtgc.io/gold)
  * - Telegram Bot (direct API calls)
- *
- * Stores verified wallets in memory with file backup.
  */
 
 import { ethers } from 'ethers';
-import fs from 'fs';
-import path from 'path';
+import { kv } from '@vercel/kv';
 
 // DTGC Token Contract
 const DTGC_ADDRESS = '0xD0676B28a457371D58d47E5247b439114e40Eb0F';
@@ -19,32 +19,65 @@ const DTGC_ABI = ['function balanceOf(address) view returns (uint256)'];
 const PULSECHAIN_RPC = 'https://rpc.pulsechain.com';
 const GATE_MIN_USD = 50;
 
-// In-memory store
-const verifiedWallets = new Map();
+// KV key prefix
+const KV_PREFIX = 'tgverify:';
+
+// Fallback in-memory store (for local dev or if KV unavailable)
+const memoryStore = new Map();
 
 // Bot token for sending notifications
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
 
-// Try to load from file on cold start
-const STORAGE_FILE = '/tmp/dtgc-verified-wallets.json';
-try {
-  if (fs.existsSync(STORAGE_FILE)) {
-    const data = JSON.parse(fs.readFileSync(STORAGE_FILE, 'utf-8'));
-    Object.entries(data).forEach(([k, v]) => verifiedWallets.set(k, v));
-    console.log(`[tg-verify] Loaded ${verifiedWallets.size} verified wallets from storage`);
+async function getFromKV(key) {
+  try {
+    if (process.env.KV_REST_API_URL) {
+      const data = await kv.get(`${KV_PREFIX}${key}`);
+      return data;
+    }
+  } catch (e) {
+    console.error('[tg-verify] KV get error:', e.message);
   }
-} catch (e) {
-  console.log('[tg-verify] No existing storage found');
+  return memoryStore.get(key) || null;
 }
 
-// Save to file
-function saveToStorage() {
+async function setToKV(key, value) {
   try {
-    const data = Object.fromEntries(verifiedWallets);
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2));
+    if (process.env.KV_REST_API_URL) {
+      // Store with 1 year TTL
+      await kv.set(`${KV_PREFIX}${key}`, value, { ex: 31536000 });
+      console.log(`[tg-verify] Saved to KV: ${key}`);
+      return true;
+    }
   } catch (e) {
-    console.error('[tg-verify] Failed to save storage:', e);
+    console.error('[tg-verify] KV set error:', e.message);
   }
+  memoryStore.set(key, value);
+  return false;
+}
+
+async function scanByWallet(walletAddress) {
+  const normalizedWallet = walletAddress.toLowerCase();
+  try {
+    if (process.env.KV_REST_API_URL) {
+      const keys = await kv.keys(`${KV_PREFIX}*`);
+      for (const key of keys) {
+        const data = await kv.get(key);
+        if (data?.walletAddress?.toLowerCase() === normalizedWallet) {
+          const userId = key.replace(KV_PREFIX, '');
+          return { userId, data };
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[tg-verify] KV scan error:', e.message);
+  }
+  // Fallback to memory scan
+  for (const [userId, data] of memoryStore) {
+    if (data?.walletAddress?.toLowerCase() === normalizedWallet) {
+      return { userId, data };
+    }
+  }
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -63,7 +96,7 @@ export default async function handler(req, res) {
 
     // Check by Telegram user ID
     if (telegramUserId) {
-      const verification = verifiedWallets.get(String(telegramUserId));
+      const verification = await getFromKV(String(telegramUserId));
       if (verification) {
         // Check if verification is still valid (within 24 hours) and refresh balance
         const ageHours = (Date.now() - verification.verifiedAt) / (1000 * 60 * 60);
@@ -78,23 +111,24 @@ export default async function handler(req, res) {
           // Include bot wallet info if stored
           botWalletAddress: verification.botWalletAddress || null,
           botKeyLast4: verification.botKeyLast4 || null,
+          storage: process.env.KV_REST_API_URL ? 'kv' : 'memory',
         });
       }
     }
 
     // Check by wallet address
     if (walletAddress) {
-      for (const [userId, v] of verifiedWallets) {
-        if (v.walletAddress.toLowerCase() === walletAddress.toLowerCase()) {
-          return res.status(200).json({
-            verified: true,
-            telegramUserId: userId,
-            walletAddress: v.walletAddress,
-            balance: v.dtgcBalance,
-            balanceUsd: v.balanceUsd,
-            verifiedAt: v.verifiedAt,
-          });
-        }
+      const result = await scanByWallet(walletAddress);
+      if (result) {
+        return res.status(200).json({
+          verified: true,
+          telegramUserId: result.userId,
+          walletAddress: result.data.walletAddress,
+          balance: result.data.dtgcBalance,
+          balanceUsd: result.data.balanceUsd,
+          verifiedAt: result.data.verifiedAt,
+          storage: process.env.KV_REST_API_URL ? 'kv' : 'memory',
+        });
       }
     }
 
@@ -221,13 +255,13 @@ export default async function handler(req, res) {
       console.log(`[tg-verify] Storing verification${botWalletAddress ? ` with bot wallet ${botWalletAddress.slice(0, 10)}...` : ''}`);
 
       // Store by telegram ID if available
+      let savedToKV = false;
       if (telegramUserId) {
-        verifiedWallets.set(String(telegramUserId), verification);
-        saveToStorage();
+        savedToKV = await setToKV(String(telegramUserId), verification);
       }
 
       // Also store by wallet address for lookups
-      verifiedWallets.set(walletAddress.toLowerCase(), {
+      await setToKV(walletAddress.toLowerCase(), {
         ...verification,
         telegramUserId,
       });
@@ -261,6 +295,7 @@ export default async function handler(req, res) {
         balanceUsd,
         dtgcBalance,
         message: 'Wallet verified successfully!',
+        storage: savedToKV ? 'kv' : 'memory',
       });
 
     } catch (error) {
@@ -275,5 +310,6 @@ export default async function handler(req, res) {
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
-// Export for other modules
-export { verifiedWallets };
+// Export helper functions for other modules
+export { getFromKV, setToKV, scanByWallet };
+// Upgraded to KV storage Mon Feb 3 2026

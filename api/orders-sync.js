@@ -1,41 +1,65 @@
 /**
  * Order Sync API - Backup persistence for limit orders
  *
- * Syncs orders between Railway bot and Vercel for redundancy.
- * If Railway restarts, orders can be recovered from Vercel.
+ * FIXED: Now uses Vercel KV for real persistence!
+ * Previously used /tmp which was ephemeral and lost data on restart.
+ *
+ * Syncs orders between Railway/Hetzner bot and Vercel for redundancy.
+ * If the bot restarts, orders can be recovered from Vercel KV.
  *
  * POST: Save/update orders for a user
  * GET: Retrieve orders for a user
  * DELETE: Remove orders for a user
  */
 
-import fs from 'fs';
+import { kv } from '@vercel/kv';
 
-// In-memory store with file backup
-const ordersStore = new Map();
+// KV key prefix
+const KV_PREFIX = 'orders:';
 
-// Storage file for persistence across warm instances
-const STORAGE_FILE = '/tmp/dtgc-orders-sync.json';
+// Fallback in-memory store (for local dev or if KV unavailable)
+const memoryStore = new Map();
 
-// Load from file on cold start
-try {
-  if (fs.existsSync(STORAGE_FILE)) {
-    const data = JSON.parse(fs.readFileSync(STORAGE_FILE, 'utf-8'));
-    Object.entries(data).forEach(([k, v]) => ordersStore.set(k, v));
-    console.log(`[orders-sync] Loaded orders for ${ordersStore.size} users`);
+async function getFromKV(key) {
+  try {
+    if (process.env.KV_REST_API_URL) {
+      const data = await kv.get(`${KV_PREFIX}${key}`);
+      return data;
+    }
+  } catch (e) {
+    console.error('[orders-sync] KV get error:', e.message);
   }
-} catch (e) {
-  console.log('[orders-sync] No existing storage found');
+  // Fallback to memory
+  return memoryStore.get(key) || null;
 }
 
-// Save to file
-function saveToStorage() {
+async function setToKV(key, value) {
   try {
-    const data = Object.fromEntries(ordersStore);
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2));
+    if (process.env.KV_REST_API_URL) {
+      // Store with 1 year TTL
+      await kv.set(`${KV_PREFIX}${key}`, value, { ex: 31536000 });
+      console.log(`[orders-sync] Saved to KV: ${key}`);
+      return true;
+    }
   } catch (e) {
-    console.error('[orders-sync] Failed to save:', e);
+    console.error('[orders-sync] KV set error:', e.message);
   }
+  // Fallback to memory
+  memoryStore.set(key, value);
+  return false;
+}
+
+async function deleteFromKV(key) {
+  try {
+    if (process.env.KV_REST_API_URL) {
+      await kv.del(`${KV_PREFIX}${key}`);
+      return true;
+    }
+  } catch (e) {
+    console.error('[orders-sync] KV delete error:', e.message);
+  }
+  memoryStore.delete(key);
+  return false;
 }
 
 export default async function handler(req, res) {
@@ -64,7 +88,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'userId required' });
     }
 
-    const userOrders = ordersStore.get(userId);
+    const userOrders = await getFromKV(userId);
 
     return res.status(200).json({
       success: true,
@@ -73,6 +97,7 @@ export default async function handler(req, res) {
       dcaOrders: userOrders?.dcaOrders || [],
       tradeHistory: userOrders?.tradeHistory || [],
       syncedAt: userOrders?.syncedAt || null,
+      storage: process.env.KV_REST_API_URL ? 'kv' : 'memory',
     });
   }
 
@@ -85,7 +110,7 @@ export default async function handler(req, res) {
     }
 
     // Merge with existing data
-    const existing = ordersStore.get(userId) || {};
+    const existing = await getFromKV(userId) || {};
 
     const updated = {
       limitOrders: limitOrders || existing.limitOrders || [],
@@ -94,10 +119,9 @@ export default async function handler(req, res) {
       syncedAt: Date.now(),
     };
 
-    ordersStore.set(userId, updated);
-    saveToStorage();
+    const savedToKV = await setToKV(userId, updated);
 
-    console.log(`[orders-sync] Saved ${updated.limitOrders.length} orders for user ${userId}`);
+    console.log(`[orders-sync] Saved ${updated.limitOrders.length} orders for user ${userId} (KV: ${savedToKV})`);
 
     return res.status(200).json({
       success: true,
@@ -106,6 +130,7 @@ export default async function handler(req, res) {
       dcaCount: updated.dcaOrders.length,
       historyCount: updated.tradeHistory.length,
       syncedAt: updated.syncedAt,
+      storage: savedToKV ? 'kv' : 'memory',
     });
   }
 
@@ -115,8 +140,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'userId required' });
     }
 
-    ordersStore.delete(userId);
-    saveToStorage();
+    await deleteFromKV(userId);
 
     return res.status(200).json({
       success: true,
@@ -126,3 +150,4 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
 }
+// Upgraded to KV storage Mon Feb 3 2026
