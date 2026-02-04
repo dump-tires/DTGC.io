@@ -53,8 +53,9 @@ const CONFIG = {
   DEADLINE_MINUTES: 20,
   EXPLORER: 'https://scan.pulsechain.com',
 
-  // InstaBond API (dtrader backend on Hetzner)
-  INSTABOND_API: process.env.REACT_APP_INSTABOND_API || 'http://65.109.68.172:3847',
+  // InstaBond API - Hetzner primary, Vercel fallback
+  INSTABOND_API: 'http://65.109.68.172:3847',
+  INSTABOND_API_FALLBACK: 'https://dtgc.io/api/instabond',
 };
 
 // Helper to get token logo from gib.show - PulseChain token images
@@ -1259,11 +1260,25 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
   // 🔥 INSTABOND API INTEGRATION - Real graduation sniping via backend
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Fetch InstaBond orders from backend
+  // Fetch InstaBond orders from backend (Hetzner primary, Vercel fallback)
   const fetchInstaBondOrders = useCallback(async () => {
     if (!userAddress) return;
+
+    // Try Hetzner first
     try {
       const response = await fetch(`${CONFIG.INSTABOND_API}/instabond/${userAddress}`);
+      if (response.ok) {
+        const data = await response.json();
+        setInstaBondOrders(data.orders || []);
+        return;
+      }
+    } catch (err) {
+      console.log('Hetzner InstaBond API failed, trying fallback:', err.message);
+    }
+
+    // Fallback to Vercel
+    try {
+      const response = await fetch(`${CONFIG.INSTABOND_API_FALLBACK}/${userAddress}`);
       if (response.ok) {
         const data = await response.json();
         setInstaBondOrders(data.orders || []);
@@ -1273,7 +1288,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     }
   }, [userAddress]);
 
-  // Create InstaBond order via backend API
+  // Create InstaBond order via backend API (Hetzner primary, Vercel fallback)
   const createInstaBondOrder = async (tokenAddress, tokenSymbol, amountPls, takeProfitPercent) => {
     if (!userAddress || !signer) {
       showToastMsg('❌ Connect wallet first', 'error');
@@ -1288,30 +1303,45 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       showToastMsg('✍️ Sign message to arm InstaBond...', 'info');
       const signature = await signer.signMessage(message);
 
-      // Call backend API
-      const response = await fetch(`${CONFIG.INSTABOND_API}/instabond`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          walletAddress: userAddress,
-          tokenAddress,
-          tokenSymbol,
-          amountPls,
-          takeProfitPercent,
-          signature,
-          message,
-        }),
-      });
+      const payload = {
+        walletAddress: userAddress,
+        tokenAddress,
+        tokenSymbol,
+        amountPls,
+        takeProfitPercent,
+        signature,
+        message,
+      };
 
-      // Check if API endpoint exists
+      // Try Hetzner first
+      let response;
+      let usedFallback = false;
+      try {
+        response = await fetch(`${CONFIG.INSTABOND_API}/instabond`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error('Hetzner failed');
+      } catch (e) {
+        // Fallback to Vercel
+        console.log('Hetzner failed, trying Vercel fallback...');
+        usedFallback = true;
+        response = await fetch(`${CONFIG.INSTABOND_API_FALLBACK}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+
       if (!response.ok) {
         throw new Error(`InstaBond API unavailable (${response.status})`);
       }
 
       const data = await response.json();
       if (data.success) {
-        showToastMsg(`🎯 InstaBond ARMED! Watching for graduation...`, 'success');
-        fetchInstaBondOrders(); // Refresh orders
+        showToastMsg(`🎯 InstaBond ARMED!${usedFallback ? ' (via backup)' : ''} Watching for graduation...`, 'success');
+        fetchInstaBondOrders();
         return data.order;
       } else {
         throw new Error(data.error || 'Failed to create InstaBond');
