@@ -8,6 +8,18 @@ import { config } from '../config';
 // DEXScreener API base URL
 const DEXSCREENER_API = 'https://api.dexscreener.com/latest';
 
+// Tokens to exclude from Probable Wins (native tokens, stablecoins, wrapped)
+const EXCLUDED_TOKENS = new Set([
+  '0xa1077a294dde1b09bb078844df40758a5d0f9a27', // WPLS
+  '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d', // INC
+  '0x0cb6f5a34ad42ec934882a05265a7d5f59b51a2f', // DAI from ETH
+  '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07', // USDC from ETH
+  '0xefd766ccb38eaf1dfd701853bfce31359239f305', // DAI
+].map(a => a.toLowerCase()));
+
+// Excluded token names (low liquidity native tokens)
+const EXCLUDED_NAMES = ['pulsechain', 'pls', 'wrapped pulse'];
+
 export interface TokenPair {
   chainId: string;
   dexId: string;
@@ -172,9 +184,15 @@ class DexScreenerService {
       }
 
       const data = await response.json() as { pairs?: TokenPair[] };
-      const pairs: TokenPair[] = (data.pairs || []).filter(
-        (p: TokenPair) => p.chainId === 'pulsechain' && p.liquidity?.usd > 10000
-      );
+      const pairs: TokenPair[] = (data.pairs || []).filter((p: TokenPair) => {
+        const addr = p.baseToken?.address?.toLowerCase();
+        const name = p.baseToken?.name?.toLowerCase() || '';
+        const symbol = p.baseToken?.symbol?.toLowerCase() || '';
+        return p.chainId === 'pulsechain' &&
+          (p.liquidity?.usd || 0) > 2000 && // Lowered from 10000 for more variety
+          !EXCLUDED_TOKENS.has(addr) &&
+          !EXCLUDED_NAMES.some(ex => name.includes(ex) || symbol === ex);
+      });
 
       // Sort by 24h volume
       pairs.sort((a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
@@ -185,7 +203,10 @@ class DexScreenerService {
 
       for (const pair of pairs) {
         const addr = pair.baseToken.address.toLowerCase();
-        if (seen.has(addr)) continue;
+        const name = pair.baseToken.name?.toLowerCase() || '';
+        const symbol = pair.baseToken.symbol?.toLowerCase() || '';
+        if (seen.has(addr) || EXCLUDED_TOKENS.has(addr)) continue;
+        if (EXCLUDED_NAMES.some(ex => name.includes(ex) || symbol === ex)) continue;
         seen.add(addr);
 
         tokens.push({

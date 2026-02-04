@@ -29,6 +29,39 @@ import { TradeHistory, LinkedWallets, SnipeOrders } from '../db/jsonStore';
 import { dexScreener, TokenInfo } from '../integrations/dexscreener';
 import * as keyboards from './keyboards';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// TIMEZONE HELPERS - US Eastern Time (Miami)
+// ═══════════════════════════════════════════════════════════════════════════════
+const TIMEZONE = 'America/New_York'; // EST/EDT
+
+const formatTimestamp = (date: Date = new Date()): string => {
+  return date.toLocaleString('en-US', {
+    timeZone: TIMEZONE,
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+const formatTime = (date: Date = new Date()): string => {
+  return date.toLocaleTimeString('en-US', {
+    timeZone: TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+const formatDateShort = (date: Date = new Date()): string => {
+  return date.toLocaleDateString('en-US', {
+    timeZone: TIMEZONE,
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
 /**
  * ⚜️ DTG BOND BOT (@DTGBondBot) - PulseChain Telegram Trading Bot
  *
@@ -2835,11 +2868,8 @@ export class DtraderBot {
       session.pendingOrderType = undefined;
       session.selectedWallets = undefined;
 
-      // Generate receipt timestamp
-      const now = new Date();
-      const timestamp = now.toLocaleString('en-US', {
-        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
-      });
+      // Generate receipt timestamp (EST)
+      const timestamp = formatTimestamp();
 
       // Order type emoji and name
       const orderTypeEmoji: Record<string, string> = {
@@ -5390,7 +5420,7 @@ export class DtraderBot {
       msg += `💡 _Tip: Link your MetaMask/Rabby wallet for seamless tracking!_\n`;
     }
 
-    msg += `_Last updated: ${new Date().toLocaleTimeString()}_`;
+    msg += `_Last updated: ${formatTime()}_`;
 
     await this.bot.sendMessage(chatId, msg, {
       parse_mode: 'Markdown',
@@ -7662,7 +7692,7 @@ Hold $50+ of DTGC to trade
       msg += `Tokens: **${formatNumber(tokens)}** (${supplyPercent.toFixed(2)}%)\n\n`;
       msg += `[Contract](${config.explorerUrl}/address/${tokenAddress}) • [DEXScreener](https://dexscreener.com/pulsechain/${tokenAddress}) • [DEXTools](https://www.dextools.io/app/en/pulse/pair-explorer/${tokenAddress})\n`;
       msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
-      msg += `🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
+      msg += `🕐 ${formatTimestamp()}`;
 
       const keyboard = keyboards.tokenPositionKeyboard({
         tokenAddress,

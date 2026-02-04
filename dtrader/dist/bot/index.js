@@ -53,6 +53,35 @@ const antiRug_1 = require("../security/antiRug");
 const jsonStore_1 = require("../db/jsonStore");
 const dexscreener_1 = require("../integrations/dexscreener");
 const keyboards = __importStar(require("./keyboards"));
+// ═══════════════════════════════════════════════════════════════════════════════
+// TIMEZONE HELPERS - US Eastern Time (Miami)
+// ═══════════════════════════════════════════════════════════════════════════════
+const TIMEZONE = 'America/New_York'; // EST/EDT
+const formatTimestamp = (date = new Date()) => {
+    return date.toLocaleString('en-US', {
+        timeZone: TIMEZONE,
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+};
+const formatTime = (date = new Date()) => {
+    return date.toLocaleTimeString('en-US', {
+        timeZone: TIMEZONE,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+};
+const formatDateShort = (date = new Date()) => {
+    return date.toLocaleDateString('en-US', {
+        timeZone: TIMEZONE,
+        month: 'short',
+        day: 'numeric'
+    });
+};
 const GAS_GWEI = {
     normal: 0.01,
     fast: 0.1,
@@ -2261,11 +2290,8 @@ class DtraderBot {
             session.pendingPrice = undefined;
             session.pendingOrderType = undefined;
             session.selectedWallets = undefined;
-            // Generate receipt timestamp
-            const now = new Date();
-            const timestamp = now.toLocaleString('en-US', {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
-            });
+            // Generate receipt timestamp (EST)
+            const timestamp = formatTimestamp();
             // Order type emoji and name
             const orderTypeEmoji = {
                 limit_buy: '🟢',
@@ -4293,7 +4319,7 @@ class DtraderBot {
         else {
             msg += `💡 _Tip: Link your MetaMask/Rabby wallet for seamless tracking!_\n`;
         }
-        msg += `_Last updated: ${new Date().toLocaleTimeString()}_`;
+        msg += `_Last updated: ${formatTime()}_`;
         await this.bot.sendMessage(chatId, msg, {
             parse_mode: 'Markdown',
             reply_markup: keyboards.mainMenuKeyboard,
@@ -6184,7 +6210,7 @@ Hold $50+ of DTGC to trade
             msg += `Tokens: **${(0, pnlCard_1.formatNumber)(tokens)}** (${supplyPercent.toFixed(2)}%)\n\n`;
             msg += `[Contract](${config_1.config.explorerUrl}/address/${tokenAddress}) • [DEXScreener](https://dexscreener.com/pulsechain/${tokenAddress}) • [DEXTools](https://www.dextools.io/app/en/pulse/pair-explorer/${tokenAddress})\n`;
             msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
-            msg += `🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)}`;
+            msg += `🕐 ${formatTimestamp()}`;
             const keyboard = keyboards.tokenPositionKeyboard({
                 tokenAddress,
                 tokenSymbol,
