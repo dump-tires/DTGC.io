@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTrader Sniper - Ice Planet WIN</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: #0a1628;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .pnl-card {
+            width: 400px;
+            height: 600px;
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow:
+                0 0 40px rgba(0, 212, 255, 0.5),
+                0 0 80px rgba(0, 212, 255, 0.3),
+                0 0 120px rgba(255, 255, 255, 0.2),
+                inset 0 0 60px rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(0, 212, 255, 0.6);
+        }
+
+        /* Frost edge effect */
+        .pnl-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border-radius: 20px;
+            border: 3px solid transparent;
+            background: linear-gradient(135deg, rgba(255,255,255,0.4), transparent, rgba(255,255,255,0.2)) border-box;
+            -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg,
+                rgba(10, 22, 40, 0.1) 0%,
+                rgba(10, 22, 40, 0.05) 40%,
+                rgba(10, 22, 40, 0.4) 75%,
+                rgba(10, 22, 40, 0.85) 100%
+            );
+            z-index: 1;
+        }
+
+        /* Snow/Yeti background - replace with your image */
+        .mando-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('snow-yeti-bg.png') center center / cover no-repeat;
+            z-index: 0;
+        }
+
+        /* Snowfall animation */
+        .snowflakes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 3;
+            overflow: hidden;
+        }
+
+        .snowflake {
+            position: absolute;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1em;
+            animation: fall linear infinite;
+            text-shadow: 0 0 5px rgba(255,255,255,0.8);
+        }
+
+        @keyframes fall {
+            0% {
+                transform: translateY(-10px) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(610px) rotate(360deg);
+                opacity: 0.3;
+            }
+        }
+
+        .content {
+            position: relative;
+            z-index: 4;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-text {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: #00D4FF;
+            text-shadow:
+                0 0 10px rgba(0, 212, 255, 0.8),
+                0 0 20px rgba(0, 212, 255, 0.5);
+        }
+
+        .win-badge {
+            background: linear-gradient(135deg, #00D4FF 0%, #0099CC 50%, #FFFFFF 100%);
+            color: #0a1628;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 900;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            animation: frost-pulse 2s infinite;
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.6);
+        }
+
+        @keyframes frost-pulse {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(0, 212, 255, 0.8), 0 0 40px rgba(255,255,255,0.3);
+            }
+            50% {
+                box-shadow: 0 0 40px rgba(0, 212, 255, 1), 0 0 60px rgba(255,255,255,0.5);
+            }
+        }
+
+        .spacer {
+            flex: 1;
+        }
+
+        .stats {
+            background: rgba(10, 22, 40, 0.15);
+            backdrop-filter: blur(4px);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            box-shadow:
+                inset 0 0 30px rgba(0, 212, 255, 0.1),
+                0 0 20px rgba(0, 212, 255, 0.2);
+        }
+
+        .token-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .token-name {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        .token-ticker {
+            color: #00D4FF;
+            font-size: 13px;
+            text-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+        }
+
+        .pnl-display {
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .pnl-percent {
+            font-family: 'Orbitron', monospace;
+            font-size: 56px;
+            font-weight: 900;
+            color: #00FF88;
+            text-shadow:
+                0 0 20px rgba(0, 255, 136, 0.8),
+                0 0 40px rgba(0, 255, 136, 0.5),
+                0 0 60px rgba(0, 212, 255, 0.3);
+            line-height: 1;
+        }
+
+        .pnl-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-top: 5px;
+            text-shadow: 0 0 5px rgba(255,255,255,0.3);
+        }
+
+        .pnl-amount {
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: #00FF88;
+            margin-top: 8px;
+            text-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
+        }
+
+        .trade-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .detail-item {
+            text-align: center;
+            background: rgba(0, 212, 255, 0.08);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .detail-label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .detail-value {
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            margin-top: 3px;
+            text-shadow: 0 0 8px rgba(255,255,255,0.4);
+        }
+
+        .detail-value.buy {
+            color: #00FF88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.6);
+        }
+
+        .detail-value.sell {
+            color: #00D4FF;
+            text-shadow: 0 0 10px rgba(0, 212, 255, 0.6);
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        .website {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: #00D4FF;
+            text-decoration: none;
+            text-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+        }
+
+        .timestamp {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 10px;
+        }
+
+        .ice-badge {
+            background: linear-gradient(135deg, #FFFFFF 0%, #00D4FF 100%);
+            color: #0a1628;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+        }
+
+        /* Frozen watermark */
+        .sniper-tag {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: rgba(0, 212, 255, 0.1);
+            text-transform: uppercase;
+            letter-spacing: 8px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="pnl-card">
+        <div class="mando-bg"></div>
+        <div class="background"></div>
+        <div class="sniper-tag">ICE PLANET SNIPER</div>
+
+        <!-- Snowfall effect -->
+        <div class="snowflakes">
+            <div class="snowflake" style="left: 10%; animation-duration: 8s; animation-delay: 0s; font-size: 0.8em;">❄</div>
+            <div class="snowflake" style="left: 20%; animation-duration: 10s; animation-delay: 1s; font-size: 1.2em;">❄</div>
+            <div class="snowflake" style="left: 30%; animation-duration: 7s; animation-delay: 2s; font-size: 0.6em;">❄</div>
+            <div class="snowflake" style="left: 40%; animation-duration: 9s; animation-delay: 0.5s; font-size: 1em;">❄</div>
+            <div class="snowflake" style="left: 50%; animation-duration: 11s; animation-delay: 3s; font-size: 0.9em;">❄</div>
+            <div class="snowflake" style="left: 60%; animation-duration: 8s; animation-delay: 1.5s; font-size: 1.1em;">❄</div>
+            <div class="snowflake" style="left: 70%; animation-duration: 10s; animation-delay: 2.5s; font-size: 0.7em;">❄</div>
+            <div class="snowflake" style="left: 80%; animation-duration: 9s; animation-delay: 0s; font-size: 1em;">❄</div>
+            <div class="snowflake" style="left: 90%; animation-duration: 7s; animation-delay: 4s; font-size: 0.8em;">❄</div>
+            <div class="snowflake" style="left: 15%; animation-duration: 12s; animation-delay: 2s; font-size: 0.5em;">✦</div>
+            <div class="snowflake" style="left: 45%; animation-duration: 11s; animation-delay: 1s; font-size: 0.6em;">✦</div>
+            <div class="snowflake" style="left: 75%; animation-duration: 13s; animation-delay: 3s; font-size: 0.4em;">✦</div>
+        </div>
+
+        <div class="content">
+            <div class="header">
+                <div class="logo">
+                    <div class="logo-text">DTRADER<br>SNIPER</div>
+                </div>
+                <div class="win-badge">❄️ FROZEN WIN</div>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="stats">
+                <div class="token-info">
+                    <div>
+                        <div class="token-name">FROST BEAST</div>
+                        <div class="token-ticker">$YETI</div>
+                    </div>
+                    <div class="ice-badge">Ice Planet</div>
+                </div>
+
+                <div class="pnl-display">
+                    <div class="pnl-percent">+342%</div>
+                    <div class="pnl-label">Frozen Profit</div>
+                    <div class="pnl-amount">+17,100 PLS</div>
+                </div>
+
+                <div class="trade-details">
+                    <div class="detail-item">
+                        <div class="detail-label">Entry</div>
+                        <div class="detail-value buy">5,000 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Exit</div>
+                        <div class="detail-value sell">22,100 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Hold Time</div>
+                        <div class="detail-value">1h 47m</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Snipe Type</div>
+                        <div class="detail-value">Mempool</div>
+                    </div>
+                </div>
+
+                <div class="footer">
+                    <a href="https://dtgc.io/gold" class="website">dtgc.io/gold</a>
+                    <div class="timestamp">Feb 3, 2026 • 11:45 PM EST</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

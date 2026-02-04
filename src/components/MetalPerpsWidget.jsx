@@ -1,45 +1,78 @@
-// Institutional Auto Trade v4.3 - LIVE PRICES (no stale fallbacks)
-// Lambda: gTrade Direct Prices, Auto-Retry, Momentum Detection, Auto-Claim Pending
+// Institutional Auto Trade v5.0-Q7 - Q7 D-RAM v5.2.6 CALIBRATED
+// Lambda: gTrade Direct Prices, Q7 Haneef System, 5-Factor Confluence
 import React, { useState, useEffect, useRef } from 'react';
 
 // ==================== CONFIGURATION ====================
 
 const LAMBDA_URL = 'https://mqd4yvwog76amuift2p23du2ma0ehaqp.lambda-url.us-east-2.on.aws/';
 
+// ==================== Q7 D-RAM v5.2.6 CALIBRATION ====================
+// Per-asset RSI bounds from Q7 empirical testing (15M timeframe)
+const Q7_RSI_BOUNDS = {
+  BTC: { oversold: 34, overbought: 66 },
+  ETH: { oversold: 32, overbought: 68 },
+  GOLD: { oversold: 30, overbought: 70 },
+  SILVER: { oversold: 30, overbought: 70 },
+};
+
+// Q7 Engine weights (SWP > BRK > MR > TRND priority)
+const Q7_ENGINE_WEIGHTS = {
+  SWP: 30,   // Sweep - highest priority
+  BRK: 25,   // Breakout
+  MR: 25,    // Mean Reversion
+  TRND: 15,  // Trend - throttled
+  MTUM: 5,   // Momentum - confirmation only
+};
+
+// Q7 Confluence factors
+const Q7_CONFLUENCE_WEIGHTS = {
+  trend: 30,    // EMA alignment
+  adx: 20,      // ADX strength
+  rsi: 20,      // RSI position
+  volume: 15,   // Volume confirmation
+  mtf: 15,      // Multi-timeframe
+};
+
+// Q7 Calibrated TP/SL ratios (1.5:1 R:R minimum)
+const Q7_TP_SL = {
+  crypto: { tp: 2.25, sl: 1.5 },     // BTC/ETH: 2.25% TP, 1.5% SL
+  commodity: { tp: 3.75, sl: 2.5 },  // GOLD/SILVER: wider for volatility
+};
+
 // ==================== SCALP MODE PRESETS ====================
-// Optimized for quick in-and-out trades during volatile markets
+// Q7 D-RAM v5.2.6 calibrated presets with 1.5:1 R:R minimum
 const SCALP_PRESETS = {
-  // Conservative scalp - safer margins
+  // Q7 Conservative - empirically calibrated
   conservative: {
-    name: '🟢 Safe Scalp',
-    tp: 0.5,       // 0.5% take profit
-    sl: 0.3,       // 0.3% stop loss
+    name: '🟢 Q7 Safe',
+    tp: 1.5,       // 1.5% take profit (Q7 calibrated)
+    sl: 1.0,       // 1.0% stop loss (1.5:1 R:R)
     leverage: 50,  // Lower leverage for safety
-    description: 'Small gains, tight stops',
+    description: 'Q7 safe mode, 1.5:1 R:R',
   },
-  // Standard scalp - balanced
+  // Q7 Standard - balanced with Q7 calibration
   standard: {
-    name: '🟡 Standard',
-    tp: 1.0,       // 1% take profit
-    sl: 0.5,       // 0.5% stop loss
+    name: '🟡 Q7 Standard',
+    tp: 2.25,      // 2.25% take profit (Q7 calibrated)
+    sl: 1.5,       // 1.5% stop loss (1.5:1 R:R)
     leverage: 75,  // Medium leverage
-    description: 'Balanced risk/reward',
+    description: 'Q7 balanced, 1.5:1 R:R',
   },
-  // Aggressive scalp - max gains
+  // Q7 Aggressive - calibrated for volatility
   aggressive: {
-    name: '🔴 Aggressive',
-    tp: 1.5,       // 1.5% take profit
-    sl: 0.75,      // 0.75% stop loss
+    name: '🔴 Q7 Aggro',
+    tp: 3.0,       // 3.0% take profit (Q7 calibrated)
+    sl: 2.0,       // 2.0% stop loss (1.5:1 R:R)
     leverage: 100, // High leverage
-    description: 'Higher risk, higher reward',
+    description: 'Q7 aggressive, 1.5:1 R:R',
   },
-  // Sniper mode - very tight for momentum plays
+  // Q7 Sniper - momentum plays with Q7 confluence
   sniper: {
-    name: '🎯 Sniper',
-    tp: 0.3,       // 0.3% take profit (quick grab)
-    sl: 0.2,       // 0.2% stop loss (tight)
+    name: '🎯 Q7 Sniper',
+    tp: 0.75,      // 0.75% take profit (quick grab)
+    sl: 0.5,       // 0.5% stop loss (1.5:1 R:R)
     leverage: 125, // Max leverage
-    description: 'Quick in/out, momentum plays',
+    description: 'Q7 momentum, quick in/out',
   },
 };
 
@@ -76,12 +109,12 @@ const ASSET_IMAGES = {
   SILVER: '/images/silver_bar.png',
 };
 
-// SYNCED WITH gTrade v10 actual limits + Lambda v3.86 gTrade native pricing
+// SYNCED WITH gTrade v10 actual limits + Lambda v4.0-Q7 Q7 D-RAM calibration
 const ASSETS = {
-  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'gTrade' },
-  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'gTrade' },
-  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'gTrade' },
-  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'gTrade' },
+  BTC: { name: 'Bitcoin', symbol: 'BTC', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'gTrade', rsi: Q7_RSI_BOUNDS.BTC },
+  ETH: { name: 'Ethereum', symbol: 'ETH', maxLev: 150, minLev: 2, type: 'crypto', priceSource: 'gTrade', rsi: Q7_RSI_BOUNDS.ETH },
+  GOLD: { name: 'Gold', symbol: 'XAU', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'gTrade', rsi: Q7_RSI_BOUNDS.GOLD },
+  SILVER: { name: 'Silver', symbol: 'XAG', maxLev: 25, minLev: 2, type: 'commodity', priceSource: 'gTrade', rsi: Q7_RSI_BOUNDS.SILVER },
 };
 
 // Leverage quick-select buttons per asset type
@@ -190,8 +223,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
-  const [takeProfit, setTakeProfit] = useState('1.5');
-  const [stopLoss, setStopLoss] = useState('1.0');
+  const [takeProfit, setTakeProfit] = useState('2.25');  // Q7 calibrated default
+  const [stopLoss, setStopLoss] = useState('1.5');       // Q7 calibrated default (1.5:1 R:R)
   const [botStatus, setBotStatus] = useState(null);
   const [botActivity, setBotActivity] = useState([]);
   const [livePrices, setLivePrices] = useState({});
@@ -210,6 +243,10 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [momentum, setMomentum] = useState({ direction: 'neutral', strength: 0 }); // bearish, neutral, bullish
+
+  // ===== Q7 SIGNAL STATE =====
+  const [q7Signal, setQ7Signal] = useState(null); // Latest Q7 analysis from Lambda
+  const [q7Loading, setQ7Loading] = useState(false);
 
   // ===== PENDING ORDERS / COLLATERAL CLAIM STATE =====
   const [pendingOrders, setPendingOrders] = useState([]);
@@ -269,6 +306,29 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
       console.error('API Error:', error);
       throw error;
     }
+  };
+
+  // Fetch Q7 signal analysis for selected asset
+  const fetchQ7Signal = async (assetKey) => {
+    setQ7Loading(true);
+    try {
+      const result = await apiCall('ANALYZE', { asset: assetKey });
+      if (result.success && result.analysis) {
+        setQ7Signal({
+          asset: assetKey,
+          score: result.analysis.score || 0,
+          direction: result.analysis.direction || 'NEUTRAL',
+          engines: result.analysis.engines || {},
+          confluence: result.analysis.confluence || 0,
+          indicators: result.analysis.indicators || {},
+          timestamp: new Date(),
+        });
+        console.log(`📊 Q7 Signal for ${assetKey}:`, result.analysis);
+      }
+    } catch (error) {
+      console.error('Q7 analysis error:', error);
+    }
+    setQ7Loading(false);
   };
 
   // Fetch bot status (includes balance + positions)
@@ -856,6 +916,16 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
     }
   }, [livePrices, positions]);
 
+  // Fetch Q7 signal when asset changes or on initial load
+  useEffect(() => {
+    if (isExpanded && activeTab === 'trade') {
+      fetchQ7Signal(selectedAsset);
+      // Refresh Q7 signal every 30 seconds
+      const q7Interval = setInterval(() => fetchQ7Signal(selectedAsset), 30000);
+      return () => clearInterval(q7Interval);
+    }
+  }, [selectedAsset, isExpanded, activeTab]);
+
   // ==================== COLLAPSED STATE ====================
   if (!isExpanded) {
     return (
@@ -927,7 +997,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
               <span style={{ fontSize: '16px' }}>⚡</span>
             </div>
             <div>
-              <div style={{ fontWeight: 700, color: '#fff', fontSize: '13px' }}>Institutional Auto Trade</div>
+              <div style={{ fontWeight: 700, color: '#fff', fontSize: '13px' }}>Q7 Auto Trade v5.0</div>
               <div style={{ fontSize: '9px', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00ff88', animation: 'pulse 2s infinite' }} />
                 <ArbitrumLogo size={10} />
@@ -1093,16 +1163,86 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
               </div>
             </div>
 
-            {/* ===== SCALP MODE SELECTOR ===== */}
+            {/* ===== Q7 SIGNAL DISPLAY ===== */}
             <div style={{
-              background: 'linear-gradient(135deg, rgba(255, 140, 0, 0.1), rgba(255, 68, 68, 0.1))',
+              background: q7Signal?.score >= 20
+                ? `linear-gradient(135deg, ${q7Signal?.direction === 'LONG' ? 'rgba(0,255,136,0.15)' : 'rgba(255,68,68,0.15)'}, rgba(138,43,226,0.1))`
+                : 'rgba(50,50,70,0.3)',
               borderRadius: '8px',
               padding: '8px',
               marginBottom: '10px',
-              border: '1px solid rgba(255, 140, 0, 0.2)',
+              border: `1px solid ${q7Signal?.score >= 20 ? (q7Signal?.direction === 'LONG' ? 'rgba(0,255,136,0.4)' : 'rgba(255,68,68,0.4)') : 'rgba(138,43,226,0.2)'}`,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ color: '#ff8c00', fontSize: '10px', fontWeight: 600 }}>⚡ SCALP MODE</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '10px', color: '#8a2be2', fontWeight: 600 }}>🧠 Q7 SIGNAL</span>
+                  {q7Loading && <span style={{ fontSize: '8px', color: '#888' }}>⏳</span>}
+                </div>
+                {q7Signal && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: q7Signal.score >= 20 ? (q7Signal.direction === 'LONG' ? '#00ff88' : '#ff4444') : '#888',
+                    }}>
+                      {q7Signal.direction === 'LONG' ? '📈' : q7Signal.direction === 'SHORT' ? '📉' : '➖'} {q7Signal.score}
+                    </span>
+                    <span style={{
+                      fontSize: '8px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: q7Signal.score >= 20 ? 'rgba(138,43,226,0.3)' : 'rgba(100,100,100,0.3)',
+                      color: q7Signal.score >= 20 ? '#8a2be2' : '#888',
+                    }}>
+                      {q7Signal.score >= 20 ? '✓ READY' : 'WAIT'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {q7Signal && (
+                <>
+                  {/* Engine Scores */}
+                  <div style={{ display: 'flex', gap: '3px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                    {Object.entries(q7Signal.engines || {}).map(([engine, data]) => (
+                      <span key={engine} style={{
+                        fontSize: '7px',
+                        padding: '2px 4px',
+                        borderRadius: '3px',
+                        background: data.score > 0 ? 'rgba(0,255,136,0.15)' : 'rgba(100,100,100,0.2)',
+                        color: data.score > 0 ? '#00ff88' : '#666',
+                        border: `1px solid ${data.score > 0 ? 'rgba(0,255,136,0.3)' : 'transparent'}`,
+                      }}>
+                        {engine}: {data.score || 0}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* RSI + Confluence */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#888' }}>
+                    <span>RSI: {q7Signal.indicators?.rsi?.toFixed(1) || '--'} (Q7: {asset.rsi?.oversold}/{asset.rsi?.overbought})</span>
+                    <span>Confluence: {q7Signal.confluence || 0}%</span>
+                  </div>
+                </>
+              )}
+
+              {!q7Signal && !q7Loading && (
+                <div style={{ textAlign: 'center', fontSize: '9px', color: '#666', padding: '4px' }}>
+                  Analyzing {selectedAsset}...
+                </div>
+              )}
+            </div>
+
+            {/* ===== Q7 SCALP MODE SELECTOR ===== */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(255, 140, 0, 0.1))',
+              borderRadius: '8px',
+              padding: '8px',
+              marginBottom: '10px',
+              border: '1px solid rgba(138, 43, 226, 0.3)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ color: '#8a2be2', fontSize: '10px', fontWeight: 600 }}>⚡ Q7 SCALP MODE (1.5:1 R:R)</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {momentum.direction !== 'neutral' && (
                     <span style={{
@@ -1474,7 +1614,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 2s infinite' }} />
                   <div>
-                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Institutional Auto Trade v4.3</div>
+                    <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '13px' }}>🤖 Q7 D-RAM v5.0 Auto Trade</div>
                     <div style={{ color: '#888', fontSize: '9px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span style={{ color: priceSource === 'live' || priceSource === 'gtrade-direct' || priceSource === 'gtrade-api' ? '#00ff88' : '#ff9900' }}>
                         {priceSource === 'live' ? '📈 Live Prices' : priceSource === 'gtrade-direct' ? '🎯 gTrade Direct' : priceSource === 'gtrade-api' ? '🎯 gTrade API' : '📡 Cached'}

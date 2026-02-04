@@ -2352,102 +2352,97 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
               </div>
             </div>
             
-            {/* Custom tokens section */}
+            {/* Custom tokens section - Clean 2-row layout */}
             {Object.keys(customTokens).length > 0 && (
-              <div style={{ padding: '4px 12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ fontSize: '0.65rem', color: '#D4AF37', marginBottom: '4px', fontWeight: 600 }}>⭐ YOUR TOKENS</div>
+              <div style={{ padding: '6px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontSize: '0.6rem', color: '#D4AF37', marginBottom: '6px', fontWeight: 600 }}>⭐ YOUR TOKENS</div>
                 {Object.entries(customTokens).filter(([sym]) => sym !== excludeToken).map(([symbol, token]) => (
-                  <div key={symbol} style={{ ...styles.selectOption, background: symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent', flexWrap: 'wrap', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '150px', cursor: 'pointer' }}
+                  <div key={symbol} style={{
+                    background: symbol === value ? 'rgba(212,175,55,0.12)' : 'rgba(0,0,0,0.15)',
+                    borderRadius: '8px', padding: '8px 10px', marginBottom: '6px',
+                    border: symbol === value ? '1px solid rgba(212,175,55,0.3)' : '1px solid rgba(255,255,255,0.05)'
+                  }}>
+                    {/* Row 1: Token info + Balance */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '6px' }}
                       onClick={() => { onChange(symbol); setShow(false); }}>
-                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: 'rgba(212,175,55,0.1)' }}>
-                        <TokenIcon icon={token.logo || getTokenLogo(token.address)} emoji={token.emoji} size={28} />
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: 'rgba(212,175,55,0.1)' }}>
+                        <TokenIcon icon={token.logo || getTokenLogo(token.address)} emoji={token.emoji} size={32} />
                       </div>
-                      <div style={{ minWidth: '50px' }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{symbol}</div>
-                        <div style={{ fontSize: '0.6rem', color: '#888' }}>{token.name?.slice(0, 10)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>{symbol}</div>
+                        <div style={{ fontSize: '0.65rem', color: '#777', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{token.name}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>{formatNumber(balances[symbol] || 0)}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#4CAF50' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
                       </div>
                     </div>
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                      <div
-                        onClick={(e) => { e.stopPropagation(); copyToClipboard(token.address, symbol + ' CA'); }}
-                        style={{ fontSize: '0.55rem', color: '#888', cursor: 'pointer', padding: '3px 5px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}
-                        title="Copy Contract Address"
-                      >📋 CA</div>
-                      <div
-                        onClick={(e) => { e.stopPropagation(); quickSellToken(symbol); setShow(false); }}
-                        style={{ fontSize: '0.55rem', color: '#FF6B6B', cursor: 'pointer', padding: '3px 5px', background: 'rgba(255,107,107,0.15)', borderRadius: '4px', fontWeight: 600 }}
-                        title="Market Sell"
-                      >💸 Sell</div>
-                      <div
-                        onClick={(e) => { e.stopPropagation(); limitSellToken(symbol, token.address); setShow(false); }}
-                        style={{ fontSize: '0.55rem', color: '#4CAF50', cursor: 'pointer', padding: '3px 5px', background: 'rgba(76,175,80,0.15)', borderRadius: '4px', fontWeight: 600 }}
-                        title="Limit Sell Order"
-                      >📊 Limit</div>
-                      <div
-                        onClick={(e) => { e.stopPropagation(); removeCustomToken(symbol); }}
-                        style={{ fontSize: '0.55rem', color: '#666', cursor: 'pointer', padding: '3px 5px' }}
-                        title="Remove Token"
-                      >🗑️</div>
-                    </div>
-                    {/* Balance */}
-                    <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{formatNumber(balances[symbol] || 0)}</div>
-                      <div style={{ fontSize: '0.6rem', color: '#4CAF50' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
+                    {/* Row 2: Action buttons - spaced evenly */}
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <div onClick={(e) => { e.stopPropagation(); copyToClipboard(token.address, symbol); }}
+                        style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', color: '#999', cursor: 'pointer', padding: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '5px' }}>
+                        📋 Copy CA</div>
+                      <div onClick={(e) => { e.stopPropagation(); quickSellToken(symbol); setShow(false); }}
+                        style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', color: '#FF6B6B', cursor: 'pointer', padding: '5px', background: 'rgba(255,107,107,0.15)', borderRadius: '5px', fontWeight: 600 }}>
+                        💸 Sell</div>
+                      <div onClick={(e) => { e.stopPropagation(); limitSellToken(symbol, token.address); setShow(false); }}
+                        style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', color: '#4CAF50', cursor: 'pointer', padding: '5px', background: 'rgba(76,175,80,0.15)', borderRadius: '5px', fontWeight: 600 }}>
+                        📊 Limit</div>
+                      <div onClick={(e) => { e.stopPropagation(); removeCustomToken(symbol); }}
+                        style={{ width: '32px', textAlign: 'center', fontSize: '0.7rem', color: '#666', cursor: 'pointer', padding: '5px', background: 'rgba(255,255,255,0.04)', borderRadius: '5px' }}>
+                        ✕</div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
             
-            {/* Built-in tokens */}
-            <div style={{ padding: '4px 12px' }}>
-              <div style={{ fontSize: '0.65rem', color: '#888', marginBottom: '4px', fontWeight: 600 }}>TOKENS</div>
+            {/* Built-in tokens - Clean 2-row layout */}
+            <div style={{ padding: '6px 10px' }}>
+              <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '6px', fontWeight: 600 }}>TOKENS</div>
               {Object.entries(TOKENS).filter(([sym]) => sym !== excludeToken).map(([symbol, token]) => (
-                <div key={symbol} style={{ ...styles.selectOption, background: symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent', flexWrap: 'wrap', gap: '4px' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(212, 175, 55, 0.1)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = symbol === value ? 'rgba(212, 175, 55, 0.2)' : 'transparent'}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '120px', cursor: 'pointer' }}
-                    onClick={() => { onChange(symbol); setShow(false); }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <TokenIcon icon={token.logo} emoji={token.emoji} size={28} />
+                <div key={symbol} style={{
+                  background: symbol === value ? 'rgba(212,175,55,0.12)' : 'rgba(0,0,0,0.15)',
+                  borderRadius: '8px', padding: '8px 10px', marginBottom: '6px',
+                  border: symbol === value ? '1px solid rgba(212,175,55,0.3)' : '1px solid rgba(255,255,255,0.05)',
+                  cursor: 'pointer'
+                }} onClick={() => { onChange(symbol); setShow(false); }}>
+                  {/* Row 1: Token info + Balance */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <TokenIcon icon={token.logo} emoji={token.emoji} size={28} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#fff' }}>{symbol}</div>
+                        <div style={{ fontSize: '0.6rem', color: '#888' }}>{token.name?.slice(0, 12)}</div>
+                      </div>
                     </div>
-                    <div style={{ minWidth: '50px' }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{symbol}</div>
-                      <div style={{ fontSize: '0.65rem', color: '#888' }}>{token.name?.slice(0, 10)}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 500, color: '#fff' }}>{formatNumber(balances[symbol] || 0)}</div>
+                      <div style={{ fontSize: '0.6rem', color: '#4CAF50' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
                     </div>
                   </div>
-                  {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                    {token.address && (
-                      <div
-                        onClick={(e) => { e.stopPropagation(); copyToClipboard(token.address, symbol + ' CA'); }}
-                        style={{ fontSize: '0.55rem', color: '#888', cursor: 'pointer', padding: '3px 5px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px' }}
-                        title="Copy Contract Address"
-                      >📋 CA</div>
-                    )}
-                    {/* Show sell buttons only if user has balance and it's not PLS/WPLS */}
-                    {(balances[symbol] || 0) > 0 && symbol !== 'PLS' && symbol !== 'WPLS' && (
-                      <>
-                        <div
-                          onClick={(e) => { e.stopPropagation(); quickSellToken(symbol); setShow(false); }}
-                          style={{ fontSize: '0.55rem', color: '#FF6B6B', cursor: 'pointer', padding: '3px 5px', background: 'rgba(255,107,107,0.15)', borderRadius: '4px', fontWeight: 600 }}
-                          title="Market Sell"
-                        >💸 Sell</div>
-                        <div
-                          onClick={(e) => { e.stopPropagation(); limitSellToken(symbol, token.address); setShow(false); }}
-                          style={{ fontSize: '0.55rem', color: '#4CAF50', cursor: 'pointer', padding: '3px 5px', background: 'rgba(76,175,80,0.15)', borderRadius: '4px', fontWeight: 600 }}
-                          title="Limit Sell"
-                        >📊 Limit</div>
-                      </>
-                    )}
-                  </div>
-                  {/* Balance */}
-                  <div style={{ textAlign: 'right', minWidth: '80px' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 500, whiteSpace: 'nowrap' }}>{formatNumber(balances[symbol] || 0)}</div>
-                    <div style={{ fontSize: '0.65rem', color: '#4CAF50', whiteSpace: 'nowrap' }}>{formatUSD((balances[symbol] || 0) * (livePrices[symbol] || 0))}</div>
-                  </div>
+                  {/* Row 2: Action buttons - only show if token has address or user has balance */}
+                  {(token.address || ((balances[symbol] || 0) > 0 && symbol !== 'PLS' && symbol !== 'WPLS')) && (
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {token.address && (
+                        <div onClick={(e) => { e.stopPropagation(); copyToClipboard(token.address, symbol); }}
+                          style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', color: '#999', cursor: 'pointer', padding: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '5px' }}>
+                          📋 CA</div>
+                      )}
+                      {(balances[symbol] || 0) > 0 && symbol !== 'PLS' && symbol !== 'WPLS' && (
+                        <>
+                          <div onClick={(e) => { e.stopPropagation(); quickSellToken(symbol); setShow(false); }}
+                            style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', color: '#FF6B6B', cursor: 'pointer', padding: '5px', background: 'rgba(255,107,107,0.15)', borderRadius: '5px', fontWeight: 600 }}>
+                            💸 Sell</div>
+                          <div onClick={(e) => { e.stopPropagation(); limitSellToken(symbol, token.address); setShow(false); }}
+                            style={{ flex: 1, textAlign: 'center', fontSize: '0.7rem', color: '#4CAF50', cursor: 'pointer', padding: '5px', background: 'rgba(76,175,80,0.15)', borderRadius: '5px', fontWeight: 600 }}>
+                            📊 Limit</div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

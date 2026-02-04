@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTrader Sniper - BIG WIN</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .pnl-card {
+            width: 400px;
+            height: 620px;
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(255, 215, 0, 0.5), 0 0 100px rgba(255, 215, 0, 0.3);
+            border: 3px solid rgba(255, 215, 0, 0.6);
+        }
+        .mando-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('mando-gold-lava.jpg');
+            background-size: cover;
+            background-position: center top;
+            z-index: 0;
+        }
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(180deg,
+                rgba(0,0,0,0.1) 0%,
+                rgba(0,0,0,0) 30%,
+                rgba(0,0,0,0.5) 65%,
+                rgba(0,0,0,0.95) 100%
+            );
+            z-index: 1;
+        }
+        .content {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo-text {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: #FFD700;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 1), 0 0 30px rgba(255, 215, 0, 0.5);
+        }
+        .win-badge {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
+            padding: 8px 18px;
+            border-radius: 25px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 900;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.8); }
+            50% { box-shadow: 0 0 40px rgba(255, 215, 0, 1), 0 0 60px rgba(255, 215, 0, 0.5); }
+        }
+        .spacer { flex: 1; }
+        .stats {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(15px);
+            border-radius: 18px;
+            padding: 22px;
+            border: 2px solid rgba(255, 215, 0, 0.4);
+        }
+        .token-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.25);
+        }
+        .token-name { font-size: 26px; font-weight: 700; color: #fff; }
+        .token-ticker { color: #FFD700; font-size: 14px; margin-top: 2px; }
+        .snipe-type {
+            background: linear-gradient(135deg, #FF6B35 0%, #FF4444 100%);
+            color: #fff;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .snipe-type.mempool { background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%); }
+        .pnl-display { text-align: center; margin: 20px 0; }
+        .pnl-percent {
+            font-family: 'Orbitron', monospace;
+            font-size: 72px;
+            font-weight: 900;
+            color: #00FF88;
+            text-shadow: 0 0 30px rgba(0, 255, 136, 1), 0 0 60px rgba(0, 255, 136, 0.5);
+            line-height: 1;
+        }
+        .pnl-label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-top: 8px;
+        }
+        .pnl-amount {
+            font-family: 'Orbitron', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: #00FF88;
+            margin-top: 12px;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+        .trade-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 18px;
+        }
+        .detail-item {
+            text-align: center;
+            background: rgba(255, 215, 0, 0.05);
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+        }
+        .detail-label {
+            color: rgba(255, 255, 255, 0.45);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .detail-value {
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 18px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 215, 0, 0.25);
+        }
+        .website {
+            font-family: 'Orbitron', monospace;
+            font-size: 13px;
+            color: #FFD700;
+            font-weight: 700;
+        }
+        .timestamp { color: rgba(255, 255, 255, 0.4); font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="pnl-card">
+        <div class="mando-bg"></div>
+        <div class="overlay"></div>
+        <div class="content">
+            <div class="header">
+                <div class="logo-text">DTRADER<br>SNIPER</div>
+                <div class="win-badge">🏆 BIG WIN</div>
+            </div>
+            <div class="spacer"></div>
+            <div class="stats">
+                <div class="token-info">
+                    <div>
+                        <div class="token-name">MOONSHOT</div>
+                        <div class="token-ticker">$MOON</div>
+                    </div>
+                    <div class="snipe-type mempool">MEMPOOL</div>
+                </div>
+                <div class="pnl-display">
+                    <div class="pnl-percent">+847%</div>
+                    <div class="pnl-label">PROFIT</div>
+                    <div class="pnl-amount">+127,450 PLS</div>
+                </div>
+                <div class="trade-details">
+                    <div class="detail-item">
+                        <div class="detail-label">Entry</div>
+                        <div class="detail-value">15,000 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Exit</div>
+                        <div class="detail-value">142,450 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Hold Time</div>
+                        <div class="detail-value">4h 23m</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Wallet</div>
+                        <div class="detail-value">DTrader 1</div>
+                    </div>
+                </div>
+                <div class="footer">
+                    <span class="website">dtgc.io/gold</span>
+                    <span class="timestamp">Feb 3, 2026 • 9:42 PM</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

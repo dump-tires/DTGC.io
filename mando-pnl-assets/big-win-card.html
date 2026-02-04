@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTrader Sniper - BIG WIN</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .pnl-card {
+            width: 400px;
+            height: 600px;
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow:
+                0 0 40px rgba(255, 215, 0, 0.5),
+                0 0 80px rgba(255, 215, 0, 0.3),
+                inset 0 0 60px rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 215, 0, 0.6);
+        }
+
+        .background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg,
+                rgba(0,0,0,0.3) 0%,
+                rgba(0,0,0,0.1) 30%,
+                rgba(0,0,0,0.6) 70%,
+                rgba(0,0,0,0.95) 100%
+            );
+            z-index: 1;
+        }
+
+        /* Replace this with your Mando image */
+        .mando-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('mando-bg.png') center center / cover no-repeat;
+            z-index: 0;
+        }
+
+        .content {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo img {
+            width: 40px;
+            height: 40px;
+        }
+
+        .logo-text {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: #FFD700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+        }
+
+        .win-badge {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 900;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.8); }
+            50% { box-shadow: 0 0 40px rgba(255, 215, 0, 1); }
+        }
+
+        .spacer {
+            flex: 1;
+        }
+
+        .stats {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .token-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .token-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .token-ticker {
+            color: #FFD700;
+            font-size: 14px;
+        }
+
+        .pnl-display {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .pnl-percent {
+            font-family: 'Orbitron', monospace;
+            font-size: 64px;
+            font-weight: 900;
+            color: #00FF88;
+            text-shadow:
+                0 0 20px rgba(0, 255, 136, 0.8),
+                0 0 40px rgba(0, 255, 136, 0.5);
+            line-height: 1;
+        }
+
+        .pnl-label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-top: 5px;
+        }
+
+        .pnl-amount {
+            font-family: 'Orbitron', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: #00FF88;
+            margin-top: 10px;
+        }
+
+        .trade-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .detail-item {
+            text-align: center;
+        }
+
+        .detail-label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .detail-value {
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        .detail-value.buy {
+            color: #00FF88;
+        }
+
+        .detail-value.sell {
+            color: #FFD700;
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .website {
+            font-family: 'Orbitron', monospace;
+            font-size: 12px;
+            color: #FFD700;
+            text-decoration: none;
+        }
+
+        .timestamp {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 11px;
+        }
+
+        .sniper-tag {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: rgba(255, 215, 0, 0.15);
+            text-transform: uppercase;
+            letter-spacing: 8px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="pnl-card">
+        <div class="mando-bg"></div>
+        <div class="background"></div>
+        <div class="sniper-tag">DTRADER SNIPER</div>
+        <div class="content">
+            <div class="header">
+                <div class="logo">
+                    <div class="logo-text">DTRADER<br>SNIPER</div>
+                </div>
+                <div class="win-badge">🏆 BIG WIN</div>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="stats">
+                <div class="token-info">
+                    <div>
+                        <div class="token-name">MOONSHOT</div>
+                        <div class="token-ticker">$MOON</div>
+                    </div>
+                    <div class="token-ticker">PulseChain</div>
+                </div>
+
+                <div class="pnl-display">
+                    <div class="pnl-percent">+847%</div>
+                    <div class="pnl-label">Profit</div>
+                    <div class="pnl-amount">+127,450 PLS</div>
+                </div>
+
+                <div class="trade-details">
+                    <div class="detail-item">
+                        <div class="detail-label">Entry</div>
+                        <div class="detail-value buy">15,000 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Exit</div>
+                        <div class="detail-value sell">142,450 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Hold Time</div>
+                        <div class="detail-value">4h 23m</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Snipe Type</div>
+                        <div class="detail-value">Mempool</div>
+                    </div>
+                </div>
+
+                <div class="footer">
+                    <a href="https://dtgc.io/gold" class="website">dtgc.io/gold</a>
+                    <div class="timestamp">Feb 3, 2026 • 9:42 PM EST</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

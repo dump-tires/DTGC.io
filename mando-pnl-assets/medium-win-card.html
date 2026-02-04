@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTrader Sniper - Medium Win</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .pnl-card {
+            width: 400px;
+            height: 600px;
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow:
+                0 0 30px rgba(0, 255, 136, 0.4),
+                0 0 60px rgba(0, 255, 136, 0.2),
+                inset 0 0 60px rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(0, 255, 136, 0.5);
+        }
+
+        .background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg,
+                rgba(0,0,0,0.2) 0%,
+                rgba(0,0,0,0.1) 40%,
+                rgba(0,0,0,0.7) 75%,
+                rgba(0,0,0,0.95) 100%
+            );
+            z-index: 1;
+        }
+
+        .mando-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('mando-bg.png') center center / cover no-repeat;
+            z-index: 0;
+        }
+
+        .content {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-text {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: #00FF88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
+        }
+
+        .win-badge {
+            background: linear-gradient(135deg, #00FF88 0%, #00CC6A 100%);
+            color: #000;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 900;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .spacer {
+            flex: 1;
+        }
+
+        .stats {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .token-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+        }
+
+        .token-name {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .token-ticker {
+            color: #00FF88;
+            font-size: 13px;
+        }
+
+        .pnl-display {
+            text-align: center;
+            margin: 15px 0;
+        }
+
+        .pnl-percent {
+            font-family: 'Orbitron', monospace;
+            font-size: 52px;
+            font-weight: 900;
+            color: #00FF88;
+            text-shadow:
+                0 0 15px rgba(0, 255, 136, 0.7),
+                0 0 30px rgba(0, 255, 136, 0.4);
+            line-height: 1;
+        }
+
+        .pnl-label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-top: 5px;
+        }
+
+        .pnl-amount {
+            font-family: 'Orbitron', monospace;
+            font-size: 22px;
+            font-weight: 700;
+            color: #00FF88;
+            margin-top: 8px;
+        }
+
+        .trade-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .detail-item {
+            text-align: center;
+            background: rgba(0, 255, 136, 0.05);
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .detail-label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .detail-value {
+            color: #fff;
+            font-size: 15px;
+            font-weight: 700;
+            margin-top: 3px;
+        }
+
+        .detail-value.buy {
+            color: #00FF88;
+        }
+
+        .detail-value.sell {
+            color: #FFD700;
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0, 255, 136, 0.2);
+        }
+
+        .website {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            color: #00FF88;
+            text-decoration: none;
+        }
+
+        .timestamp {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 10px;
+        }
+
+        .instabond-badge {
+            background: linear-gradient(135deg, #FF6B35 0%, #FF4444 100%);
+            color: #fff;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="pnl-card">
+        <div class="mando-bg"></div>
+        <div class="background"></div>
+        <div class="content">
+            <div class="header">
+                <div class="logo">
+                    <div class="logo-text">DTRADER<br>SNIPER</div>
+                </div>
+                <div class="win-badge">✅ PROFIT</div>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="stats">
+                <div class="token-info">
+                    <div>
+                        <div class="token-name">ALPHA GEM</div>
+                        <div class="token-ticker">$ALPHA</div>
+                    </div>
+                    <div class="instabond-badge">InstaBond</div>
+                </div>
+
+                <div class="pnl-display">
+                    <div class="pnl-percent">+156%</div>
+                    <div class="pnl-label">Realized Profit</div>
+                    <div class="pnl-amount">+7,800 PLS</div>
+                </div>
+
+                <div class="trade-details">
+                    <div class="detail-item">
+                        <div class="detail-label">Entry</div>
+                        <div class="detail-value buy">5,000 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Exit</div>
+                        <div class="detail-value sell">12,800 PLS</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Hold Time</div>
+                        <div class="detail-value">47 min</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Take Profit</div>
+                        <div class="detail-value">150% TP</div>
+                    </div>
+                </div>
+
+                <div class="footer">
+                    <a href="https://dtgc.io/gold" class="website">dtgc.io/gold</a>
+                    <div class="timestamp">Feb 3, 2026 • 2:15 PM EST</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTrader Sniper - P&L Card Gallery</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #fff;
+        }
+
+        h1 {
+            font-family: 'Orbitron', monospace;
+            text-align: center;
+            font-size: 32px;
+            color: #FFD700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 40px;
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 40px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .card-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .card-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            color: #FFD700;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .pnl-card {
+            width: 350px;
+            height: 520px;
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow:
+                0 0 40px rgba(255, 215, 0, 0.3),
+                inset 0 0 60px rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 215, 0, 0.4);
+        }
+
+        .pnl-card.green-theme {
+            border-color: rgba(0, 255, 136, 0.4);
+            box-shadow: 0 0 40px rgba(0, 255, 136, 0.3), inset 0 0 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg,
+                rgba(0,0,0,0.2) 0%,
+                rgba(0,0,0,0.1) 40%,
+                rgba(0,0,0,0.7) 75%,
+                rgba(0,0,0,0.95) 100%
+            );
+            z-index: 1;
+        }
+
+        .mando-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            z-index: 0;
+        }
+
+        /* Different themed backgrounds - placeholders for your 12 images */
+        .bg-volcano-1 { background: linear-gradient(180deg, #2d1810 0%, #4a1c1c 50%, #1a0a0a 100%); }
+        .bg-volcano-2 { background: linear-gradient(180deg, #1a1a1a 0%, #3d1515 50%, #0a0a0a 100%); }
+        .bg-gold { background: linear-gradient(180deg, #2d2510 0%, #4a3c1c 50%, #1a1505 100%); }
+        .bg-space { background: linear-gradient(180deg, #0a0a1a 0%, #1a1a3a 50%, #050510 100%); }
+        .bg-desert { background: linear-gradient(180deg, #3d3020 0%, #5a4830 50%, #2a2015 100%); }
+        .bg-marble { background: linear-gradient(180deg, #f5f5f5 0%, #d0d0d0 50%, #808080 100%); }
+        .bg-planet { background: linear-gradient(180deg, #1a2a3a 0%, #2a3a4a 50%, #0a1520 100%); }
+        .bg-forest { background: linear-gradient(180deg, #1a2a1a 0%, #2a4a2a 50%, #0a150a 100%); }
+
+        .content {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 18px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-text {
+            font-family: 'Orbitron', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            color: #FFD700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+        }
+
+        .green-theme .logo-text {
+            color: #00FF88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
+        }
+
+        .win-badge {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #000;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-family: 'Orbitron', monospace;
+            font-weight: 900;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .win-badge.big { animation: pulse 2s infinite; }
+        .win-badge.medium { background: linear-gradient(135deg, #00FF88 0%, #00CC6A 100%); }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.8); }
+            50% { box-shadow: 0 0 30px rgba(255, 215, 0, 1); }
+        }
+
+        .spacer { flex: 1; }
+
+        .stats {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            border-radius: 14px;
+            padding: 16px;
+            border: 1px solid rgba(255, 215, 0, 0.25);
+        }
+
+        .green-theme .stats {
+            border-color: rgba(0, 255, 136, 0.25);
+        }
+
+        .token-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 215, 0, 0.15);
+        }
+
+        .green-theme .token-info {
+            border-color: rgba(0, 255, 136, 0.15);
+        }
+
+        .token-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .token-ticker {
+            color: #FFD700;
+            font-size: 12px;
+        }
+
+        .green-theme .token-ticker {
+            color: #00FF88;
+        }
+
+        .pnl-display {
+            text-align: center;
+            margin: 12px 0;
+        }
+
+        .pnl-percent {
+            font-family: 'Orbitron', monospace;
+            font-size: 48px;
+            font-weight: 900;
+            color: #00FF88;
+            text-shadow: 0 0 15px rgba(0, 255, 136, 0.7);
+            line-height: 1;
+        }
+
+        .pnl-percent.big {
+            font-size: 56px;
+            color: #FFD700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+        }
+
+        .pnl-label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 4px;
+        }
+
+        .pnl-amount {
+            font-family: 'Orbitron', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: #00FF88;
+            margin-top: 6px;
+        }
+
+        .trade-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .detail-item {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 8px;
+            border-radius: 6px;
+        }
+
+        .detail-label {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .detail-value {
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 215, 0, 0.15);
+        }
+
+        .green-theme .footer {
+            border-color: rgba(0, 255, 136, 0.15);
+        }
+
+        .website {
+            font-family: 'Orbitron', monospace;
+            font-size: 10px;
+            color: #FFD700;
+        }
+
+        .green-theme .website {
+            color: #00FF88;
+        }
+
+        .timestamp {
+            color: rgba(255, 255, 255, 0.35);
+            font-size: 9px;
+        }
+
+        .snipe-type {
+            background: linear-gradient(135deg, #FF6B35 0%, #FF4444 100%);
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 8px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .snipe-type.mempool {
+            background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+        }
+
+        .instructions {
+            max-width: 800px;
+            margin: 60px auto 0;
+            background: rgba(255, 215, 0, 0.05);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 16px;
+            padding: 30px;
+        }
+
+        .instructions h2 {
+            font-family: 'Orbitron', monospace;
+            color: #FFD700;
+            margin-bottom: 20px;
+        }
+
+        .instructions ol {
+            color: rgba(255,255,255,0.8);
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 10px;
+        }
+
+        .instructions code {
+            background: rgba(0,0,0,0.5);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #00FF88;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 DTRADER SNIPER P&L CARDS</h1>
+    <p class="subtitle">Replace backgrounds with your Mando images</p>
+
+    <div class="gallery">
+        <!-- BIG WIN - Volcano Theme -->
+        <div class="card-wrapper">
+            <div class="card-label">🏆 Big Win - Volcano</div>
+            <div class="pnl-card">
+                <div class="mando-bg bg-volcano-1"></div>
+                <div class="background"></div>
+                <div class="content">
+                    <div class="header">
+                        <div class="logo-text">DTRADER<br>SNIPER</div>
+                        <div class="win-badge big">🏆 BIG WIN</div>
+                    </div>
+                    <div class="spacer"></div>
+                    <div class="stats">
+                        <div class="token-info">
+                            <div>
+                                <div class="token-name">MOONSHOT</div>
+                                <div class="token-ticker">$MOON</div>
+                            </div>
+                            <div class="snipe-type mempool">Mempool</div>
+                        </div>
+                        <div class="pnl-display">
+                            <div class="pnl-percent big">+847%</div>
+                            <div class="pnl-label">Profit</div>
+                            <div class="pnl-amount">+127,450 PLS</div>
+                        </div>
+                        <div class="trade-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Entry</div>
+                                <div class="detail-value">15,000 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Exit</div>
+                                <div class="detail-value">142,450 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Hold Time</div>
+                                <div class="detail-value">4h 23m</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Wallet</div>
+                                <div class="detail-value">DTrader 1</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span class="website">dtgc.io/gold</span>
+                            <span class="timestamp">Feb 3, 2026 • 9:42 PM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MEGA WIN - Gold Armor Theme -->
+        <div class="card-wrapper">
+            <div class="card-label">💰 Mega Win - Gold Armor</div>
+            <div class="pnl-card">
+                <div class="mando-bg bg-gold"></div>
+                <div class="background"></div>
+                <div class="content">
+                    <div class="header">
+                        <div class="logo-text">DTRADER<br>SNIPER</div>
+                        <div class="win-badge big">💰 MEGA</div>
+                    </div>
+                    <div class="spacer"></div>
+                    <div class="stats">
+                        <div class="token-info">
+                            <div>
+                                <div class="token-name">ALPHA GEM</div>
+                                <div class="token-ticker">$ALPHA</div>
+                            </div>
+                            <div class="snipe-type">InstaBond</div>
+                        </div>
+                        <div class="pnl-display">
+                            <div class="pnl-percent big">+1,247%</div>
+                            <div class="pnl-label">Profit</div>
+                            <div class="pnl-amount">+312,500 PLS</div>
+                        </div>
+                        <div class="trade-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Entry</div>
+                                <div class="detail-value">25,000 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Exit</div>
+                                <div class="detail-value">337,500 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Hold Time</div>
+                                <div class="detail-value">2h 15m</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Take Profit</div>
+                                <div class="detail-value">1000% TP</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span class="website">dtgc.io/gold</span>
+                            <span class="timestamp">Feb 3, 2026 • 3:15 PM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Medium Win - Space Theme -->
+        <div class="card-wrapper">
+            <div class="card-label">✅ Medium Win - Space</div>
+            <div class="pnl-card green-theme">
+                <div class="mando-bg bg-space"></div>
+                <div class="background"></div>
+                <div class="content">
+                    <div class="header">
+                        <div class="logo-text">DTRADER<br>SNIPER</div>
+                        <div class="win-badge medium">✅ PROFIT</div>
+                    </div>
+                    <div class="spacer"></div>
+                    <div class="stats">
+                        <div class="token-info">
+                            <div>
+                                <div class="token-name">LUNAR</div>
+                                <div class="token-ticker">$LUNAR</div>
+                            </div>
+                            <div class="snipe-type mempool">Mempool</div>
+                        </div>
+                        <div class="pnl-display">
+                            <div class="pnl-percent">+156%</div>
+                            <div class="pnl-label">Profit</div>
+                            <div class="pnl-amount">+7,800 PLS</div>
+                        </div>
+                        <div class="trade-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Entry</div>
+                                <div class="detail-value">5,000 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Exit</div>
+                                <div class="detail-value">12,800 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Hold Time</div>
+                                <div class="detail-value">47 min</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Wallet</div>
+                                <div class="detail-value">DTrader 3</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span class="website">dtgc.io/gold</span>
+                            <span class="timestamp">Feb 3, 2026 • 11:30 AM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Medium Win - Desert Theme -->
+        <div class="card-wrapper">
+            <div class="card-label">✅ Medium Win - Desert</div>
+            <div class="pnl-card green-theme">
+                <div class="mando-bg bg-desert"></div>
+                <div class="background"></div>
+                <div class="content">
+                    <div class="header">
+                        <div class="logo-text">DTRADER<br>SNIPER</div>
+                        <div class="win-badge medium">✅ PROFIT</div>
+                    </div>
+                    <div class="spacer"></div>
+                    <div class="stats">
+                        <div class="token-info">
+                            <div>
+                                <div class="token-name">SAND COIN</div>
+                                <div class="token-ticker">$SAND</div>
+                            </div>
+                            <div class="snipe-type">InstaBond</div>
+                        </div>
+                        <div class="pnl-display">
+                            <div class="pnl-percent">+89%</div>
+                            <div class="pnl-label">Profit</div>
+                            <div class="pnl-amount">+4,450 PLS</div>
+                        </div>
+                        <div class="trade-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Entry</div>
+                                <div class="detail-value">5,000 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Exit</div>
+                                <div class="detail-value">9,450 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Hold Time</div>
+                                <div class="detail-value">1h 12m</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Take Profit</div>
+                                <div class="detail-value">100% TP</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span class="website">dtgc.io/gold</span>
+                            <span class="timestamp">Feb 3, 2026 • 8:45 AM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Big Win - Marble Hallway -->
+        <div class="card-wrapper">
+            <div class="card-label">🏆 Big Win - Marble Hall</div>
+            <div class="pnl-card">
+                <div class="mando-bg bg-marble"></div>
+                <div class="background"></div>
+                <div class="content">
+                    <div class="header">
+                        <div class="logo-text">DTRADER<br>SNIPER</div>
+                        <div class="win-badge big">🏆 BIG WIN</div>
+                    </div>
+                    <div class="spacer"></div>
+                    <div class="stats">
+                        <div class="token-info">
+                            <div>
+                                <div class="token-name">PRESTIGE</div>
+                                <div class="token-ticker">$PRST</div>
+                            </div>
+                            <div class="snipe-type mempool">Mempool</div>
+                        </div>
+                        <div class="pnl-display">
+                            <div class="pnl-percent big">+523%</div>
+                            <div class="pnl-label">Profit</div>
+                            <div class="pnl-amount">+52,300 PLS</div>
+                        </div>
+                        <div class="trade-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Entry</div>
+                                <div class="detail-value">10,000 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Exit</div>
+                                <div class="detail-value">62,300 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Hold Time</div>
+                                <div class="detail-value">6h 45m</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Wallet</div>
+                                <div class="detail-value">DTrader 2</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span class="website">dtgc.io/gold</span>
+                            <span class="timestamp">Feb 3, 2026 • 5:20 PM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Medium Win - Planet Theme -->
+        <div class="card-wrapper">
+            <div class="card-label">✅ Medium Win - Planet</div>
+            <div class="pnl-card green-theme">
+                <div class="mando-bg bg-planet"></div>
+                <div class="background"></div>
+                <div class="content">
+                    <div class="header">
+                        <div class="logo-text">DTRADER<br>SNIPER</div>
+                        <div class="win-badge medium">✅ PROFIT</div>
+                    </div>
+                    <div class="spacer"></div>
+                    <div class="stats">
+                        <div class="token-info">
+                            <div>
+                                <div class="token-name">ORBIT</div>
+                                <div class="token-ticker">$ORB</div>
+                            </div>
+                            <div class="snipe-type">InstaBond</div>
+                        </div>
+                        <div class="pnl-display">
+                            <div class="pnl-percent">+234%</div>
+                            <div class="pnl-label">Profit</div>
+                            <div class="pnl-amount">+11,700 PLS</div>
+                        </div>
+                        <div class="trade-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Entry</div>
+                                <div class="detail-value">5,000 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Exit</div>
+                                <div class="detail-value">16,700 PLS</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Hold Time</div>
+                                <div class="detail-value">2h 05m</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Take Profit</div>
+                                <div class="detail-value">250% TP</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span class="website">dtgc.io/gold</span>
+                            <span class="timestamp">Feb 3, 2026 • 1:15 PM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="instructions">
+        <h2>📝 How to Use Your Mando Images</h2>
+        <ol>
+            <li>Save your 12 Mando images to this folder: <code>mando-pnl-assets/</code></li>
+            <li>Name them like: <code>mando-volcano-1.png</code>, <code>mando-gold.png</code>, <code>mando-space.png</code>, etc.</li>
+            <li>Edit this HTML and update the <code>.mando-bg</code> classes:</li>
+        </ol>
+        <pre style="background: #000; padding: 15px; border-radius: 8px; margin-top: 15px; color: #00FF88; overflow-x: auto;">
+.bg-volcano-1 {
+    background: url('mando-volcano-1.png') center center / cover no-repeat;
+}</pre>
+        <p style="margin-top: 20px; color: rgba(255,255,255,0.6);">
+            <strong>Pro tip:</strong> Take screenshots of these cards for your Twitter/socials! 📸
+        </p>
+    </div>
+</body>
+</html>
