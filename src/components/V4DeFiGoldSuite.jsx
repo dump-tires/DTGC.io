@@ -978,9 +978,10 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       showToastMsg('❌ Invalid contract address', 'error');
       return null;
     }
-    
+
     setImportLoading(true);
     try {
+      // Fetch from both RPC and DEXScreener in parallel
       const rpcProvider = new ethers.JsonRpcProvider(CONFIG.RPC_URL);
       const tokenContract = new ethers.Contract(contractAddress, [
         'function name() view returns (string)',
@@ -988,27 +989,47 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         'function decimals() view returns (uint8)',
         'function totalSupply() view returns (uint256)',
       ], rpcProvider);
-      
-      const [name, symbol, decimals, totalSupply] = await Promise.all([
-        tokenContract.name().catch(() => 'Unknown'),
-        tokenContract.symbol().catch(() => 'TOKEN'),
-        tokenContract.decimals().catch(() => 18),
-        tokenContract.totalSupply().catch(() => 0n),
+
+      // Also fetch from DEXScreener for price data
+      const dexPromise = fetch(`${DEXSCREENER_API}/tokens/pulsechain/${contractAddress}`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
+
+      const [contractData, dexData] = await Promise.all([
+        Promise.all([
+          tokenContract.name().catch(() => 'Unknown'),
+          tokenContract.symbol().catch(() => 'TOKEN'),
+          tokenContract.decimals().catch(() => 18),
+          tokenContract.totalSupply().catch(() => 0n),
+        ]),
+        dexPromise
       ]);
-      
+
+      const [name, symbol, decimals, totalSupply] = contractData;
+      const dexPair = dexData?.pairs?.[0];
+
       const tokenInfo = {
         address: contractAddress.toLowerCase(),
         symbol: symbol.toUpperCase(),
         name,
         decimals: Number(decimals),
-        logo: getTokenLogo(contractAddress),
+        logo: dexPair?.info?.imageUrl || getTokenLogo(contractAddress),
         emoji: '🔸',
         isCustom: true,
         totalSupply: parseFloat(ethers.formatUnits(totalSupply, decimals)),
+        priceUsd: dexPair?.priceUsd ? parseFloat(dexPair.priceUsd) : null,
+        priceNative: dexPair?.priceNative ? parseFloat(dexPair.priceNative) : null,
+        liquidity: dexPair?.liquidity?.usd || 0,
+        dexScreenerUrl: dexPair?.url,
       };
-      
+
+      // Update live prices if we got DEX data
+      if (dexPair?.priceUsd) {
+        setLivePrices(prev => ({ ...prev, [symbol.toUpperCase()]: parseFloat(dexPair.priceUsd) }));
+      }
+
       setImportedToken(tokenInfo);
-      showToastMsg(`✅ Found: ${name} (${symbol})`, 'success');
+      showToastMsg(`✅ Found: ${name} (${symbol})${dexPair?.priceUsd ? ` @ $${parseFloat(dexPair.priceUsd).toFixed(6)}` : ''}`, 'success');
       return tokenInfo;
     } catch (err) {
       console.error('Import token error:', err);
@@ -1756,14 +1777,19 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     setWinsLoading(true);
     setWinsError(null);
 
-    // Excluded addresses (native tokens, stablecoins, wrapped tokens)
+    // Excluded addresses (native tokens, stablecoins, wrapped tokens, low liquidity chains)
     const EXCLUDED_TOKENS = new Set([
       '0xa1077a294dde1b09bb078844df40758a5d0f9a27', // WPLS
       '0x2fa878ab3f87cc1c9737fc071108f904c0b0c95d', // INC
       '0x0cb6f5a34ad42ec934882a05265a7d5f59b51a2f', // DAI from ETH
       '0x15d38573d2feeb82e7ad5187ab8c1d52810b1f07', // USDC from ETH
       '0xefD766cCb38EaF1dfd701853BFCe31359239F305', // DAI
+      '0x0000000000000000000000000000000000000000', // Native PLS (null addr)
+      'pulsechain',  // Exclude tokens named "PulseChain"
     ].map(a => a.toLowerCase()));
+
+    // Excluded token NAMES (for low-liquidity native chain tokens)
+    const EXCLUDED_NAMES = ['pulsechain', 'pls', 'wrapped pulse'];
 
     try {
       // Use trending tokens endpoint for better diversity
@@ -1798,12 +1824,16 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         }
       }
 
-      // Filter for PulseChain, good liquidity, and exclude native tokens
-      pairs = pairs.filter(p =>
-        p.chainId === 'pulsechain' &&
-        (p.liquidity?.usd || 0) > 5000 &&
-        !EXCLUDED_TOKENS.has(p.baseToken?.address?.toLowerCase())
-      );
+      // Filter for PulseChain, decent liquidity, and exclude native/wrapped tokens
+      pairs = pairs.filter(p => {
+        const addr = p.baseToken?.address?.toLowerCase();
+        const name = p.baseToken?.name?.toLowerCase() || '';
+        const symbol = p.baseToken?.symbol?.toLowerCase() || '';
+        return p.chainId === 'pulsechain' &&
+          (p.liquidity?.usd || 0) > 2000 && // Lowered from 5000 for more variety
+          !EXCLUDED_TOKENS.has(addr) &&
+          !EXCLUDED_NAMES.some(ex => name.includes(ex) || symbol === ex);
+      });
 
       pairs.sort((a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
 
@@ -1812,7 +1842,10 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
 
       for (const pair of pairs) {
         const addr = pair.baseToken?.address?.toLowerCase();
+        const name = pair.baseToken?.name?.toLowerCase() || '';
+        const symbol = pair.baseToken?.symbol?.toLowerCase() || '';
         if (!addr || seen.has(addr) || EXCLUDED_TOKENS.has(addr)) continue;
+        if (EXCLUDED_NAMES.some(ex => name.includes(ex) || symbol === ex)) continue;
         seen.add(addr);
 
         const { score, reasons } = calculateWinScore(pair);
@@ -1823,12 +1856,14 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           name: pair.baseToken.name,
           symbol: pair.baseToken.symbol,
           priceUsd: parseFloat(pair.priceUsd || '0'),
+          priceNative: parseFloat(pair.priceNative || '0'), // Price in PLS for limit sell
           priceChange24h: pair.priceChange?.h24 || 0,
           priceChange1h: pair.priceChange?.h1 || 0,
           volume24h: pair.volume?.h24 || 0,
           liquidity: pair.liquidity?.usd || 0,
           marketCap: pair.marketCap || 0,
           dexScreenerUrl: pair.url,
+          imageUrl: pair.info?.imageUrl || `https://dd.dexscreener.com/ds-data/tokens/pulsechain/${pair.baseToken.address}.png`,
           txns24h: pair.txns?.h24 || { buys: 0, sells: 0 },
           ageHours,
           score,
@@ -3059,13 +3094,23 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      {/* Token icon from DEXScreener */}
                       <div style={{
                         width: '40px', height: '40px', borderRadius: '50%',
                         background: `linear-gradient(135deg, hsl(${(idx * 36) % 360}, 70%, 50%), hsl(${(idx * 36 + 60) % 360}, 70%, 40%))`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#fff', fontWeight: 700, fontSize: '0.9rem',
+                        overflow: 'hidden',
                       }}>
-                        {token.symbol?.charAt(0) || '?'}
+                        {token.imageUrl ? (
+                          <img
+                            src={token.imageUrl}
+                            alt={token.symbol}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <span style={{ display: token.imageUrl ? 'none' : 'flex' }}>{token.symbol?.charAt(0) || '?'}</span>
                       </div>
                       <div>
                         <div style={{ fontWeight: 600, color: '#fff' }}>{token.name}</div>
@@ -3122,6 +3167,20 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                     </div>
                   </div>
 
+                  {/* User balance check - show if they hold this token */}
+                  {(() => {
+                    const userHolding = Object.entries(customTokens).find(([sym, t]) => t.address?.toLowerCase() === token.address?.toLowerCase());
+                    const userBalance = userHolding ? (balances[userHolding[0]] || 0) : 0;
+                    return userBalance > 0 ? (
+                      <div style={{ background: 'rgba(212,175,55,0.15)', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', border: '1px solid rgba(212,175,55,0.3)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
+                          <span style={{ color: '#D4AF37' }}>💰 You hold: {formatNumber(userBalance)} {token.symbol}</span>
+                          <span style={{ color: '#4CAF50' }}>${formatUSD(userBalance * token.priceUsd)}</span>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
                   {/* Action buttons */}
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -3137,6 +3196,27 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                     >
                       💰 Quick Buy
                     </button>
+                    {/* Limit Sell - show if user holds token */}
+                    {(() => {
+                      const userHolding = Object.entries(customTokens).find(([sym, t]) => t.address?.toLowerCase() === token.address?.toLowerCase());
+                      const userBalance = userHolding ? (balances[userHolding[0]] || 0) : 0;
+                      return userBalance > 0 ? (
+                        <button
+                          onClick={() => {
+                            setActiveTab('sniper');
+                            setSniperCA(token.address);
+                            setSniperOrderType('limit_sell');
+                          }}
+                          style={{
+                            flex: 1, background: 'linear-gradient(135deg, #FF6B6B, #D32F2F)',
+                            border: 'none', borderRadius: '8px', padding: '10px',
+                            color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem',
+                          }}
+                        >
+                          📉 Limit Sell
+                        </button>
+                      ) : null;
+                    })()}
                     <a
                       href={token.dexScreenerUrl}
                       target="_blank"
@@ -3290,24 +3370,55 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                   overflow: 'hidden',
                 }}>
                   {sniperToken.logo ? (
-                    <img src={sniperToken.logo} alt={sniperToken.symbol} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <span style={{ fontSize: '1.5rem' }}>🔸</span>
-                  )}
+                    <img src={sniperToken.logo} alt={sniperToken.symbol} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                  ) : sniperToken.address ? (
+                    <img
+                      src={`https://dd.dexscreener.com/ds-data/tokens/pulsechain/${sniperToken.address}.png`}
+                      alt={sniperToken.symbol}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  ) : null}
+                  <span style={{ fontSize: '1.5rem' }}>🔸</span>
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ color: '#fff', fontWeight: 700, fontSize: '1.1rem' }}>{sniperToken.name}</div>
                   <div style={{ color: '#D4AF37', fontSize: '0.85rem' }}>${sniperToken.symbol}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 600 }}>
-                    {livePrices[sniperToken.symbol] ? formatUSD(livePrices[sniperToken.symbol]) : 'Price N/A'}
+                  <div style={{ color: livePrices[sniperToken.symbol] ? '#4CAF50' : '#F44336', fontSize: '0.9rem', fontWeight: 600 }}>
+                    {livePrices[sniperToken.symbol] ? `$${livePrices[sniperToken.symbol].toFixed(6)}` : 'Price N/A'}
                   </div>
                   <div style={{ color: '#888', fontSize: '0.7rem' }}>
                     Balance: {formatNumber(balances[sniperToken.symbol] || 0)}
                   </div>
                 </div>
               </div>
+
+              {/* User Holdings - Show prominently if user has balance */}
+              {(balances[sniperToken.symbol] || 0) > 0 && (
+                <div style={{
+                  background: 'rgba(76,175,80,0.15)',
+                  border: '1px solid rgba(76,175,80,0.3)',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  marginTop: '10px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}>
+                  <div>
+                    <div style={{ color: '#4CAF50', fontWeight: 600, fontSize: '0.8rem' }}>💰 You Hold This Token</div>
+                    <div style={{ color: '#fff', fontSize: '1rem', fontWeight: 700 }}>{formatNumber(balances[sniperToken.symbol])} {sniperToken.symbol}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ color: '#888', fontSize: '0.7rem' }}>Value</div>
+                    <div style={{ color: '#4CAF50', fontSize: '1rem', fontWeight: 600 }}>
+                      {formatUSD((balances[sniperToken.symbol] || 0) * (livePrices[sniperToken.symbol] || 0))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3453,6 +3564,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
             <div style={styles.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={styles.label}>🎯 Target Price (PLS)</span>
+                {sniperToken && livePrices[sniperToken.symbol] && (
+                  <span style={{ color: '#4CAF50', fontSize: '0.7rem' }}>Current: {livePrices[sniperToken.symbol].toFixed(8)} PLS</span>
+                )}
               </div>
               <div style={styles.inputGroup}>
                 <span style={{ color: '#888', fontSize: '1.2rem' }}>◈</span>
@@ -3464,6 +3578,77 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                   style={styles.input}
                 />
               </div>
+
+              {/* Percentage shortcuts for Limit Sell */}
+              {sniperLimitType === 'limit-sell' && sniperToken && (
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>🚀 Quick % Targets:</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                    {[
+                      { pct: 25, label: '+25%' },
+                      { pct: 50, label: '+50%' },
+                      { pct: 100, label: '+100%' },
+                      { pct: 200, label: '+200%' },
+                    ].map(opt => {
+                      const currentPrice = livePrices[sniperToken.symbol] || 0;
+                      const targetPrice = currentPrice * (1 + opt.pct / 100);
+                      return (
+                        <button
+                          key={opt.pct}
+                          onClick={() => setSniperLimitPrice(targetPrice.toFixed(10))}
+                          style={{
+                            padding: '8px 4px',
+                            background: 'rgba(76,175,80,0.15)',
+                            border: '1px solid rgba(76,175,80,0.3)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                          }}
+                        >
+                          <div style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.8rem' }}>{opt.label}</div>
+                          <div style={{ color: '#888', fontSize: '0.55rem' }}>{targetPrice > 0 ? targetPrice.toExponential(2) : '--'}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Percentage shortcuts for Limit Buy (discounts) */}
+              {sniperLimitType === 'limit-buy' && sniperToken && (
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ color: '#888', fontSize: '0.7rem', marginBottom: '8px' }}>📉 Buy at Discount:</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                    {[
+                      { pct: -10, label: '-10%' },
+                      { pct: -25, label: '-25%' },
+                      { pct: -50, label: '-50%' },
+                      { pct: -75, label: '-75%' },
+                    ].map(opt => {
+                      const currentPrice = livePrices[sniperToken.symbol] || 0;
+                      const targetPrice = currentPrice * (1 + opt.pct / 100);
+                      return (
+                        <button
+                          key={opt.pct}
+                          onClick={() => setSniperLimitPrice(targetPrice.toFixed(10))}
+                          style={{
+                            padding: '8px 4px',
+                            background: 'rgba(255,107,107,0.15)',
+                            border: '1px solid rgba(255,107,107,0.3)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                          }}
+                        >
+                          <div style={{ color: '#FF6B6B', fontWeight: 700, fontSize: '0.8rem' }}>{opt.label}</div>
+                          <div style={{ color: '#888', fontSize: '0.55rem' }}>{targetPrice > 0 ? targetPrice.toExponential(2) : '--'}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div style={{ color: '#888', fontSize: '0.7rem', marginTop: '8px' }}>
                 {sniperLimitType === 'limit-buy'
                   ? '💡 Order triggers when price drops to this level'
