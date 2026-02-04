@@ -53,8 +53,8 @@ const CONFIG = {
   DEADLINE_MINUTES: 20,
   EXPLORER: 'https://scan.pulsechain.com',
 
-  // InstaBond API (dtrader backend)
-  INSTABOND_API: process.env.REACT_APP_INSTABOND_API || 'https://dtgc-bot.railway.app/api',
+  // InstaBond API (dtrader backend on Hetzner)
+  INSTABOND_API: process.env.REACT_APP_INSTABOND_API || 'http://65.109.68.172:3847',
 };
 
 // Helper to get token logo from gib.show - PulseChain token images
@@ -1303,6 +1303,11 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         }),
       });
 
+      // Check if API endpoint exists
+      if (!response.ok) {
+        throw new Error(`InstaBond API unavailable (${response.status})`);
+      }
+
       const data = await response.json();
       if (data.success) {
         showToastMsg(`🎯 InstaBond ARMED! Watching for graduation...`, 'success');
@@ -1324,6 +1329,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       const response = await fetch(`${CONFIG.INSTABOND_API}/instabond/${orderId}`, {
         method: 'DELETE',
       });
+      if (!response.ok) {
+        throw new Error(`Cancel failed (${response.status})`);
+      }
       const data = await response.json();
       if (data.success) {
         showToastMsg('❌ InstaBond cancelled', 'info');
@@ -1792,35 +1800,22 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     const EXCLUDED_NAMES = ['pulsechain', 'pls', 'wrapped pulse'];
 
     try {
-      // Use trending tokens endpoint for better diversity
-      const response = await fetch(`${DEXSCREENER_API}/token-boosts/top/v1`);
+      // Use DexScreener search - token-boosts endpoint is deprecated
       let pairs = [];
 
-      if (response.ok) {
-        const boosts = await response.json();
-        // Filter for PulseChain tokens
-        const pulsechainBoosts = (boosts || []).filter(b => b.chainId === 'pulsechain');
-
-        // Fetch details for each boosted token
-        for (const boost of pulsechainBoosts.slice(0, 20)) {
-          try {
-            const tokenResp = await fetch(`${DEXSCREENER_API}/tokens/pulsechain/${boost.tokenAddress}`);
-            if (tokenResp.ok) {
-              const tokenData = await tokenResp.json();
-              if (tokenData.pairs?.length > 0) {
-                pairs.push(tokenData.pairs[0]);
-              }
-            }
-          } catch (e) { /* skip failed tokens */ }
-        }
+      // Primary: search for trending PulseChain tokens
+      const searchResp = await fetch(`${DEXSCREENER_API}/dex/search?q=pulsechain`);
+      if (searchResp.ok) {
+        const data = await searchResp.json();
+        pairs = (data.pairs || []).filter(p => p.chainId === 'pulsechain');
       }
 
-      // Fallback to search if boosts didn't return enough
-      if (pairs.length < 5) {
-        const searchResp = await fetch(`${DEXSCREENER_API}/dex/search?q=pulsechain`);
-        if (searchResp.ok) {
-          const data = await searchResp.json();
-          pairs = [...pairs, ...(data.pairs || [])];
+      // Secondary: get top pairs by volume
+      if (pairs.length < 10) {
+        const topResp = await fetch(`${DEXSCREENER_API}/dex/pairs/pulsechain`);
+        if (topResp.ok) {
+          const topData = await topResp.json();
+          pairs = [...pairs, ...(topData.pairs || [])];
         }
       }
 

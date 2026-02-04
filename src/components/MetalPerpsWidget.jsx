@@ -1,10 +1,15 @@
 // Institutional Auto Trade v5.0-Q7 - Q7 D-RAM v5.2.6 CALIBRATED
 // Lambda: gTrade Direct Prices, Q7 Haneef System, 5-Factor Confluence
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createChart, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
 
 // ==================== CONFIGURATION ====================
 
 const LAMBDA_URL = 'https://mqd4yvwog76amuift2p23du2ma0ehaqp.lambda-url.us-east-2.on.aws/';
+
+// Q7 Dev Wallet Address (Lambda trading wallet) - DTGC holders can view live trades
+const Q7_DEV_WALLET = '0x978c5786CDB46b1519A9c1C4814e06d5956f6c64';
+const DTGC_MIN_REQUIRED = 50; // Minimum DTGC to view Q7 Live Trades
 
 // ==================== Q7 D-RAM v5.2.6 CALIBRATION ====================
 // Per-asset RSI bounds from Q7 empirical testing (15M timeframe)
@@ -212,7 +217,7 @@ const TradingViewTickerTape = () => {
 
 // ==================== MAIN COMPONENT ====================
 
-export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
+export default function MetalPerpsWidget({ livePrices: externalPrices = {}, connectedAddress = null, dtgcBalance = 0 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('trade');
   const [selectedAsset, setSelectedAsset] = useState('BTC');
@@ -248,11 +253,32 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
   const [q7Signal, setQ7Signal] = useState(null); // Latest Q7 analysis from Lambda
   const [q7Loading, setQ7Loading] = useState(false);
 
+  // ===== INSTITUTIONAL CHART STATE =====
+  const [candleData, setCandleData] = useState([]);
+  const [volumeData, setVolumeData] = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const chartContainerRef = useRef(null);
+  const chartRef = useRef(null);
+  const candleSeriesRef = useRef(null);
+  const volumeSeriesRef = useRef(null);
+  const emaLineRef = useRef(null);
+
   // ===== PENDING ORDERS / COLLATERAL CLAIM STATE =====
   const [pendingOrders, setPendingOrders] = useState([]);
   const [isClaiming, setIsClaiming] = useState(false);
   const [autoClaimEnabled, setAutoClaimEnabled] = useState(true); // Auto-claim on by default
   const [claimResults, setClaimResults] = useState([]);
+
+  // ===== P&L TRACKING & VICTORY CARDS =====
+  const [closedTrades, setClosedTrades] = useState([]); // Track closed trades for P&L history
+
+  // ===== USER'S GTRADE POSITIONS (fetched directly from gTrade API) =====
+  const [userPositions, setUserPositions] = useState([]);
+  const [userPositionsLoading, setUserPositionsLoading] = useState(false);
+  const [totalUnrealizedPnl, setTotalUnrealizedPnl] = useState(0);
+
+  // ===== Q7 LIVE ACCESS (DTGC Token Gating) =====
+  const hasQ7Access = dtgcBalance >= DTGC_MIN_REQUIRED;
   
   const asset = ASSETS[selectedAsset];
   const tvSymbol = TV_SYMBOLS[selectedAsset];
@@ -386,6 +412,124 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
       console.error('Failed to fetch bot status:', error);
     }
   };
+
+  // ===== FETCH USER'S POSITIONS DIRECTLY FROM GTRADE API =====
+  const fetchUserPositions = async (walletAddress) => {
+    if (!walletAddress) return;
+
+    setUserPositionsLoading(true);
+    try {
+      // Try EU endpoint first, then US
+      const endpoints = [
+        `https://backend-arbitrum.eu.gains.trade/open-trades/${walletAddress}`,
+        `https://backend-arbitrum.gains.trade/open-trades/${walletAddress}`,
+      ];
+
+      let data = null;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (response.ok) {
+            data = await response.json();
+            console.log(`✅ gTrade positions from ${endpoint}:`, data?.length || 0);
+            break;
+          }
+        } catch (e) {
+          console.log(`⚠️ gTrade endpoint failed: ${endpoint}`);
+        }
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        // Map gTrade API response to our position format
+        const ASSET_INDEX_REVERSE = { 0: 'BTC', 1: 'ETH', 90: 'GOLD', 91: 'SILVER' };
+
+        const mappedPositions = data.map((t, idx) => {
+          const pairIndex = parseInt(t.trade?.pairIndex || t.pairIndex || 0);
+          const asset = ASSET_INDEX_REVERSE[pairIndex] || `PAIR${pairIndex}`;
+          const isLong = t.trade?.long === true || t.trade?.long === 'true' || t.trade?.buy === true;
+          const leverage = parseInt(t.trade?.leverage || t.leverage || 1) / 1000;
+          const collateral = parseFloat(t.trade?.collateralAmount || t.collateralAmount || 0) / 1e6;
+          const openPrice = parseFloat(t.trade?.openPrice || t.openPrice || 0) / 1e10;
+          const tp = parseFloat(t.trade?.tp || t.tp || 0) / 1e10;
+          const sl = parseFloat(t.trade?.sl || t.sl || 0) / 1e10;
+
+          // Get current price for P&L calculation
+          const currentPrice = livePrices[asset] || openPrice;
+          const priceDiff = isLong
+            ? (currentPrice - openPrice) / openPrice
+            : (openPrice - currentPrice) / openPrice;
+          const pnlPct = priceDiff * 100 * leverage;
+          const pnlUsd = collateral * priceDiff * leverage;
+
+          return {
+            index: parseInt(t.trade?.index || t.index || idx),
+            asset,
+            pairIndex,
+            long: isLong,
+            leverage,
+            collateral,
+            openPrice,
+            currentPrice,
+            tp,
+            sl,
+            pnlPct,
+            pnlUsd,
+          };
+        });
+
+        setUserPositions(mappedPositions);
+
+        // Calculate total unrealized P&L
+        const totalPnl = mappedPositions.reduce((sum, p) => sum + (p.pnlUsd || 0), 0);
+        setTotalUnrealizedPnl(totalPnl);
+
+        console.log(`📊 User positions loaded: ${mappedPositions.length}, Total PnL: $${totalPnl.toFixed(2)}`);
+      } else {
+        setUserPositions([]);
+        setTotalUnrealizedPnl(0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user positions from gTrade:', error);
+    }
+    setUserPositionsLoading(false);
+  };
+
+  // Fetch user positions when wallet connects or prices update
+  useEffect(() => {
+    if (connectedAddress) {
+      fetchUserPositions(connectedAddress);
+    }
+  }, [connectedAddress]);
+
+  // Refresh user positions every 10 seconds when expanded
+  useEffect(() => {
+    if (isExpanded && connectedAddress) {
+      const interval = setInterval(() => {
+        fetchUserPositions(connectedAddress);
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [isExpanded, connectedAddress]);
+
+  // Update P&L when prices change
+  useEffect(() => {
+    if (userPositions.length > 0 && Object.keys(livePrices).length > 0) {
+      const updatedPositions = userPositions.map(pos => {
+        const currentPrice = livePrices[pos.asset] || pos.currentPrice;
+        const priceDiff = pos.long
+          ? (currentPrice - pos.openPrice) / pos.openPrice
+          : (pos.openPrice - currentPrice) / pos.openPrice;
+        const pnlPct = priceDiff * 100 * pos.leverage;
+        const pnlUsd = pos.collateral * priceDiff * pos.leverage;
+
+        return { ...pos, currentPrice, pnlPct, pnlUsd };
+      });
+
+      setUserPositions(updatedPositions);
+      const totalPnl = updatedPositions.reduce((sum, p) => sum + (p.pnlUsd || 0), 0);
+      setTotalUnrealizedPnl(totalPnl);
+    }
+  }, [livePrices]);
 
   // ===== PENDING ORDERS / COLLATERAL CLAIM FUNCTIONS =====
 
@@ -569,6 +713,179 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
     });
   };
 
+  // ===== INSTITUTIONAL CHART - CANDLE FETCHING =====
+  const fetchCandleData = useCallback(async (asset) => {
+    setChartLoading(true);
+    try {
+      const productMap = { BTC: 'BTC-USD', ETH: 'ETH-USD' };
+      const product = productMap[asset];
+
+      if (asset === 'GOLD' || asset === 'SILVER') {
+        // Use PAXG as gold proxy for chart
+        const url = `https://api.exchange.coinbase.com/products/PAXG-USD/candles?granularity=900`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const candles = data.slice(0, 100).reverse().map(c => ({
+            time: c[0],
+            open: parseFloat(c[3]),
+            high: parseFloat(c[2]),
+            low: parseFloat(c[1]),
+            close: parseFloat(c[4]),
+          }));
+          const volumes = data.slice(0, 100).reverse().map(c => ({
+            time: c[0],
+            value: parseFloat(c[5]),
+            color: parseFloat(c[4]) >= parseFloat(c[3]) ? 'rgba(0, 255, 136, 0.5)' : 'rgba(255, 68, 68, 0.5)',
+          }));
+          setCandleData(candles);
+          setVolumeData(volumes);
+        }
+      } else if (product) {
+        const url = `https://api.exchange.coinbase.com/products/${product}/candles?granularity=900`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const candles = data.slice(0, 100).reverse().map(c => ({
+            time: c[0],
+            open: parseFloat(c[3]),
+            high: parseFloat(c[2]),
+            low: parseFloat(c[1]),
+            close: parseFloat(c[4]),
+          }));
+          const volumes = data.slice(0, 100).reverse().map(c => ({
+            time: c[0],
+            value: parseFloat(c[5]),
+            color: parseFloat(c[4]) >= parseFloat(c[3]) ? 'rgba(0, 255, 136, 0.5)' : 'rgba(255, 68, 68, 0.5)',
+          }));
+          setCandleData(candles);
+          setVolumeData(volumes);
+        }
+      }
+    } catch (e) {
+      console.log('Chart candle fetch failed:', e.message);
+    }
+    setChartLoading(false);
+  }, []);
+
+  // ===== CHART INITIALIZATION =====
+  useEffect(() => {
+    if (!chartContainerRef.current || candleData.length === 0) return;
+
+    // Clean up existing chart
+    if (chartRef.current) {
+      chartRef.current.remove();
+      chartRef.current = null;
+    }
+
+    // Create new chart with institutional styling
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 200,
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: '#888',
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { color: 'rgba(255,255,255,0.03)' },
+        horzLines: { color: 'rgba(255,255,255,0.03)' },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: 'rgba(255,215,0,0.3)', width: 1, style: 2 },
+        horzLine: { color: 'rgba(255,215,0,0.3)', width: 1, style: 2 },
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(255,255,255,0.1)',
+        scaleMargins: { top: 0.1, bottom: 0.2 },
+      },
+      timeScale: {
+        borderColor: 'rgba(255,255,255,0.1)',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
+    });
+
+    chartRef.current = chart;
+
+    // Add candlestick series with institutional colors (v5 API)
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#00ff88',
+      downColor: '#ff4444',
+      borderUpColor: '#00ff88',
+      borderDownColor: '#ff4444',
+      wickUpColor: '#00ff88',
+      wickDownColor: '#ff4444',
+    });
+    candleSeries.setData(candleData);
+    candleSeriesRef.current = candleSeries;
+
+    // Add volume histogram (v5 API)
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'volume',
+    });
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: { top: 0.85, bottom: 0 },
+    });
+    volumeSeries.setData(volumeData);
+    volumeSeriesRef.current = volumeSeries;
+
+    // Add EMA line if we have enough data (v5 API)
+    if (candleData.length >= 21) {
+      const emaData = [];
+      let ema = candleData.slice(0, 21).reduce((sum, c) => sum + c.close, 0) / 21;
+      for (let i = 21; i < candleData.length; i++) {
+        ema = candleData[i].close * (2/22) + ema * (1 - 2/22);
+        emaData.push({ time: candleData[i].time, value: ema });
+      }
+      const emaLine = chart.addSeries(LineSeries, {
+        color: '#FFD700',
+        lineWidth: 1,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      emaLine.setData(emaData);
+      emaLineRef.current = emaLine;
+    }
+
+    // Fit content
+    chart.timeScale().fitContent();
+
+    // Handle resize
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+      }
+    };
+  }, [candleData, volumeData]);
+
+  // Fetch candles when asset changes
+  useEffect(() => {
+    fetchCandleData(selectedAsset);
+  }, [selectedAsset, fetchCandleData]);
+
+  // Update candles every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchCandleData(selectedAsset);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [selectedAsset, fetchCandleData]);
+
   // ===== AGGRESSIVE SCALP TRADE EXECUTION =====
   // Retry logic + quick execution for volatile markets
   const openTrade = async (retryAttempt = 0) => {
@@ -749,6 +1066,29 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
           message: `Closed ${position?.asset || 'position'} #${tradeIndex}${pnlMsg}`,
           time: new Date().toLocaleTimeString(),
         }, ...prev].slice(0, 20));
+
+        // ===== UPDATE P&L STATS =====
+        if (pnl) {
+          setTradeStats(prev => ({
+            ...prev,
+            wins: pnl.percent >= 0 ? prev.wins + 1 : prev.wins,
+            losses: pnl.percent < 0 ? prev.losses + 1 : prev.losses,
+            totalPnl: prev.totalPnl + (pnl.usd || 0),
+          }));
+
+          // Add to closed trades history for victory cards
+          setClosedTrades(prev => [{
+            asset: position?.asset,
+            direction: position?.long ? 'LONG' : 'SHORT',
+            pnlPercent: pnl.percent,
+            pnlUsd: pnl.usd,
+            leverage: position?.leverage,
+            collateral: position?.collateral,
+            closedAt: new Date().toISOString(),
+            closeType: 'MANUAL',
+          }, ...prev].slice(0, 50));
+        }
+
         fetchBotStatus();
       } else {
         showToast(result.error || 'Failed to close', 'error');
@@ -811,7 +1151,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
         const tpHit = isLong ? currentPrice >= tpPrice : currentPrice <= tpPrice;
 
         if (tpHit) {
-          console.log(`🎯 TP HIT for ${pos.asset}! Current: $${currentPrice}, TP: $${tpPrice}, PnL: ${pnlPercent.toFixed(2)}%`);
+          const pnlUsd = pos.collateral * (pnlPercent / 100);
+          console.log(`🎯 TP HIT for ${pos.asset}! Current: $${currentPrice}, TP: $${tpPrice}, PnL: ${pnlPercent.toFixed(2)}% (+$${pnlUsd.toFixed(2)})`);
           showToast(`🎯 TP HIT! Closing ${pos.asset} @ +${pnlPercent.toFixed(1)}%`, 'success');
 
           // Auto-close the position
@@ -819,9 +1160,29 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
             const closeResult = await apiCall('CLOSE_TRADE', { tradeIndex: pos.index });
             setBotActivity(prev => [{
               type: 'TP_HIT',
-              message: `🎯 TP: ${pos.asset} closed @ +${pnlPercent.toFixed(1)}%`,
+              message: `🎯 TP: ${pos.asset} closed @ +${pnlPercent.toFixed(1)}% (+$${pnlUsd.toFixed(2)})`,
               time: new Date().toLocaleTimeString(),
             }, ...prev].slice(0, 20));
+
+            // ===== UPDATE P&L STATS FOR TP HIT =====
+            if (closeResult.success) {
+              setTradeStats(prev => ({
+                ...prev,
+                wins: prev.wins + 1,
+                totalPnl: prev.totalPnl + pnlUsd,
+              }));
+              setClosedTrades(prev => [{
+                asset: pos.asset,
+                direction: pos.long ? 'LONG' : 'SHORT',
+                pnlPercent: pnlPercent,
+                pnlUsd: pnlUsd,
+                leverage: pos.leverage,
+                collateral: pos.collateral,
+                closedAt: new Date().toISOString(),
+                closeType: 'TP_HIT',
+              }, ...prev].slice(0, 50));
+              console.log(`📊 P&L Updated: +$${pnlUsd.toFixed(2)} (TP HIT)`);
+            }
 
             // MASTER TP: After successful close, auto-claim any pending collateral
             if (closeResult.success) {
@@ -857,17 +1218,39 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
         const slHit = isLong ? currentPrice <= slPrice : currentPrice >= slPrice;
 
         if (slHit) {
-          console.log(`🛑 SL HIT for ${pos.asset}! Current: $${currentPrice}, SL: $${slPrice}, PnL: ${pnlPercent.toFixed(2)}%`);
+          const pnlUsd = pos.collateral * (pnlPercent / 100);
+          console.log(`🛑 SL HIT for ${pos.asset}! Current: $${currentPrice}, SL: $${slPrice}, PnL: ${pnlPercent.toFixed(2)}% ($${pnlUsd.toFixed(2)})`);
           showToast(`🛑 SL HIT! Closing ${pos.asset} @ ${pnlPercent.toFixed(1)}%`, 'error');
 
           // Auto-close the position
           try {
-            await apiCall('CLOSE_TRADE', { tradeIndex: pos.index });
+            const closeResult = await apiCall('CLOSE_TRADE', { tradeIndex: pos.index });
             setBotActivity(prev => [{
               type: 'SL_HIT',
-              message: `🛑 SL: ${pos.asset} closed @ ${pnlPercent.toFixed(1)}%`,
+              message: `🛑 SL: ${pos.asset} closed @ ${pnlPercent.toFixed(1)}% ($${pnlUsd.toFixed(2)})`,
               time: new Date().toLocaleTimeString(),
             }, ...prev].slice(0, 20));
+
+            // ===== UPDATE P&L STATS FOR SL HIT =====
+            if (closeResult?.success !== false) {
+              setTradeStats(prev => ({
+                ...prev,
+                losses: prev.losses + 1,
+                totalPnl: prev.totalPnl + pnlUsd, // pnlUsd is negative
+              }));
+              setClosedTrades(prev => [{
+                asset: pos.asset,
+                direction: pos.long ? 'LONG' : 'SHORT',
+                pnlPercent: pnlPercent,
+                pnlUsd: pnlUsd,
+                leverage: pos.leverage,
+                collateral: pos.collateral,
+                closedAt: new Date().toISOString(),
+                closeType: 'SL_HIT',
+              }, ...prev].slice(0, 50));
+              console.log(`📊 P&L Updated: $${pnlUsd.toFixed(2)} (SL HIT)`);
+            }
+
             fetchBotStatus(); // Refresh positions
           } catch (e) {
             console.error('Auto-close SL failed:', e);
@@ -1043,7 +1426,9 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
       }}>
         {[
           { id: 'trade', label: '⚡ Trade' },
-          { id: 'positions', label: `💼 ${positions.length}` },
+          { id: 'positions', label: `💼 ${userPositions.length || positions.length}` },
+          { id: 'stats', label: '📊 P&L' },
+          { id: 'q7live', label: '🔴 Q7' },
           { id: 'bot', label: '🤖 Bot' },
         ].map((tab) => (
           <button
@@ -1115,9 +1500,99 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
               })}
             </div>
 
-            {/* Chart */}
-            <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', overflow: 'hidden', marginBottom: '6px' }}>
-              <TradingViewMiniSymbol symbol={tvSymbol} height={160} />
+            {/* ===== INSTITUTIONAL CHART ===== */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(0,0,0,0.5), rgba(20,20,40,0.5))',
+              borderRadius: '10px',
+              overflow: 'hidden',
+              marginBottom: '10px',
+              border: '1px solid rgba(255,215,0,0.15)',
+              position: 'relative',
+            }}>
+              {/* Chart Header */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '6px 10px',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                background: 'rgba(0,0,0,0.3)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#FFD700', fontWeight: 700, fontSize: '12px' }}>
+                    {selectedAsset}/USD
+                  </span>
+                  <span style={{ color: '#888', fontSize: '9px' }}>15m</span>
+                  {chartLoading && <span style={{ color: '#FFD700', fontSize: '8px' }}>⟳</span>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    color: candleData.length > 1 && candleData[candleData.length-1]?.close >= candleData[candleData.length-2]?.close
+                      ? '#00ff88' : '#ff4444',
+                  }}>
+                    ${livePrices[selectedAsset]?.toLocaleString(undefined, {
+                      minimumFractionDigits: selectedAsset === 'BTC' ? 2 : selectedAsset === 'ETH' ? 2 : 2,
+                      maximumFractionDigits: selectedAsset === 'BTC' ? 2 : selectedAsset === 'ETH' ? 2 : 2
+                    }) || '---'}
+                  </span>
+                  {candleData.length > 1 && (
+                    <span style={{
+                      fontSize: '9px',
+                      padding: '2px 4px',
+                      borderRadius: '3px',
+                      background: candleData[candleData.length-1]?.close >= candleData[candleData.length-2]?.close
+                        ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)',
+                      color: candleData[candleData.length-1]?.close >= candleData[candleData.length-2]?.close
+                        ? '#00ff88' : '#ff4444',
+                    }}>
+                      {candleData[candleData.length-1]?.close >= candleData[candleData.length-2]?.close ? '▲' : '▼'}
+                      {(Math.abs(((Number(candleData[candleData.length-1]?.close) - Number(candleData[candleData.length-2]?.close)) / Number(candleData[candleData.length-2]?.close)) * 100) || 0).toFixed(2)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Chart Container */}
+              <div
+                ref={chartContainerRef}
+                style={{
+                  width: '100%',
+                  height: '200px',
+                  background: 'transparent',
+                }}
+              />
+
+              {/* Chart Footer - OHLC */}
+              {candleData.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '4px 10px',
+                  borderTop: '1px solid rgba(255,255,255,0.05)',
+                  background: 'rgba(0,0,0,0.3)',
+                  fontSize: '8px',
+                  color: '#666',
+                }}>
+                  <span>O: <span style={{ color: '#aaa' }}>${Number(candleData[candleData.length-1]?.open || 0).toFixed(2)}</span></span>
+                  <span>H: <span style={{ color: '#00ff88' }}>${Number(candleData[candleData.length-1]?.high || 0).toFixed(2)}</span></span>
+                  <span>L: <span style={{ color: '#ff4444' }}>${Number(candleData[candleData.length-1]?.low || 0).toFixed(2)}</span></span>
+                  <span>C: <span style={{ color: '#FFD700' }}>${Number(candleData[candleData.length-1]?.close || 0).toFixed(2)}</span></span>
+                </div>
+              )}
+
+              {/* EMA Legend */}
+              <div style={{
+                position: 'absolute',
+                top: '32px',
+                left: '10px',
+                fontSize: '8px',
+                color: '#FFD700',
+                opacity: 0.7,
+              }}>
+                EMA 21
+              </div>
             </div>
 
             {/* Price Display - Live from Lambda/gTrade */}
@@ -1220,7 +1695,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
 
                   {/* RSI + Confluence */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#888' }}>
-                    <span>RSI: {q7Signal.indicators?.rsi?.toFixed(1) || '--'} (Q7: {asset.rsi?.oversold}/{asset.rsi?.overbought})</span>
+                    <span>RSI: {q7Signal.indicators?.rsi || '--'} (Q7: {asset.rsi?.oversold}/{asset.rsi?.overbought})</span>
                     <span>Confluence: {q7Signal.confluence || 0}%</span>
                   </div>
                 </>
@@ -1482,29 +1957,60 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
         {/* ----- POSITIONS TAB ----- */}
         {activeTab === 'positions' && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ color: '#888', fontSize: '10px' }}>Open Positions</span>
-              <button onClick={fetchBotStatus} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid rgba(255,215,0,0.3)', background: 'transparent', color: '#FFD700', cursor: 'pointer', fontSize: '9px' }}>🔄 Refresh</button>
+            {/* Summary Header */}
+            <div style={{
+              background: totalUnrealizedPnl >= 0 ? 'rgba(0,255,136,0.1)' : 'rgba(255,68,68,0.1)',
+              borderRadius: '10px',
+              padding: '12px',
+              marginBottom: '12px',
+              border: `1px solid ${totalUnrealizedPnl >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,68,68,0.3)'}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ color: '#888', fontSize: '10px' }}>Unrealized P&L</div>
+                  <div style={{
+                    color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444',
+                    fontSize: '20px',
+                    fontWeight: 700,
+                  }}>
+                    {totalUnrealizedPnl >= 0 ? '+' : ''}${totalUnrealizedPnl.toFixed(2)}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: '#888', fontSize: '10px' }}>Positions</div>
+                  <div style={{ color: '#FFD700', fontSize: '18px', fontWeight: 700 }}>{userPositions.length}</div>
+                </div>
+              </div>
             </div>
-            
-            {positions.length === 0 ? (
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ color: '#888', fontSize: '10px' }}>
+                {connectedAddress ? `gTrade Positions (${connectedAddress.slice(0, 6)}...${connectedAddress.slice(-4)})` : 'Connect Wallet'}
+              </span>
+              <button onClick={() => fetchUserPositions(connectedAddress)} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid rgba(255,215,0,0.3)', background: 'transparent', color: '#FFD700', cursor: 'pointer', fontSize: '9px' }}>
+                {userPositionsLoading ? '⏳' : '🔄'} Refresh
+              </button>
+            </div>
+
+            {userPositions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
-                <div style={{ fontSize: '32px', marginBottom: '10px' }}>📭</div>
-                <div style={{ fontSize: '12px' }}>No open positions</div>
-                <div style={{ fontSize: '10px', color: '#555', marginTop: '4px' }}>Open a trade to get started</div>
+                <div style={{ fontSize: '32px', marginBottom: '10px' }}>{userPositionsLoading ? '⏳' : '📭'}</div>
+                <div style={{ fontSize: '12px' }}>{userPositionsLoading ? 'Loading positions...' : 'No open positions'}</div>
+                <div style={{ fontSize: '10px', color: '#555', marginTop: '4px' }}>
+                  {connectedAddress ? 'Open a trade on gTrade to see it here' : 'Connect your wallet to see positions'}
+                </div>
               </div>
             ) : (
-              positions.map((pos, idx) => {
-                const pnl = calculatePnL(pos);
-                const isLong = pos.long === true || pos.long === 'true';
-                const currentPrice = livePrices[pos.asset];
+              userPositions.map((pos, idx) => {
+                const isLong = pos.long === true;
+                const currentPrice = pos.currentPrice || livePrices[pos.asset];
                 return (
                   <div key={idx} style={{
                     background: 'rgba(0,0,0,0.3)',
                     borderRadius: '10px',
                     padding: '10px',
                     marginBottom: '8px',
-                    border: `1px solid ${isLong ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)'}`,
+                    border: `1px solid ${pos.pnlUsd >= 0 ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)'}`,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1512,7 +2018,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
                         <span style={{ color: '#fff', fontWeight: 700, fontSize: '12px' }}>{pos.asset}</span>
                         <span style={{ color: isLong ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>{isLong ? 'LONG' : 'SHORT'}</span>
                       </div>
-                      <span style={{ color: '#FFD700', fontSize: '11px', fontWeight: 600 }}>{pos.leverage?.toFixed(1)}x</span>
+                      <span style={{ color: '#FFD700', fontSize: '11px', fontWeight: 600 }}>{Number(pos.leverage || 0).toFixed(1)}x</span>
                     </div>
 
                     {/* Price comparison - MATCHES gTRADE UI */}
@@ -1524,12 +2030,12 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', marginBottom: '2px' }}>
                         <span style={{ color: '#888' }}>Open Price</span>
-                        <span style={{ color: '#fff', fontWeight: 600 }}>${pos.openPrice?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        <span style={{ color: '#fff', fontWeight: 600 }}>${Number(pos.openPrice || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
                         <span style={{ color: '#888' }}>Current Price</span>
-                        <span style={{ color: currentPrice && currentPrice > pos.openPrice ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
-                          ${currentPrice?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '---'}
+                        <span style={{ color: currentPrice > pos.openPrice ? '#00ff88' : '#ff4444', fontWeight: 600 }}>
+                          ${Number(currentPrice || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </span>
                       </div>
                     </div>
@@ -1537,43 +2043,39 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '10px', marginBottom: '8px' }}>
                       <div>
                         <span style={{ color: '#666' }}>Collateral: </span>
-                        <span style={{ color: '#fff' }}>${pos.collateral?.toFixed(2)} USDC</span>
+                        <span style={{ color: '#fff' }}>${Number(pos.collateral || 0).toFixed(2)} USDC</span>
                       </div>
                       <div>
                         <span style={{ color: '#666' }}>Position: </span>
-                        <span style={{ color: '#FFD700' }}>${(pos.collateral * pos.leverage).toFixed(2)}</span>
+                        <span style={{ color: '#FFD700' }}>${Number((pos.collateral || 0) * (pos.leverage || 1)).toFixed(2)}</span>
                       </div>
                       <div>
                         <span style={{ color: '#00ff88' }}>TP: </span>
-                        <span style={{ color: '#00ff88' }}>${pos.tp > 0 ? pos.tp.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'None'}</span>
+                        <span style={{ color: '#00ff88' }}>${pos.tp > 0 ? Number(pos.tp).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'None'}</span>
                       </div>
                       <div>
                         <span style={{ color: '#ff4444' }}>SL: </span>
-                        <span style={{ color: '#ff4444' }}>${pos.sl > 0 ? pos.sl.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'None'}</span>
+                        <span style={{ color: '#ff4444' }}>${pos.sl > 0 ? Number(pos.sl).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'None'}</span>
                       </div>
                     </div>
 
                     {/* P&L Display - MATCHES gTRADE FORMAT */}
                     <div style={{
-                      background: pnl && pnl.percent >= 0 ? 'rgba(0,255,136,0.15)' : 'rgba(255,68,68,0.15)',
+                      background: pos.pnlUsd >= 0 ? 'rgba(0,255,136,0.15)' : 'rgba(255,68,68,0.15)',
                       borderRadius: '6px',
                       padding: '8px',
                       marginBottom: '8px',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ color: '#888', fontSize: '10px' }}>Unrealized PnL</span>
-                        {pnl ? (
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ color: pnl.percent >= 0 ? '#00ff88' : '#ff4444', fontWeight: 700, fontSize: '14px' }}>
-                              {pnl.usd >= 0 ? '+' : ''}{pnl.usd.toFixed(2)} USDC
-                            </div>
-                            <div style={{ color: pnl.percent >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px', opacity: 0.8 }}>
-                              ({pnl.percent >= 0 ? '+' : ''}{pnl.percent.toFixed(2)}%)
-                            </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: pos.pnlUsd >= 0 ? '#00ff88' : '#ff4444', fontWeight: 700, fontSize: '14px' }}>
+                            {pos.pnlUsd >= 0 ? '+' : ''}{Number(pos.pnlUsd || 0).toFixed(2)} USDC
                           </div>
-                        ) : (
-                          <span style={{ color: '#666', fontSize: '12px' }}>Loading...</span>
-                        )}
+                          <div style={{ color: pos.pnlPct >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px', opacity: 0.8 }}>
+                            ({pos.pnlPct >= 0 ? '+' : ''}{Number(pos.pnlPct || 0).toFixed(2)}%)
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -1595,6 +2097,295 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {} }) {
                   </div>
                 );
               })
+            )}
+          </>
+        )}
+
+        {/* ----- STATS/P&L TAB ----- */}
+        {activeTab === 'stats' && (
+          <>
+            {/* P&L Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(138, 43, 226, 0.1))',
+              borderRadius: '12px',
+              padding: '14px',
+              marginBottom: '12px',
+              border: '1px solid rgba(255, 215, 0, 0.2)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ArbitrumLogo size={20} />
+                  <div>
+                    <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '14px' }}>Arbitrum Auto-Perp P&L</div>
+                    <div style={{ color: '#888', fontSize: '9px' }}>gTrade • DTGC.io</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '18px' }}>${balance?.toFixed(2) || '---'}</div>
+                  <div style={{ color: '#888', fontSize: '9px' }}>Available USDC</div>
+                </div>
+              </div>
+
+              {/* Win/Loss Stats */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                  <div style={{ color: '#00ff88', fontSize: '24px', fontWeight: 700 }}>{tradeStats.wins || 0}</div>
+                  <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 600 }}>WINS</div>
+                </div>
+                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                  <div style={{ color: '#ff4444', fontSize: '24px', fontWeight: 700 }}>{tradeStats.losses || 0}</div>
+                  <div style={{ color: '#ff4444', fontSize: '10px', fontWeight: 600 }}>LOSSES</div>
+                </div>
+                <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.15)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                  <div style={{ color: '#8a2be2', fontSize: '24px', fontWeight: 700 }}>
+                    {tradeStats.wins + tradeStats.losses > 0
+                      ? Math.round((tradeStats.wins / (tradeStats.wins + tradeStats.losses)) * 100)
+                      : 0}%
+                  </div>
+                  <div style={{ color: '#8a2be2', fontSize: '10px', fontWeight: 600 }}>WIN RATE</div>
+                </div>
+              </div>
+
+              {/* Total P&L */}
+              <div style={{
+                background: tradeStats.totalPnl >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)',
+                borderRadius: '8px',
+                padding: '12px',
+                textAlign: 'center',
+                border: `1px solid ${tradeStats.totalPnl >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 68, 0.3)'}`,
+              }}>
+                <div style={{ color: '#888', fontSize: '10px', marginBottom: '4px' }}>Session Total P&L</div>
+                <div style={{
+                  color: tradeStats.totalPnl >= 0 ? '#00ff88' : '#ff4444',
+                  fontSize: '28px',
+                  fontWeight: 700
+                }}>
+                  {tradeStats.totalPnl >= 0 ? '+' : ''}{tradeStats.totalPnl?.toFixed(2) || '0.00'} USDC
+                </div>
+              </div>
+            </div>
+
+            {/* Victory Card - Mando Style */}
+            {tradeStats.wins > 0 && (
+              <div style={{
+                background: 'linear-gradient(145deg, rgba(255, 215, 0, 0.25), rgba(255, 140, 0, 0.2), rgba(138, 43, 226, 0.15))',
+                borderRadius: '12px',
+                padding: '14px',
+                marginBottom: '12px',
+                border: '2px solid rgba(255, 215, 0, 0.5)',
+                position: 'relative',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: '-20px',
+                  right: '-20px',
+                  width: '100px',
+                  height: '100px',
+                  background: 'radial-gradient(circle, rgba(255,215,0,0.4) 0%, transparent 60%)',
+                  borderRadius: '50%',
+                }} />
+                <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+                  <div style={{ fontSize: '28px', marginBottom: '4px' }}>🏆</div>
+                  <div style={{ color: '#FFD700', fontWeight: 800, fontSize: '11px', letterSpacing: '1px' }}>
+                    ARBITRUM AUTO-PERP SCALP WIN
+                  </div>
+                  <div style={{ color: '#ff8c00', fontSize: '9px', fontWeight: 600 }}>DTGC.io/gTrade</div>
+                  <div style={{
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    marginTop: '10px',
+                  }}>
+                    <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700 }}>
+                      +${Math.abs(tradeStats.totalPnl || 0).toFixed(2)} USDC
+                    </div>
+                    <div style={{ color: '#888', fontSize: '9px', marginTop: '4px' }}>
+                      {tradeStats.wins} Wins • {tradeStats.successes} Trades • Q7 D-RAM v5.2.6
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Trade History */}
+            <div style={{
+              background: 'rgba(0,0,0,0.3)',
+              borderRadius: '10px',
+              padding: '12px',
+              marginBottom: '12px',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ color: '#888', fontSize: '10px', fontWeight: 600 }}>📜 TRADE HISTORY</span>
+                <span style={{ color: '#555', fontSize: '8px' }}>{closedTrades.length} trades</span>
+              </div>
+              {closedTrades.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '15px', color: '#555', fontSize: '10px' }}>
+                  No closed trades yet this session
+                </div>
+              ) : (
+                <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                  {closedTrades.slice(0, 10).map((trade, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px',
+                      background: 'rgba(0,0,0,0.2)',
+                      borderRadius: '6px',
+                      marginBottom: '4px',
+                      border: `1px solid ${trade.pnlPercent >= 0 ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)'}`,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '12px' }}>{trade.direction === 'LONG' ? '📈' : '📉'}</span>
+                        <div>
+                          <div style={{ color: '#fff', fontSize: '10px', fontWeight: 600 }}>{trade.asset}</div>
+                          <div style={{ color: '#888', fontSize: '8px' }}>{trade.leverage?.toFixed(0)}x • {trade.closeType || 'CLOSED'}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ color: trade.pnlPercent >= 0 ? '#00ff88' : '#ff4444', fontSize: '11px', fontWeight: 700 }}>
+                          {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent?.toFixed(1)}%
+                        </div>
+                        <div style={{ color: trade.pnlUsd >= 0 ? '#00ff88' : '#ff4444', fontSize: '9px' }}>
+                          {trade.pnlUsd >= 0 ? '+' : ''}${trade.pnlUsd?.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ----- Q7 LIVE TRADES TAB ----- */}
+        {activeTab === 'q7live' && (
+          <>
+            {!hasQ7Access ? (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 140, 0, 0.1))',
+                borderRadius: '12px',
+                padding: '20px',
+                textAlign: 'center',
+                border: '1px solid rgba(255, 215, 0, 0.3)',
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '12px' }}>🔒</div>
+                <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '16px', marginBottom: '8px' }}>
+                  DTGC Holder Access Required
+                </div>
+                <div style={{ color: '#888', fontSize: '12px', marginBottom: '16px' }}>
+                  Hold {DTGC_MIN_REQUIRED}+ DTGC to view Q7 Dev Wallet live trades
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+                  <div style={{ color: '#888', fontSize: '10px', marginBottom: '4px' }}>Your DTGC Balance</div>
+                  <div style={{ color: '#ff8c00', fontSize: '20px', fontWeight: 700 }}>
+                    {dtgcBalance?.toFixed(2) || '0.00'} DTGC
+                  </div>
+                </div>
+                <a href="https://pulsex.mypinata.cloud/ipfs/bafybeicakbywm4bqgprhgo74p6y6d4knphhxd2i2nhsxp4tnz7dkd3ywqq/#/?outputCurrency=0xD0676B28a457371D58d47E5247b439114e40Eb0F"
+                   target="_blank" rel="noopener noreferrer"
+                   style={{ display: 'inline-block', background: 'linear-gradient(135deg, #FFD700, #ff8c00)', color: '#000', padding: '10px 20px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', textDecoration: 'none' }}>
+                  🛒 Buy DTGC on PulseX
+                </a>
+              </div>
+            ) : (
+              <>
+                {/* Q7 Live Status Header */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(255, 0, 0, 0.2), rgba(255, 140, 0, 0.15))',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  marginBottom: '12px',
+                  border: '1px solid rgba(255, 0, 0, 0.3)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ff0000', boxShadow: '0 0 10px #ff0000', animation: 'pulse 1s infinite' }} />
+                      <span style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700 }}>Q7 DEV WALLET LIVE</span>
+                    </div>
+                    <div style={{ background: 'rgba(0, 255, 136, 0.2)', padding: '3px 8px', borderRadius: '4px', fontSize: '9px', color: '#00ff88', fontWeight: 600 }}>
+                      🔓 DTGC Access
+                    </div>
+                  </div>
+                  <div style={{ color: '#888', fontSize: '9px', fontFamily: 'monospace' }}>
+                    {Q7_DEV_WALLET.slice(0, 12)}...{Q7_DEV_WALLET.slice(-10)}
+                  </div>
+                </div>
+
+                {/* Q7 Active Positions */}
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
+                  <div style={{ color: '#888', fontSize: '10px', marginBottom: '8px', fontWeight: 600 }}>🔥 Q7 ACTIVE POSITIONS</div>
+                  {positions.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#555', fontSize: '10px' }}>
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
+                      No active positions - Q7 analyzing markets...
+                    </div>
+                  ) : (
+                    positions.map((pos, idx) => {
+                      const pnl = calculatePnL(pos);
+                      return (
+                        <div key={idx} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', marginBottom: '6px',
+                          border: `1px solid ${pnl?.percent >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,68,68,0.3)'}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '16px' }}>{pos.long ? '📈' : '📉'}</span>
+                            <div>
+                              <div style={{ color: '#fff', fontSize: '13px', fontWeight: 700 }}>{pos.asset}</div>
+                              <div style={{ color: '#888', fontSize: '9px' }}>{pos.leverage?.toFixed(0)}x {pos.long ? 'LONG' : 'SHORT'} • ${pos.collateral?.toFixed(2)}</div>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ color: pnl?.percent >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
+                              {pnl ? `${pnl.percent >= 0 ? '+' : ''}${pnl.percent.toFixed(2)}%` : '---'}
+                            </div>
+                            <div style={{ color: pnl?.usd >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px' }}>
+                              {pnl ? `${pnl.usd >= 0 ? '+' : ''}$${pnl.usd.toFixed(2)}` : '---'}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Participation Instructions */}
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(138, 43, 226, 0.1))',
+                  borderRadius: '10px', padding: '14px', marginBottom: '12px',
+                  border: '1px solid rgba(0, 255, 136, 0.2)',
+                }}>
+                  <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: 700, marginBottom: '10px' }}>🎮 WANT TO PARTICIPATE?</div>
+                  <div style={{ color: '#888', fontSize: '10px', lineHeight: 1.6, marginBottom: '12px' }}>
+                    Follow Q7's trades at your own risk. Load your Arbitrum wallet:
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ flex: 1, background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#00ff88', fontSize: '16px', fontWeight: 700 }}>$30+</div>
+                      <div style={{ color: '#888', fontSize: '9px' }}>USDC</div>
+                    </div>
+                    <div style={{ flex: 1, background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#627EEA', fontSize: '16px', fontWeight: 700 }}>$10+</div>
+                      <div style={{ color: '#888', fontSize: '9px' }}>ETH (Gas)</div>
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(255, 215, 0, 0.1)', borderRadius: '6px', padding: '10px', border: '1px solid rgba(255, 215, 0, 0.2)' }}>
+                    <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 600, marginBottom: '4px' }}>💰 5% PROFIT SHARING</div>
+                    <div style={{ color: '#888', fontSize: '9px', lineHeight: 1.5 }}>
+                      Winning trades send 5% to Q7 Dev wallet for continued development.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Disclaimer */}
+                <div style={{ background: 'rgba(255, 68, 68, 0.1)', borderRadius: '8px', padding: '10px', border: '1px solid rgba(255, 68, 68, 0.2)' }}>
+                  <div style={{ color: '#ff4444', fontSize: '9px', lineHeight: 1.5 }}>
+                    ⚠️ <strong>RISK:</strong> Trading perpetuals involves loss risk. Past performance ≠ future results. DYOR.
+                  </div>
+                </div>
+              </>
             )}
           </>
         )}

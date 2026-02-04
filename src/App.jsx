@@ -14278,7 +14278,11 @@ export default function App() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* METALS V1 - Precious Metals Perps Trading Widget */}
       {/* ═══════════════════════════════════════════════════════════════ */}
-      <MetalPerpsWidget livePrices={{ BTC: cryptoPrices.btc, ETH: cryptoPrices.eth, GOLD: metalPrices.gold, SILVER: metalPrices.silver }} />
+      <MetalPerpsWidget
+        livePrices={{ BTC: cryptoPrices.btc, ETH: cryptoPrices.eth, GOLD: metalPrices.gold, SILVER: metalPrices.silver }}
+        connectedAddress={account}
+        dtgcBalance={parseFloat(dtgcBalance || '0')}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ZAPP ARB LASER LINK MODAL - One-click arbitrage route calculator */}

@@ -1,0 +1,19 @@
+{
+  "name": "jupiter-q7-perps",
+  "version": "2.0.0",
+  "description": "Jupiter Perps Q7 D-RAM Autonomous Trading Bot",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js",
+    "deploy": "zip -r function.zip . && aws lambda update-function-code --function-name JupiterPerpBotNode --zip-file fileb://function.zip"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.91.0",
+    "@coral-xyz/anchor": "^0.29.0",
+    "@aws-sdk/client-sqs": "^3.500.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
