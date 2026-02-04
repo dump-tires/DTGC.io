@@ -131,6 +131,13 @@ export declare class DtraderBot {
      */
     private showPnLSummary;
     /**
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * COMPREHENSIVE DASHBOARD - Shows complete status on login
+     * Wallets, P&L, Orders, Snipes, Probable Wins - all in one place
+     * ═══════════════════════════════════════════════════════════════════════════════
+     */
+    private showDashboard;
+    /**
      * Generate and send P&L card image
      * Uses Mando sniper image as background
      */

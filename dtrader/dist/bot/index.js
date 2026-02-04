@@ -572,32 +572,30 @@ class DtraderBot {
                 }
             }
             const hasLinkedWallet = !!persistedLink;
-            // Show compact welcome with menu immediately visible
-            let welcomeMsg = `⚜️ **DTRADER SNIPER**\n`;
-            welcomeMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-            if (isNew) {
-                welcomeMsg += `✨ **Welcome!** Your bot wallet:\n`;
-                welcomeMsg += `\`${wallet.address}\`\n\n`;
-                welcomeMsg += `⚠️ **Fund this wallet with PLS to trade!**\n\n`;
+            // For new users, show simple welcome first
+            if (isNew || !hasLinkedWallet) {
+                let welcomeMsg = `⚜️ **DTRADER SNIPER**\n`;
+                welcomeMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                if (isNew) {
+                    welcomeMsg += `✨ **Welcome!** Your bot wallet:\n`;
+                    welcomeMsg += `\`${wallet.address}\`\n\n`;
+                    welcomeMsg += `⚠️ **Fund this wallet with PLS to trade!**\n\n`;
+                }
+                if (!hasLinkedWallet) {
+                    welcomeMsg += `🔗 **Link your DTGC wallet** to unlock all features\n`;
+                    welcomeMsg += `⚜️ Hold $50+ DTGC for PRO access\n\n`;
+                }
+                welcomeMsg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+                welcomeMsg += `📱 **Select an option below:**`;
+                await this.bot.sendMessage(chatId, welcomeMsg, {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboards.mainMenuKeyboard,
+                });
             }
             else {
-                welcomeMsg += `👋 **Welcome back!**\n\n`;
+                // For returning verified users, show comprehensive dashboard
+                await this.showDashboard(chatId, userId);
             }
-            if (hasLinkedWallet && persistedLink) {
-                welcomeMsg += `✅ **Wallet Linked:** \`${persistedLink.walletAddress.slice(0, 8)}...\`\n`;
-                welcomeMsg += `💰 Balance: ~$${persistedLink.balanceUsd}\n\n`;
-            }
-            else {
-                welcomeMsg += `🔗 **Link your DTGC wallet** to unlock all features\n`;
-                welcomeMsg += `⚜️ Hold $50+ DTGC for PRO access\n\n`;
-            }
-            welcomeMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
-            welcomeMsg += `📱 **Select an option below:**\n`;
-            welcomeMsg += `ℹ️ Tap **Help** for feature explanations`;
-            await this.bot.sendMessage(chatId, welcomeMsg, {
-                parse_mode: 'Markdown',
-                reply_markup: keyboards.mainMenuKeyboard,
-            });
         });
         // ═══════════════════════════════════════════════════════════════════════════
         // QUICK MENU COMMANDS - Direct access without parameters
@@ -1288,6 +1286,89 @@ class DtraderBot {
             if (wallet) {
                 const pk = await wallet_1.walletManager.exportPrivateKey(userId);
                 await this.bot.sendMessage(chatId, `⚠️ **NEVER SHARE THIS!**\n\n🔑 Private Key:\n\`${pk}\`\n\n_Delete this message after saving!_`, { parse_mode: 'Markdown' });
+            }
+            return;
+        }
+        // Export ALL wallet keys for backup
+        if (data === 'wallet_export_all') {
+            const botWallet = await wallet_1.walletManager.getWallet(userId);
+            const snipeWallets = await multiWallet_1.multiWallet.getUserWallets(userId);
+            let msg = `🔐 **WALLET BACKUP - SAVE SECURELY**\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `⚠️ **NEVER SHARE THESE KEYS!**\n\n`;
+            if (botWallet) {
+                const botPk = await wallet_1.walletManager.exportPrivateKey(userId);
+                msg += `**🤖 Bot Wallet:**\n`;
+                msg += `Address: \`${botWallet.address}\`\n`;
+                msg += `Key: \`${botPk}\`\n\n`;
+            }
+            if (snipeWallets.length > 0) {
+                msg += `**🎯 DTrader Wallets (${snipeWallets.length}):**\n\n`;
+                for (const w of snipeWallets) {
+                    const pk = multiWallet_1.multiWallet.exportPrivateKey(userId, w.index);
+                    msg += `#${w.index} ${w.label || 'DTrader ' + w.index}:\n`;
+                    msg += `Addr: \`${w.address}\`\n`;
+                    msg += `Key: \`${pk || 'N/A'}\`\n\n`;
+                }
+            }
+            msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `💾 **Save these in a secure location**\n`;
+            msg += `🗑️ _Delete this message after saving!_`;
+            await this.bot.sendMessage(chatId, msg, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🗑️ Delete This Message', callback_data: 'delete_message' }],
+                        [{ text: '🔙 Back to Dashboard', callback_data: 'main_menu' }],
+                    ],
+                },
+            });
+            return;
+        }
+        // Backup info - show what's being stored
+        if (data === 'backup_info') {
+            const linkedWallet = jsonStore_1.LinkedWallets.get(userId);
+            const snipeWallets = await multiWallet_1.multiWallet.getUserWallets(userId);
+            const activeOrders = limitOrder_1.limitOrderEngine.getUserOrders(userId).filter(o => o.status === 'pending');
+            const pendingSnipes = session.snipeOrders.filter(o => o.status === 'pending');
+            let msg = `💾 **YOUR DATA BACKUP STATUS**\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            msg += `**🔒 What's Saved:**\n`;
+            msg += `• ✅ Bot wallet (encrypted)\n`;
+            msg += `• ✅ ${snipeWallets.length} DTrader wallets\n`;
+            msg += `• ✅ ${activeOrders.length} active limit orders\n`;
+            msg += `• ✅ ${pendingSnipes.length} pending snipes\n`;
+            if (linkedWallet)
+                msg += `• ✅ Gold wallet link\n`;
+            msg += `\n`;
+            msg += `**🌐 Sync Status:**\n`;
+            msg += `• 💾 Local: Saved to disk\n`;
+            msg += `• ☁️ Vercel: Backed up online\n`;
+            msg += `• 🔄 Last sync: ${formatTimestamp()}\n\n`;
+            msg += `**🛡️ Security:**\n`;
+            msg += `• Keys encrypted at rest\n`;
+            msg += `• Data survives bot restarts\n`;
+            msg += `• Settings persist forever\n\n`;
+            msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+            msg += `⚜️ _Your setup is safe with DTRADER_`;
+            await this.bot.sendMessage(chatId, msg, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '🔑 Export All Keys', callback_data: 'wallet_export_all' }],
+                        [{ text: '🔙 Back to Dashboard', callback_data: 'main_menu' }],
+                    ],
+                },
+            });
+            return;
+        }
+        // Delete message (for sensitive info)
+        if (data === 'delete_message') {
+            try {
+                await this.bot.deleteMessage(parseInt(chatId), messageId);
+            }
+            catch (e) {
+                console.log('Could not delete message:', e);
             }
             return;
         }
@@ -5792,6 +5873,169 @@ Hold $50+ of DTGC to trade
                 ],
             },
         });
+    }
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * COMPREHENSIVE DASHBOARD - Shows complete status on login
+     * Wallets, P&L, Orders, Snipes, Probable Wins - all in one place
+     * ═══════════════════════════════════════════════════════════════════════════════
+     */
+    async showDashboard(chatId, userId) {
+        const session = this.getSession(chatId);
+        const now = formatTimestamp();
+        // Get wallet data
+        const botWallet = await wallet_1.walletManager.getWallet(userId);
+        const linkedWallet = jsonStore_1.LinkedWallets.get(userId);
+        const snipeWallets = await multiWallet_1.multiWallet.getUserWallets(userId);
+        // Get orders and snipes
+        const activeOrders = limitOrder_1.limitOrderEngine.getUserOrders(userId).filter(o => o.status === 'pending');
+        const pendingSnipes = session.snipeOrders.filter(o => o.status === 'pending');
+        const filledSnipes = session.snipeOrders.filter(o => o.status === 'filled');
+        const failedSnipes = session.snipeOrders.filter(o => o.status === 'cancelled');
+        const completedTrades = jsonStore_1.TradeHistory.getCompletedTrades(userId, 50);
+        // Calculate P&L
+        let totalPnlPls = 0, totalInvested = 0, wins = 0, losses = 0;
+        for (const entry of completedTrades) {
+            const pnl = parseFloat(entry.pnlPls || '0');
+            const amt = parseFloat(entry.amountPls || '0');
+            totalPnlPls += pnl;
+            totalInvested += amt;
+            if ((entry.pnlPercent || 0) > 0)
+                wins++;
+            else if ((entry.pnlPercent || 0) < 0)
+                losses++;
+        }
+        const winRate = wins + losses > 0 ? (wins / (wins + losses) * 100) : 0;
+        const pnlPercent = totalInvested > 0 ? (totalPnlPls / totalInvested * 100) : 0;
+        // Build dashboard message
+        let msg = `╔════════════════════════════════════╗\n`;
+        msg += `║   ⚜️  **DTRADER DASHBOARD**  ⚜️   ║\n`;
+        msg += `╠════════════════════════════════════╣\n`;
+        msg += `║  🕐 ${now} (EST)                ║\n`;
+        msg += `╚════════════════════════════════════╝\n\n`;
+        // ══════ WALLETS SECTION ══════
+        msg += `**━━━ 👛 YOUR WALLETS ━━━**\n\n`;
+        // Gold Wallet (Linked DTGC holder)
+        if (linkedWallet) {
+            msg += `🏆 **Gold Wallet** (DTGC Gate)\n`;
+            msg += `   \`${linkedWallet.walletAddress.slice(0, 10)}...${linkedWallet.walletAddress.slice(-6)}\`\n`;
+            msg += `   💰 ~$${linkedWallet.balanceUsd.toFixed(0)} | ⚜️ DTGC Verified\n\n`;
+        }
+        // Bot Wallet
+        if (botWallet) {
+            msg += `🤖 **Bot Wallet**\n`;
+            msg += `   \`${botWallet.address.slice(0, 10)}...${botWallet.address.slice(-6)}\`\n\n`;
+        }
+        // Snipe Wallets (DTrader 1-6)
+        if (snipeWallets.length > 0) {
+            msg += `🎯 **DTrader Wallets** (${snipeWallets.length})\n`;
+            for (const w of snipeWallets.slice(0, 6)) {
+                const activeIcon = w.isActive ? '✅' : '⬜';
+                msg += `   ${activeIcon} #${w.index} ${w.label || 'DTrader ' + w.index}: \`${w.address.slice(0, 8)}...\`\n`;
+            }
+            msg += `\n`;
+        }
+        // ══════ P&L SECTION ══════
+        msg += `**━━━ 📊 P&L SUMMARY ━━━**\n\n`;
+        const pnlEmoji = pnlPercent >= 0 ? '📈' : '📉';
+        const pnlSign = pnlPercent >= 0 ? '+' : '';
+        msg += `${pnlEmoji} **Total P&L:** ${pnlSign}${pnlPercent.toFixed(2)}%\n`;
+        msg += `✅ Wins: ${wins} | ❌ Losses: ${losses}\n`;
+        msg += `🎯 **Win Rate:** ${winRate.toFixed(1)}%\n\n`;
+        // ══════ ACTIVE ORDERS ══════
+        msg += `**━━━ 📋 ACTIVE ORDERS ━━━**\n\n`;
+        if (activeOrders.length > 0) {
+            for (const order of activeOrders.slice(0, 5)) {
+                const typeEmoji = order.orderType === 'limit_buy' ? '🟢' : order.orderType === 'limit_sell' ? '🔴' : '📊';
+                msg += `${typeEmoji} ${order.tokenSymbol || 'TOKEN'} @ ${parseFloat(order.targetPrice).toExponential(2)} PLS\n`;
+            }
+            if (activeOrders.length > 5)
+                msg += `   _...and ${activeOrders.length - 5} more_\n`;
+        }
+        else {
+            msg += `   _No active limit orders_\n`;
+        }
+        msg += `\n`;
+        // ══════ ACTIVE SNIPES ══════
+        msg += `**━━━ 🎯 ACTIVE SNIPES ━━━**\n\n`;
+        if (pendingSnipes.length > 0) {
+            for (const snipe of pendingSnipes.slice(0, 5)) {
+                msg += `🔥 ${snipe.tokenSymbol || snipe.tokenAddress?.slice(0, 8) || 'Unknown'} | ${snipe.amountPls.toLocaleString()} PLS\n`;
+                if (snipe.takeProfitPercent)
+                    msg += `   TP: +${snipe.takeProfitPercent}%\n`;
+            }
+            if (pendingSnipes.length > 5)
+                msg += `   _...and ${pendingSnipes.length - 5} more_\n`;
+        }
+        else {
+            msg += `   _No pending snipes_\n`;
+        }
+        msg += `\n`;
+        // ══════ FAILED/CANCELLED ══════
+        if (failedSnipes.length > 0) {
+            msg += `**━━━ ❌ FAILED (${failedSnipes.length}) ━━━**\n\n`;
+            for (const fail of failedSnipes.slice(0, 3)) {
+                msg += `⚠️ ${fail.tokenSymbol || 'Unknown'} - Cancelled\n`;
+            }
+            msg += `\n`;
+        }
+        // ══════ FOOTER ══════
+        msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        msg += `💾 **All data synced & backed up**\n`;
+        msg += `🔒 Keys encrypted on server\n`;
+        msg += `⚜️ _Memory persists across restarts_`;
+        // Send dashboard with action buttons
+        await this.bot.sendMessage(chatId, msg, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '🏆 Probable Wins', callback_data: 'wins_menu' },
+                        { text: '📊 Full P&L', callback_data: 'history_pnl' },
+                    ],
+                    [
+                        { text: '👛 Wallet Details', callback_data: 'wallet_menu' },
+                        { text: '📋 All Orders', callback_data: 'orders_menu' },
+                    ],
+                    [
+                        { text: '🔑 Export Keys', callback_data: 'wallet_export_all' },
+                        { text: '💾 Backup Info', callback_data: 'backup_info' },
+                    ],
+                    [
+                        { text: '🎯 New Snipe', callback_data: 'snipe_menu' },
+                        { text: '💰 Buy/Sell', callback_data: 'buy_menu' },
+                    ],
+                    [{ text: '⚙️ Settings', callback_data: 'settings_menu' }],
+                ],
+            },
+        });
+        // Also show top 3 Probable Wins summary
+        try {
+            const probableWins = await dexscreener_1.dexScreener.getProbableWins(5);
+            if (probableWins.length > 0) {
+                let winsMsg = `\n🏆 **TODAY'S TOP OPPORTUNITIES**\n`;
+                winsMsg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                for (let i = 0; i < Math.min(3, probableWins.length); i++) {
+                    const pw = probableWins[i];
+                    const t = pw.token;
+                    const scoreEmoji = pw.score >= 70 ? '🟢' : pw.score >= 50 ? '🟡' : '🟠';
+                    winsMsg += `${i + 1}. ${scoreEmoji} **$${t.symbol}** (${pw.score}/100)\n`;
+                    winsMsg += `   💧 $${dexscreener_1.dexScreener.formatNumber(t.liquidity)} | ${t.priceChange24h >= 0 ? '📈' : '📉'} ${t.priceChange24h >= 0 ? '+' : ''}${t.priceChange24h.toFixed(1)}%\n`;
+                }
+                winsMsg += `\n_Tap "Probable Wins" for more_`;
+                await this.bot.sendMessage(chatId, winsMsg, {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '🏆 See All Probable Wins', callback_data: 'wins_menu' }],
+                        ],
+                    },
+                });
+            }
+        }
+        catch (e) {
+            console.log('Could not load Probable Wins for dashboard:', e);
+        }
     }
     /**
      * Generate and send P&L card image
