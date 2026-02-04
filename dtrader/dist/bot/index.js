@@ -82,6 +82,22 @@ const formatDateShort = (date = new Date()) => {
         day: 'numeric'
     });
 };
+// Helper to fetch DTGC balance for a wallet address
+const fetchDTGCBalance = async (walletAddress) => {
+    try {
+        const provider = new ethers_1.ethers.JsonRpcProvider(config_1.config.rpc);
+        const dtgcContract = new ethers_1.ethers.Contract(config_1.config.tokenGate.dtgc, ['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)'], provider);
+        const [balance, decimals] = await Promise.all([
+            dtgcContract.balanceOf(walletAddress),
+            dtgcContract.decimals()
+        ]);
+        return parseFloat(ethers_1.ethers.formatUnits(balance, decimals));
+    }
+    catch (e) {
+        console.log('Error fetching DTGC balance:', e);
+        return 0;
+    }
+};
 const GAS_GWEI = {
     normal: 0.01,
     fast: 0.1,
@@ -5915,11 +5931,12 @@ Hold $50+ of DTGC to trade
         msg += `╚════════════════════════════════════╝\n\n`;
         // ══════ WALLETS SECTION ══════
         msg += `**━━━ 👛 YOUR WALLETS ━━━**\n\n`;
-        // Gold Wallet (Linked DTGC holder)
+        // Gold Wallet (Linked DTGC holder) - Fetch live DTGC balance
         if (linkedWallet) {
+            const dtgcBalance = await fetchDTGCBalance(linkedWallet.walletAddress);
             msg += `🏆 **Gold Wallet** (DTGC Gate)\n`;
             msg += `   \`${linkedWallet.walletAddress.slice(0, 10)}...${linkedWallet.walletAddress.slice(-6)}\`\n`;
-            msg += `   💰 ~$${linkedWallet.balanceUsd.toFixed(0)} | ⚜️ DTGC Verified\n\n`;
+            msg += `   💰 ~$${linkedWallet.balanceUsd.toFixed(0)} | ⚜️ ${dtgcBalance > 0 ? dtgcBalance.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '✓'} DTGC\n\n`;
         }
         // Bot Wallet
         if (botWallet) {
@@ -5975,7 +5992,8 @@ Hold $50+ of DTGC to trade
         if (failedSnipes.length > 0) {
             msg += `**━━━ ❌ FAILED (${failedSnipes.length}) ━━━**\n\n`;
             for (const fail of failedSnipes.slice(0, 3)) {
-                msg += `⚠️ ${fail.tokenSymbol || 'Unknown'} - Cancelled\n`;
+                const reason = fail.cancelReason || 'Cancelled';
+                msg += `⚠️ ${fail.tokenSymbol || 'Unknown'} - ${reason}\n`;
             }
             msg += `\n`;
         }

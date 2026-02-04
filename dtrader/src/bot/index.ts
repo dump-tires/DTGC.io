@@ -62,6 +62,26 @@ const formatDateShort = (date: Date = new Date()): string => {
   });
 };
 
+// Helper to fetch DTGC balance for a wallet address
+const fetchDTGCBalance = async (walletAddress: string): Promise<number> => {
+  try {
+    const provider = new ethers.JsonRpcProvider(config.rpc);
+    const dtgcContract = new ethers.Contract(
+      config.tokenGate.dtgc,
+      ['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)'],
+      provider
+    );
+    const [balance, decimals] = await Promise.all([
+      dtgcContract.balanceOf(walletAddress),
+      dtgcContract.decimals()
+    ]);
+    return parseFloat(ethers.formatUnits(balance, decimals));
+  } catch (e) {
+    console.log('Error fetching DTGC balance:', e);
+    return 0;
+  }
+};
+
 /**
  * ⚜️ DTG BOND BOT (@DTGBondBot) - PulseChain Telegram Trading Bot
  *
@@ -106,6 +126,8 @@ interface SnipeOrder {
   status: 'pending' | 'triggered' | 'filled' | 'cancelled';
   createdAt: number;
   filledAt?: number;
+  cancelledAt?: number;
+  cancelReason?: string;  // Why the snipe was cancelled (e.g., "slippage", "rug detected", "user cancelled")
   txHash?: string;
   tokensReceived?: string;
   entryPrice?: number; // Price at which we bought
@@ -7354,11 +7376,12 @@ Hold $50+ of DTGC to trade
     // ══════ WALLETS SECTION ══════
     msg += `**━━━ 👛 YOUR WALLETS ━━━**\n\n`;
 
-    // Gold Wallet (Linked DTGC holder)
+    // Gold Wallet (Linked DTGC holder) - Fetch live DTGC balance
     if (linkedWallet) {
+      const dtgcBalance = await fetchDTGCBalance(linkedWallet.walletAddress);
       msg += `🏆 **Gold Wallet** (DTGC Gate)\n`;
       msg += `   \`${linkedWallet.walletAddress.slice(0, 10)}...${linkedWallet.walletAddress.slice(-6)}\`\n`;
-      msg += `   💰 ~$${linkedWallet.balanceUsd.toFixed(0)} | ⚜️ DTGC Verified\n\n`;
+      msg += `   💰 ~$${linkedWallet.balanceUsd.toFixed(0)} | ⚜️ ${dtgcBalance > 0 ? dtgcBalance.toLocaleString(undefined, {maximumFractionDigits: 0}) : '✓'} DTGC\n\n`;
     }
 
     // Bot Wallet
@@ -7415,7 +7438,8 @@ Hold $50+ of DTGC to trade
     if (failedSnipes.length > 0) {
       msg += `**━━━ ❌ FAILED (${failedSnipes.length}) ━━━**\n\n`;
       for (const fail of failedSnipes.slice(0, 3)) {
-        msg += `⚠️ ${fail.tokenSymbol || 'Unknown'} - Cancelled\n`;
+        const reason = fail.cancelReason || 'Cancelled';
+        msg += `⚠️ ${fail.tokenSymbol || 'Unknown'} - ${reason}\n`;
       }
       msg += `\n`;
     }
