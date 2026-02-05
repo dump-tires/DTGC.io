@@ -804,6 +804,15 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
         setRealPnL({ total, wins, losses, trades });
         setClosedTrades(trades.slice(0, 20)); // Also update closedTrades for display
+        // Sync tradeStats with real historical data for Bot tab congruency
+        setTradeStats(prev => ({
+          ...prev,
+          wins,
+          losses,
+          totalPnl: total,
+          successes: wins,
+          attempts: wins + losses,
+        }));
         console.log(`📊 Real P&L: $${total.toFixed(2)} | ${wins}W/${losses}L`);
       }
     } catch (error) {
@@ -850,12 +859,12 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     }
   };
 
-  // Fetch historical trades on component mount and when stats tab is active
+  // Fetch historical trades for CONNECTED WALLET (synced with user's actual trades)
   useEffect(() => {
-    if (activeTab === 'stats') {
-      fetchHistoricalTrades(Q7_DEV_WALLET);
+    if (activeTab === 'stats' && userAddress) {
+      fetchHistoricalTrades(userAddress);
     }
-  }, [activeTab]);
+  }, [activeTab, userAddress]);
 
   // ===== PENDING ORDERS / COLLATERAL CLAIM FUNCTIONS =====
 
@@ -2525,9 +2534,9 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 📤 SHARE P&L CARD
               </button>
 
-              {/* Wallet Address */}
+              {/* Wallet Address - Shows connected wallet */}
               <div style={{ textAlign: 'center', marginTop: '10px', color: '#555', fontSize: '8px' }}>
-                {Q7_DEV_WALLET.slice(0, 10)}...{Q7_DEV_WALLET.slice(-8)}
+                {userAddress ? `${userAddress.slice(0, 10)}...${userAddress.slice(-8)}` : 'Connect Wallet'}
               </div>
             </div>
 
@@ -2624,8 +2633,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <span style={{ color: '#555', fontSize: '9px' }}>{historicalTrades.length || closedTrades.length} trades</span>
                   <button
-                    onClick={() => fetchHistoricalTrades(Q7_DEV_WALLET)}
-                    disabled={historicalLoading}
+                    onClick={() => userAddress && fetchHistoricalTrades(userAddress)}
+                    disabled={historicalLoading || !userAddress}
                     style={{ background: 'rgba(255,215,0,0.2)', border: 'none', borderRadius: '4px', padding: '3px 8px', color: '#FFD700', fontSize: '9px', cursor: 'pointer' }}
                   >
                     {historicalLoading ? '⏳' : '🔄'}
@@ -3451,10 +3460,26 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
               pointerEvents: 'none',
             }} />
 
+            {/* Mando Sniper Image */}
+            <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 1 }}>
+              <img
+                src="/images/mando-sniper.png"
+                alt="Mando Sniper"
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  border: '3px solid #FFD700',
+                  boxShadow: '0 0 20px rgba(255, 215, 0, 0.4)',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
-                <ArbitrumLogo size={36} />
+                <ArbitrumLogo size={32} />
                 <div>
                   <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '18px', letterSpacing: '1px' }}>Q7 AUTO-PERP</div>
                   <div style={{ color: '#888', fontSize: '11px' }}>ARBITRUM • gTRADE • DTGC.io</div>
@@ -3514,7 +3539,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
               <div style={{ color: '#FFD700', fontSize: '11px', fontWeight: 700, marginBottom: '4px' }}>🎯 DTGC.io/gold</div>
               <div style={{ color: '#555', fontSize: '9px' }}>
-                {Q7_DEV_WALLET.slice(0, 12)}...{Q7_DEV_WALLET.slice(-10)}
+                {userAddress ? `${userAddress.slice(0, 12)}...${userAddress.slice(-10)}` : 'Connect Wallet'}
               </div>
               <div style={{ color: '#333', fontSize: '8px', marginTop: '8px' }}>
                 {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
