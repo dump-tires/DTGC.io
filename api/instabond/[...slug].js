@@ -42,6 +42,7 @@ export default async function handler(req, res) {
       return res.status(response.status).json({
         success: false,
         error: `Hetzner API error: ${response.status}`,
+        debug: { targetUrl, slug: req.query.slug, path },
       });
     }
 
