@@ -337,9 +337,54 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   // Calculate collateral deployed from open positions
   const collateralDeployed = userPositions.reduce((sum, pos) => sum + (pos.collateral || 0), 0);
 
+  // Calculate LIVE position stats (winning = positive unrealized PnL)
+  const getLivePositionStats = () => {
+    if (!userPositions.length) return { wins: 0, losses: 0, total: 0, count: 0 };
+
+    const winning = userPositions.filter(p => (p.pnlUsd || 0) > 0);
+    const losing = userPositions.filter(p => (p.pnlUsd || 0) < 0);
+    const total = userPositions.reduce((sum, p) => sum + (p.pnlUsd || 0), 0);
+
+    return {
+      wins: winning.length,
+      losses: losing.length,
+      total,
+      count: userPositions.length,
+      winRate: userPositions.length > 0 ? Math.round((winning.length / userPositions.length) * 100) : 0,
+    };
+  };
+
+  // Get combined stats (historical closed + live open)
+  const getCombinedStats = () => {
+    const live = getLivePositionStats();
+    const closed = realPnL;
+
+    // If we have closed trades, combine them. Otherwise use live positions only
+    if (closed.wins > 0 || closed.losses > 0) {
+      return {
+        wins: closed.wins + live.wins,
+        losses: closed.losses + live.losses,
+        total: closed.total + live.total,
+        count: (closed.trades?.length || 0) + live.count,
+      };
+    }
+
+    // No closed trades - show live position performance
+    return live;
+  };
+
   // Calculate filtered P&L based on time range
   const getFilteredPnL = () => {
-    if (!historicalTrades.length) return { total: 0, wins: 0, losses: 0 };
+    // If no historical trades, use live positions
+    if (!historicalTrades.length) {
+      const live = getLivePositionStats();
+      return {
+        total: live.total,
+        wins: live.wins,
+        losses: live.losses,
+        count: live.count,
+      };
+    }
 
     const now = Date.now();
     const timeFilters = {
@@ -352,29 +397,41 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     const cutoff = now - (timeFilters[pnlTimeRange] || Infinity);
     const filtered = historicalTrades.filter(t => t.timestamp >= cutoff);
 
+    // Add live position stats
+    const live = getLivePositionStats();
+
     return {
-      total: filtered.reduce((sum, t) => sum + t.pnlUsd, 0),
-      wins: filtered.filter(t => t.pnlUsd > 0).length,
-      losses: filtered.filter(t => t.pnlUsd < 0).length,
-      count: filtered.length,
+      total: filtered.reduce((sum, t) => sum + t.pnlUsd, 0) + live.total,
+      wins: filtered.filter(t => t.pnlUsd > 0).length + live.wins,
+      losses: filtered.filter(t => t.pnlUsd < 0).length + live.losses,
+      count: filtered.length + live.count,
     };
   };
 
-  // Forecast based on recent performance
+  // Forecast based on recent performance (uses live data if no closed trades)
   const getForecast = () => {
     const recent = getFilteredPnL();
     if (recent.count === 0) return null;
 
-    const winRate = recent.wins / (recent.wins + recent.losses) || 0;
-    const avgPnlPerTrade = recent.total / recent.count;
-    const tradesPerDay = pnlTimeRange === 'all' ? recent.count / 7 : recent.count / (parseInt(pnlTimeRange) / 24);
+    const totalTrades = recent.wins + recent.losses;
+    const winRate = totalTrades > 0 ? recent.wins / totalTrades : 0;
+    const avgPnlPerTrade = recent.count > 0 ? recent.total / recent.count : 0;
+
+    // Estimate trades per day based on time range
+    let tradesPerDay;
+    if (pnlTimeRange === 'all') {
+      tradesPerDay = recent.count > 0 ? recent.count / 7 : 0; // Assume 7 days of data
+    } else {
+      const hours = parseInt(pnlTimeRange) || 24;
+      tradesPerDay = recent.count > 0 ? (recent.count / hours) * 24 : 0;
+    }
 
     return {
       winRate: (winRate * 100).toFixed(1),
-      avgPnlPerTrade: avgPnlPerTrade.toFixed(2),
-      tradesPerDay: tradesPerDay.toFixed(1),
-      projected24h: (avgPnlPerTrade * tradesPerDay).toFixed(2),
-      projected7d: (avgPnlPerTrade * tradesPerDay * 7).toFixed(2),
+      avgPnlPerTrade: isNaN(avgPnlPerTrade) ? '0.00' : avgPnlPerTrade.toFixed(2),
+      tradesPerDay: isNaN(tradesPerDay) ? '0.0' : tradesPerDay.toFixed(1),
+      projected24h: isNaN(avgPnlPerTrade * tradesPerDay) ? '0.00' : (avgPnlPerTrade * tradesPerDay).toFixed(2),
+      projected7d: isNaN(avgPnlPerTrade * tradesPerDay * 7) ? '0.00' : (avgPnlPerTrade * tradesPerDay * 7).toFixed(2),
     };
   };
 
@@ -2660,48 +2717,60 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               )}
 
-              {/* Win/Loss/Rate Stats */}
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
-                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
-                  <div style={{ color: '#00ff88', fontSize: '28px', fontWeight: 800 }}>{realPnL.wins || tradeStats.wins || 0}</div>
-                  <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WINS</div>
-                </div>
-                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
-                  <div style={{ color: '#ff4444', fontSize: '28px', fontWeight: 800 }}>{realPnL.losses || tradeStats.losses || 0}</div>
-                  <div style={{ color: '#ff4444', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>LOSSES</div>
-                </div>
-                <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(138, 43, 226, 0.3)' }}>
-                  <div style={{ color: '#8a2be2', fontSize: '28px', fontWeight: 800 }}>
-                    {(realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0) > 0
-                      ? Math.round(((realPnL.wins || tradeStats.wins || 0) / ((realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0))) * 100)
-                      : 0}%
+              {/* Win/Loss/Rate Stats - LIVE from open positions! */}
+              {(() => {
+                const stats = getCombinedStats();
+                const winRate = (stats.wins + stats.losses) > 0
+                  ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100)
+                  : 0;
+                return (
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+                    <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
+                      <div style={{ color: '#00ff88', fontSize: '28px', fontWeight: 800 }}>{stats.wins}</div>
+                      <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WINNING</div>
+                    </div>
+                    <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
+                      <div style={{ color: '#ff4444', fontSize: '28px', fontWeight: 800 }}>{stats.losses}</div>
+                      <div style={{ color: '#ff4444', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>LOSING</div>
+                    </div>
+                    <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(138, 43, 226, 0.3)' }}>
+                      <div style={{ color: '#8a2be2', fontSize: '28px', fontWeight: 800 }}>{winRate}%</div>
+                      <div style={{ color: '#8a2be2', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
+                    </div>
                   </div>
-                  <div style={{ color: '#8a2be2', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
-                </div>
-              </div>
+                );
+              })()}
 
-              {/* Total P&L - Large Display */}
-              <div style={{
-                background: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05))' : 'linear-gradient(135deg, rgba(255, 68, 68, 0.15), rgba(255, 68, 68, 0.05))',
-                borderRadius: '12px',
-                padding: '16px',
-                textAlign: 'center',
-                border: `2px solid ${(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 68, 68, 0.4)'}`,
-                marginBottom: '12px',
-              }}>
-                <div style={{ color: '#888', fontSize: '11px', marginBottom: '6px', fontWeight: 600 }}>TOTAL P&L</div>
-                <div style={{
-                  color: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '#00ff88' : '#ff4444',
-                  fontSize: '36px',
-                  fontWeight: 800,
-                  textShadow: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '0 0 20px rgba(0,255,136,0.5)' : '0 0 20px rgba(255,68,68,0.5)',
-                }}>
-                  {(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '+' : ''}{(realPnL.total || tradeStats.totalPnl || 0).toFixed(2)} USDC
-                </div>
-                <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
-                  {historicalTrades.length || closedTrades.length} trades • Q7 D-RAM Auto-Scalp
-                </div>
-              </div>
+              {/* Total P&L - LIVE Combined (unrealized + realized) */}
+              {(() => {
+                const stats = getCombinedStats();
+                const displayPnL = stats.total;
+                return (
+                  <div style={{
+                    background: displayPnL >= 0 ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05))' : 'linear-gradient(135deg, rgba(255, 68, 68, 0.15), rgba(255, 68, 68, 0.05))',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    textAlign: 'center',
+                    border: `2px solid ${displayPnL >= 0 ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 68, 68, 0.4)'}`,
+                    marginBottom: '12px',
+                  }}>
+                    <div style={{ color: '#888', fontSize: '11px', marginBottom: '6px', fontWeight: 600 }}>
+                      TOTAL P&L {userPositions.length > 0 ? '(LIVE)' : ''}
+                    </div>
+                    <div style={{
+                      color: displayPnL >= 0 ? '#00ff88' : '#ff4444',
+                      fontSize: '36px',
+                      fontWeight: 800,
+                      textShadow: displayPnL >= 0 ? '0 0 20px rgba(0,255,136,0.5)' : '0 0 20px rgba(255,68,68,0.5)',
+                    }}>
+                      {displayPnL >= 0 ? '+' : ''}{displayPnL.toFixed(2)} USDC
+                    </div>
+                    <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
+                      {stats.count} positions • Q7 D-RAM Auto-Scalp
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Time Range Slider */}
               <div style={{
@@ -3773,32 +3842,35 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
               </div>
             </div>
 
-            {/* Stats Grid - Uses filtered P&L when time range selected */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
-              <div style={{ background: 'rgba(0, 255, 136, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(0, 255, 136, 0.3)' }}>
-                <div style={{ color: '#00ff88', fontSize: '32px', fontWeight: 900 }}>{pnlTimeRange === 'all' ? (realPnL.wins || 0) : getFilteredPnL().wins}</div>
-                <div style={{ color: '#00ff88', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WINS</div>
-              </div>
-              <div style={{ background: 'rgba(255, 68, 68, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(255, 68, 68, 0.3)' }}>
-                <div style={{ color: '#ff4444', fontSize: '32px', fontWeight: 900 }}>{pnlTimeRange === 'all' ? (realPnL.losses || 0) : getFilteredPnL().losses}</div>
-                <div style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>LOSSES</div>
-              </div>
-              <div style={{ background: 'rgba(138, 43, 226, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(138, 43, 226, 0.3)' }}>
-                <div style={{ color: '#8a2be2', fontSize: '32px', fontWeight: 900 }}>
-                  {(() => {
-                    const w = pnlTimeRange === 'all' ? (realPnL.wins || 0) : getFilteredPnL().wins;
-                    const l = pnlTimeRange === 'all' ? (realPnL.losses || 0) : getFilteredPnL().losses;
-                    return (w + l) > 0 ? Math.round((w / (w + l)) * 100) : 0;
-                  })()}%
-                </div>
-                <div style={{ color: '#8a2be2', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WIN RATE</div>
-              </div>
-            </div>
-
-            {/* Total P&L Hero - Uses filtered data based on time range */}
+            {/* Stats Grid - LIVE from combined open + closed positions */}
             {(() => {
-              const displayPnL = pnlTimeRange === 'all' ? (realPnL.total || 0) : getFilteredPnL().total;
-              const tradeCount = pnlTimeRange === 'all' ? historicalTrades.length : (getFilteredPnL().count || 0);
+              const stats = getFilteredPnL(); // Already includes live positions
+              const winRate = (stats.wins + stats.losses) > 0
+                ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100)
+                : 0;
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
+                  <div style={{ background: 'rgba(0, 255, 136, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(0, 255, 136, 0.3)' }}>
+                    <div style={{ color: '#00ff88', fontSize: '32px', fontWeight: 900 }}>{stats.wins}</div>
+                    <div style={{ color: '#00ff88', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WINNING</div>
+                  </div>
+                  <div style={{ background: 'rgba(255, 68, 68, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(255, 68, 68, 0.3)' }}>
+                    <div style={{ color: '#ff4444', fontSize: '32px', fontWeight: 900 }}>{stats.losses}</div>
+                    <div style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>LOSING</div>
+                  </div>
+                  <div style={{ background: 'rgba(138, 43, 226, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(138, 43, 226, 0.3)' }}>
+                    <div style={{ color: '#8a2be2', fontSize: '32px', fontWeight: 900 }}>{winRate}%</div>
+                    <div style={{ color: '#8a2be2', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WIN RATE</div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Total P&L Hero - LIVE combined data */}
+            {(() => {
+              const stats = getFilteredPnL();
+              const displayPnL = stats.total;
+              const tradeCount = stats.count;
               return (
                 <div style={{
                   background: displayPnL >= 0
