@@ -1092,25 +1092,77 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const fetchHistoricalTrades = async (walletAddr = Q7_DEV_WALLET) => {
     setHistoricalLoading(true);
     try {
-      // gTrade historical trades API
+      // gTrade historical trades API - increased limit to 200
       const endpoints = [
-        `https://backend-arbitrum.gains.trade/historical-trades/${walletAddr}?limit=50`,
-        `https://backend-arbitrum.eu.gains.trade/historical-trades/${walletAddr}?limit=50`,
+        `https://backend-arbitrum.gains.trade/historical-trades/${walletAddr}?limit=200`,
+        `https://backend-arbitrum.eu.gains.trade/historical-trades/${walletAddr}?limit=200`,
       ];
 
       let data = null;
       for (const endpoint of endpoints) {
         try {
+          console.log(`🔍 Fetching historical trades from: ${endpoint}`);
           const response = await fetch(endpoint);
           if (response.ok) {
             data = await response.json();
-            console.log(`✅ Historical trades from gTrade:`, data?.length || 0);
-            break;
+            console.log(`✅ Historical trades from gTrade API:`, data?.length || 0);
+            if (data?.length > 0) break;
           }
         } catch (e) {
-          console.log(`⚠️ Historical endpoint failed: ${endpoint}`);
+          console.log(`⚠️ Historical endpoint failed: ${endpoint}`, e.message);
         }
       }
+
+      // Fallback: Try gTrade Subgraph if API returns empty
+      if (!data || data.length === 0) {
+        console.log('🔍 Trying gTrade Subgraph fallback...');
+        try {
+          const subgraphUrl = 'https://api.thegraph.com/subgraphs/name/gains-network/gains-network-arbitrum';
+          const query = `{
+            trades(first: 200, where: {trader: "${walletAddr.toLowerCase()}"}, orderBy: closeTimestamp, orderDirection: desc) {
+              id
+              pairIndex
+              long
+              collateralAmount
+              openPrice
+              closePrice
+              percentProfit
+              closeType
+              closeTimestamp
+              leverage
+            }
+          }`;
+
+          const subgraphResponse = await fetch(subgraphUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query }),
+          });
+
+          if (subgraphResponse.ok) {
+            const subgraphData = await subgraphResponse.json();
+            if (subgraphData?.data?.trades?.length > 0) {
+              console.log(`✅ Historical trades from Subgraph:`, subgraphData.data.trades.length);
+              // Convert subgraph format to our format
+              data = subgraphData.data.trades.map(t => ({
+                pairIndex: t.pairIndex,
+                long: t.long,
+                collateralAmount: t.collateralAmount,
+                openPrice: t.openPrice,
+                closePrice: t.closePrice,
+                percentProfit: parseFloat(t.percentProfit) / 1e10, // Subgraph stores differently
+                closeType: t.closeType,
+                timestamp: parseInt(t.closeTimestamp) * 1000,
+                leverage: t.leverage,
+              }));
+            }
+          }
+        } catch (subgraphError) {
+          console.log('⚠️ Subgraph fallback failed:', subgraphError.message);
+        }
+      }
+
+      console.log(`📊 Total historical trades found: ${data?.length || 0}`);
 
       if (Array.isArray(data) && data.length > 0) {
         const ASSET_INDEX_REVERSE = { 0: 'BTC', 1: 'ETH', 90: 'GOLD', 91: 'SILVER' };
