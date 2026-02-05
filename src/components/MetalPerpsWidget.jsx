@@ -1530,6 +1530,135 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     }
   }, [activeTab]);
 
+  // ===== FETCH USER'S ARBITRUM USDC BALANCE FOR COPY TRADING =====
+  const fetchArbUsdcBalance = async (walletAddr) => {
+    if (!walletAddr || walletAddr.length < 42) return;
+
+    try {
+      // Arbitrum USDC contract
+      const ARB_USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
+      const ARB_RPC = 'https://arb1.arbitrum.io/rpc';
+
+      // Use ethers v6 syntax for read-only call
+      const data = `0x70a08231000000000000000000000000${walletAddr.slice(2).toLowerCase()}`;
+
+      const response = await fetch(ARB_RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_call',
+          params: [{ to: ARB_USDC, data }, 'latest'],
+          id: 1,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.result) {
+        const balance = parseInt(result.result, 16) / 1e6; // USDC has 6 decimals
+        console.log(`💰 ARB USDC Balance for ${walletAddr.slice(0, 10)}...: $${balance.toFixed(2)}`);
+        setCopyTradeArbBalance(balance);
+        return balance;
+      }
+    } catch (error) {
+      console.error('Failed to fetch ARB USDC balance:', error);
+    }
+
+    // Also try fetching ETH balance as backup
+    try {
+      const response = await fetch('https://arb1.arbitrum.io/rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_getBalance',
+          params: [walletAddr, 'latest'],
+          id: 1,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.result) {
+        const ethBalance = parseInt(result.result, 16) / 1e18;
+        const ethPrice = livePrices.ETH || 1900;
+        const ethValueUsd = ethBalance * ethPrice;
+        console.log(`💰 ARB ETH: ${ethBalance.toFixed(4)} (~$${ethValueUsd.toFixed(2)})`);
+        // Add ETH value to USDC balance for total
+        setCopyTradeArbBalance(prev => prev + ethValueUsd);
+      }
+    } catch (e) { /* silent */ }
+
+    return 0;
+  };
+
+  // Fetch ARB USDC balance when wallet connects
+  useEffect(() => {
+    if (connectedAddress) {
+      fetchArbUsdcBalance(connectedAddress);
+      // Refresh every 30 seconds
+      const interval = setInterval(() => fetchArbUsdcBalance(connectedAddress), 30000);
+      return () => clearInterval(interval);
+    }
+  }, [connectedAddress]);
+
+  // ===== COPY TRADING SYNC - Mirror Q7 Bot Trades =====
+  const [lastKnownQ7Positions, setLastKnownQ7Positions] = useState([]);
+
+  // Detect new Q7 trades and update copy trade stats
+  useEffect(() => {
+    if (!copyTradeEnabled || !q7DevPositions.length) return;
+
+    // Find NEW positions that weren't in last known
+    const newPositions = q7DevPositions.filter(pos =>
+      !lastKnownQ7Positions.find(p => p.asset === pos.asset && p.openPrice === pos.openPrice)
+    );
+
+    // Find CLOSED positions (were in last known but not in current)
+    const closedPositions = lastKnownQ7Positions.filter(pos =>
+      !q7DevPositions.find(p => p.asset === pos.asset && p.openPrice === pos.openPrice)
+    );
+
+    // Process new trades
+    if (newPositions.length > 0) {
+      console.log(`📋 Copy Trade: ${newPositions.length} new Q7 positions detected`);
+      setCopyTradeMirroredCount(prev => prev + newPositions.length);
+
+      newPositions.forEach(pos => {
+        showToastMsg(`📋 COPY: ${pos.direction} ${pos.asset} @ $${pos.openPrice?.toFixed(2)}`, 'info');
+      });
+    }
+
+    // Process closed trades and calculate P&L
+    if (closedPositions.length > 0) {
+      closedPositions.forEach(pos => {
+        const currentPrice = livePrices[pos.asset] || pos.openPrice;
+        const priceDiff = pos.direction === 'LONG'
+          ? (currentPrice - pos.openPrice) / pos.openPrice
+          : (pos.openPrice - currentPrice) / pos.openPrice;
+        const pnlUsd = (pos.collateral || 5) * priceDiff * (pos.leverage || 25);
+
+        setCopyTradeUserPnL(prev => ({
+          total: prev.total + pnlUsd,
+          wins: pnlUsd > 0 ? prev.wins + 1 : prev.wins,
+          losses: pnlUsd < 0 ? prev.losses + 1 : prev.losses,
+        }));
+
+        const emoji = pnlUsd >= 0 ? '✅' : '❌';
+        showToastMsg(`${emoji} COPY CLOSE: ${pos.asset} ${pnlUsd >= 0 ? '+' : ''}$${pnlUsd.toFixed(2)}`, pnlUsd >= 0 ? 'success' : 'error');
+      });
+    }
+
+    // Update last known positions
+    setLastKnownQ7Positions(q7DevPositions);
+  }, [q7DevPositions, copyTradeEnabled, livePrices]);
+
+  // Set copy trade start time when enabled
+  useEffect(() => {
+    if (copyTradeEnabled && !copyTradeLastSync) {
+      setCopyTradeLastSync(new Date());
+    }
+  }, [copyTradeEnabled]);
+
   // WebSocket connection for real-time trade history updates
   useEffect(() => {
     let ws = null;
@@ -4522,8 +4651,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#888', fontSize: '10px' }}>⚡ $40 ARB USDC/ETH</span>
-                    <span style={{ color: hasArbFunds || balance >= 40 ? '#00ff88' : '#ff9900', fontSize: '10px', fontWeight: 600 }}>
-                      {balance >= 40 ? `✓ $${balance?.toFixed(0)}` : `~ $${balance?.toFixed(0) || '0'}`}
+                    <span style={{ color: copyTradeArbBalance >= COPY_TRADE_ARB_MIN ? '#00ff88' : '#ff9900', fontSize: '10px', fontWeight: 600 }}>
+                      {copyTradeArbBalance >= COPY_TRADE_ARB_MIN ? `✓ $${copyTradeArbBalance?.toFixed(2)}` : `~ $${copyTradeArbBalance?.toFixed(2) || '0'}`}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
