@@ -283,6 +283,11 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   // ===== POLYMARKET PREDICTION MARKETS =====
   const [polymarketData, setPolymarketData] = useState([]);
   const [polymarketLoading, setPolymarketLoading] = useState(false);
+
+  // ===== Q7 DEV WALLET LIVE POSITIONS =====
+  const [q7DevPositions, setQ7DevPositions] = useState([]);
+  const [q7DevLoading, setQ7DevLoading] = useState(false);
+  const [q7DevPnl, setQ7DevPnl] = useState(0);
   
   const asset = ASSETS[selectedAsset];
   const tvSymbol = TV_SYMBOLS[selectedAsset];
@@ -618,6 +623,108 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
       fetchPolymarketData();
     }
   }, [activeTab]);
+
+  // ===== Q7 DEV WALLET POSITION FETCH =====
+  const fetchQ7DevPositions = async () => {
+    setQ7DevLoading(true);
+    try {
+      // Fetch Q7 dev wallet positions directly from gTrade API
+      const endpoints = [
+        `https://backend-arbitrum.gains.trade/open-trades/${Q7_DEV_WALLET}`,
+        `https://backend-arbitrum.eu.gains.trade/open-trades/${Q7_DEV_WALLET}`,
+      ];
+
+      let data = null;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (response.ok) {
+            data = await response.json();
+            console.log(`✅ Q7 Dev positions from gTrade:`, data?.length || 0);
+            break;
+          }
+        } catch (e) {
+          console.log(`⚠️ gTrade endpoint failed: ${endpoint}`);
+        }
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        const ASSET_INDEX_REVERSE = { 0: 'BTC', 1: 'ETH', 90: 'GOLD', 91: 'SILVER' };
+
+        const mappedPositions = data.map((t, idx) => {
+          const pairIndex = parseInt(t.trade?.pairIndex || t.pairIndex || 0);
+          const asset = ASSET_INDEX_REVERSE[pairIndex] || `PAIR${pairIndex}`;
+          const isLong = t.trade?.long === true || t.trade?.long === 'true' || t.trade?.buy === true;
+          const leverage = parseInt(t.trade?.leverage || t.leverage || 1) / 1000;
+          const collateral = parseFloat(t.trade?.collateralAmount || t.collateralAmount || 0) / 1e6;
+          const openPrice = parseFloat(t.trade?.openPrice || t.openPrice || 0) / 1e10;
+          const tp = parseFloat(t.trade?.tp || t.tp || 0) / 1e10;
+          const sl = parseFloat(t.trade?.sl || t.sl || 0) / 1e10;
+
+          // Get current price for P&L calculation
+          const currentPrice = livePrices[asset] || openPrice;
+          const priceDiff = isLong
+            ? (currentPrice - openPrice) / openPrice
+            : (openPrice - currentPrice) / openPrice;
+          const pnlPct = priceDiff * 100 * leverage;
+          const pnlUsd = collateral * priceDiff * leverage;
+
+          return {
+            index: parseInt(t.trade?.index || t.index || idx),
+            asset,
+            pairIndex,
+            long: isLong,
+            leverage,
+            collateral,
+            openPrice,
+            currentPrice,
+            tp,
+            sl,
+            pnlPct,
+            pnlUsd,
+          };
+        });
+
+        setQ7DevPositions(mappedPositions);
+        const totalPnl = mappedPositions.reduce((sum, p) => sum + (p.pnlUsd || 0), 0);
+        setQ7DevPnl(totalPnl);
+        console.log(`🔴 Q7 Dev positions loaded: ${mappedPositions.length}, Total PnL: $${totalPnl.toFixed(2)}`);
+      } else {
+        setQ7DevPositions([]);
+        setQ7DevPnl(0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Q7 dev positions:', error);
+    }
+    setQ7DevLoading(false);
+  };
+
+  // Fetch Q7 dev positions when tab is active and refresh every 10s
+  useEffect(() => {
+    if (activeTab === 'q7live') {
+      fetchQ7DevPositions();
+      const interval = setInterval(fetchQ7DevPositions, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
+  // Update Q7 dev positions P&L when prices change
+  useEffect(() => {
+    if (q7DevPositions.length > 0 && Object.keys(livePrices).length > 0) {
+      const updatedPositions = q7DevPositions.map(pos => {
+        const currentPrice = livePrices[pos.asset] || pos.currentPrice;
+        const priceDiff = pos.long
+          ? (currentPrice - pos.openPrice) / pos.openPrice
+          : (pos.openPrice - currentPrice) / pos.openPrice;
+        const pnlPct = priceDiff * 100 * pos.leverage;
+        const pnlUsd = pos.collateral * priceDiff * pos.leverage;
+        return { ...pos, currentPrice, pnlPct, pnlUsd };
+      });
+      setQ7DevPositions(updatedPositions);
+      const totalPnl = updatedPositions.reduce((sum, p) => sum + (p.pnlUsd || 0), 0);
+      setQ7DevPnl(totalPnl);
+    }
+  }, [livePrices]);
 
   // ===== PENDING ORDERS / COLLATERAL CLAIM FUNCTIONS =====
 
@@ -1404,11 +1511,11 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
         onClick={() => setIsExpanded(true)}
         style={{
           position: 'fixed',
-          bottom: isMobile ? '185px' : '100px',
+          bottom: isMobile ? '75px' : '100px',
           left: isMobile ? 'auto' : '20px',
-          right: isMobile ? '10px' : 'auto',
-          width: isMobile ? '44px' : '56px',
-          height: isMobile ? '44px' : '56px',
+          right: isMobile ? '12px' : 'auto',
+          width: isMobile ? '48px' : '56px',
+          height: isMobile ? '48px' : '56px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #FFD700, #FFA500)',
           display: 'flex',
@@ -1431,12 +1538,12 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   return (
     <div style={{
       position: 'fixed',
-      bottom: isMobile ? '10px' : '20px',
-      left: isMobile ? '10px' : '20px',
-      right: isMobile ? '10px' : 'auto',
+      bottom: isMobile ? '60px' : '20px',
+      left: isMobile ? '8px' : '20px',
+      right: isMobile ? '8px' : 'auto',
       width: isMobile ? 'auto' : '400px',
       maxWidth: '420px',
-      maxHeight: isMobile ? '85vh' : '90vh',
+      maxHeight: isMobile ? '75vh' : '90vh',
       background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
       borderRadius: '16px',
       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 215, 0, 0.2)',
@@ -2402,41 +2509,44 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   </div>
                 </div>
 
-                {/* Q7 Active Positions */}
+                {/* Q7 Active Positions - fetched from gTrade API */}
                 <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
-                  <div style={{ color: '#888', fontSize: '10px', marginBottom: '8px', fontWeight: 600 }}>🔥 Q7 ACTIVE POSITIONS</div>
-                  {positions.length === 0 ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ color: '#888', fontSize: '10px', fontWeight: 600 }}>🔥 Q7 ACTIVE POSITIONS ({q7DevPositions.length})</div>
+                    {q7DevLoading && <span style={{ color: '#FFD700', fontSize: '10px' }}>⏳</span>}
+                    <div style={{ color: q7DevPnl >= 0 ? '#00ff88' : '#ff4444', fontSize: '11px', fontWeight: 700 }}>
+                      {q7DevPnl >= 0 ? '+' : ''}${q7DevPnl.toFixed(2)}
+                    </div>
+                  </div>
+                  {q7DevPositions.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '20px', color: '#555', fontSize: '10px' }}>
-                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
-                      No active positions - Q7 analyzing markets...
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>{q7DevLoading ? '⏳' : '📊'}</div>
+                      {q7DevLoading ? 'Loading Q7 positions...' : 'No active positions - Q7 analyzing markets...'}
                     </div>
                   ) : (
-                    positions.map((pos, idx) => {
-                      const pnl = calculatePnL(pos);
-                      return (
-                        <div key={idx} style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', marginBottom: '6px',
-                          border: `1px solid ${pnl?.percent >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,68,68,0.3)'}`,
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '16px' }}>{pos.long ? '📈' : '📉'}</span>
-                            <div>
-                              <div style={{ color: '#fff', fontSize: '13px', fontWeight: 700 }}>{pos.asset}</div>
-                              <div style={{ color: '#888', fontSize: '9px' }}>{pos.leverage?.toFixed(0)}x {pos.long ? 'LONG' : 'SHORT'} • ${pos.collateral?.toFixed(2)}</div>
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ color: pnl?.percent >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
-                              {pnl ? `${pnl.percent >= 0 ? '+' : ''}${pnl.percent.toFixed(2)}%` : '---'}
-                            </div>
-                            <div style={{ color: pnl?.usd >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px' }}>
-                              {pnl ? `${pnl.usd >= 0 ? '+' : ''}$${pnl.usd.toFixed(2)}` : '---'}
-                            </div>
+                    q7DevPositions.map((pos, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', marginBottom: '6px',
+                        border: `1px solid ${pos.pnlPct >= 0 ? 'rgba(0,255,136,0.3)' : 'rgba(255,68,68,0.3)'}`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '16px' }}>{pos.long ? '📈' : '📉'}</span>
+                          <div>
+                            <div style={{ color: '#fff', fontSize: '13px', fontWeight: 700 }}>{pos.asset}</div>
+                            <div style={{ color: '#888', fontSize: '9px' }}>{pos.leverage?.toFixed(0)}x {pos.long ? 'LONG' : 'SHORT'} • ${pos.collateral?.toFixed(2)}</div>
                           </div>
                         </div>
-                      );
-                    })
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: pos.pnlPct >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
+                            {pos.pnlPct >= 0 ? '+' : ''}{pos.pnlPct.toFixed(2)}%
+                          </div>
+                          <div style={{ color: pos.pnlUsd >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px' }}>
+                            {pos.pnlUsd >= 0 ? '+' : ''}${pos.pnlUsd.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
 
