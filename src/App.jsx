@@ -12392,6 +12392,27 @@ export default function App() {
                 </a>
               </div>
 
+              {/* WHITEPAPERS & RESEARCH */}
+              <div style={{ marginTop: '32px', marginBottom: '32px' }}>
+                <h3 className="contracts-title gold-text" style={{ marginBottom: '16px' }}>📑 WHITEPAPERS & RESEARCH</h3>
+                <div className="links-grid">
+                  <a href="/Metals_Arbitrum_PulseChain_Whitepaper.pdf" target="_blank" rel="noopener noreferrer" className="link-card" style={{ background: 'linear-gradient(135deg, rgba(184,134,11,0.2), rgba(255,215,0,0.1))', border: '2px solid #B8860B' }}>
+                    <span className="link-icon">📊</span>
+                    <div className="link-info">
+                      <div className="link-name" style={{ color: '#FFD700' }}>Metals Arbitrum × PulseChain</div>
+                      <div className="link-url">Q7 Auto-Perp Engine Whitepaper</div>
+                    </div>
+                  </a>
+                  <a href="/DTGC-Audit-Dessert-Finance.pdf" target="_blank" rel="noopener noreferrer" className="link-card">
+                    <span className="link-icon">🔒</span>
+                    <div className="link-info">
+                      <div className="link-name">Security Audit</div>
+                      <div className="link-url">Dessert Finance Audit Report</div>
+                    </div>
+                  </a>
+                </div>
+              </div>
+
               <div className="contracts-section">
                 <h3 className="contracts-title gold-text">CONTRACT ADDRESSES</h3>
                 {[

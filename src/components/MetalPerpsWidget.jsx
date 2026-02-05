@@ -2929,7 +2929,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     cursor: 'pointer',
                   }}
                 >
-                  📸 SNAPSHOT CARD
+                  📸 SNAPSHOT
                 </button>
                 <button
                   onClick={() => setShowRetrospectCard(true)}
@@ -2945,8 +2945,31 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     cursor: 'pointer',
                   }}
                 >
-                  📊 RETROSPECT CARD
+                  📊 RETROSPECT
                 </button>
+                <a
+                  href="/Metals_Arbitrum_PulseChain_Whitepaper.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    flex: 1,
+                    padding: '12px 8px',
+                    background: 'linear-gradient(135deg, #B8860B, #8B6914)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    textDecoration: 'none',
+                    textAlign: 'center',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  📑 WHITEPAPER
+                </a>
               </div>
 
               {/* Wallet Address - Shows connected wallet */}
