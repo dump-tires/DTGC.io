@@ -3846,61 +3846,77 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             }}
           >✕</button>
 
-          {/* MANDALORIAN P&L CARD */}
+          {/* MANDALORIAN P&L CARD - Full Background Art */}
           <div style={{
-            background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
             borderRadius: '20px',
-            padding: '24px',
-            maxWidth: '380px',
+            maxWidth: '400px',
             width: '100%',
-            border: '3px solid rgba(255, 215, 0, 0.5)',
+            border: '4px solid rgba(255, 215, 0, 0.7)',
             position: 'relative',
             overflow: 'hidden',
-            boxShadow: '0 20px 60px rgba(255, 215, 0, 0.2)',
+            boxShadow: '0 20px 60px rgba(255, 215, 0, 0.3), 0 0 100px rgba(255, 215, 0, 0.1)',
           }}>
-            {/* Mandalorian Beskar corners */}
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '50px', height: '50px', borderTop: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '16px 0 0 0' }} />
-            <div style={{ position: 'absolute', top: 0, right: 0, width: '50px', height: '50px', borderTop: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 16px 0 0' }} />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '50px', height: '50px', borderBottom: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '0 0 0 16px' }} />
-            <div style={{ position: 'absolute', bottom: 0, right: 0, width: '50px', height: '50px', borderBottom: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 0 16px 0' }} />
-
-            {/* Glow Effect */}
+            {/* FULL MANDO BACKGROUND IMAGE */}
             <div style={{
               position: 'absolute',
-              top: '-50%',
-              left: '-50%',
-              width: '200%',
-              height: '200%',
-              background: 'radial-gradient(circle at center, rgba(255,215,0,0.1) 0%, transparent 50%)',
-              pointerEvents: 'none',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundImage: `url(${currentMandoImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center top',
+              zIndex: 0,
             }} />
 
-            {/* Mando Image - Randomized! */}
-            <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 1 }}>
-              <img
-                src={currentMandoImage}
-                alt="Mando Sniper"
-                style={{
-                  width: '100px',
-                  height: '100px',
-                  borderRadius: '50%',
-                  border: '4px solid #FFD700',
-                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
-                  objectFit: 'cover',
-                }}
-              />
-            </div>
+            {/* Artistic gradient overlay - NOT opaque */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.75) 60%, rgba(0,0,0,0.85) 100%)',
+              zIndex: 1,
+            }} />
 
-            {/* Header */}
-            <div style={{ textAlign: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
+            {/* Content Container */}
+            <div style={{ position: 'relative', zIndex: 2, padding: '24px' }}>
+              {/* Mandalorian Beskar corners */}
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '50px', height: '50px', borderTop: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '16px 0 0 0' }} />
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '50px', height: '50px', borderTop: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 16px 0 0' }} />
+              <div style={{ position: 'absolute', bottom: 0, left: 0, width: '50px', height: '50px', borderBottom: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '0 0 0 16px' }} />
+              <div style={{ position: 'absolute', bottom: 0, right: 0, width: '50px', height: '50px', borderBottom: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 0 16px 0' }} />
+
+              {/* Glow Effect */}
+              <div style={{
+                position: 'absolute',
+                top: '-50%',
+                left: '-50%',
+                width: '200%',
+                height: '200%',
+                background: 'radial-gradient(circle at center, rgba(255,215,0,0.15) 0%, transparent 50%)',
+                pointerEvents: 'none',
+              }} />
+
+            {/* Header - Glassmorphism style */}
+            <div style={{
+              textAlign: 'center',
+              marginBottom: '16px',
+              padding: '16px',
+              background: 'rgba(0, 0, 0, 0.4)',
+              backdropFilter: 'blur(10px)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 215, 0, 0.3)',
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
                 <ArbitrumLogo size={32} />
                 <div>
-                  <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '18px', letterSpacing: '1px' }}>Q7 AUTO-PERP</div>
-                  <div style={{ color: '#888', fontSize: '11px' }}>ARBITRUM • gTRADE • DTGC.io</div>
+                  <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '20px', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>Q7 AUTO-PERP</div>
+                  <div style={{ color: '#ccc', fontSize: '11px', textShadow: '0 1px 5px rgba(0,0,0,0.8)' }}>ARBITRUM • gTRADE • DTGC.io</div>
                 </div>
               </div>
-              <div style={{ color: '#555', fontSize: '9px' }}>D-RAM v5.2.6 Calibrated</div>
+              <div style={{ color: '#888', fontSize: '9px' }}>D-RAM v5.2.6 Calibrated</div>
 
               {/* Time Range Toggle in Card */}
               <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', marginTop: '10px' }}>
@@ -3925,31 +3941,31 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
               </div>
             </div>
 
-            {/* Stats Grid - LIVE from combined open + closed positions */}
+            {/* Stats Grid - Glassmorphism style */}
             {(() => {
-              const stats = getFilteredPnL(); // Already includes live positions
+              const stats = getFilteredPnL();
               const winRate = (stats.wins + stats.losses) > 0
                 ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100)
                 : 0;
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
-                  <div style={{ background: 'rgba(0, 255, 136, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(0, 255, 136, 0.3)' }}>
-                    <div style={{ color: '#00ff88', fontSize: '32px', fontWeight: 900 }}>{stats.wins}</div>
-                    <div style={{ color: '#00ff88', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WINNING</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                  <div style={{ background: 'rgba(0, 255, 136, 0.2)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(0, 255, 136, 0.4)' }}>
+                    <div style={{ color: '#00ff88', fontSize: '32px', fontWeight: 900, textShadow: '0 2px 10px rgba(0,255,136,0.5)' }}>{stats.wins}</div>
+                    <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WINNING</div>
                   </div>
-                  <div style={{ background: 'rgba(255, 68, 68, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(255, 68, 68, 0.3)' }}>
-                    <div style={{ color: '#ff4444', fontSize: '32px', fontWeight: 900 }}>{stats.losses}</div>
-                    <div style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>LOSING</div>
+                  <div style={{ background: 'rgba(255, 68, 68, 0.2)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(255, 68, 68, 0.4)' }}>
+                    <div style={{ color: '#ff4444', fontSize: '32px', fontWeight: 900, textShadow: '0 2px 10px rgba(255,68,68,0.5)' }}>{stats.losses}</div>
+                    <div style={{ color: '#ff4444', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>LOSING</div>
                   </div>
-                  <div style={{ background: 'rgba(138, 43, 226, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(138, 43, 226, 0.3)' }}>
-                    <div style={{ color: '#8a2be2', fontSize: '32px', fontWeight: 900 }}>{winRate}%</div>
-                    <div style={{ color: '#8a2be2', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WIN RATE</div>
+                  <div style={{ background: 'rgba(138, 43, 226, 0.2)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(138, 43, 226, 0.4)' }}>
+                    <div style={{ color: '#8a2be2', fontSize: '32px', fontWeight: 900, textShadow: '0 2px 10px rgba(138,43,226,0.5)' }}>{winRate}%</div>
+                    <div style={{ color: '#8a2be2', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
                   </div>
                 </div>
               );
             })()}
 
-            {/* Total P&L Hero - LIVE combined data */}
+            {/* Total P&L Hero - Glassmorphism */}
             {(() => {
               const stats = getFilteredPnL();
               const displayPnL = stats.total;
@@ -3957,24 +3973,23 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
               return (
                 <div style={{
                   background: displayPnL >= 0
-                    ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))'
-                    : 'linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(200, 50, 50, 0.1))',
+                    ? 'rgba(0, 255, 136, 0.15)'
+                    : 'rgba(255, 68, 68, 0.15)',
+                  backdropFilter: 'blur(10px)',
                   borderRadius: '16px',
                   padding: '20px',
                   textAlign: 'center',
                   border: `3px solid ${displayPnL >= 0 ? 'rgba(0, 255, 136, 0.5)' : 'rgba(255, 68, 68, 0.5)'}`,
                   marginBottom: '16px',
-                  position: 'relative',
-                  zIndex: 1,
                 }}>
-                  <div style={{ color: '#888', fontSize: '12px', marginBottom: '8px', fontWeight: 600, letterSpacing: '1px' }}>
+                  <div style={{ color: '#fff', fontSize: '12px', marginBottom: '8px', fontWeight: 600, letterSpacing: '1px', textShadow: '0 1px 5px rgba(0,0,0,0.8)' }}>
                     {pnlTimeRange === 'all' ? 'TOTAL P&L' : `P&L (${pnlTimeRange.toUpperCase()})`}
                   </div>
                   <div style={{
                     color: displayPnL >= 0 ? '#00ff88' : '#ff4444',
-                    fontSize: '42px',
+                    fontSize: '44px',
                     fontWeight: 900,
-                    textShadow: displayPnL >= 0 ? '0 0 30px rgba(0,255,136,0.6)' : '0 0 30px rgba(255,68,68,0.6)',
+                    textShadow: displayPnL >= 0 ? '0 0 40px rgba(0,255,136,0.8), 0 2px 10px rgba(0,0,0,0.5)' : '0 0 40px rgba(255,68,68,0.8), 0 2px 10px rgba(0,0,0,0.5)',
                   }}>
                     {displayPnL >= 0 ? '+' : ''}{displayPnL.toFixed(2)} USDC
                   </div>
@@ -4120,205 +4135,257 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             }}
           >✕</button>
 
-          {/* RETROSPECT P&L CARD */}
+          {/* RETROSPECT P&L CARD - Full Background Mando Art */}
           <div style={{
-            background: 'linear-gradient(145deg, #0d1117 0%, #161b22 50%, #21262d 100%)',
             borderRadius: '20px',
-            padding: '24px',
             maxWidth: '400px',
             width: '100%',
-            border: '3px solid rgba(255, 215, 0, 0.6)',
+            border: '4px solid rgba(255, 215, 0, 0.7)',
             position: 'relative',
             overflow: 'hidden',
-            boxShadow: '0 20px 60px rgba(255, 215, 0, 0.25)',
+            boxShadow: '0 20px 60px rgba(255, 215, 0, 0.3), 0 0 100px rgba(255, 215, 0, 0.1)',
           }}>
-            {/* Corner accents */}
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '60px', height: '60px', borderTop: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '16px 0 0 0' }} />
-            <div style={{ position: 'absolute', top: 0, right: 0, width: '60px', height: '60px', borderTop: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 16px 0 0' }} />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '60px', height: '60px', borderBottom: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '0 0 0 16px' }} />
-            <div style={{ position: 'absolute', bottom: 0, right: 0, width: '60px', height: '60px', borderBottom: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 0 16px 0' }} />
-
-            {/* Mando Image */}
-            <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 1 }}>
-              <img
-                src={currentMandoImage}
-                alt="Mando"
-                style={{
-                  width: '90px',
-                  height: '90px',
-                  borderRadius: '50%',
-                  border: '4px solid #FFD700',
-                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
-                  objectFit: 'cover',
-                }}
-              />
-            </div>
-
-            {/* Header */}
-            <div style={{ textAlign: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
-              <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '20px', letterSpacing: '1px' }}>📊 P&L RETROSPECT</div>
-              <div style={{ color: '#888', fontSize: '11px', marginTop: '4px' }}>ARBITRUM • gTRADE • DTGC.io</div>
-              <div style={{ color: '#555', fontSize: '9px', marginTop: '2px' }}>Portfolio Performance Summary</div>
-            </div>
-
-            {/* Initial Capital */}
+            {/* FULL MANDO BACKGROUND IMAGE */}
             <div style={{
-              background: 'rgba(138, 43, 226, 0.15)',
-              borderRadius: '12px',
-              padding: '14px',
-              marginBottom: '12px',
-              border: '2px solid rgba(138, 43, 226, 0.4)',
-              position: 'relative',
-              zIndex: 1,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ color: '#8a2be2', fontSize: '11px', fontWeight: 700 }}>💰 INITIAL CAPITAL</div>
-                <div style={{ color: '#8a2be2', fontSize: '20px', fontWeight: 800 }}>
-                  ${(startingBalance || 0).toFixed(2)}
-                </div>
-              </div>
-            </div>
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundImage: `url(${currentMandoImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center top',
+              zIndex: 0,
+            }} />
 
-            {/* Closed Trades & Win Rate Row */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', position: 'relative', zIndex: 1 }}>
+            {/* Artistic gradient overlay - NOT opaque, lets Mando show through */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.45) 25%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.8) 75%, rgba(0,0,0,0.9) 100%)',
+              zIndex: 1,
+            }} />
+
+            {/* Content Container */}
+            <div style={{ position: 'relative', zIndex: 2, padding: '24px' }}>
+              {/* Mandalorian Beskar corners */}
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '60px', height: '60px', borderTop: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '16px 0 0 0' }} />
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '60px', height: '60px', borderTop: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 16px 0 0' }} />
+              <div style={{ position: 'absolute', bottom: 0, left: 0, width: '60px', height: '60px', borderBottom: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '0 0 0 16px' }} />
+              <div style={{ position: 'absolute', bottom: 0, right: 0, width: '60px', height: '60px', borderBottom: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 0 16px 0' }} />
+
+              {/* Radial glow effect */}
               <div style={{
-                flex: 1,
-                background: 'rgba(255, 215, 0, 0.15)',
+                position: 'absolute',
+                top: '-50%',
+                left: '-50%',
+                width: '200%',
+                height: '200%',
+                background: 'radial-gradient(circle at center, rgba(255,215,0,0.1) 0%, transparent 50%)',
+                pointerEvents: 'none',
+              }} />
+
+              {/* Header - Glassmorphism style */}
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '16px',
+                padding: '16px',
+                background: 'rgba(0, 0, 0, 0.4)',
+                backdropFilter: 'blur(10px)',
+                borderRadius: '12px',
+                border: '1px solid rgba(255, 215, 0, 0.3)',
+              }}>
+                <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '22px', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>📊 P&L RETROSPECT</div>
+                <div style={{ color: '#ccc', fontSize: '11px', marginTop: '4px', textShadow: '0 1px 5px rgba(0,0,0,0.8)' }}>ARBITRUM • gTRADE • DTGC.io</div>
+                <div style={{ color: '#888', fontSize: '9px', marginTop: '2px' }}>Portfolio Performance Summary</div>
+              </div>
+
+              {/* Initial Capital - Glassmorphism */}
+              <div style={{
+                background: 'rgba(138, 43, 226, 0.2)',
+                backdropFilter: 'blur(10px)',
                 borderRadius: '12px',
                 padding: '14px',
-                textAlign: 'center',
-                border: '2px solid rgba(255, 215, 0, 0.4)',
+                marginBottom: '12px',
+                border: '2px solid rgba(138, 43, 226, 0.5)',
               }}>
-                <div style={{ color: '#FFD700', fontSize: '28px', fontWeight: 900 }}>{historicalTrades.length}</div>
-                <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700 }}>CLOSED TRADES</div>
-              </div>
-              <div style={{
-                flex: 1,
-                background: 'rgba(0, 255, 136, 0.15)',
-                borderRadius: '12px',
-                padding: '14px',
-                textAlign: 'center',
-                border: '2px solid rgba(0, 255, 136, 0.4)',
-              }}>
-                <div style={{ color: '#00ff88', fontSize: '28px', fontWeight: 900 }}>
-                  {(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ color: '#d896ff', fontSize: '11px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>💰 INITIAL CAPITAL</div>
+                  <div style={{ color: '#d896ff', fontSize: '22px', fontWeight: 800, textShadow: '0 2px 10px rgba(138,43,226,0.6)' }}>
+                    ${(startingBalance || 0).toFixed(2)}
+                  </div>
                 </div>
-                <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700 }}>WIN RATE</div>
               </div>
-            </div>
 
-            {/* W/L Breakdown */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', position: 'relative', zIndex: 1 }}>
-              <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.1)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-                <div style={{ color: '#00ff88', fontSize: '18px', fontWeight: 700 }}>{realPnL.wins || 0}</div>
-                <div style={{ color: '#00ff88', fontSize: '8px' }}>WINS</div>
-              </div>
-              <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.1)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-                <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 700 }}>{realPnL.losses || 0}</div>
-                <div style={{ color: '#ff4444', fontSize: '8px' }}>LOSSES</div>
-              </div>
-              <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.1)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-                <div style={{ color: '#0096ff', fontSize: '18px', fontWeight: 700 }}>{userPositions.length}</div>
-                <div style={{ color: '#0096ff', fontSize: '8px' }}>OPEN</div>
-              </div>
-            </div>
-
-            {/* Total System Capital NOW */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))',
-              borderRadius: '16px',
-              padding: '20px',
-              textAlign: 'center',
-              border: '3px solid rgba(0, 255, 136, 0.5)',
-              marginBottom: '12px',
-              position: 'relative',
-              zIndex: 1,
-              boxShadow: '0 4px 20px rgba(0, 255, 136, 0.2)',
-            }}>
-              <div style={{ color: '#888', fontSize: '11px', marginBottom: '6px', fontWeight: 600 }}>💎 TOTAL SYSTEM CAPITAL NOW</div>
-              <div style={{
-                color: '#00ff88',
-                fontSize: '38px',
-                fontWeight: 900,
-                textShadow: '0 0 30px rgba(0,255,136,0.6)',
-              }}>
-                ${getTotalSystemCapital().toFixed(2)}
-              </div>
-              {startingBalance && startingBalance > 0 && (
+              {/* Closed Trades & Win Rate Row - Glassmorphism */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
                 <div style={{
-                  color: getROI() >= 0 ? '#00ff88' : '#ff4444',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  marginTop: '6px',
+                  flex: 1,
+                  background: 'rgba(255, 215, 0, 0.2)',
+                  backdropFilter: 'blur(10px)',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  textAlign: 'center',
+                  border: '2px solid rgba(255, 215, 0, 0.5)',
                 }}>
-                  {getROI() >= 0 ? '↑' : '↓'} {Math.abs(getROI()).toFixed(2)}% ROI
+                  <div style={{ color: '#FFD700', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(255,215,0,0.5)' }}>{historicalTrades.length}</div>
+                  <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>CLOSED TRADES</div>
+                </div>
+                <div style={{
+                  flex: 1,
+                  background: 'rgba(0, 255, 136, 0.2)',
+                  backdropFilter: 'blur(10px)',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  textAlign: 'center',
+                  border: '2px solid rgba(0, 255, 136, 0.5)',
+                }}>
+                  <div style={{ color: '#00ff88', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(0,255,136,0.5)' }}>
+                    {(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%
+                  </div>
+                  <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
+                </div>
+              </div>
+
+              {/* W/L Breakdown - Glassmorphism */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
+                  <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,255,136,0.4)' }}>{realPnL.wins || 0}</div>
+                  <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>WINS</div>
+                </div>
+                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
+                  <div style={{ color: '#ff4444', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(255,68,68,0.4)' }}>{realPnL.losses || 0}</div>
+                  <div style={{ color: '#ff4444', fontSize: '9px', fontWeight: 600 }}>LOSSES</div>
+                </div>
+                <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.15)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 150, 255, 0.3)' }}>
+                  <div style={{ color: '#0096ff', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,150,255,0.4)' }}>{userPositions.length}</div>
+                  <div style={{ color: '#0096ff', fontSize: '9px', fontWeight: 600 }}>OPEN</div>
+                </div>
+              </div>
+
+              {/* Total System Capital NOW - Glassmorphism Hero */}
+              <div style={{
+                background: 'rgba(0, 255, 136, 0.15)',
+                backdropFilter: 'blur(12px)',
+                borderRadius: '16px',
+                padding: '20px',
+                textAlign: 'center',
+                border: '3px solid rgba(0, 255, 136, 0.5)',
+                marginBottom: '12px',
+                boxShadow: '0 4px 30px rgba(0, 255, 136, 0.2)',
+              }}>
+                <div style={{ color: '#ccc', fontSize: '11px', marginBottom: '6px', fontWeight: 600, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>💎 TOTAL SYSTEM CAPITAL NOW</div>
+                <div style={{
+                  color: '#00ff88',
+                  fontSize: '40px',
+                  fontWeight: 900,
+                  textShadow: '0 0 40px rgba(0,255,136,0.7), 0 2px 10px rgba(0,0,0,0.5)',
+                }}>
+                  ${getTotalSystemCapital().toFixed(2)}
+                </div>
+                {startingBalance && startingBalance > 0 && (
+                  <div style={{
+                    color: getROI() >= 0 ? '#00ff88' : '#ff4444',
+                    fontSize: '16px',
+                    fontWeight: 700,
+                    marginTop: '6px',
+                    textShadow: getROI() >= 0 ? '0 0 15px rgba(0,255,136,0.6)' : '0 0 15px rgba(255,68,68,0.6)',
+                  }}>
+                    {getROI() >= 0 ? '↑' : '↓'} {Math.abs(getROI()).toFixed(2)}% ROI
+                  </div>
+                )}
+              </div>
+
+              {/* Realized & Unrealized P&L - Glassmorphism */}
+              <div style={{
+                background: 'rgba(255, 215, 0, 0.1)',
+                backdropFilter: 'blur(8px)',
+                borderRadius: '12px',
+                padding: '12px',
+                marginBottom: '16px',
+                border: '1px solid rgba(255, 215, 0, 0.3)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 600 }}>📜 Realized P&L</div>
+                  <div style={{ color: (realPnL.total || 0) >= 0 ? '#00ff88' : '#ff4444', fontSize: '15px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>
+                    {(realPnL.total || 0) >= 0 ? '+' : ''}{(realPnL.total || 0).toFixed(2)} USDC
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                  <div style={{ color: '#0096ff', fontSize: '10px', fontWeight: 600 }}>📸 Unrealized P&L</div>
+                  <div style={{ color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444', fontSize: '15px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>
+                    {totalUnrealizedPnl >= 0 ? '+' : ''}{totalUnrealizedPnl.toFixed(2)} USDC
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#FFD700', fontSize: '12px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>🎯 DTGC.io/gold</div>
+                <div style={{ color: '#999', fontSize: '9px', marginTop: '4px' }}>
+                  {userAddress ? `${userAddress.slice(0, 12)}...${userAddress.slice(-10)}` : 'Connect Wallet'}
+                </div>
+                <div style={{ color: '#666', fontSize: '8px', marginTop: '4px' }}>
+                  {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+              </div>
+
+              {/* Gold Bars for high profit */}
+              {getGoldBars(getTotalSystemCapital() - (startingBalance || 0)) > 0 && (
+                <div style={{
+                  marginTop: '16px',
+                  padding: '12px',
+                  background: 'rgba(255, 215, 0, 0.15)',
+                  backdropFilter: 'blur(8px)',
+                  borderRadius: '12px',
+                  border: '2px solid rgba(255, 215, 0, 0.4)',
+                }}>
+                  <div style={{
+                    color: '#FFD700',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    marginBottom: '8px',
+                    letterSpacing: '1px',
+                    textShadow: '0 1px 5px rgba(0,0,0,0.5)',
+                  }}>
+                    🏆 PROFIT REWARD LEVEL 🏆
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    {[...Array(getGoldBars(getTotalSystemCapital() - (startingBalance || 0)))].map((_, i) => (
+                      <img
+                        key={i}
+                        src="/gold_bar.png"
+                        alt="Gold Bar"
+                        style={{
+                          width: '44px',
+                          height: '22px',
+                          objectFit: 'contain',
+                          filter: 'drop-shadow(0 2px 6px rgba(255, 215, 0, 0.6))',
+                          animation: `goldPulse 1.5s ease-in-out ${i * 0.2}s infinite`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{
+                    color: '#ccc',
+                    fontSize: '9px',
+                    textAlign: 'center',
+                    marginTop: '8px',
+                    textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                  }}>
+                    {(getTotalSystemCapital() - (startingBalance || 0)) >= 1000 ? '🐋 WHALE STATUS!' :
+                     (getTotalSystemCapital() - (startingBalance || 0)) >= 500 ? '💎 Diamond Hands!' :
+                     (getTotalSystemCapital() - (startingBalance || 0)) >= 250 ? '🔥 On Fire!' :
+                     (getTotalSystemCapital() - (startingBalance || 0)) >= 100 ? '📈 Stacking!' :
+                     '✨ Nice Gains!'}
+                  </div>
                 </div>
               )}
             </div>
-
-            {/* Realized P&L */}
-            <div style={{
-              background: 'rgba(255, 215, 0, 0.1)',
-              borderRadius: '10px',
-              padding: '10px',
-              marginBottom: '16px',
-              position: 'relative',
-              zIndex: 1,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ color: '#FFD700', fontSize: '10px' }}>📜 Realized P&L</div>
-                <div style={{ color: (realPnL.total || 0) >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
-                  {(realPnL.total || 0) >= 0 ? '+' : ''}{(realPnL.total || 0).toFixed(2)} USDC
-                </div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                <div style={{ color: '#0096ff', fontSize: '10px' }}>📸 Unrealized P&L</div>
-                <div style={{ color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
-                  {totalUnrealizedPnl >= 0 ? '+' : ''}{totalUnrealizedPnl.toFixed(2)} USDC
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-              <div style={{ color: '#FFD700', fontSize: '11px', fontWeight: 700 }}>🎯 DTGC.io/gold</div>
-              <div style={{ color: '#555', fontSize: '9px', marginTop: '4px' }}>
-                {userAddress ? `${userAddress.slice(0, 12)}...${userAddress.slice(-10)}` : 'Connect Wallet'}
-              </div>
-              <div style={{ color: '#333', fontSize: '8px', marginTop: '4px' }}>
-                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              </div>
-            </div>
-
-            {/* Gold Bars for high profit */}
-            {getGoldBars(getTotalSystemCapital() - (startingBalance || 0)) > 0 && (
-              <div style={{
-                marginTop: '16px',
-                padding: '10px',
-                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 140, 0, 0.1))',
-                borderRadius: '10px',
-                border: '2px solid rgba(255, 215, 0, 0.4)',
-                position: 'relative',
-                zIndex: 1,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  {[...Array(getGoldBars(getTotalSystemCapital() - (startingBalance || 0)))].map((_, i) => (
-                    <img
-                      key={i}
-                      src="/gold_bar.png"
-                      alt="Gold Bar"
-                      style={{
-                        width: '40px',
-                        height: '20px',
-                        objectFit: 'contain',
-                        filter: 'drop-shadow(0 2px 4px rgba(255, 215, 0, 0.5))',
-                        animation: `goldPulse 1.5s ease-in-out ${i * 0.2}s infinite`,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Share Instructions */}
