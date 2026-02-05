@@ -1276,9 +1276,9 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
       console.log('Hetzner InstaBond API failed, trying fallback:', err.message);
     }
 
-    // Fallback to Vercel
+    // Fallback to Vercel proxy
     try {
-      const response = await fetch(`${CONFIG.INSTABOND_API_FALLBACK}/${userAddress}`);
+      const response = await fetch(`${CONFIG.INSTABOND_API_FALLBACK}/instabond/${userAddress}`);
       if (response.ok) {
         const data = await response.json();
         setInstaBondOrders(data.orders || []);
@@ -1324,10 +1324,10 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
         });
         if (!response.ok) throw new Error('Hetzner failed');
       } catch (e) {
-        // Fallback to Vercel
+        // Fallback to Vercel proxy
         console.log('Hetzner failed, trying Vercel fallback...');
         usedFallback = true;
-        response = await fetch(`${CONFIG.INSTABOND_API_FALLBACK}`, {
+        response = await fetch(`${CONFIG.INSTABOND_API_FALLBACK}/instabond`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1353,12 +1353,22 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
     }
   };
 
-  // Cancel InstaBond order
+  // Cancel InstaBond order (Hetzner primary, Vercel fallback)
   const cancelInstaBondOrder = async (orderId) => {
     try {
-      const response = await fetch(`${CONFIG.INSTABOND_API}/instabond/${orderId}`, {
-        method: 'DELETE',
-      });
+      let response;
+      try {
+        response = await fetch(`${CONFIG.INSTABOND_API}/instabond/${orderId}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) throw new Error('Hetzner failed');
+      } catch (e) {
+        // Fallback to Vercel proxy
+        response = await fetch(`${CONFIG.INSTABOND_API_FALLBACK}/instabond/${orderId}`, {
+          method: 'DELETE',
+        });
+      }
+
       if (!response.ok) {
         throw new Error(`Cancel failed (${response.status})`);
       }

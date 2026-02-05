@@ -9,7 +9,7 @@ const LAMBDA_URL = 'https://mqd4yvwog76amuift2p23du2ma0ehaqp.lambda-url.us-east-
 
 // Q7 Dev Wallet Address (Lambda trading wallet) - DTGC holders can view live trades
 const Q7_DEV_WALLET = '0x978c5786CDB46b1519A9c1C4814e06d5956f6c64';
-const DTGC_MIN_REQUIRED = 50; // Minimum DTGC to view Q7 Live Trades
+const DTGC_MIN_REQUIRED = 0; // Paywall disabled - free access for now
 
 // ==================== Q7 D-RAM v5.2.6 CALIBRATION ====================
 // Per-asset RSI bounds from Q7 empirical testing (15M timeframe)

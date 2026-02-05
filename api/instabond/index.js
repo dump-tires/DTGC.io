@@ -14,9 +14,8 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { slug } = req.query; // Catch-all route params
-  const path = slug ? `/${slug.join('/')}` : '';
-  const targetUrl = `${HETZNER_API}/instabond${path}`;
+  // This handles /api/instabond (base route) -> forwards to Hetzner /api/instabond
+  const targetUrl = `${HETZNER_API}/api/instabond`;
 
   console.log(`[InstaBond Proxy] ${req.method} ${targetUrl}`);
 
