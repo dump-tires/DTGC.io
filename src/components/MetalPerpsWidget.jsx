@@ -434,6 +434,139 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     return chartData;
   };
 
+  // Generate COLLATERAL GROWTH data - combines all trades (open + closed) to show capital deployment
+  const getCollateralGrowthData = () => {
+    // Combine historical closed trades with open positions
+    const allTrades = [];
+
+    // Add closed trades with their collateral
+    if (historicalTrades && historicalTrades.length > 0) {
+      historicalTrades.forEach(trade => {
+        allTrades.push({
+          timestamp: trade.timestamp || Date.now(),
+          collateral: trade.collateral || trade.initialCollateral || 5, // Default to $5 if not available
+          type: 'closed',
+          pnl: trade.pnlUsd || 0,
+        });
+      });
+    }
+
+    // Add open positions with their collateral
+    if (userPositions && userPositions.length > 0) {
+      userPositions.forEach(pos => {
+        allTrades.push({
+          timestamp: pos.openTimestamp || pos.timestamp || Date.now(),
+          collateral: pos.collateral || pos.initialCollateral || 5,
+          type: 'open',
+          pnl: pos.pnlUsd || 0,
+        });
+      });
+    }
+
+    if (allTrades.length === 0) return [];
+
+    // Sort by timestamp (oldest first)
+    allTrades.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Calculate cumulative collateral deployed over time
+    let cumulativeCollateral = 0;
+    const chartData = allTrades.map((trade, idx) => {
+      cumulativeCollateral += trade.collateral;
+      return {
+        timestamp: trade.timestamp,
+        collateral: trade.collateral,
+        cumulative: cumulativeCollateral,
+        type: trade.type,
+        index: idx,
+      };
+    });
+
+    return chartData;
+  };
+
+  // Render Collateral Growth Chart - shows capital deployment over time
+  const renderCollateralGrowthChart = () => {
+    const data = getCollateralGrowthData();
+    if (data.length < 2) return null;
+
+    const width = 340;
+    const height = 100;
+    const padding = { top: 10, right: 10, bottom: 20, left: 45 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Get min/max values - start from 0 for growth chart
+    const values = data.map(d => d.cumulative);
+    const minVal = 0;
+    const maxVal = Math.max(...values) * 1.1; // 10% headroom
+    const range = maxVal - minVal || 1;
+
+    // Scale functions
+    const scaleX = (idx) => padding.left + (idx / (data.length - 1)) * chartWidth;
+    const scaleY = (val) => padding.top + chartHeight - ((val - minVal) / range) * chartHeight;
+
+    // Generate path
+    const pathD = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(i)} ${scaleY(d.cumulative)}`).join(' ');
+
+    // Get date range
+    const startDate = new Date(data[0].timestamp);
+    const endDate = new Date(data[data.length - 1].timestamp);
+
+    return (
+      <svg width={width} height={height} style={{ display: 'block' }}>
+        {/* Gradient fill under line - gold/green for growth */}
+        <defs>
+          <linearGradient id="collateralGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="rgba(255,215,0,0.5)" />
+            <stop offset="50%" stopColor="rgba(0,255,136,0.3)" />
+            <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines */}
+        <line x1={padding.left} y1={scaleY(maxVal/2)} x2={width - padding.right} y2={scaleY(maxVal/2)} stroke="rgba(255,255,255,0.1)" strokeDasharray="4" />
+
+        {/* Area fill */}
+        <path
+          d={`${pathD} L ${scaleX(data.length-1)} ${scaleY(0)} L ${scaleX(0)} ${scaleY(0)} Z`}
+          fill="url(#collateralGradient)"
+        />
+
+        {/* Main line - gold for collateral growth */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke="#FFD700"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          filter="drop-shadow(0 2px 4px rgba(255,215,0,0.4))"
+        />
+
+        {/* Data points - show for reasonable number */}
+        {data.length <= 20 && data.map((d, i) => (
+          <circle
+            key={i}
+            cx={scaleX(i)}
+            cy={scaleY(d.cumulative)}
+            r="3"
+            fill={d.type === 'open' ? '#0096ff' : '#00ff88'}
+            stroke="#000"
+            strokeWidth="1"
+          />
+        ))}
+
+        {/* Y-axis labels */}
+        <text x={padding.left - 5} y={padding.top + 4} fill="#FFD700" fontSize="8" textAnchor="end">${maxVal.toFixed(0)}</text>
+        <text x={padding.left - 5} y={height - padding.bottom} fill="#888" fontSize="8" textAnchor="end">$0</text>
+
+        {/* X-axis labels */}
+        <text x={padding.left} y={height - 5} fill="#666" fontSize="8">{startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>
+        <text x={width - padding.right} y={height - 5} fill="#666" fontSize="8" textAnchor="end">{endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>
+      </svg>
+    );
+  };
+
   // Render simple SVG line chart
   const renderPnLChart = () => {
     const data = getPnLChartData();
@@ -4957,14 +5090,18 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* Trades & Win Rate Row - Use OPEN positions if no closed trades */}
+              {/* Trades & Win Rate Row - TOTAL ALL TRADES (open + closed) */}
               {(() => {
                 const liveStats = getLivePositionStats();
-                const hasClosedTrades = historicalTrades.length > 0;
-                const tradeCount = hasClosedTrades ? historicalTrades.length : userPositions.length;
-                const winRateBase = hasClosedTrades ? (realPnL.wins + realPnL.losses) : userPositions.length;
-                const wins = hasClosedTrades ? realPnL.wins : liveStats.wins;
-                const winRate = winRateBase > 0 ? Math.round((wins / winRateBase) * 100) : 0;
+                const closedCount = historicalTrades.length;
+                const openCount = userPositions.length;
+                const totalTradeCount = closedCount + openCount;
+
+                // Combined win rate: closed wins + open profits
+                const totalWins = realPnL.wins + liveStats.wins;
+                const totalLosses = realPnL.losses + liveStats.losses;
+                const totalForWinRate = totalWins + totalLosses;
+                const combinedWinRate = totalForWinRate > 0 ? Math.round((totalWins / totalForWinRate) * 100) : 0;
 
                 return (
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
@@ -4977,8 +5114,9 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                       textAlign: 'center',
                       border: '2px solid rgba(255, 215, 0, 0.5)',
                     }}>
-                      <div style={{ color: '#FFD700', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(255,215,0,0.5)' }}>{tradeCount}</div>
-                      <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>{hasClosedTrades ? 'CLOSED' : 'OPEN'} TRADES</div>
+                      <div style={{ color: '#FFD700', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(255,215,0,0.5)' }}>{totalTradeCount}</div>
+                      <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>TOTAL TRADES</div>
+                      <div style={{ color: '#888', fontSize: '8px', marginTop: '2px' }}>{closedCount} closed • {openCount} open</div>
                     </div>
                     <div style={{
                       flex: 1,
@@ -4990,40 +5128,45 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                       border: '2px solid rgba(0, 255, 136, 0.5)',
                     }}>
                       <div style={{ color: '#00ff88', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(0,255,136,0.5)' }}>
-                        {winRate}%
+                        {combinedWinRate}%
                       </div>
-                      <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>{hasClosedTrades ? 'WIN' : 'PROFIT'} RATE</div>
+                      <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>SUCCESS RATE</div>
+                      <div style={{ color: '#888', fontSize: '8px', marginTop: '2px' }}>{totalWins}W / {totalLosses}L</div>
                     </div>
                   </div>
                 );
               })()}
 
-              {/* W/L Breakdown - Use open positions data if no closed trades */}
+              {/* W/L Breakdown - Combined closed wins/losses + open profit/loss */}
               {(() => {
                 const liveStats = getLivePositionStats();
-                const hasClosedTrades = (realPnL.wins + realPnL.losses) > 0;
-                const displayWins = hasClosedTrades ? realPnL.wins : liveStats.wins;
-                const displayLosses = hasClosedTrades ? realPnL.losses : liveStats.losses;
+                // Combined totals
+                const totalWins = realPnL.wins + liveStats.wins;
+                const totalLosses = realPnL.losses + liveStats.losses;
+                const totalCollateral = collateralDeployed + (historicalTrades.length * 5); // Estimate closed collateral at ~$5 each
                 return (
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
                     <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
-                      <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,255,136,0.4)' }}>{displayWins}</div>
-                      <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>{hasClosedTrades ? 'WINS' : 'WINNING'}</div>
+                      <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,255,136,0.4)' }}>{totalWins}</div>
+                      <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>WINS</div>
+                      <div style={{ color: '#666', fontSize: '7px' }}>{realPnL.wins} closed + {liveStats.wins} open</div>
                     </div>
                     <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
-                      <div style={{ color: '#ff4444', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(255,68,68,0.4)' }}>{displayLosses}</div>
-                      <div style={{ color: '#ff4444', fontSize: '9px', fontWeight: 600 }}>{hasClosedTrades ? 'LOSSES' : 'LOSING'}</div>
+                      <div style={{ color: '#ff4444', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(255,68,68,0.4)' }}>{totalLosses}</div>
+                      <div style={{ color: '#ff4444', fontSize: '9px', fontWeight: 600 }}>LOSSES</div>
+                      <div style={{ color: '#666', fontSize: '7px' }}>{realPnL.losses} closed + {liveStats.losses} open</div>
                     </div>
-                    <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 150, 255, 0.3)' }}>
-                      <div style={{ color: '#0096ff', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,150,255,0.4)' }}>{userPositions.length}</div>
-                      <div style={{ color: '#0096ff', fontSize: '9px', fontWeight: 600 }}>OPEN</div>
+                    <div style={{ flex: 1, background: 'rgba(255, 215, 0, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255, 215, 0, 0.3)' }}>
+                      <div style={{ color: '#FFD700', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(255,215,0,0.4)' }}>${collateralDeployed.toFixed(0)}</div>
+                      <div style={{ color: '#FFD700', fontSize: '9px', fontWeight: 600 }}>DEPLOYED</div>
+                      <div style={{ color: '#666', fontSize: '7px' }}>open collateral</div>
                     </div>
                   </div>
                 );
               })()}
 
-              {/* P&L TIME GRAPH - transparent */}
-              {historicalTrades.length >= 2 && (
+              {/* COLLATERAL GROWTH CHART - Shows all capital deployed over time */}
+              {(historicalTrades.length + userPositions.length) >= 2 && (
                 <div style={{
                   background: 'rgba(0, 0, 0, 0.15)',
                   backdropFilter: 'blur(2px)',
@@ -5033,19 +5176,29 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   border: '1px solid rgba(255, 215, 0, 0.4)',
                 }}>
                   <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700, marginBottom: '8px', textAlign: 'center', letterSpacing: '1px' }}>
-                    📈 P&L OVER TIME
+                    📈 COLLATERAL GROWTH CHART
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    {renderPnLChart()}
+                    {renderCollateralGrowthChart()}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', padding: '0 5px' }}>
-                    <div style={{ color: '#888', fontSize: '8px' }}>{historicalTrades.length} trades</div>
+                    <div style={{ color: '#888', fontSize: '8px' }}>{historicalTrades.length + userPositions.length} total trades</div>
                     <div style={{
-                      color: (realPnL.total || 0) >= 0 ? '#00ff88' : '#ff4444',
+                      color: '#FFD700',
                       fontSize: '9px',
                       fontWeight: 700,
                     }}>
-                      {(realPnL.total || 0) >= 0 ? '↑' : '↓'} ${Math.abs(realPnL.total || 0).toFixed(2)}
+                      💰 ${(collateralDeployed + (historicalTrades.length * 5)).toFixed(0)} deployed
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00ff88' }} />
+                      <span style={{ color: '#666', fontSize: '7px' }}>Closed</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#0096ff' }} />
+                      <span style={{ color: '#666', fontSize: '7px' }}>Open</span>
                     </div>
                   </div>
                 </div>
@@ -5202,7 +5355,12 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
           <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
             <button
               onClick={() => {
-                const text = `📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Closed: ${historicalTrades.length} trades (${realPnL.wins}W/${realPnL.losses}L)\n🎯 Win Rate: ${(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%\n💎 Current: $${getTotalSystemCapital().toFixed(2)}\n${startingBalance ? `📈 ROI: ${getROI() >= 0 ? '+' : ''}${getROI().toFixed(2)}%` : ''}\n\n🎯 dtgc.io/gold`;
+                const liveStats = getLivePositionStats();
+                const totalTrades = historicalTrades.length + userPositions.length;
+                const totalWins = realPnL.wins + liveStats.wins;
+                const totalLosses = realPnL.losses + liveStats.losses;
+                const winRate = (totalWins + totalLosses) > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 100) : 0;
+                const text = `📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Total: ${totalTrades} trades (${historicalTrades.length} closed + ${userPositions.length} open)\n🎯 ${totalWins}W/${totalLosses}L (${winRate}% success)\n💎 Capital: $${getTotalSystemCapital().toFixed(2)}\n${startingBalance ? `📈 ROI: ${getROI() >= 0 ? '+' : ''}${getROI().toFixed(2)}%` : ''}\n\n🎯 dtgc.io/perps`;
                 window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
               }}
               style={{
@@ -5220,8 +5378,11 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             </button>
             <button
               onClick={() => {
-                const text = `📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Closed: ${historicalTrades.length} trades\n🎯 Win Rate: ${(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%\n💎 Current: $${getTotalSystemCapital().toFixed(2)}\n\n🎯 dtgc.io/gold`;
-                window.open(`https://t.me/share/url?url=${encodeURIComponent('https://dtgc.io/gold')}&text=${encodeURIComponent(text)}`, '_blank');
+                const liveStats = getLivePositionStats();
+                const totalTrades = historicalTrades.length + userPositions.length;
+                const totalWins = realPnL.wins + liveStats.wins;
+                const text = `📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Total: ${totalTrades} trades\n🎯 ${totalWins} wins (${(totalWins + realPnL.losses + liveStats.losses) > 0 ? Math.round((totalWins / (totalWins + realPnL.losses + liveStats.losses)) * 100) : 0}%)\n💎 Capital: $${getTotalSystemCapital().toFixed(2)}\n\n🎯 dtgc.io/perps`;
+                window.open(`https://t.me/share/url?url=${encodeURIComponent('https://dtgc.io/perps')}&text=${encodeURIComponent(text)}`, '_blank');
               }}
               style={{
                 padding: '12px 24px',
@@ -5238,7 +5399,12 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             </button>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(`📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Closed: ${historicalTrades.length} trades (${realPnL.wins}W/${realPnL.losses}L)\n🎯 Win Rate: ${(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%\n💎 Current: $${getTotalSystemCapital().toFixed(2)}\n${startingBalance ? `📈 ROI: ${getROI() >= 0 ? '+' : ''}${getROI().toFixed(2)}%` : ''}\n\n🎯 dtgc.io/gold`);
+                const liveStats = getLivePositionStats();
+                const totalTrades = historicalTrades.length + userPositions.length;
+                const totalWins = realPnL.wins + liveStats.wins;
+                const totalLosses = realPnL.losses + liveStats.losses;
+                const winRate = (totalWins + totalLosses) > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 100) : 0;
+                navigator.clipboard.writeText(`📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Total: ${totalTrades} trades (${historicalTrades.length} closed + ${userPositions.length} open)\n🎯 ${totalWins}W/${totalLosses}L (${winRate}% success)\n💎 Capital: $${getTotalSystemCapital().toFixed(2)}\n${startingBalance ? `📈 ROI: ${getROI() >= 0 ? '+' : ''}${getROI().toFixed(2)}%` : ''}\n\n🎯 dtgc.io/perps`);
                 setShowRetrospectCard(false);
                 showToastMsg('📋 Retrospect copied to clipboard!', 'success');
               }}
