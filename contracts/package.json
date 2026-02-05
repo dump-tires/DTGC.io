@@ -1,0 +1,30 @@
+{
+  "name": "metals-flywheel-contracts",
+  "version": "1.0.0",
+  "description": "Metals 5% Win Flywheel Smart Contracts - Arbitrum to PulseChain",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:arbitrum": "hardhat run scripts/deploy-flywheel.js --network arbitrum",
+    "deploy:testnet": "hardhat run scripts/deploy-flywheel.js --network arbitrumSepolia",
+    "verify": "hardhat verify --network arbitrum",
+    "clean": "hardhat clean"
+  },
+  "keywords": [
+    "arbitrum",
+    "pulsechain",
+    "defi",
+    "flywheel",
+    "trading"
+  ],
+  "author": "DTGC.io Q7 Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "hardhat": "^2.19.0",
+    "dotenv": "^16.3.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
+  }
+}
