@@ -2695,78 +2695,131 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* Unrealized P&L from Open Positions */}
+              {/* 📸 SNAPSHOT LIVE TRADES P&L */}
               {userPositions.length > 0 && (
                 <div style={{
-                  background: totalUnrealizedPnl >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)',
-                  borderRadius: '8px',
-                  padding: '10px',
+                  background: 'linear-gradient(135deg, rgba(0, 150, 255, 0.15), rgba(138, 43, 226, 0.1))',
+                  borderRadius: '10px',
+                  padding: '12px',
                   marginBottom: '12px',
-                  border: `1px solid ${totalUnrealizedPnl >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 68, 0.3)'}`,
+                  border: '2px solid rgba(0, 150, 255, 0.4)',
                 }}>
+                  <div style={{ color: '#0096ff', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.5px' }}>
+                    📸 SNAPSHOT LIVE TRADES P&L
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ color: '#888', fontSize: '10px' }}>📊 UNREALIZED ({userPositions.length} positions)</div>
+                    <div style={{ color: '#888', fontSize: '10px' }}>{userPositions.length} open positions</div>
                     <div style={{
                       color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444',
                       fontWeight: 800,
-                      fontSize: '16px',
+                      fontSize: '20px',
                     }}>
                       {totalUnrealizedPnl >= 0 ? '+' : ''}{totalUnrealizedPnl.toFixed(2)} USDC
                     </div>
                   </div>
+                  {(() => {
+                    const live = getLivePositionStats();
+                    return (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                        <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.2)', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
+                          <div style={{ color: '#00ff88', fontSize: '16px', fontWeight: 700 }}>{live.wins}</div>
+                          <div style={{ color: '#00ff88', fontSize: '8px' }}>WINNING</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.2)', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
+                          <div style={{ color: '#ff4444', fontSize: '16px', fontWeight: 700 }}>{live.losses}</div>
+                          <div style={{ color: '#ff4444', fontSize: '8px' }}>LOSING</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.2)', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
+                          <div style={{ color: '#8a2be2', fontSize: '16px', fontWeight: 700 }}>{live.winRate}%</div>
+                          <div style={{ color: '#8a2be2', fontSize: '8px' }}>RATE</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
-              {/* Win/Loss/Rate Stats - LIVE from open positions! */}
-              {(() => {
-                const stats = getCombinedStats();
-                const winRate = (stats.wins + stats.losses) > 0
-                  ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100)
-                  : 0;
-                return (
-                  <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
-                    <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
-                      <div style={{ color: '#00ff88', fontSize: '28px', fontWeight: 800 }}>{stats.wins}</div>
-                      <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WINNING</div>
+              {/* 📜 CLOSED TRADES P&L (Realized) */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 140, 0, 0.05))',
+                borderRadius: '10px',
+                padding: '12px',
+                marginBottom: '12px',
+                border: '2px solid rgba(255, 215, 0, 0.3)',
+              }}>
+                <div style={{ color: '#FFD700', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.5px' }}>
+                  📜 CLOSED TRADES P&L (Realized)
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ color: '#888', fontSize: '10px' }}>{historicalTrades.length} trades closed</div>
+                  <div style={{
+                    color: (realPnL.total || 0) >= 0 ? '#00ff88' : '#ff4444',
+                    fontWeight: 800,
+                    fontSize: '20px',
+                  }}>
+                    {(realPnL.total || 0) >= 0 ? '+' : ''}{(realPnL.total || 0).toFixed(2)} USDC
+                  </div>
+                </div>
+                {historicalTrades.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.2)', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
+                      <div style={{ color: '#00ff88', fontSize: '16px', fontWeight: 700 }}>{realPnL.wins || 0}</div>
+                      <div style={{ color: '#00ff88', fontSize: '8px' }}>WINS</div>
                     </div>
-                    <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
-                      <div style={{ color: '#ff4444', fontSize: '28px', fontWeight: 800 }}>{stats.losses}</div>
-                      <div style={{ color: '#ff4444', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>LOSING</div>
+                    <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.2)', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
+                      <div style={{ color: '#ff4444', fontSize: '16px', fontWeight: 700 }}>{realPnL.losses || 0}</div>
+                      <div style={{ color: '#ff4444', fontSize: '8px' }}>LOSSES</div>
                     </div>
-                    <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(138, 43, 226, 0.3)' }}>
-                      <div style={{ color: '#8a2be2', fontSize: '28px', fontWeight: 800 }}>{winRate}%</div>
-                      <div style={{ color: '#8a2be2', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
+                    <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.2)', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
+                      <div style={{ color: '#8a2be2', fontSize: '16px', fontWeight: 700 }}>
+                        {(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%
+                      </div>
+                      <div style={{ color: '#8a2be2', fontSize: '8px' }}>RATE</div>
                     </div>
                   </div>
-                );
-              })()}
+                )}
+                {historicalTrades.length === 0 && (
+                  <div style={{ color: '#555', fontSize: '9px', textAlign: 'center', marginTop: '4px' }}>
+                    No closed trades yet
+                  </div>
+                )}
+              </div>
 
-              {/* Total P&L - LIVE Combined (unrealized + realized) */}
+              {/* 💎 COMBINED TOTAL P&L (Live + Closed) */}
               {(() => {
                 const stats = getCombinedStats();
                 const displayPnL = stats.total;
+                const liveCount = userPositions.length;
+                const closedCount = historicalTrades.length;
                 return (
                   <div style={{
-                    background: displayPnL >= 0 ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05))' : 'linear-gradient(135deg, rgba(255, 68, 68, 0.15), rgba(255, 68, 68, 0.05))',
+                    background: displayPnL >= 0
+                      ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))'
+                      : 'linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(200, 50, 50, 0.1))',
                     borderRadius: '12px',
                     padding: '16px',
                     textAlign: 'center',
-                    border: `2px solid ${displayPnL >= 0 ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 68, 68, 0.4)'}`,
+                    border: `3px solid ${displayPnL >= 0 ? 'rgba(0, 255, 136, 0.5)' : 'rgba(255, 68, 68, 0.5)'}`,
                     marginBottom: '12px',
+                    boxShadow: displayPnL >= 0 ? '0 4px 20px rgba(0, 255, 136, 0.2)' : '0 4px 20px rgba(255, 68, 68, 0.2)',
                   }}>
-                    <div style={{ color: '#888', fontSize: '11px', marginBottom: '6px', fontWeight: 600 }}>
-                      TOTAL P&L {userPositions.length > 0 ? '(LIVE)' : ''}
+                    <div style={{ color: '#FFD700', fontSize: '11px', marginBottom: '6px', fontWeight: 700, letterSpacing: '1px' }}>
+                      💎 COMBINED TOTAL P&L
                     </div>
                     <div style={{
                       color: displayPnL >= 0 ? '#00ff88' : '#ff4444',
-                      fontSize: '36px',
-                      fontWeight: 800,
-                      textShadow: displayPnL >= 0 ? '0 0 20px rgba(0,255,136,0.5)' : '0 0 20px rgba(255,68,68,0.5)',
+                      fontSize: '40px',
+                      fontWeight: 900,
+                      textShadow: displayPnL >= 0 ? '0 0 30px rgba(0,255,136,0.6)' : '0 0 30px rgba(255,68,68,0.6)',
                     }}>
                       {displayPnL >= 0 ? '+' : ''}{displayPnL.toFixed(2)} USDC
                     </div>
-                    <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
-                      {stats.count} positions • Q7 D-RAM Auto-Scalp
+                    <div style={{ color: '#666', fontSize: '9px', marginTop: '6px' }}>
+                      {liveCount > 0 && <span style={{ color: '#0096ff' }}>{liveCount} live</span>}
+                      {liveCount > 0 && closedCount > 0 && ' + '}
+                      {closedCount > 0 && <span style={{ color: '#FFD700' }}>{closedCount} closed</span>}
+                      {liveCount === 0 && closedCount === 0 && 'No trades yet'}
+                      <span style={{ color: '#555' }}> • Q7 D-RAM</span>
                     </div>
                   </div>
                 );
