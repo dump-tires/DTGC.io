@@ -326,6 +326,58 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const [historicalLoading, setHistoricalLoading] = useState(false);
   const [realPnL, setRealPnL] = useState({ total: 0, wins: 0, losses: 0, trades: [] });
 
+  // ===== COLLATERAL & BALANCE TRACKING =====
+  const [startingBalance, setStartingBalance] = useState(() => {
+    // Try to load from localStorage
+    const saved = localStorage.getItem('dtgc_starting_balance');
+    return saved ? parseFloat(saved) : null;
+  });
+  const [pnlTimeRange, setPnlTimeRange] = useState('all'); // '24h', '48h', '72h', 'all'
+
+  // Calculate collateral deployed from open positions
+  const collateralDeployed = userPositions.reduce((sum, pos) => sum + (pos.collateral || 0), 0);
+
+  // Calculate filtered P&L based on time range
+  const getFilteredPnL = () => {
+    if (!historicalTrades.length) return { total: 0, wins: 0, losses: 0 };
+
+    const now = Date.now();
+    const timeFilters = {
+      '24h': 24 * 60 * 60 * 1000,
+      '48h': 48 * 60 * 60 * 1000,
+      '72h': 72 * 60 * 60 * 1000,
+      'all': Infinity,
+    };
+
+    const cutoff = now - (timeFilters[pnlTimeRange] || Infinity);
+    const filtered = historicalTrades.filter(t => t.timestamp >= cutoff);
+
+    return {
+      total: filtered.reduce((sum, t) => sum + t.pnlUsd, 0),
+      wins: filtered.filter(t => t.pnlUsd > 0).length,
+      losses: filtered.filter(t => t.pnlUsd < 0).length,
+      count: filtered.length,
+    };
+  };
+
+  // Forecast based on recent performance
+  const getForecast = () => {
+    const recent = getFilteredPnL();
+    if (recent.count === 0) return null;
+
+    const winRate = recent.wins / (recent.wins + recent.losses) || 0;
+    const avgPnlPerTrade = recent.total / recent.count;
+    const tradesPerDay = pnlTimeRange === 'all' ? recent.count / 7 : recent.count / (parseInt(pnlTimeRange) / 24);
+
+    return {
+      winRate: (winRate * 100).toFixed(1),
+      avgPnlPerTrade: avgPnlPerTrade.toFixed(2),
+      tradesPerDay: tradesPerDay.toFixed(1),
+      projected24h: (avgPnlPerTrade * tradesPerDay).toFixed(2),
+      projected7d: (avgPnlPerTrade * tradesPerDay * 7).toFixed(2),
+    };
+  };
+
   // ===== SHAREABLE P&L CARD =====
   const [showShareCard, setShowShareCard] = useState(false);
   const [currentMandoImage, setCurrentMandoImage] = useState(MANDO_IMAGES[0]);
@@ -910,12 +962,45 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     }
   };
 
-  // Fetch historical trades for CONNECTED WALLET (synced with user's actual trades)
+  // Fetch historical trades for CONNECTED WALLET on mount AND when tab changes
+  useEffect(() => {
+    if (userAddress) {
+      fetchHistoricalTrades(userAddress);
+    }
+  }, [userAddress]); // Fetch on mount when wallet connects
+
+  // Refetch when switching to stats tab
   useEffect(() => {
     if (activeTab === 'stats' && userAddress) {
       fetchHistoricalTrades(userAddress);
     }
-  }, [activeTab, userAddress]);
+  }, [activeTab]);
+
+  // Sync tradeStats with userPositions (for OPEN position counts)
+  useEffect(() => {
+    if (userPositions.length > 0) {
+      const longs = userPositions.filter(p => p.direction === 'LONG').length;
+      const shorts = userPositions.filter(p => p.direction === 'SHORT').length;
+      // Update with open position counts (not historical wins/losses)
+      setTradeStats(prev => ({
+        ...prev,
+        openLongs: longs,
+        openShorts: shorts,
+        openTotal: userPositions.length,
+        deployedCollateral: collateralDeployed,
+      }));
+    }
+  }, [userPositions, collateralDeployed]);
+
+  // Save starting balance when first balance is loaded
+  useEffect(() => {
+    if (balance !== null && startingBalance === null) {
+      const total = balance + collateralDeployed;
+      setStartingBalance(total);
+      localStorage.setItem('dtgc_starting_balance', total.toString());
+      console.log(`💰 Starting balance set: $${total.toFixed(2)} (${balance} available + ${collateralDeployed.toFixed(2)} deployed)`);
+    }
+  }, [balance, collateralDeployed, startingBalance]);
 
   // ===== PENDING ORDERS / COLLATERAL CLAIM FUNCTIONS =====
 
@@ -1778,6 +1863,21 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Collateral Deployed Badge */}
+            {collateralDeployed > 0 && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(138, 43, 226, 0.3), rgba(75, 0, 130, 0.2))',
+                border: '1px solid rgba(138, 43, 226, 0.5)',
+                borderRadius: '8px',
+                padding: '4px 8px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#8a2be2', fontWeight: 700, fontSize: '12px' }}>
+                  ${collateralDeployed.toFixed(2)}
+                </div>
+                <div style={{ color: '#666', fontSize: '7px' }}>DEPLOYED</div>
+              </div>
+            )}
             <div style={{ textAlign: 'right' }}>
               <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '14px' }}>
                 ${balance?.toFixed(2) || '---'}
@@ -2518,10 +2618,47 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '20px' }}>${balance?.toFixed(2) || '---'}</div>
-                  <div style={{ color: '#888', fontSize: '9px' }}>USDC Balance</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
+                    {collateralDeployed > 0 && (
+                      <div style={{ background: 'rgba(138, 43, 226, 0.2)', padding: '4px 8px', borderRadius: '6px' }}>
+                        <div style={{ color: '#8a2be2', fontWeight: 700, fontSize: '12px' }}>${collateralDeployed.toFixed(2)}</div>
+                        <div style={{ color: '#666', fontSize: '7px' }}>DEPLOYED</div>
+                      </div>
+                    )}
+                    <div>
+                      <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '18px' }}>${balance?.toFixed(2) || '---'}</div>
+                      <div style={{ color: '#888', fontSize: '8px' }}>AVAILABLE</div>
+                    </div>
+                  </div>
+                  {startingBalance && (
+                    <div style={{ color: '#555', fontSize: '8px', marginTop: '2px' }}>
+                      Started: ${startingBalance.toFixed(2)}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Unrealized P&L from Open Positions */}
+              {userPositions.length > 0 && (
+                <div style={{
+                  background: totalUnrealizedPnl >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  marginBottom: '12px',
+                  border: `1px solid ${totalUnrealizedPnl >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 68, 0.3)'}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ color: '#888', fontSize: '10px' }}>📊 UNREALIZED ({userPositions.length} positions)</div>
+                    <div style={{
+                      color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444',
+                      fontWeight: 800,
+                      fontSize: '16px',
+                    }}>
+                      {totalUnrealizedPnl >= 0 ? '+' : ''}{totalUnrealizedPnl.toFixed(2)} USDC
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Win/Loss/Rate Stats */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
@@ -2565,6 +2702,81 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   {historicalTrades.length || closedTrades.length} trades • Q7 D-RAM Auto-Scalp
                 </div>
               </div>
+
+              {/* Time Range Slider */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '8px',
+                padding: '10px',
+                marginBottom: '12px',
+              }}>
+                <div style={{ color: '#888', fontSize: '9px', marginBottom: '8px', textAlign: 'center' }}>📅 P&L TIME RANGE</div>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                  {['24h', '48h', '72h', 'all'].map(range => (
+                    <button
+                      key={range}
+                      onClick={() => setPnlTimeRange(range)}
+                      style={{
+                        flex: 1,
+                        padding: '6px 10px',
+                        background: pnlTimeRange === range ? 'rgba(255, 215, 0, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                        border: `1px solid ${pnlTimeRange === range ? '#FFD700' : '#444'}`,
+                        borderRadius: '6px',
+                        color: pnlTimeRange === range ? '#FFD700' : '#888',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {range.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                {pnlTimeRange !== 'all' && (
+                  <div style={{ textAlign: 'center', marginTop: '8px' }}>
+                    <div style={{ color: getFilteredPnL().total >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
+                      {getFilteredPnL().total >= 0 ? '+' : ''}{getFilteredPnL().total.toFixed(2)} USDC
+                    </div>
+                    <div style={{ color: '#666', fontSize: '9px' }}>
+                      {getFilteredPnL().wins}W / {getFilteredPnL().losses}L in last {pnlTimeRange}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Forecast Section */}
+              {getForecast() && (
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(0, 150, 255, 0.1), rgba(138, 43, 226, 0.1))',
+                  borderRadius: '8px',
+                  padding: '10px',
+                  marginBottom: '12px',
+                  border: '1px solid rgba(0, 150, 255, 0.3)',
+                }}>
+                  <div style={{ color: '#0096ff', fontSize: '10px', fontWeight: 700, marginBottom: '8px', textAlign: 'center' }}>
+                    📈 FORECAST (based on {pnlTimeRange} data)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#0096ff', fontSize: '14px', fontWeight: 700 }}>{getForecast().winRate}%</div>
+                      <div style={{ color: '#666', fontSize: '8px' }}>Win Rate</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#FFD700', fontSize: '14px', fontWeight: 700 }}>${getForecast().projected24h}</div>
+                      <div style={{ color: '#666', fontSize: '8px' }}>24h Proj</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#00ff88', fontSize: '14px', fontWeight: 700 }}>${getForecast().projected7d}</div>
+                      <div style={{ color: '#666', fontSize: '8px' }}>7d Proj</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center', marginTop: '6px' }}>
+                    <div style={{ color: '#888', fontSize: '8px' }}>
+                      ~{getForecast().tradesPerDay} trades/day • ${getForecast().avgPnlPerTrade} avg/trade
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Share Button */}
               <button
@@ -3537,54 +3749,86 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
               <div style={{ color: '#555', fontSize: '9px' }}>D-RAM v5.2.6 Calibrated</div>
+
+              {/* Time Range Toggle in Card */}
+              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', marginTop: '10px' }}>
+                {['24h', '48h', '72h', 'all'].map(range => (
+                  <button
+                    key={range}
+                    onClick={() => setPnlTimeRange(range)}
+                    style={{
+                      padding: '4px 10px',
+                      background: pnlTimeRange === range ? 'rgba(255, 215, 0, 0.3)' : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${pnlTimeRange === range ? '#FFD700' : '#333'}`,
+                      borderRadius: '4px',
+                      color: pnlTimeRange === range ? '#FFD700' : '#666',
+                      fontSize: '9px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {range.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Stats Grid */}
+            {/* Stats Grid - Uses filtered P&L when time range selected */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
               <div style={{ background: 'rgba(0, 255, 136, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(0, 255, 136, 0.3)' }}>
-                <div style={{ color: '#00ff88', fontSize: '32px', fontWeight: 900 }}>{realPnL.wins || tradeStats.wins || 0}</div>
+                <div style={{ color: '#00ff88', fontSize: '32px', fontWeight: 900 }}>{pnlTimeRange === 'all' ? (realPnL.wins || 0) : getFilteredPnL().wins}</div>
                 <div style={{ color: '#00ff88', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WINS</div>
               </div>
               <div style={{ background: 'rgba(255, 68, 68, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(255, 68, 68, 0.3)' }}>
-                <div style={{ color: '#ff4444', fontSize: '32px', fontWeight: 900 }}>{realPnL.losses || tradeStats.losses || 0}</div>
+                <div style={{ color: '#ff4444', fontSize: '32px', fontWeight: 900 }}>{pnlTimeRange === 'all' ? (realPnL.losses || 0) : getFilteredPnL().losses}</div>
                 <div style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>LOSSES</div>
               </div>
               <div style={{ background: 'rgba(138, 43, 226, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(138, 43, 226, 0.3)' }}>
                 <div style={{ color: '#8a2be2', fontSize: '32px', fontWeight: 900 }}>
-                  {(realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0) > 0
-                    ? Math.round(((realPnL.wins || tradeStats.wins || 0) / ((realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0))) * 100)
-                    : 0}%
+                  {(() => {
+                    const w = pnlTimeRange === 'all' ? (realPnL.wins || 0) : getFilteredPnL().wins;
+                    const l = pnlTimeRange === 'all' ? (realPnL.losses || 0) : getFilteredPnL().losses;
+                    return (w + l) > 0 ? Math.round((w / (w + l)) * 100) : 0;
+                  })()}%
                 </div>
                 <div style={{ color: '#8a2be2', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WIN RATE</div>
               </div>
             </div>
 
-            {/* Total P&L Hero */}
-            <div style={{
-              background: (realPnL.total || tradeStats.totalPnl || 0) >= 0
-                ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))'
-                : 'linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(200, 50, 50, 0.1))',
-              borderRadius: '16px',
-              padding: '20px',
-              textAlign: 'center',
-              border: `3px solid ${(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? 'rgba(0, 255, 136, 0.5)' : 'rgba(255, 68, 68, 0.5)'}`,
-              marginBottom: '16px',
-              position: 'relative',
-              zIndex: 1,
-            }}>
-              <div style={{ color: '#888', fontSize: '12px', marginBottom: '8px', fontWeight: 600, letterSpacing: '1px' }}>TOTAL P&L</div>
-              <div style={{
-                color: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '#00ff88' : '#ff4444',
-                fontSize: '42px',
-                fontWeight: 900,
-                textShadow: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '0 0 30px rgba(0,255,136,0.6)' : '0 0 30px rgba(255,68,68,0.6)',
-              }}>
-                {(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '+' : ''}{(realPnL.total || tradeStats.totalPnl || 0).toFixed(2)} USDC
-              </div>
-              <div style={{ color: '#666', fontSize: '11px', marginTop: '8px' }}>
-                {historicalTrades.length || closedTrades.length} trades executed
-              </div>
-            </div>
+            {/* Total P&L Hero - Uses filtered data based on time range */}
+            {(() => {
+              const displayPnL = pnlTimeRange === 'all' ? (realPnL.total || 0) : getFilteredPnL().total;
+              const tradeCount = pnlTimeRange === 'all' ? historicalTrades.length : (getFilteredPnL().count || 0);
+              return (
+                <div style={{
+                  background: displayPnL >= 0
+                    ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))'
+                    : 'linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(200, 50, 50, 0.1))',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  textAlign: 'center',
+                  border: `3px solid ${displayPnL >= 0 ? 'rgba(0, 255, 136, 0.5)' : 'rgba(255, 68, 68, 0.5)'}`,
+                  marginBottom: '16px',
+                  position: 'relative',
+                  zIndex: 1,
+                }}>
+                  <div style={{ color: '#888', fontSize: '12px', marginBottom: '8px', fontWeight: 600, letterSpacing: '1px' }}>
+                    {pnlTimeRange === 'all' ? 'TOTAL P&L' : `P&L (${pnlTimeRange.toUpperCase()})`}
+                  </div>
+                  <div style={{
+                    color: displayPnL >= 0 ? '#00ff88' : '#ff4444',
+                    fontSize: '42px',
+                    fontWeight: 900,
+                    textShadow: displayPnL >= 0 ? '0 0 30px rgba(0,255,136,0.6)' : '0 0 30px rgba(255,68,68,0.6)',
+                  }}>
+                    {displayPnL >= 0 ? '+' : ''}{displayPnL.toFixed(2)} USDC
+                  </div>
+                  <div style={{ color: '#666', fontSize: '11px', marginTop: '8px' }}>
+                    {tradeCount} trades {pnlTimeRange !== 'all' ? `in ${pnlTimeRange}` : 'executed'}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Footer */}
             <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
@@ -3598,7 +3842,9 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             </div>
 
             {/* Gold Bars Reward Section - Shows when profit is $50+ */}
-            {getGoldBars(realPnL.total || tradeStats.totalPnl || 0) > 0 && (
+            {(() => {
+              const displayPnL = pnlTimeRange === 'all' ? (realPnL.total || 0) : getFilteredPnL().total;
+              return getGoldBars(displayPnL) > 0 && (
               <div style={{
                 marginTop: '16px',
                 padding: '12px',
@@ -3624,7 +3870,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   gap: '8px',
                   flexWrap: 'wrap',
                 }}>
-                  {[...Array(getGoldBars(realPnL.total || tradeStats.totalPnl || 0))].map((_, i) => (
+                  {[...Array(getGoldBars(displayPnL))].map((_, i) => (
                     <img
                       key={i}
                       src="/gold_bar.png"
@@ -3645,14 +3891,15 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   textAlign: 'center',
                   marginTop: '8px',
                 }}>
-                  {(realPnL.total || tradeStats.totalPnl || 0) >= 1000 ? '🐋 WHALE STATUS!' :
-                   (realPnL.total || tradeStats.totalPnl || 0) >= 500 ? '💎 Diamond Hands!' :
-                   (realPnL.total || tradeStats.totalPnl || 0) >= 250 ? '🔥 On Fire!' :
-                   (realPnL.total || tradeStats.totalPnl || 0) >= 100 ? '📈 Stacking!' :
+                  {displayPnL >= 1000 ? '🐋 WHALE STATUS!' :
+                   displayPnL >= 500 ? '💎 Diamond Hands!' :
+                   displayPnL >= 250 ? '🔥 On Fire!' :
+                   displayPnL >= 100 ? '📈 Stacking!' :
                    '✨ Nice Gains!'}
                 </div>
               </div>
-            )}
+            );
+            })()}
           </div>
 
           {/* Share Instructions */}
