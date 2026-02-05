@@ -1092,36 +1092,53 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const fetchHistoricalTrades = async (walletAddr = Q7_DEV_WALLET) => {
     setHistoricalLoading(true);
     try {
-      // gTrade historical trades API - multiple regional endpoints with 500 limit
-      const endpoints = [
-        `https://backend-arbitrum.gains.trade/historical-trades/${walletAddr}?limit=500`,
-        `https://backend-arbitrum.eu.gains.trade/historical-trades/${walletAddr}?limit=500`,
-        `https://backend-arbitrum.us.gains.trade/historical-trades/${walletAddr}?limit=500`,
-        // Also try user-trading-variables which may have trade history
-        `https://backend-arbitrum.gains.trade/user-trading-variables/${walletAddr}`,
-      ];
+      // PRIMARY: backend-global API discovered by Claude Desktop (WORKS!)
+      // Format: /api/personal-trading-history/{address}?chainId=42161&limit=500
+      const primaryEndpoint = `https://backend-global.gains.trade/api/personal-trading-history/${walletAddr}?chainId=42161&limit=500`;
 
       let data = null;
-      for (const endpoint of endpoints) {
-        try {
-          console.log(`🔍 Fetching historical trades from: ${endpoint}`);
-          const response = await fetch(endpoint, {
-            headers: {
-              'Accept': 'application/json',
-              'Origin': 'https://gains.trade'
-            }
-          });
-          if (response.ok) {
-            const result = await response.json();
-            // Handle both array response and object with trades property
-            data = Array.isArray(result) ? result : (result.trades || result.historicalTrades || []);
-            console.log(`✅ Historical trades from gTrade API:`, data?.length || 0);
-            if (data?.length > 0) break;
-          } else {
-            console.log(`⚠️ HTTP ${response.status} from ${endpoint}`);
+      let isGlobalFormat = false; // Track which format we got
+
+      // Try the WORKING global endpoint first
+      try {
+        console.log(`🔍 Fetching from PRIMARY endpoint: ${primaryEndpoint}`);
+        const response = await fetch(primaryEndpoint, {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (response.ok) {
+          const result = await response.json();
+          data = Array.isArray(result) ? result : (result.data || result.trades || []);
+          if (data?.length > 0) {
+            isGlobalFormat = true;
+            console.log(`✅ SUCCESS! ${data.length} trades from backend-global API`);
           }
-        } catch (e) {
-          console.log(`⚠️ Historical endpoint failed: ${endpoint}`, e.message);
+        }
+      } catch (e) {
+        console.log(`⚠️ Primary endpoint failed: ${e.message}`);
+      }
+
+      // Fallback: Try regional endpoints if global fails
+      if (!data || data.length === 0) {
+        const fallbackEndpoints = [
+          `https://backend-arbitrum.gains.trade/historical-trades/${walletAddr}?limit=500`,
+          `https://backend-arbitrum.eu.gains.trade/historical-trades/${walletAddr}?limit=500`,
+        ];
+
+        for (const endpoint of fallbackEndpoints) {
+          try {
+            console.log(`🔍 Trying fallback: ${endpoint}`);
+            const response = await fetch(endpoint, {
+              headers: { 'Accept': 'application/json', 'Origin': 'https://gains.trade' }
+            });
+            if (response.ok) {
+              const result = await response.json();
+              data = Array.isArray(result) ? result : (result.trades || []);
+              console.log(`✅ Historical trades from fallback:`, data?.length || 0);
+              if (data?.length > 0) break;
+            }
+          } catch (e) {
+            console.log(`⚠️ Fallback failed: ${endpoint}`, e.message);
+          }
         }
       }
 
@@ -1209,7 +1226,41 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
       if (Array.isArray(data) && data.length > 0) {
         const ASSET_INDEX_REVERSE = { 0: 'BTC', 1: 'ETH', 90: 'GOLD', 91: 'SILVER' };
 
-        const trades = data.map(t => {
+        // Filter for closed trades only (TradeClosed action) from global API
+        const closedTradesOnly = data.filter(t =>
+          t.action === 'TradeClosed' ||
+          t.action === 'TradeClosedMarket' ||
+          t.closeType ||
+          t.closePrice
+        );
+
+        console.log(`📊 Closed trades: ${closedTradesOnly.length} / ${data.length} total`);
+
+        const trades = (closedTradesOnly.length > 0 ? closedTradesOnly : data).map(t => {
+          // Handle GLOBAL API format (pair: "XAU/USD", pnl, pnl_net, etc.)
+          if (t.pair) {
+            const pairName = t.pair.replace('/USD', '').replace('/', '-');
+            const pnlNet = parseFloat(t.pnl_net || t.pnl || 0);
+            const collateral = parseFloat(t.collateral || t.size || 0);
+            const leverage = parseFloat(t.leverage || 1);
+            const pnlPercent = collateral > 0 ? (pnlNet / collateral) * 100 : 0;
+
+            return {
+              asset: pairName,
+              direction: t.buy === true || t.long === true ? 'LONG' : 'SHORT',
+              leverage,
+              collateral,
+              openPrice: parseFloat(t.openPrice || t.price || 0),
+              closePrice: parseFloat(t.closePrice || t.price || 0),
+              pnlPercent,
+              pnlUsd: pnlNet,
+              timestamp: new Date(t.date).getTime(),
+              closeType: t.action || 'CLOSED',
+              txHash: t.tx || null,
+            };
+          }
+
+          // Handle LEGACY API format (pairIndex, collateralAmount, etc.)
           const pairIndex = parseInt(t.pairIndex || 0);
           const asset = ASSET_INDEX_REVERSE[pairIndex] || `PAIR${pairIndex}`;
           const isLong = t.long === true || t.long === 'true' || t.buy === true;
@@ -1343,8 +1394,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
     const connectWebSocket = () => {
       try {
-        // gTrade backend WebSocket for real-time events
-        ws = new WebSocket('wss://backend-arbitrum.gains.trade/events');
+        // gTrade backend WebSocket for real-time events (try global first)
+        ws = new WebSocket('wss://backend-global.gains.trade/events');
 
         ws.onopen = () => {
           console.log('🔌 gTrade WebSocket connected');
