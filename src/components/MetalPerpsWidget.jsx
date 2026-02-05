@@ -92,6 +92,34 @@ const AUTO_TRADE_CONFIG = {
 // gTrade Pricing API - Direct source for real-time prices
 const GTRADE_PRICES_API = 'https://backend-pricing.eu.gains.trade/charts/prices?from=gTrade&pairs=0,1,90,91';
 
+// ==================== MANDO P&L CARD ASSETS ====================
+// Randomized images for shareable P&L cards
+const MANDO_IMAGES = [
+  '/images/mando/mando-sniper.png',
+  '/images/mando/mando-gold-lava.jpg',
+  '/images/mando/mando-silver-lava.jpg',
+  '/images/mando/mando-hallway-gold.jpg',
+  '/images/mando/mando-hallway-bright.jpg',
+  '/images/mando/mando-action-1.jpg',
+  '/images/mando/mando-action-3.jpg',
+  '/images/mando/mando-desert-1.jpg',
+  '/images/mando/mando-desert-2.jpg',
+  '/images/mando/mando-desert-3.jpg',
+  '/images/mando/mando-desert-4.jpg',
+  '/images/mando/mando-watercolor.jpg',
+  '/images/mando/mando-watercolor-lava.jpg',
+  '/images/mando/Snow-mando.png',
+];
+
+// Gold bar thresholds for profit rewards (USDC)
+const GOLD_BAR_THRESHOLDS = [
+  { min: 50, bars: 1 },    // $50+ = 1 gold bar
+  { min: 100, bars: 2 },   // $100+ = 2 gold bars
+  { min: 250, bars: 3 },   // $250+ = 3 gold bars
+  { min: 500, bars: 4 },   // $500+ = 4 gold bars
+  { min: 1000, bars: 5 },  // $1000+ = 5 gold bars (WHALE!)
+];
+
 // gTrade pair indices mapping
 const GTRADE_PAIR_INDEX = {
   BTC: '0',
@@ -218,6 +246,9 @@ const TradingViewTickerTape = () => {
 // ==================== MAIN COMPONENT ====================
 
 export default function MetalPerpsWidget({ livePrices: externalPrices = {}, connectedAddress = null, dtgcBalance = 0 }) {
+  // Alias for backwards compatibility - userAddress is used throughout the component
+  const userAddress = connectedAddress;
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('trade');
   const [selectedAsset, setSelectedAsset] = useState('BTC');
@@ -297,7 +328,27 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
   // ===== SHAREABLE P&L CARD =====
   const [showShareCard, setShowShareCard] = useState(false);
+  const [currentMandoImage, setCurrentMandoImage] = useState(MANDO_IMAGES[0]);
   const pnlCardRef = useRef(null);
+
+  // Randomize Mando image when share card opens
+  useEffect(() => {
+    if (showShareCard) {
+      const randomIndex = Math.floor(Math.random() * MANDO_IMAGES.length);
+      setCurrentMandoImage(MANDO_IMAGES[randomIndex]);
+    }
+  }, [showShareCard]);
+
+  // Calculate gold bars based on profit
+  const getGoldBars = (profit) => {
+    if (profit <= 0) return 0;
+    for (let i = GOLD_BAR_THRESHOLDS.length - 1; i >= 0; i--) {
+      if (profit >= GOLD_BAR_THRESHOLDS[i].min) {
+        return GOLD_BAR_THRESHOLDS[i].bars;
+      }
+    }
+    return 0;
+  };
 
   // ===== Q7 DEV WALLET LIVE POSITIONS =====
   const [q7DevPositions, setQ7DevPositions] = useState([]);
@@ -3460,17 +3511,17 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
               pointerEvents: 'none',
             }} />
 
-            {/* Mando Sniper Image */}
+            {/* Mando Image - Randomized! */}
             <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 1 }}>
               <img
-                src="/images/mando-sniper.png"
+                src={currentMandoImage}
                 alt="Mando Sniper"
                 style={{
-                  width: '80px',
-                  height: '80px',
+                  width: '100px',
+                  height: '100px',
                   borderRadius: '50%',
-                  border: '3px solid #FFD700',
-                  boxShadow: '0 0 20px rgba(255, 215, 0, 0.4)',
+                  border: '4px solid #FFD700',
+                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
                   objectFit: 'cover',
                 }}
               />
@@ -3545,6 +3596,63 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </div>
             </div>
+
+            {/* Gold Bars Reward Section - Shows when profit is $50+ */}
+            {getGoldBars(realPnL.total || tradeStats.totalPnl || 0) > 0 && (
+              <div style={{
+                marginTop: '16px',
+                padding: '12px',
+                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 140, 0, 0.1))',
+                borderRadius: '12px',
+                border: '2px solid rgba(255, 215, 0, 0.4)',
+                position: 'relative',
+                zIndex: 1,
+              }}>
+                <div style={{
+                  color: '#FFD700',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  marginBottom: '8px',
+                  letterSpacing: '1px'
+                }}>
+                  🏆 PROFIT REWARD LEVEL 🏆
+                </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                }}>
+                  {[...Array(getGoldBars(realPnL.total || tradeStats.totalPnl || 0))].map((_, i) => (
+                    <img
+                      key={i}
+                      src="/gold_bar.png"
+                      alt="Gold Bar"
+                      style={{
+                        width: '48px',
+                        height: '24px',
+                        objectFit: 'contain',
+                        filter: 'drop-shadow(0 2px 4px rgba(255, 215, 0, 0.5))',
+                        animation: `goldPulse 1.5s ease-in-out ${i * 0.2}s infinite`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div style={{
+                  color: '#888',
+                  fontSize: '9px',
+                  textAlign: 'center',
+                  marginTop: '8px',
+                }}>
+                  {(realPnL.total || tradeStats.totalPnl || 0) >= 1000 ? '🐋 WHALE STATUS!' :
+                   (realPnL.total || tradeStats.totalPnl || 0) >= 500 ? '💎 Diamond Hands!' :
+                   (realPnL.total || tradeStats.totalPnl || 0) >= 250 ? '🔥 On Fire!' :
+                   (realPnL.total || tradeStats.totalPnl || 0) >= 100 ? '📈 Stacking!' :
+                   '✨ Nice Gains!'}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Share Instructions */}
@@ -3576,11 +3684,21 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
         </div>
       )}
 
-      {/* ===== PULSE ANIMATION ===== */}
+      {/* ===== ANIMATIONS ===== */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
+        }
+        @keyframes goldPulse {
+          0%, 100% {
+            transform: scale(1) rotate(0deg);
+            filter: drop-shadow(0 2px 4px rgba(255, 215, 0, 0.5));
+          }
+          50% {
+            transform: scale(1.1) rotate(2deg);
+            filter: drop-shadow(0 4px 8px rgba(255, 215, 0, 0.8));
+          }
         }
       `}</style>
     </div>
