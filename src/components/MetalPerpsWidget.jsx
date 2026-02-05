@@ -402,6 +402,112 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     };
   };
 
+  // Generate P&L chart data for time graph
+  const getPnLChartData = () => {
+    if (!historicalTrades || historicalTrades.length === 0) return [];
+
+    // Sort trades by timestamp (oldest first)
+    const sortedTrades = [...historicalTrades].sort((a, b) => a.timestamp - b.timestamp);
+
+    // Calculate cumulative P&L
+    let cumulative = 0;
+    const chartData = sortedTrades.map((trade, idx) => {
+      cumulative += trade.pnlUsd;
+      return {
+        timestamp: trade.timestamp,
+        pnl: trade.pnlUsd,
+        cumulative,
+        index: idx,
+      };
+    });
+
+    return chartData;
+  };
+
+  // Render simple SVG line chart
+  const renderPnLChart = () => {
+    const data = getPnLChartData();
+    if (data.length < 2) return null;
+
+    const width = 340;
+    const height = 100;
+    const padding = { top: 10, right: 10, bottom: 20, left: 45 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Get min/max values
+    const values = data.map(d => d.cumulative);
+    const minVal = Math.min(0, ...values);
+    const maxVal = Math.max(...values);
+    const range = maxVal - minVal || 1;
+
+    // Scale functions
+    const scaleX = (idx) => padding.left + (idx / (data.length - 1)) * chartWidth;
+    const scaleY = (val) => padding.top + chartHeight - ((val - minVal) / range) * chartHeight;
+
+    // Generate path
+    const pathD = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(i)} ${scaleY(d.cumulative)}`).join(' ');
+
+    // Zero line
+    const zeroY = scaleY(0);
+
+    // Get today's date range
+    const startDate = new Date(data[0].timestamp);
+    const endDate = new Date(data[data.length - 1].timestamp);
+
+    return (
+      <svg width={width} height={height} style={{ display: 'block' }}>
+        {/* Grid lines */}
+        <line x1={padding.left} y1={zeroY} x2={width - padding.right} y2={zeroY} stroke="rgba(255,255,255,0.2)" strokeDasharray="4" />
+
+        {/* Gradient fill under line */}
+        <defs>
+          <linearGradient id="pnlGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={data[data.length-1].cumulative >= 0 ? 'rgba(0,255,136,0.4)' : 'rgba(255,68,68,0.4)'} />
+            <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+          </linearGradient>
+        </defs>
+
+        {/* Area fill */}
+        <path
+          d={`${pathD} L ${scaleX(data.length-1)} ${zeroY} L ${scaleX(0)} ${zeroY} Z`}
+          fill="url(#pnlGradient)"
+        />
+
+        {/* Main line */}
+        <path
+          d={pathD}
+          fill="none"
+          stroke={data[data.length-1].cumulative >= 0 ? '#00ff88' : '#ff4444'}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Data points */}
+        {data.length <= 15 && data.map((d, i) => (
+          <circle
+            key={i}
+            cx={scaleX(i)}
+            cy={scaleY(d.cumulative)}
+            r="3"
+            fill={d.pnl >= 0 ? '#00ff88' : '#ff4444'}
+            stroke="#000"
+            strokeWidth="1"
+          />
+        ))}
+
+        {/* Y-axis labels */}
+        <text x={padding.left - 5} y={padding.top + 4} fill="#888" fontSize="8" textAnchor="end">${maxVal.toFixed(0)}</text>
+        <text x={padding.left - 5} y={height - padding.bottom} fill="#888" fontSize="8" textAnchor="end">${minVal.toFixed(0)}</text>
+
+        {/* X-axis labels */}
+        <text x={padding.left} y={height - 5} fill="#666" fontSize="8">{startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>
+        <text x={width - padding.right} y={height - 5} fill="#666" fontSize="8" textAnchor="end">{endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>
+      </svg>
+    );
+  };
+
   // Calculate collateral deployed from open positions
   const collateralDeployed = userPositions.reduce((sum, pos) => sum + (pos.collateral || 0), 0);
 
@@ -4351,14 +4457,14 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
               zIndex: 0,
             }} />
 
-            {/* Artistic gradient overlay - NOT opaque, lets Mando show through */}
+            {/* Artistic gradient overlay - very transparent, lets Mando show through */}
             <div style={{
               position: 'absolute',
               top: 0,
               left: 0,
               right: 0,
               bottom: 0,
-              background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.45) 25%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.8) 75%, rgba(0,0,0,0.9) 100%)',
+              background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.3) 25%, rgba(0,0,0,0.45) 50%, rgba(0,0,0,0.6) 75%, rgba(0,0,0,0.75) 100%)',
               zIndex: 1,
             }} />
 
@@ -4381,25 +4487,25 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 pointerEvents: 'none',
               }} />
 
-              {/* Header - Glassmorphism style */}
+              {/* Header - Glassmorphism style - more transparent for Mando art */}
               <div style={{
                 textAlign: 'center',
                 marginBottom: '16px',
                 padding: '16px',
-                background: 'rgba(0, 0, 0, 0.4)',
-                backdropFilter: 'blur(10px)',
+                background: 'rgba(0, 0, 0, 0.2)',
+                backdropFilter: 'blur(4px)',
                 borderRadius: '12px',
-                border: '1px solid rgba(255, 215, 0, 0.3)',
+                border: '1px solid rgba(255, 215, 0, 0.4)',
               }}>
                 <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '22px', letterSpacing: '1px', textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>📊 P&L RETROSPECT</div>
                 <div style={{ color: '#ccc', fontSize: '11px', marginTop: '4px', textShadow: '0 1px 5px rgba(0,0,0,0.8)' }}>ARBITRUM • gTRADE • DTGC.io</div>
                 <div style={{ color: '#888', fontSize: '9px', marginTop: '2px' }}>Portfolio Performance Summary</div>
               </div>
 
-              {/* Initial Capital - Glassmorphism */}
+              {/* Initial Capital - Glassmorphism - transparent for art */}
               <div style={{
-                background: 'rgba(138, 43, 226, 0.2)',
-                backdropFilter: 'blur(10px)',
+                background: 'rgba(138, 43, 226, 0.1)',
+                backdropFilter: 'blur(3px)',
                 borderRadius: '12px',
                 padding: '14px',
                 marginBottom: '12px',
@@ -4413,12 +4519,12 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* Closed Trades & Win Rate Row - Glassmorphism */}
+              {/* Closed Trades & Win Rate Row - Glassmorphism - transparent */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
                 <div style={{
                   flex: 1,
-                  background: 'rgba(255, 215, 0, 0.2)',
-                  backdropFilter: 'blur(10px)',
+                  background: 'rgba(255, 215, 0, 0.08)',
+                  backdropFilter: 'blur(3px)',
                   borderRadius: '12px',
                   padding: '14px',
                   textAlign: 'center',
@@ -4429,8 +4535,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
                 <div style={{
                   flex: 1,
-                  background: 'rgba(0, 255, 136, 0.2)',
-                  backdropFilter: 'blur(10px)',
+                  background: 'rgba(0, 255, 136, 0.08)',
+                  backdropFilter: 'blur(3px)',
                   borderRadius: '12px',
                   padding: '14px',
                   textAlign: 'center',
@@ -4443,32 +4549,61 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* W/L Breakdown - Glassmorphism */}
+              {/* W/L Breakdown - Glassmorphism - transparent */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
-                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
+                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
                   <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,255,136,0.4)' }}>{realPnL.wins || 0}</div>
                   <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>WINS</div>
                 </div>
-                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
+                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
                   <div style={{ color: '#ff4444', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(255,68,68,0.4)' }}>{realPnL.losses || 0}</div>
                   <div style={{ color: '#ff4444', fontSize: '9px', fontWeight: 600 }}>LOSSES</div>
                 </div>
-                <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.15)', backdropFilter: 'blur(8px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 150, 255, 0.3)' }}>
+                <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 150, 255, 0.3)' }}>
                   <div style={{ color: '#0096ff', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,150,255,0.4)' }}>{userPositions.length}</div>
                   <div style={{ color: '#0096ff', fontSize: '9px', fontWeight: 600 }}>OPEN</div>
                 </div>
               </div>
 
-              {/* Total System Capital NOW - Glassmorphism Hero */}
+              {/* P&L TIME GRAPH - transparent */}
+              {historicalTrades.length >= 2 && (
+                <div style={{
+                  background: 'rgba(0, 0, 0, 0.15)',
+                  backdropFilter: 'blur(2px)',
+                  borderRadius: '12px',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  border: '1px solid rgba(255, 215, 0, 0.4)',
+                }}>
+                  <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700, marginBottom: '8px', textAlign: 'center', letterSpacing: '1px' }}>
+                    📈 P&L OVER TIME
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    {renderPnLChart()}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', padding: '0 5px' }}>
+                    <div style={{ color: '#888', fontSize: '8px' }}>{historicalTrades.length} trades</div>
+                    <div style={{
+                      color: (realPnL.total || 0) >= 0 ? '#00ff88' : '#ff4444',
+                      fontSize: '9px',
+                      fontWeight: 700,
+                    }}>
+                      {(realPnL.total || 0) >= 0 ? '↑' : '↓'} ${Math.abs(realPnL.total || 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Total System Capital NOW - Hero but transparent for Mando */}
               <div style={{
-                background: 'rgba(0, 255, 136, 0.15)',
-                backdropFilter: 'blur(12px)',
+                background: 'rgba(0, 255, 136, 0.08)',
+                backdropFilter: 'blur(3px)',
                 borderRadius: '16px',
                 padding: '20px',
                 textAlign: 'center',
                 border: '3px solid rgba(0, 255, 136, 0.5)',
                 marginBottom: '12px',
-                boxShadow: '0 4px 30px rgba(0, 255, 136, 0.2)',
+                boxShadow: '0 4px 30px rgba(0, 255, 136, 0.15)',
               }}>
                 <div style={{ color: '#ccc', fontSize: '11px', marginBottom: '6px', fontWeight: 600, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>💎 TOTAL SYSTEM CAPITAL NOW</div>
                 <div style={{
@@ -4492,14 +4627,14 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 )}
               </div>
 
-              {/* Realized & Unrealized P&L - Glassmorphism */}
+              {/* Realized & Unrealized P&L - transparent */}
               <div style={{
-                background: 'rgba(255, 215, 0, 0.1)',
-                backdropFilter: 'blur(8px)',
+                background: 'rgba(255, 215, 0, 0.05)',
+                backdropFilter: 'blur(2px)',
                 borderRadius: '12px',
                 padding: '12px',
                 marginBottom: '16px',
-                border: '1px solid rgba(255, 215, 0, 0.3)',
+                border: '1px solid rgba(255, 215, 0, 0.4)',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 600 }}>📜 Realized P&L</div>
@@ -4515,14 +4650,14 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* 5% Flywheel to PLS */}
+              {/* 5% Flywheel to PLS - transparent */}
               <div style={{
-                background: 'rgba(255, 0, 128, 0.15)',
-                backdropFilter: 'blur(8px)',
+                background: 'rgba(255, 0, 128, 0.06)',
+                backdropFilter: 'blur(2px)',
                 borderRadius: '12px',
                 padding: '12px',
                 marginBottom: '16px',
-                border: '1px solid rgba(255, 0, 128, 0.4)',
+                border: '1px solid rgba(255, 0, 128, 0.5)',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ color: '#ff0080', fontSize: '10px', fontWeight: 600 }}>🔄 5% Flywheel → PLS</div>
@@ -4546,15 +4681,15 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* Gold Bars for high profit */}
+              {/* Gold Bars for high profit - transparent for Mando art */}
               {getGoldBars(getTotalSystemCapital() - (startingBalance || 0)) > 0 && (
                 <div style={{
                   marginTop: '16px',
                   padding: '12px',
-                  background: 'rgba(255, 215, 0, 0.15)',
-                  backdropFilter: 'blur(8px)',
+                  background: 'rgba(255, 215, 0, 0.06)',
+                  backdropFilter: 'blur(2px)',
                   borderRadius: '12px',
-                  border: '2px solid rgba(255, 215, 0, 0.4)',
+                  border: '2px solid rgba(255, 215, 0, 0.5)',
                 }}>
                   <div style={{
                     color: '#FFD700',
@@ -4687,3 +4822,4 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     </div>
   );
 }
+
