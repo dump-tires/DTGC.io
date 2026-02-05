@@ -334,6 +334,74 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   });
   const [pnlTimeRange, setPnlTimeRange] = useState('all'); // '24h', '48h', '72h', 'all'
 
+  // ===== 5% FLYWHEEL TRACKING =====
+  const FLYWHEEL_PERCENTAGE = 0.05; // 5%
+  const GROWTH_ENGINE_WALLET = '0x1449a7d9973e6215534d785e3e306261156eb610';
+
+  const [flywheelStats, setFlywheelStats] = useState(() => {
+    const saved = localStorage.getItem('dtgc_flywheel_stats');
+    return saved ? JSON.parse(saved) : {
+      totalWins: 0,
+      totalWinAmount: 0,
+      totalFlywheelAllocated: 0,
+      lastUpdated: null,
+      transactions: [],
+    };
+  });
+
+  // Save flywheel stats to localStorage when updated
+  useEffect(() => {
+    localStorage.setItem('dtgc_flywheel_stats', JSON.stringify(flywheelStats));
+  }, [flywheelStats]);
+
+  // Calculate 5% flywheel from any profit amount
+  const calculateFlywheelAmount = (profitUsd) => {
+    if (profitUsd <= 0) return 0;
+    return profitUsd * FLYWHEEL_PERCENTAGE;
+  };
+
+  // Process a winning trade and track flywheel allocation
+  const processWinForFlywheel = (profitUsd, tradeInfo = {}) => {
+    if (profitUsd <= 0) return;
+
+    const flywheelAmount = calculateFlywheelAmount(profitUsd);
+
+    setFlywheelStats(prev => ({
+      ...prev,
+      totalWins: prev.totalWins + 1,
+      totalWinAmount: prev.totalWinAmount + profitUsd,
+      totalFlywheelAllocated: prev.totalFlywheelAllocated + flywheelAmount,
+      lastUpdated: Date.now(),
+      transactions: [
+        {
+          timestamp: Date.now(),
+          profit: profitUsd,
+          flywheel: flywheelAmount,
+          ...tradeInfo,
+        },
+        ...prev.transactions.slice(0, 99), // Keep last 100
+      ],
+    }));
+
+    console.log(`🔄 Flywheel: $${profitUsd.toFixed(2)} profit → $${flywheelAmount.toFixed(2)} (5%) to PLS`);
+    return flywheelAmount;
+  };
+
+  // Get flywheel projection based on current performance
+  const getFlywheelProjection = () => {
+    const live = getLivePositionStats();
+    const currentUnrealized = live.total > 0 ? live.total : 0;
+    const projectedFlywheel = calculateFlywheelAmount(currentUnrealized);
+
+    return {
+      currentUnrealized,
+      projectedFlywheel,
+      totalAllocated: flywheelStats.totalFlywheelAllocated,
+      totalWithProjected: flywheelStats.totalFlywheelAllocated + projectedFlywheel,
+      winningPositions: live.wins,
+    };
+  };
+
   // Calculate collateral deployed from open positions
   const collateralDeployed = userPositions.reduce((sum, pos) => sum + (pos.collateral || 0), 0);
 
@@ -977,6 +1045,21 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
         setRealPnL({ total, wins, losses, trades });
         setClosedTrades(trades.slice(0, 20)); // Also update closedTrades for display
+
+        // Calculate 5% Flywheel from ALL winning closed trades
+        const winningTrades = trades.filter(t => t.pnlUsd > 0);
+        const totalWinAmount = winningTrades.reduce((sum, t) => sum + t.pnlUsd, 0);
+        const totalFlywheelFromClosed = totalWinAmount * FLYWHEEL_PERCENTAGE;
+
+        // Update flywheel stats with historical data
+        setFlywheelStats(prev => ({
+          ...prev,
+          totalWins: wins,
+          totalWinAmount: totalWinAmount,
+          totalFlywheelAllocated: totalFlywheelFromClosed,
+          lastUpdated: Date.now(),
+        }));
+
         // Sync tradeStats with real historical data for Bot tab congruency
         setTradeStats(prev => ({
           ...prev,
@@ -987,6 +1070,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
           attempts: wins + losses,
         }));
         console.log(`📊 Real P&L: $${total.toFixed(2)} | ${wins}W/${losses}L`);
+        console.log(`🔄 Flywheel from closed wins: $${totalFlywheelFromClosed.toFixed(2)} (5% of $${totalWinAmount.toFixed(2)})`);
       }
     } catch (error) {
       console.error('Failed to fetch historical trades:', error);
@@ -2978,6 +3062,90 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
               </div>
             </div>
 
+            {/* 🔄 5% FLYWHEEL TO PULSECHAIN */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255, 0, 128, 0.1), rgba(138, 43, 226, 0.15))',
+              borderRadius: '12px',
+              padding: '14px',
+              marginBottom: '12px',
+              border: '2px solid rgba(255, 0, 128, 0.4)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ color: '#ff0080', fontWeight: 700, fontSize: '12px' }}>🔄 5% FLYWHEEL → PLS</div>
+                <div style={{
+                  background: 'rgba(0, 255, 136, 0.2)',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  color: '#00ff88',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                }}>
+                  ACTIVE
+                </div>
+              </div>
+
+              {/* Flywheel Stats */}
+              {(() => {
+                const projection = getFlywheelProjection();
+                const liveStats = getLivePositionStats();
+                return (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '10px' }}>
+                      <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                        <div style={{ color: '#00ff88', fontSize: '16px', fontWeight: 700 }}>
+                          ${projection.totalAllocated.toFixed(2)}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '8px' }}>TOTAL ALLOCATED</div>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                        <div style={{ color: '#ff0080', fontSize: '16px', fontWeight: 700 }}>
+                          ${projection.projectedFlywheel.toFixed(2)}
+                        </div>
+                        <div style={{ color: '#888', fontSize: '8px' }}>PENDING (UNREALIZED)</div>
+                      </div>
+                    </div>
+
+                    {/* Breakdown */}
+                    <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ color: '#888', fontSize: '9px' }}>Winning Trades (Closed)</span>
+                        <span style={{ color: '#00ff88', fontSize: '10px', fontWeight: 600 }}>{flywheelStats.totalWins}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ color: '#888', fontSize: '9px' }}>Total Win Amount</span>
+                        <span style={{ color: '#00ff88', fontSize: '10px', fontWeight: 600 }}>${flywheelStats.totalWinAmount.toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ color: '#888', fontSize: '9px' }}>Winning Positions (Live)</span>
+                        <span style={{ color: '#0096ff', fontSize: '10px', fontWeight: 600 }}>{projection.winningPositions}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                        <span style={{ color: '#ff0080', fontSize: '9px', fontWeight: 600 }}>Est. Total to PLS</span>
+                        <span style={{ color: '#ff0080', fontSize: '11px', fontWeight: 700 }}>${projection.totalWithProjected.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Growth Engine Wallet */}
+                    <div style={{ marginTop: '10px', textAlign: 'center' }}>
+                      <div style={{ color: '#666', fontSize: '8px', marginBottom: '4px' }}>GROWTH ENGINE WALLET</div>
+                      <div
+                        onClick={() => navigator.clipboard.writeText(GROWTH_ENGINE_WALLET)}
+                        style={{
+                          color: '#ff0080',
+                          fontSize: '8px',
+                          cursor: 'pointer',
+                          fontFamily: 'monospace',
+                        }}
+                        title="Click to copy"
+                      >
+                        {GROWTH_ENGINE_WALLET.slice(0, 14)}...{GROWTH_ENGINE_WALLET.slice(-12)}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
             {/* COPY TRADING SECTION */}
             <div style={{
               background: 'rgba(138, 43, 226, 0.1)',
@@ -4342,6 +4510,26 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   <div style={{ color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444', fontSize: '15px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>
                     {totalUnrealizedPnl >= 0 ? '+' : ''}{totalUnrealizedPnl.toFixed(2)} USDC
                   </div>
+                </div>
+              </div>
+
+              {/* 5% Flywheel to PLS */}
+              <div style={{
+                background: 'rgba(255, 0, 128, 0.15)',
+                backdropFilter: 'blur(8px)',
+                borderRadius: '12px',
+                padding: '12px',
+                marginBottom: '16px',
+                border: '1px solid rgba(255, 0, 128, 0.4)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ color: '#ff0080', fontSize: '10px', fontWeight: 600 }}>🔄 5% Flywheel → PLS</div>
+                  <div style={{ color: '#ff0080', fontSize: '15px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,0,0,0.5)' }}>
+                    ${(flywheelStats.totalFlywheelAllocated + calculateFlywheelAmount(totalUnrealizedPnl > 0 ? totalUnrealizedPnl : 0)).toFixed(2)}
+                  </div>
+                </div>
+                <div style={{ color: '#888', fontSize: '8px', marginTop: '4px', textAlign: 'right' }}>
+                  To: {GROWTH_ENGINE_WALLET.slice(0, 10)}...
                 </div>
               </div>
 
