@@ -283,6 +283,21 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   // ===== POLYMARKET PREDICTION MARKETS =====
   const [polymarketData, setPolymarketData] = useState([]);
   const [polymarketLoading, setPolymarketLoading] = useState(false);
+  const [q7PolyPaused, setQ7PolyPaused] = useState(false); // Q7 Polymarket trading pause
+
+  // ===== COPY TRADING / MIRROR MODE =====
+  const [copyTradeWallet, setCopyTradeWallet] = useState('');
+  const [copyTradeEnabled, setCopyTradeEnabled] = useState(false);
+  const [copyTradePositions, setCopyTradePositions] = useState([]);
+
+  // ===== HISTORICAL TRADE DATA (Real P&L) =====
+  const [historicalTrades, setHistoricalTrades] = useState([]);
+  const [historicalLoading, setHistoricalLoading] = useState(false);
+  const [realPnL, setRealPnL] = useState({ total: 0, wins: 0, losses: 0, trades: [] });
+
+  // ===== SHAREABLE P&L CARD =====
+  const [showShareCard, setShowShareCard] = useState(false);
+  const pnlCardRef = useRef(null);
 
   // ===== Q7 DEV WALLET LIVE POSITIONS =====
   const [q7DevPositions, setQ7DevPositions] = useState([]);
@@ -725,6 +740,122 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
       setQ7DevPnl(totalPnl);
     }
   }, [livePrices]);
+
+  // ===== FETCH HISTORICAL TRADES (Real P&L) =====
+  const fetchHistoricalTrades = async (walletAddr = Q7_DEV_WALLET) => {
+    setHistoricalLoading(true);
+    try {
+      // gTrade historical trades API
+      const endpoints = [
+        `https://backend-arbitrum.gains.trade/historical-trades/${walletAddr}?limit=50`,
+        `https://backend-arbitrum.eu.gains.trade/historical-trades/${walletAddr}?limit=50`,
+      ];
+
+      let data = null;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (response.ok) {
+            data = await response.json();
+            console.log(`✅ Historical trades from gTrade:`, data?.length || 0);
+            break;
+          }
+        } catch (e) {
+          console.log(`⚠️ Historical endpoint failed: ${endpoint}`);
+        }
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        const ASSET_INDEX_REVERSE = { 0: 'BTC', 1: 'ETH', 90: 'GOLD', 91: 'SILVER' };
+
+        const trades = data.map(t => {
+          const pairIndex = parseInt(t.pairIndex || 0);
+          const asset = ASSET_INDEX_REVERSE[pairIndex] || `PAIR${pairIndex}`;
+          const isLong = t.long === true || t.long === 'true' || t.buy === true;
+          const leverage = parseInt(t.leverage || 1) / 1000;
+          const collateral = parseFloat(t.collateralAmount || 0) / 1e6;
+          const openPrice = parseFloat(t.openPrice || 0) / 1e10;
+          const closePrice = parseFloat(t.closePrice || 0) / 1e10;
+          const pnlRaw = parseFloat(t.percentProfit || 0);
+          const pnlUsd = collateral * (pnlRaw / 100);
+          const timestamp = parseInt(t.timestamp || t.closeTimestamp || Date.now());
+
+          return {
+            asset,
+            direction: isLong ? 'LONG' : 'SHORT',
+            leverage,
+            collateral,
+            openPrice,
+            closePrice,
+            pnlPercent: pnlRaw,
+            pnlUsd,
+            timestamp,
+            closeType: t.closeType || 'CLOSED',
+            txHash: t.txHash || null,
+          };
+        }).sort((a, b) => b.timestamp - a.timestamp);
+
+        setHistoricalTrades(trades);
+
+        // Calculate real P&L stats
+        const wins = trades.filter(t => t.pnlUsd > 0).length;
+        const losses = trades.filter(t => t.pnlUsd < 0).length;
+        const total = trades.reduce((sum, t) => sum + t.pnlUsd, 0);
+
+        setRealPnL({ total, wins, losses, trades });
+        setClosedTrades(trades.slice(0, 20)); // Also update closedTrades for display
+        console.log(`📊 Real P&L: $${total.toFixed(2)} | ${wins}W/${losses}L`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch historical trades:', error);
+    }
+    setHistoricalLoading(false);
+  };
+
+  // ===== COPY TRADING - Fetch positions for wallet to mirror =====
+  const fetchCopyTradePositions = async () => {
+    if (!copyTradeWallet || copyTradeWallet.length < 42) return;
+
+    try {
+      const endpoints = [
+        `https://backend-arbitrum.gains.trade/open-trades/${copyTradeWallet}`,
+        `https://backend-arbitrum.eu.gains.trade/open-trades/${copyTradeWallet}`,
+      ];
+
+      let data = null;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (response.ok) {
+            data = await response.json();
+            break;
+          }
+        } catch (e) { /* silent fail */ }
+      }
+
+      if (Array.isArray(data)) {
+        const ASSET_INDEX_REVERSE = { 0: 'BTC', 1: 'ETH', 90: 'GOLD', 91: 'SILVER' };
+        const positions = data.map(t => ({
+          asset: ASSET_INDEX_REVERSE[parseInt(t.trade?.pairIndex || 0)] || 'BTC',
+          direction: t.trade?.long ? 'LONG' : 'SHORT',
+          leverage: parseInt(t.trade?.leverage || 1) / 1000,
+          collateral: parseFloat(t.trade?.collateralAmount || 0) / 1e6,
+          openPrice: parseFloat(t.trade?.openPrice || 0) / 1e10,
+        }));
+        setCopyTradePositions(positions);
+        console.log(`📋 Copy trade positions loaded:`, positions.length);
+      }
+    } catch (error) {
+      console.error('Failed to fetch copy trade positions:', error);
+    }
+  };
+
+  // Fetch historical trades on component mount and when stats tab is active
+  useEffect(() => {
+    if (activeTab === 'stats') {
+      fetchHistoricalTrades(Q7_DEV_WALLET);
+    }
+  }, [activeTab]);
 
   // ===== PENDING ORDERS / COLLATERAL CLAIM FUNCTIONS =====
 
@@ -2300,157 +2431,283 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
         {/* ----- STATS/P&L TAB ----- */}
         {activeTab === 'stats' && (
           <>
-            {/* P&L Header */}
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(138, 43, 226, 0.1))',
-              borderRadius: '12px',
-              padding: '14px',
+            {/* SHAREABLE MANDALORIAN P&L CARD */}
+            <div ref={pnlCardRef} style={{
+              background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+              borderRadius: '16px',
+              padding: '16px',
               marginBottom: '12px',
-              border: '1px solid rgba(255, 215, 0, 0.2)',
+              border: '2px solid rgba(255, 215, 0, 0.4)',
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(255, 215, 0, 0.15)',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <ArbitrumLogo size={20} />
+              {/* Mandalorian-style corner accents */}
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '40px', height: '40px', borderTop: '3px solid #FFD700', borderLeft: '3px solid #FFD700', borderRadius: '12px 0 0 0' }} />
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '40px', height: '40px', borderTop: '3px solid #FFD700', borderRight: '3px solid #FFD700', borderRadius: '0 12px 0 0' }} />
+              <div style={{ position: 'absolute', bottom: 0, left: 0, width: '40px', height: '40px', borderBottom: '3px solid #FFD700', borderLeft: '3px solid #FFD700', borderRadius: '0 0 0 12px' }} />
+              <div style={{ position: 'absolute', bottom: 0, right: 0, width: '40px', height: '40px', borderBottom: '3px solid #FFD700', borderRight: '3px solid #FFD700', borderRadius: '0 0 12px 0' }} />
+
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <ArbitrumLogo size={28} />
                   <div>
-                    <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '14px' }}>Arbitrum Auto-Perp P&L</div>
-                    <div style={{ color: '#888', fontSize: '9px' }}>gTrade • DTGC.io</div>
+                    <div style={{ color: '#FFD700', fontWeight: 800, fontSize: '15px', letterSpacing: '0.5px' }}>Q7 ARBITRUM AUTO-PERP</div>
+                    <div style={{ color: '#888', fontSize: '10px' }}>gTrade • DTGC.io • D-RAM v5.2.6</div>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '18px' }}>${balance?.toFixed(2) || '---'}</div>
-                  <div style={{ color: '#888', fontSize: '9px' }}>Available USDC</div>
+                  <div style={{ color: '#FFD700', fontWeight: 700, fontSize: '20px' }}>${balance?.toFixed(2) || '---'}</div>
+                  <div style={{ color: '#888', fontSize: '9px' }}>USDC Balance</div>
                 </div>
               </div>
 
-              {/* Win/Loss Stats */}
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-                  <div style={{ color: '#00ff88', fontSize: '24px', fontWeight: 700 }}>{tradeStats.wins || 0}</div>
-                  <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 600 }}>WINS</div>
+              {/* Win/Loss/Rate Stats */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
+                  <div style={{ color: '#00ff88', fontSize: '28px', fontWeight: 800 }}>{realPnL.wins || tradeStats.wins || 0}</div>
+                  <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WINS</div>
                 </div>
-                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-                  <div style={{ color: '#ff4444', fontSize: '24px', fontWeight: 700 }}>{tradeStats.losses || 0}</div>
-                  <div style={{ color: '#ff4444', fontSize: '10px', fontWeight: 600 }}>LOSSES</div>
+                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
+                  <div style={{ color: '#ff4444', fontSize: '28px', fontWeight: 800 }}>{realPnL.losses || tradeStats.losses || 0}</div>
+                  <div style={{ color: '#ff4444', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>LOSSES</div>
                 </div>
-                <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.15)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-                  <div style={{ color: '#8a2be2', fontSize: '24px', fontWeight: 700 }}>
-                    {tradeStats.wins + tradeStats.losses > 0
-                      ? Math.round((tradeStats.wins / (tradeStats.wins + tradeStats.losses)) * 100)
+                <div style={{ flex: 1, background: 'rgba(138, 43, 226, 0.15)', borderRadius: '10px', padding: '12px', textAlign: 'center', border: '1px solid rgba(138, 43, 226, 0.3)' }}>
+                  <div style={{ color: '#8a2be2', fontSize: '28px', fontWeight: 800 }}>
+                    {(realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0) > 0
+                      ? Math.round(((realPnL.wins || tradeStats.wins || 0) / ((realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0))) * 100)
                       : 0}%
                   </div>
-                  <div style={{ color: '#8a2be2', fontSize: '10px', fontWeight: 600 }}>WIN RATE</div>
+                  <div style={{ color: '#8a2be2', fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
                 </div>
               </div>
 
-              {/* Total P&L */}
+              {/* Total P&L - Large Display */}
               <div style={{
-                background: tradeStats.totalPnl >= 0 ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 68, 0.1)',
-                borderRadius: '8px',
-                padding: '12px',
+                background: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05))' : 'linear-gradient(135deg, rgba(255, 68, 68, 0.15), rgba(255, 68, 68, 0.05))',
+                borderRadius: '12px',
+                padding: '16px',
                 textAlign: 'center',
-                border: `1px solid ${tradeStats.totalPnl >= 0 ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 68, 0.3)'}`,
+                border: `2px solid ${(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 68, 68, 0.4)'}`,
+                marginBottom: '12px',
               }}>
-                <div style={{ color: '#888', fontSize: '10px', marginBottom: '4px' }}>Session Total P&L</div>
+                <div style={{ color: '#888', fontSize: '11px', marginBottom: '6px', fontWeight: 600 }}>TOTAL P&L</div>
                 <div style={{
-                  color: tradeStats.totalPnl >= 0 ? '#00ff88' : '#ff4444',
-                  fontSize: '28px',
-                  fontWeight: 700
+                  color: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '#00ff88' : '#ff4444',
+                  fontSize: '36px',
+                  fontWeight: 800,
+                  textShadow: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '0 0 20px rgba(0,255,136,0.5)' : '0 0 20px rgba(255,68,68,0.5)',
                 }}>
-                  {tradeStats.totalPnl >= 0 ? '+' : ''}{tradeStats.totalPnl?.toFixed(2) || '0.00'} USDC
+                  {(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '+' : ''}{(realPnL.total || tradeStats.totalPnl || 0).toFixed(2)} USDC
                 </div>
+                <div style={{ color: '#666', fontSize: '10px', marginTop: '4px' }}>
+                  {historicalTrades.length || closedTrades.length} trades • Q7 D-RAM Auto-Scalp
+                </div>
+              </div>
+
+              {/* Share Button */}
+              <button
+                onClick={() => setShowShareCard(true)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: 'linear-gradient(135deg, #FFD700, #ff8c00)',
+                  border: 'none',
+                  borderRadius: '10px',
+                  color: '#000',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                📤 SHARE P&L CARD
+              </button>
+
+              {/* Wallet Address */}
+              <div style={{ textAlign: 'center', marginTop: '10px', color: '#555', fontSize: '8px' }}>
+                {Q7_DEV_WALLET.slice(0, 10)}...{Q7_DEV_WALLET.slice(-8)}
               </div>
             </div>
 
-            {/* Victory Card - Mando Style */}
-            {tradeStats.wins > 0 && (
-              <div style={{
-                background: 'linear-gradient(145deg, rgba(255, 215, 0, 0.25), rgba(255, 140, 0, 0.2), rgba(138, 43, 226, 0.15))',
-                borderRadius: '12px',
-                padding: '14px',
-                marginBottom: '12px',
-                border: '2px solid rgba(255, 215, 0, 0.5)',
-                position: 'relative',
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  position: 'absolute',
-                  top: '-20px',
-                  right: '-20px',
-                  width: '100px',
-                  height: '100px',
-                  background: 'radial-gradient(circle, rgba(255,215,0,0.4) 0%, transparent 60%)',
-                  borderRadius: '50%',
-                }} />
-                <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-                  <div style={{ fontSize: '28px', marginBottom: '4px' }}>🏆</div>
-                  <div style={{ color: '#FFD700', fontWeight: 800, fontSize: '11px', letterSpacing: '1px' }}>
-                    ARBITRUM AUTO-PERP SCALP WIN
-                  </div>
-                  <div style={{ color: '#ff8c00', fontSize: '9px', fontWeight: 600 }}>DTGC.io/gTrade</div>
-                  <div style={{
-                    background: 'rgba(0, 0, 0, 0.4)',
-                    borderRadius: '8px',
-                    padding: '10px',
-                    marginTop: '10px',
-                  }}>
-                    <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700 }}>
-                      +${Math.abs(tradeStats.totalPnl || 0).toFixed(2)} USDC
-                    </div>
-                    <div style={{ color: '#888', fontSize: '9px', marginTop: '4px' }}>
-                      {tradeStats.wins} Wins • {tradeStats.successes} Trades • Q7 D-RAM v5.2.6
-                    </div>
-                  </div>
-                </div>
+            {/* COPY TRADING SECTION */}
+            <div style={{
+              background: 'rgba(138, 43, 226, 0.1)',
+              borderRadius: '12px',
+              padding: '14px',
+              marginBottom: '12px',
+              border: '1px solid rgba(138, 43, 226, 0.3)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ color: '#8a2be2', fontWeight: 700, fontSize: '12px' }}>🔄 COPY TRADING</div>
+                <button
+                  onClick={() => setCopyTradeEnabled(!copyTradeEnabled)}
+                  style={{
+                    padding: '4px 12px',
+                    background: copyTradeEnabled ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                    border: `1px solid ${copyTradeEnabled ? '#00ff88' : '#555'}`,
+                    borderRadius: '6px',
+                    color: copyTradeEnabled ? '#00ff88' : '#888',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {copyTradeEnabled ? '✓ ENABLED' : 'DISABLED'}
+                </button>
               </div>
-            )}
 
-            {/* Trade History */}
+              <input
+                type="text"
+                placeholder="Enter Arbitrum wallet to mirror..."
+                value={copyTradeWallet}
+                onChange={(e) => setCopyTradeWallet(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid rgba(138, 43, 226, 0.3)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '11px',
+                  marginBottom: '10px',
+                  boxSizing: 'border-box',
+                }}
+              />
+
+              <button
+                onClick={fetchCopyTradePositions}
+                disabled={!copyTradeWallet || copyTradeWallet.length < 42}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  background: copyTradeWallet.length >= 42 ? 'rgba(138, 43, 226, 0.4)' : 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(138, 43, 226, 0.5)',
+                  borderRadius: '8px',
+                  color: copyTradeWallet.length >= 42 ? '#fff' : '#555',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: copyTradeWallet.length >= 42 ? 'pointer' : 'not-allowed',
+                  marginBottom: '8px',
+                }}
+              >
+                📋 Load Positions to Mirror
+              </button>
+
+              {copyTradePositions.length > 0 && (
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '8px', marginTop: '8px' }}>
+                  <div style={{ color: '#888', fontSize: '9px', marginBottom: '6px' }}>Positions to copy:</div>
+                  {copyTradePositions.map((pos, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <span style={{ color: '#fff', fontSize: '10px' }}>{pos.asset} {pos.direction}</span>
+                      <span style={{ color: '#FFD700', fontSize: '10px' }}>{pos.leverage}x • ${pos.collateral.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ color: '#666', fontSize: '9px', marginTop: '8px', lineHeight: 1.4 }}>
+                💡 Enter any Arbitrum wallet to view & mirror their gTrade positions. Auto-copy coming soon!
+              </div>
+            </div>
+
+            {/* Trade History with Timestamps */}
             <div style={{
               background: 'rgba(0,0,0,0.3)',
-              borderRadius: '10px',
+              borderRadius: '12px',
               padding: '12px',
               marginBottom: '12px',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ color: '#888', fontSize: '10px', fontWeight: 600 }}>📜 TRADE HISTORY</span>
-                <span style={{ color: '#555', fontSize: '8px' }}>{closedTrades.length} trades</span>
-              </div>
-              {closedTrades.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '15px', color: '#555', fontSize: '10px' }}>
-                  No closed trades yet this session
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ color: '#FFD700', fontSize: '12px', fontWeight: 700 }}>📜 TRADE HISTORY</span>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <span style={{ color: '#555', fontSize: '9px' }}>{historicalTrades.length || closedTrades.length} trades</span>
+                  <button
+                    onClick={() => fetchHistoricalTrades(Q7_DEV_WALLET)}
+                    disabled={historicalLoading}
+                    style={{ background: 'rgba(255,215,0,0.2)', border: 'none', borderRadius: '4px', padding: '3px 8px', color: '#FFD700', fontSize: '9px', cursor: 'pointer' }}
+                  >
+                    {historicalLoading ? '⏳' : '🔄'}
+                  </button>
                 </div>
-              ) : (
-                <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
-                  {closedTrades.slice(0, 10).map((trade, idx) => (
+              </div>
+
+              {(historicalTrades.length > 0 || closedTrades.length > 0) ? (
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {(historicalTrades.length > 0 ? historicalTrades : closedTrades).slice(0, 15).map((trade, idx) => (
                     <div key={idx} style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      padding: '8px',
-                      background: 'rgba(0,0,0,0.2)',
-                      borderRadius: '6px',
-                      marginBottom: '4px',
+                      padding: '10px',
+                      background: 'rgba(0,0,0,0.3)',
+                      borderRadius: '8px',
+                      marginBottom: '6px',
                       border: `1px solid ${trade.pnlPercent >= 0 ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)'}`,
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '12px' }}>{trade.direction === 'LONG' ? '📈' : '📉'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '14px' }}>{trade.direction === 'LONG' ? '📈' : '📉'}</span>
                         <div>
-                          <div style={{ color: '#fff', fontSize: '10px', fontWeight: 600 }}>{trade.asset}</div>
-                          <div style={{ color: '#888', fontSize: '8px' }}>{trade.leverage?.toFixed(0)}x • {trade.closeType || 'CLOSED'}</div>
+                          <div style={{ color: '#fff', fontSize: '11px', fontWeight: 700 }}>{trade.asset}</div>
+                          <div style={{ color: '#888', fontSize: '9px' }}>{trade.leverage?.toFixed(0)}x • {trade.closeType || 'CLOSED'}</div>
+                          <div style={{ color: '#555', fontSize: '8px' }}>
+                            {trade.timestamp ? new Date(trade.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '---'}
+                          </div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ color: trade.pnlPercent >= 0 ? '#00ff88' : '#ff4444', fontSize: '11px', fontWeight: 700 }}>
+                        <div style={{ color: trade.pnlPercent >= 0 ? '#00ff88' : '#ff4444', fontSize: '13px', fontWeight: 800 }}>
                           {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent?.toFixed(1)}%
                         </div>
-                        <div style={{ color: trade.pnlUsd >= 0 ? '#00ff88' : '#ff4444', fontSize: '9px' }}>
+                        <div style={{ color: trade.pnlUsd >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>
                           {trade.pnlUsd >= 0 ? '+' : ''}${trade.pnlUsd?.toFixed(2)}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#555', fontSize: '11px' }}>
+                  {historicalLoading ? '⏳ Loading trade history...' : 'No closed trades yet'}
+                </div>
               )}
+            </div>
+
+            {/* AUTO-TRADING SETUP GUIDE */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(255, 215, 0, 0.05))',
+              borderRadius: '12px',
+              padding: '14px',
+              border: '1px solid rgba(0, 255, 136, 0.2)',
+            }}>
+              <div style={{ color: '#00ff88', fontWeight: 700, fontSize: '12px', marginBottom: '10px' }}>⚡ AUTO-TRADING SETUP</div>
+              <div style={{ color: '#888', fontSize: '10px', lineHeight: 1.5, marginBottom: '10px' }}>
+                1️⃣ Connect your Arbitrum wallet<br/>
+                2️⃣ Deposit USDC to gTrade<br/>
+                3️⃣ Go to "🤖 Bot" tab<br/>
+                4️⃣ Select scalp preset & leverage<br/>
+                5️⃣ Enable Auto-Trade switch<br/>
+                6️⃣ Q7 D-RAM executes automatically!
+              </div>
+              <a
+                href="https://gains.trade"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block',
+                  textAlign: 'center',
+                  background: 'linear-gradient(135deg, #00ff88, #00cc6a)',
+                  color: '#000',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                🚀 Open gTrade to Fund Wallet
+              </a>
             </div>
           </>
         )}
@@ -2592,6 +2849,67 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
         {/* ----- POLYMARKET TAB ----- */}
         {activeTab === 'polymarket' && (
           <>
+            {/* Q7 THEORY / TRADING LOGIC DISPLAY */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 140, 0, 0.1))',
+              borderRadius: '12px',
+              padding: '14px',
+              marginBottom: '12px',
+              border: '1px solid rgba(255, 215, 0, 0.3)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ color: '#FFD700', fontWeight: 800, fontSize: '13px' }}>⚡ Q7 TRADING LOGIC</div>
+                <button
+                  onClick={() => setQ7PolyPaused(!q7PolyPaused)}
+                  style={{
+                    padding: '6px 14px',
+                    background: q7PolyPaused ? 'rgba(255, 68, 68, 0.3)' : 'rgba(0, 255, 136, 0.3)',
+                    border: `1px solid ${q7PolyPaused ? '#ff4444' : '#00ff88'}`,
+                    borderRadius: '8px',
+                    color: q7PolyPaused ? '#ff4444' : '#00ff88',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {q7PolyPaused ? '⏸️ PAUSED' : '▶️ ACTIVE'}
+                </button>
+              </div>
+
+              {/* Q7 Theory Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px' }}>
+                  <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700 }}>🎯 SWP (30%)</div>
+                  <div style={{ color: '#888', fontSize: '9px' }}>Sweep - High priority liquidity grabs</div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px' }}>
+                  <div style={{ color: '#ff8c00', fontSize: '10px', fontWeight: 700 }}>💥 BRK (25%)</div>
+                  <div style={{ color: '#888', fontSize: '9px' }}>Breakout - Structure breaks</div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px' }}>
+                  <div style={{ color: '#8a2be2', fontSize: '10px', fontWeight: 700 }}>📊 MR (25%)</div>
+                  <div style={{ color: '#888', fontSize: '9px' }}>Mean Reversion - RSI extremes</div>
+                </div>
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px' }}>
+                  <div style={{ color: '#00bcd4', fontSize: '10px', fontWeight: 700 }}>📈 TRND (15%)</div>
+                  <div style={{ color: '#888', fontSize: '9px' }}>Trend - EMA alignment</div>
+                </div>
+              </div>
+
+              {/* Current Market Bias */}
+              <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '8px', padding: '10px' }}>
+                <div style={{ color: '#888', fontSize: '9px', marginBottom: '4px' }}>Q7 CONFLUENCE SIGNAL</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ color: '#FFD700', fontSize: '14px', fontWeight: 800 }}>
+                    {polymarketData.length > 0 && parseFloat(polymarketData[0]?.yesPrice) > 60 ? '🟢 BULLISH BIAS' : parseFloat(polymarketData[0]?.yesPrice) < 40 ? '🔴 BEARISH BIAS' : '🟡 NEUTRAL'}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '9px' }}>
+                    Based on {polymarketData.filter(m => m.tag === 'crypto' || !m.tag).length} crypto markets
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div style={{
               background: 'linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(255, 215, 0, 0.1))',
               borderRadius: '12px',
@@ -3067,6 +3385,169 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
         }}>
           {toast.message}
+        </div>
+      )}
+
+      {/* ===== SHARE P&L CARD MODAL ===== */}
+      {showShareCard && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.9)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100000,
+          padding: '20px',
+        }}>
+          {/* Close Button */}
+          <button
+            onClick={() => setShowShareCard(false)}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              color: '#fff',
+              fontSize: '20px',
+              cursor: 'pointer',
+            }}
+          >✕</button>
+
+          {/* MANDALORIAN P&L CARD */}
+          <div style={{
+            background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+            borderRadius: '20px',
+            padding: '24px',
+            maxWidth: '380px',
+            width: '100%',
+            border: '3px solid rgba(255, 215, 0, 0.5)',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(255, 215, 0, 0.2)',
+          }}>
+            {/* Mandalorian Beskar corners */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '50px', height: '50px', borderTop: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '16px 0 0 0' }} />
+            <div style={{ position: 'absolute', top: 0, right: 0, width: '50px', height: '50px', borderTop: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 16px 0 0' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '50px', height: '50px', borderBottom: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '0 0 0 16px' }} />
+            <div style={{ position: 'absolute', bottom: 0, right: 0, width: '50px', height: '50px', borderBottom: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 0 16px 0' }} />
+
+            {/* Glow Effect */}
+            <div style={{
+              position: 'absolute',
+              top: '-50%',
+              left: '-50%',
+              width: '200%',
+              height: '200%',
+              background: 'radial-gradient(circle at center, rgba(255,215,0,0.1) 0%, transparent 50%)',
+              pointerEvents: 'none',
+            }} />
+
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '8px' }}>
+                <ArbitrumLogo size={36} />
+                <div>
+                  <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '18px', letterSpacing: '1px' }}>Q7 AUTO-PERP</div>
+                  <div style={{ color: '#888', fontSize: '11px' }}>ARBITRUM • gTRADE • DTGC.io</div>
+                </div>
+              </div>
+              <div style={{ color: '#555', fontSize: '9px' }}>D-RAM v5.2.6 Calibrated</div>
+            </div>
+
+            {/* Stats Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
+              <div style={{ background: 'rgba(0, 255, 136, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(0, 255, 136, 0.3)' }}>
+                <div style={{ color: '#00ff88', fontSize: '32px', fontWeight: 900 }}>{realPnL.wins || tradeStats.wins || 0}</div>
+                <div style={{ color: '#00ff88', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WINS</div>
+              </div>
+              <div style={{ background: 'rgba(255, 68, 68, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(255, 68, 68, 0.3)' }}>
+                <div style={{ color: '#ff4444', fontSize: '32px', fontWeight: 900 }}>{realPnL.losses || tradeStats.losses || 0}</div>
+                <div style={{ color: '#ff4444', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>LOSSES</div>
+              </div>
+              <div style={{ background: 'rgba(138, 43, 226, 0.15)', borderRadius: '12px', padding: '14px', textAlign: 'center', border: '2px solid rgba(138, 43, 226, 0.3)' }}>
+                <div style={{ color: '#8a2be2', fontSize: '32px', fontWeight: 900 }}>
+                  {(realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0) > 0
+                    ? Math.round(((realPnL.wins || tradeStats.wins || 0) / ((realPnL.wins || tradeStats.wins || 0) + (realPnL.losses || tradeStats.losses || 0))) * 100)
+                    : 0}%
+                </div>
+                <div style={{ color: '#8a2be2', fontSize: '12px', fontWeight: 700, letterSpacing: '2px' }}>WIN RATE</div>
+              </div>
+            </div>
+
+            {/* Total P&L Hero */}
+            <div style={{
+              background: (realPnL.total || tradeStats.totalPnl || 0) >= 0
+                ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))'
+                : 'linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(200, 50, 50, 0.1))',
+              borderRadius: '16px',
+              padding: '20px',
+              textAlign: 'center',
+              border: `3px solid ${(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? 'rgba(0, 255, 136, 0.5)' : 'rgba(255, 68, 68, 0.5)'}`,
+              marginBottom: '16px',
+              position: 'relative',
+              zIndex: 1,
+            }}>
+              <div style={{ color: '#888', fontSize: '12px', marginBottom: '8px', fontWeight: 600, letterSpacing: '1px' }}>TOTAL P&L</div>
+              <div style={{
+                color: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '#00ff88' : '#ff4444',
+                fontSize: '42px',
+                fontWeight: 900,
+                textShadow: (realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '0 0 30px rgba(0,255,136,0.6)' : '0 0 30px rgba(255,68,68,0.6)',
+              }}>
+                {(realPnL.total || tradeStats.totalPnl || 0) >= 0 ? '+' : ''}{(realPnL.total || tradeStats.totalPnl || 0).toFixed(2)} USDC
+              </div>
+              <div style={{ color: '#666', fontSize: '11px', marginTop: '8px' }}>
+                {historicalTrades.length || closedTrades.length} trades executed
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+              <div style={{ color: '#FFD700', fontSize: '11px', fontWeight: 700, marginBottom: '4px' }}>🎯 DTGC.io/gold</div>
+              <div style={{ color: '#555', fontSize: '9px' }}>
+                {Q7_DEV_WALLET.slice(0, 12)}...{Q7_DEV_WALLET.slice(-10)}
+              </div>
+              <div style={{ color: '#333', fontSize: '8px', marginTop: '8px' }}>
+                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
+            </div>
+          </div>
+
+          {/* Share Instructions */}
+          <div style={{ color: '#888', fontSize: '12px', marginTop: '20px', textAlign: 'center' }}>
+            📸 Screenshot this card to share your results!
+          </div>
+
+          {/* Copy Link Button */}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`Check out my Q7 Auto-Perp results! 🎯\n\n${(realPnL.wins || 0)}W / ${(realPnL.losses || 0)}L\nTotal P&L: ${(realPnL.total || 0) >= 0 ? '+' : ''}$${(realPnL.total || 0).toFixed(2)} USDC\n\nTry it: dtgc.io/gold`);
+              setShowShareCard(false);
+              showToastMsg('📋 Results copied to clipboard!', 'success');
+            }}
+            style={{
+              marginTop: '16px',
+              padding: '12px 32px',
+              background: 'linear-gradient(135deg, #FFD700, #ff8c00)',
+              border: 'none',
+              borderRadius: '12px',
+              color: '#000',
+              fontWeight: 800,
+              fontSize: '14px',
+              cursor: 'pointer',
+            }}
+          >
+            📋 COPY RESULTS
+          </button>
         </div>
       )}
 
