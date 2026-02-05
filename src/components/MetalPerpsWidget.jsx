@@ -319,6 +319,13 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   // ===== COPY TRADING / MIRROR MODE =====
   const COPY_TRADE_DTGC_MIN = 50; // $50 DTGC minimum
   const COPY_TRADE_ARB_MIN = 40; // $40 Arbitrum USDC/ETH minimum
+
+  // Registered Copy Traders - wallets authorized to copy Q7 trades
+  const REGISTERED_COPY_TRADERS = [
+    { address: '0x47E872162872B9858362118ec6D7b9a26C35Afac', name: 'Copy Trader 1', status: 'standby' },
+    { address: '0x777d7f3aD24832975AEC259AB7D7b57Be4225AbF', name: 'Copy Trader 2', status: 'standby' },
+  ];
+
   const [copyTradeWallet, setCopyTradeWallet] = useState(Q7_DEV_WALLET); // Default to Q7
   const [copyTradeEnabled, setCopyTradeEnabled] = useState(false);
   const [copyTradePositions, setCopyTradePositions] = useState([]);
@@ -4739,6 +4746,66 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                       </div>
                     </div>
                   )}
+
+                  {/* Registered Copy Traders */}
+                  <div style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    marginBottom: '10px',
+                  }}>
+                    <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 600, marginBottom: '8px' }}>
+                      👥 REGISTERED COPY TRADERS ({REGISTERED_COPY_TRADERS.length})
+                    </div>
+                    {REGISTERED_COPY_TRADERS.map((trader, idx) => {
+                      const isCurrentUser = connectedAddress?.toLowerCase() === trader.address.toLowerCase();
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '6px 8px',
+                            background: isCurrentUser ? 'rgba(0,255,136,0.1)' : 'rgba(0,0,0,0.2)',
+                            borderRadius: '4px',
+                            marginBottom: '4px',
+                            border: isCurrentUser ? '1px solid rgba(0,255,136,0.3)' : '1px solid transparent',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '10px' }}>
+                              {trader.status === 'active' ? '🟢' : trader.status === 'standby' ? '🟡' : '⚪'}
+                            </span>
+                            <div>
+                              <div style={{ color: isCurrentUser ? '#00ff88' : '#aaa', fontSize: '9px', fontWeight: 600 }}>
+                                {isCurrentUser ? '✨ You' : trader.name}
+                              </div>
+                              <div style={{ color: '#666', fontSize: '8px', fontFamily: 'monospace' }}>
+                                {trader.address.slice(0, 6)}...{trader.address.slice(-4)}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: trader.status === 'active' ? 'rgba(0,255,136,0.2)' :
+                                        trader.status === 'standby' ? 'rgba(255,215,0,0.2)' : 'rgba(100,100,100,0.2)',
+                            color: trader.status === 'active' ? '#00ff88' :
+                                   trader.status === 'standby' ? '#FFD700' : '#888',
+                            fontSize: '7px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                          }}>
+                            {trader.status}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div style={{ color: '#555', fontSize: '8px', marginTop: '6px', textAlign: 'center' }}>
+                      🔗 Mirroring Q7 Dev Wallet trades
+                    </div>
+                  </div>
 
                   {/* Risk Disclaimer */}
                   <div style={{
