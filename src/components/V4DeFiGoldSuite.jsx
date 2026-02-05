@@ -4413,8 +4413,7 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           {/* ═══════════════════════════════════════════════════════════════
               INSTABOND ORDERS DASHBOARD - Active, Completed, Failed
           ═══════════════════════════════════════════════════════════════ */}
-          {instaBondOrders.length > 0 && (
-            <div style={{
+          <div style={{
               background: 'linear-gradient(135deg, rgba(255,87,34,0.1), rgba(255,152,0,0.05))',
               borderRadius: '12px',
               padding: '12px',
@@ -4567,7 +4566,6 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
                 </div>
               )}
             </div>
-          )}
 
           {/* Scrollable token list */}
           <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
