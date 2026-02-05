@@ -54,8 +54,8 @@ const CONFIG = {
   EXPLORER: 'https://scan.pulsechain.com',
 
   // InstaBond API - Hetzner primary, Vercel fallback
-  INSTABOND_API: 'http://65.109.68.172:3847',
-  INSTABOND_API_FALLBACK: 'https://dtgc.io/api/instabond',
+  INSTABOND_API: 'http://65.109.68.172:3847/api',
+  INSTABOND_API_FALLBACK: 'https://dtgc.io/api',
 };
 
 // Helper to get token logo from gib.show - PulseChain token images
