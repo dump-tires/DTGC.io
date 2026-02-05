@@ -3605,10 +3605,12 @@ export default function App() {
         path = 'gold';
       }
 
-      const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'gold', 'whitediamond', 'zapperx'];
+      const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'gold', 'whitediamond', 'zapperx', 'perps'];
 
       // Check URL param first: ?tab=stake
       if (tabParam && validTabs.includes(tabParam)) return tabParam;
+      // Direct /perps route - show perps widget fullscreen
+      if (path === 'perps') return 'perps';
       // Check path: /stake
       if (path && validTabs.includes(path)) return path;
       // Check hash: #stake
@@ -4739,9 +4741,11 @@ export default function App() {
       } else {
         // Parse URL on popstate
         const path = window.location.pathname.toLowerCase().replace(/^\//, '').replace(/\/$/, '');
-        const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'gold', 'whitediamond', 'zapperx'];
+        const validTabs = ['stake', 'burn', 'vote', 'whitepaper', 'links', 'analytics', 'gold', 'whitediamond', 'zapperx', 'perps'];
         if (path && validTabs.includes(path)) {
           setActiveTab(path);
+        } else if (path === 'perps') {
+          setActiveTab('perps');
         } else {
           setActiveTab('stake');
         }

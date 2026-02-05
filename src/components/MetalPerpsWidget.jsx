@@ -317,9 +317,19 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const [q7PolyPaused, setQ7PolyPaused] = useState(false); // Q7 Polymarket trading pause
 
   // ===== COPY TRADING / MIRROR MODE =====
-  const [copyTradeWallet, setCopyTradeWallet] = useState('');
+  const COPY_TRADE_DTGC_MIN = 50; // $50 DTGC minimum
+  const COPY_TRADE_ARB_MIN = 40; // $40 Arbitrum USDC/ETH minimum
+  const [copyTradeWallet, setCopyTradeWallet] = useState(Q7_DEV_WALLET); // Default to Q7
   const [copyTradeEnabled, setCopyTradeEnabled] = useState(false);
   const [copyTradePositions, setCopyTradePositions] = useState([]);
+  const [copyTradeUserPnL, setCopyTradeUserPnL] = useState({ total: 0, wins: 0, losses: 0 });
+  const [copyTradeArbBalance, setCopyTradeArbBalance] = useState(0); // User's Arb USDC
+  const [copyTradeMirroredCount, setCopyTradeMirroredCount] = useState(0);
+  const [copyTradeLastSync, setCopyTradeLastSync] = useState(null);
+
+  // Check if user meets copy trade requirements
+  const hasCopyTradeAccess = dtgcBalance >= COPY_TRADE_DTGC_MIN;
+  const hasArbFunds = copyTradeArbBalance >= COPY_TRADE_ARB_MIN;
 
   // ===== HISTORICAL TRADE DATA (Real P&L) =====
   const [historicalTrades, setHistoricalTrades] = useState([]);
@@ -3825,15 +3835,58 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* Current Market Bias */}
+              {/* Current Market Bias - Based on Q7 ACTUAL POSITIONS not Polymarket */}
               <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '8px', padding: '10px' }}>
                 <div style={{ color: '#888', fontSize: '9px', marginBottom: '4px' }}>Q7 CONFLUENCE SIGNAL</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ color: '#FFD700', fontSize: '14px', fontWeight: 800 }}>
-                    {polymarketData.length > 0 && parseFloat(polymarketData[0]?.yesPrice) > 60 ? '🟢 BULLISH BIAS' : parseFloat(polymarketData[0]?.yesPrice) < 40 ? '🔴 BEARISH BIAS' : '🟡 NEUTRAL'}
+                    {(() => {
+                      // Calculate bias from Q7's actual positions
+                      const longs = userPositions.filter(p => p.direction === 'LONG').length;
+                      const shorts = userPositions.filter(p => p.direction === 'SHORT').length;
+                      const longPnl = userPositions.filter(p => p.direction === 'LONG').reduce((sum, p) => sum + (p.pnl || 0), 0);
+                      const shortPnl = userPositions.filter(p => p.direction === 'SHORT').reduce((sum, p) => sum + (p.pnl || 0), 0);
+
+                      if (shorts > longs * 1.5) return '🔴 BEARISH BIAS';
+                      if (longs > shorts * 1.5) return '🟢 BULLISH BIAS';
+                      if (shortPnl > longPnl + 10) return '🔴 BEARISH BIAS';
+                      if (longPnl > shortPnl + 10) return '🟢 BULLISH BIAS';
+                      return '🟡 NEUTRAL';
+                    })()}
                   </div>
                   <div style={{ color: '#666', fontSize: '9px' }}>
-                    Based on {polymarketData.filter(m => m.tag === 'crypto' || !m.tag).length} crypto markets
+                    Based on {userPositions.length} Q7 positions ({userPositions.filter(p => p.direction === 'LONG').length}L/{userPositions.filter(p => p.direction === 'SHORT').length}S)
+                  </div>
+                </div>
+              </div>
+
+              {/* Q7 Live Position Summary */}
+              <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', marginTop: '10px' }}>
+                <div style={{ color: '#FFD700', fontSize: '9px', fontWeight: 600, marginBottom: '6px' }}>📊 Q7 LIVE ALLOCATION</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ color: '#888', fontSize: '9px' }}>BTC Positions</span>
+                  <span style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>
+                    {userPositions.filter(p => p.asset === 'BTC').length} ({userPositions.filter(p => p.asset === 'BTC' && p.direction === 'SHORT').length}S)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ color: '#888', fontSize: '9px' }}>ETH Positions</span>
+                  <span style={{ color: '#00bcd4', fontSize: '9px', fontWeight: 600 }}>
+                    {userPositions.filter(p => p.asset === 'ETH').length} ({userPositions.filter(p => p.asset === 'ETH' && p.direction === 'SHORT').length}S)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ color: '#888', fontSize: '9px' }}>GOLD Positions</span>
+                  <span style={{ color: '#FFD700', fontSize: '9px', fontWeight: 600 }}>
+                    {userPositions.filter(p => p.asset === 'GOLD' || p.asset === 'XAU').length} ({userPositions.filter(p => (p.asset === 'GOLD' || p.asset === 'XAU') && p.direction === 'SHORT').length}S)
+                  </span>
+                </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '6px', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#888', fontSize: '9px' }}>Unrealized P&L</span>
+                    <span style={{ color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 700 }}>
+                      {totalUnrealizedPnl >= 0 ? '+' : ''}${totalUnrealizedPnl.toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -4292,6 +4345,183 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   {botStatus?.wallet ? `${botStatus.wallet.slice(0, 6)}...${botStatus.wallet.slice(-4)}` : '---'}
                 </span>
               </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* COPY TRADING - Mirror Q7 Trades */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            <div style={{
+              marginTop: '12px',
+              background: 'linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(255, 0, 128, 0.1))',
+              borderRadius: '12px',
+              padding: '14px',
+              border: '1px solid rgba(138, 43, 226, 0.3)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>🔄</span>
+                  <div>
+                    <div style={{ color: '#8a2be2', fontWeight: 700, fontSize: '13px' }}>COPY TRADING</div>
+                    <div style={{ color: '#888', fontSize: '9px' }}>Mirror Q7 trades to your wallet</div>
+                  </div>
+                </div>
+                <div style={{
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  background: hasCopyTradeAccess ? 'rgba(0,255,136,0.2)' : 'rgba(255,68,68,0.2)',
+                  color: hasCopyTradeAccess ? '#00ff88' : '#ff4444',
+                  fontSize: '8px',
+                  fontWeight: 600,
+                }}>
+                  {hasCopyTradeAccess ? '✓ ELIGIBLE' : '🔒 LOCKED'}
+                </div>
+              </div>
+
+              {/* Requirements Check */}
+              <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
+                <div style={{ color: '#888', fontSize: '9px', marginBottom: '8px', fontWeight: 600 }}>REQUIREMENTS</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#888', fontSize: '10px' }}>💎 $50 DTGC in wallet</span>
+                    <span style={{ color: hasCopyTradeAccess ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>
+                      {hasCopyTradeAccess ? `✓ $${dtgcBalance.toFixed(0)}` : `✗ $${dtgcBalance.toFixed(0)}`}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#888', fontSize: '10px' }}>⚡ $40 ARB USDC/ETH</span>
+                    <span style={{ color: hasArbFunds || balance >= 40 ? '#00ff88' : '#ff9900', fontSize: '10px', fontWeight: 600 }}>
+                      {balance >= 40 ? `✓ $${balance?.toFixed(0)}` : `~ $${balance?.toFixed(0) || '0'}`}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#888', fontSize: '10px' }}>🔗 Wallet Connected</span>
+                    <span style={{ color: userAddress ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>
+                      {userAddress ? '✓ Connected' : '✗ Not Connected'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Copy Trade Toggle */}
+              {hasCopyTradeAccess && userAddress ? (
+                <>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px',
+                    background: copyTradeEnabled ? 'rgba(0, 255, 136, 0.1)' : 'rgba(0,0,0,0.3)',
+                    borderRadius: '8px',
+                    border: copyTradeEnabled ? '1px solid rgba(0, 255, 136, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+                    marginBottom: '10px',
+                  }}>
+                    <div>
+                      <div style={{ color: copyTradeEnabled ? '#00ff88' : '#888', fontSize: '11px', fontWeight: 700 }}>
+                        {copyTradeEnabled ? '🟢 COPY TRADING ACTIVE' : '⚪ COPY TRADING OFF'}
+                      </div>
+                      <div style={{ color: '#555', fontSize: '8px', marginTop: '2px' }}>
+                        {copyTradeEnabled ? 'Mirroring Q7 trades to your wallet' : 'Enable to start copying trades'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCopyTradeEnabled(!copyTradeEnabled);
+                        if (!copyTradeEnabled) {
+                          setCopyTradeLastSync(new Date());
+                        }
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: copyTradeEnabled
+                          ? 'linear-gradient(135deg, #ff4444, #ff0000)'
+                          : 'linear-gradient(135deg, #00ff88, #00cc6a)',
+                        color: '#fff',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {copyTradeEnabled ? '⏹ STOP' : '▶ START'}
+                    </button>
+                  </div>
+
+                  {/* Your Copy Trade P&L */}
+                  {copyTradeEnabled && (
+                    <div style={{
+                      background: 'rgba(0,0,0,0.3)',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      marginBottom: '10px',
+                    }}>
+                      <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 600, marginBottom: '8px' }}>YOUR COPY TRADE P&L</div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <div style={{ flex: 1, textAlign: 'center', padding: '8px', background: 'rgba(0,255,136,0.1)', borderRadius: '6px' }}>
+                          <div style={{ color: '#00ff88', fontSize: '14px', fontWeight: 700 }}>{copyTradeUserPnL.wins}</div>
+                          <div style={{ color: '#888', fontSize: '7px' }}>WINS</div>
+                        </div>
+                        <div style={{ flex: 1, textAlign: 'center', padding: '8px', background: 'rgba(255,68,68,0.1)', borderRadius: '6px' }}>
+                          <div style={{ color: '#ff4444', fontSize: '14px', fontWeight: 700 }}>{copyTradeUserPnL.losses}</div>
+                          <div style={{ color: '#888', fontSize: '7px' }}>LOSSES</div>
+                        </div>
+                        <div style={{ flex: 1, textAlign: 'center', padding: '8px', background: 'rgba(255,215,0,0.1)', borderRadius: '6px' }}>
+                          <div style={{ color: copyTradeUserPnL.total >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
+                            ${copyTradeUserPnL.total.toFixed(2)}
+                          </div>
+                          <div style={{ color: '#888', fontSize: '7px' }}>NET P&L</div>
+                        </div>
+                      </div>
+                      <div style={{ color: '#555', fontSize: '8px', marginTop: '8px', textAlign: 'center' }}>
+                        {copyTradeMirroredCount} trades mirrored • Since {copyTradeLastSync?.toLocaleString() || 'now'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Risk Disclaimer */}
+                  <div style={{
+                    background: 'rgba(255, 140, 0, 0.1)',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    border: '1px solid rgba(255, 140, 0, 0.2)',
+                  }}>
+                    <div style={{ color: '#ff8c00', fontSize: '8px', fontWeight: 600, marginBottom: '4px' }}>⚠️ RISK DISCLAIMER</div>
+                    <div style={{ color: '#888', fontSize: '8px', lineHeight: 1.4 }}>
+                      Copy trading at your own risk. Past performance ≠ future results.
+                      You control your funds. 5% profit sharing on wins to Q7 dev wallet.
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: '8px',
+                }}>
+                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔒</div>
+                  <div style={{ color: '#888', fontSize: '11px', marginBottom: '8px' }}>
+                    Hold $50 DTGC + Connect Wallet to unlock copy trading
+                  </div>
+                  <a
+                    href="https://pulsex.mypinata.cloud/ipfs/bafybeiesh56oijasgr7creubue6xt5anivxifrwd5a5argiz4orbed57qi/#/?inputCurrency=PLS&outputCurrency=0x08BD7F9849f8EEC12Fd78c9fED6ba4e47269e3d5"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block',
+                      padding: '8px 16px',
+                      background: 'linear-gradient(135deg, #FFD700, #ff8c00)',
+                      color: '#000',
+                      borderRadius: '6px',
+                      textDecoration: 'none',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Buy DTGC on PulseX →
+                  </a>
+                </div>
+              )}
             </div>
           </>
         )}
