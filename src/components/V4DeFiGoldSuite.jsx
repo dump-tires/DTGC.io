@@ -4411,72 +4411,161 @@ export default function V4DeFiGoldSuite({ provider, signer, userAddress, onClose
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════
-              ACTIVE INSTABOND ORDERS - Shows armed snipes waiting for graduation
+              INSTABOND ORDERS DASHBOARD - Active, Completed, Failed
           ═══════════════════════════════════════════════════════════════ */}
-          {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length > 0 && (
+          {instaBondOrders.length > 0 && (
             <div style={{
-              background: 'linear-gradient(135deg, rgba(255,87,34,0.15), rgba(255,152,0,0.1))',
+              background: 'linear-gradient(135deg, rgba(255,87,34,0.1), rgba(255,152,0,0.05))',
               borderRadius: '12px',
               padding: '12px',
               marginBottom: '16px',
-              border: '1px solid rgba(255,87,34,0.3)',
+              border: '1px solid rgba(255,87,34,0.2)',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ color: '#FF5722', fontWeight: 700, fontSize: '0.9rem' }}>
-                  🔥 Your Armed Snipes ({instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length})
-                </span>
-                <span style={{ color: '#888', fontSize: '0.65rem' }}>Auto-polling every 5s</span>
-              </div>
-              {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).slice(0, 5).map(order => (
-                <div key={order.id} style={{
-                  background: 'rgba(0,0,0,0.3)',
-                  borderRadius: '8px',
-                  padding: '10px',
-                  marginBottom: '6px',
-                  border: order.status === 'buying' ? '1px solid #4CAF50' : '1px solid rgba(255,87,34,0.3)',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>
-                        {order.tokenSymbol || order.tokenAddress?.slice(0, 10) + '...'}
-                      </div>
-                      <div style={{ color: '#888', fontSize: '0.65rem' }}>
-                        {parseFloat(order.amountPls || '0').toLocaleString()} PLS → +{order.takeProfitPercent || 100}% TP
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <div style={{
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        background: order.status === 'buying' ? 'rgba(76,175,80,0.3)' : order.status === 'watching' ? 'rgba(255,152,0,0.3)' : 'rgba(255,255,255,0.1)',
-                        color: order.status === 'buying' ? '#4CAF50' : order.status === 'watching' ? '#FF9800' : '#888',
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                      }}>
-                        {order.status === 'armed' && '⏳ Armed'}
-                        {order.status === 'watching' && '👀 Watching'}
-                        {order.status === 'buying' && '🚀 BUYING!'}
-                        {order.status === 'holding' && '💎 Holding'}
-                        {order.status === 'selling' && '📉 Selling'}
-                      </div>
-                      <button
-                        onClick={() => cancelInstaBondOrder(order.id)}
-                        style={{
-                          background: 'rgba(244,67,54,0.2)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          padding: '4px 8px',
-                          color: '#F44336',
-                          fontSize: '0.65rem',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
+              {/* Stats Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ color: '#FF5722', fontWeight: 700, fontSize: '0.9rem' }}>📊 Snipe Dashboard</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ background: 'rgba(76,175,80,0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.65rem', color: '#4CAF50' }}>
+                    ✓ {instaBondOrders.filter(o => o.status === 'completed').length}
+                  </div>
+                  <div style={{ background: 'rgba(255,152,0,0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.65rem', color: '#FF9800' }}>
+                    ⏳ {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length}
+                  </div>
+                  <div style={{ background: 'rgba(244,67,54,0.2)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.65rem', color: '#F44336' }}>
+                    ✕ {instaBondOrders.filter(o => ['cancelled', 'failed'].includes(o.status)).length}
                   </div>
                 </div>
-              ))}
+              </div>
+
+              {/* Active Snipes Section */}
+              {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ color: '#FF9800', fontSize: '0.75rem', fontWeight: 600, marginBottom: '6px' }}>
+                    🔥 Active Snipes ({instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).length})
+                  </div>
+                  {instaBondOrders.filter(o => !['completed', 'cancelled', 'failed'].includes(o.status)).slice(0, 5).map(order => (
+                    <div key={order.id} style={{
+                      background: 'rgba(0,0,0,0.3)',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      marginBottom: '6px',
+                      border: order.status === 'buying' ? '1px solid #4CAF50' : '1px solid rgba(255,87,34,0.3)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>
+                            {order.tokenSymbol || order.tokenAddress?.slice(0, 10) + '...'}
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.65rem' }}>
+                            {parseFloat(order.amountPls || '0').toLocaleString()} PLS → +{order.takeProfitPercent || 100}% TP
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <div style={{
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            background: order.status === 'buying' ? 'rgba(76,175,80,0.3)' : order.status === 'watching' ? 'rgba(255,152,0,0.3)' : 'rgba(255,255,255,0.1)',
+                            color: order.status === 'buying' ? '#4CAF50' : order.status === 'watching' ? '#FF9800' : '#888',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                          }}>
+                            {order.status === 'armed' && '⏳ Armed'}
+                            {order.status === 'watching' && '👀 Watching'}
+                            {order.status === 'buying' && '🚀 BUYING!'}
+                            {order.status === 'holding' && '💎 Holding'}
+                            {order.status === 'selling' && '📉 Selling'}
+                          </div>
+                          <button
+                            onClick={() => cancelInstaBondOrder(order.id)}
+                            style={{
+                              background: 'rgba(244,67,54,0.2)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '4px 8px',
+                              color: '#F44336',
+                              fontSize: '0.65rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Completed Snipes Section */}
+              {instaBondOrders.filter(o => o.status === 'completed').length > 0 && (
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ color: '#4CAF50', fontSize: '0.75rem', fontWeight: 600, marginBottom: '6px' }}>
+                    ✅ Successful Snipes ({instaBondOrders.filter(o => o.status === 'completed').length})
+                  </div>
+                  {instaBondOrders.filter(o => o.status === 'completed').slice(0, 3).map(order => (
+                    <div key={order.id} style={{
+                      background: 'rgba(76,175,80,0.1)',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      marginBottom: '6px',
+                      border: '1px solid rgba(76,175,80,0.3)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.85rem' }}>
+                            {order.tokenSymbol || order.tokenAddress?.slice(0, 10) + '...'}
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.65rem' }}>
+                            {parseFloat(order.amountPls || '0').toLocaleString()} PLS
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ color: '#4CAF50', fontWeight: 700, fontSize: '0.85rem' }}>
+                            {order.pnlPercent ? `+${order.pnlPercent.toFixed(1)}%` : '✓ Filled'}
+                          </div>
+                          <div style={{ color: '#888', fontSize: '0.6rem' }}>
+                            {order.completedAt ? new Date(order.completedAt).toLocaleString() : 'Completed'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Failed/Cancelled Snipes Section */}
+              {instaBondOrders.filter(o => ['cancelled', 'failed'].includes(o.status)).length > 0 && (
+                <div>
+                  <div style={{ color: '#F44336', fontSize: '0.75rem', fontWeight: 600, marginBottom: '6px' }}>
+                    ❌ Failed/Cancelled ({instaBondOrders.filter(o => ['cancelled', 'failed'].includes(o.status)).length})
+                  </div>
+                  {instaBondOrders.filter(o => ['cancelled', 'failed'].includes(o.status)).slice(0, 3).map(order => (
+                    <div key={order.id} style={{
+                      background: 'rgba(244,67,54,0.1)',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      marginBottom: '4px',
+                      border: '1px solid rgba(244,67,54,0.2)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ color: '#888', fontSize: '0.8rem' }}>
+                          {order.tokenSymbol || order.tokenAddress?.slice(0, 8) + '...'}
+                        </div>
+                        <div style={{ color: '#F44336', fontSize: '0.7rem' }}>
+                          {order.status === 'cancelled' ? '🚫 Cancelled' : '⚠️ Failed'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty State */}
+              {instaBondOrders.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#666', fontSize: '0.8rem' }}>
+                  No snipes yet. Arm one below! 👇
+                </div>
+              )}
             </div>
           )}
 
