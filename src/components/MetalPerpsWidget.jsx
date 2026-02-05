@@ -4262,6 +4262,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
             );
             })()}
           </div>
+          {/* Close Card Container */}
+          </div>
 
           {/* Share Instructions */}
           <div style={{ color: '#888', fontSize: '12px', marginTop: '20px', textAlign: 'center' }}>
