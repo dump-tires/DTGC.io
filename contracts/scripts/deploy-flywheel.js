@@ -13,7 +13,7 @@ async function main() {
 
   // Contract addresses on Arbitrum One
   const ARBITRUM_USDC = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"; // Native USDC
-  const ZAPPER_X_BRIDGE = "0x0000000000000000000000000000000000000000"; // TODO: Replace with actual ZapperX address
+  const ZAPPER_X_BRIDGE = "0x978c5786cdb46b1519a9c1c4814e06d5956f6c64"; // ZapperX Bridge on Arbitrum
   const GROWTH_ENGINE_WALLET = "0x1449a7d9973e6215534d785e3e306261156eb610"; // PulseChain destination
 
   const [deployer] = await hre.ethers.getSigners();

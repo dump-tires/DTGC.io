@@ -48,7 +48,7 @@ The **Metals 5% Win Flywheel** is an automated profit reallocation protocol that
 ### Arbitrum One
 - **USDC**: `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`
 - **gTrade**: Official gTrade contracts
-- **ZapperX Bridge**: TBD
+- **ZapperX Bridge**: `0x978c5786cdb46b1519a9c1c4814e06d5956f6c64`
 
 ### PulseChain
 - **Growth Engine Wallet**: `0x1449a7d9973e6215534d785e3e306261156eb610`

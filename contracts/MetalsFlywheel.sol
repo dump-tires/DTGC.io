@@ -154,6 +154,21 @@ contract MetalsFlywheel is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
+     * @notice Withdraw accumulated USDC for manual bridging via ZapperX
+     * @dev Use this when ZapperX requires EOA interaction
+     * @param to Address to receive USDC (typically owner's EOA for manual bridging)
+     */
+    function withdrawForManualBridge(address to) external onlyOwner nonReentrant {
+        if (to == address(0)) revert InvalidAddress();
+        uint256 balance = usdc.balanceOf(address(this));
+        if (balance == 0) revert InsufficientProfit();
+
+        usdc.safeTransfer(to, balance);
+
+        emit FlywheelBridged(balance, to, block.timestamp);
+    }
+
+    /**
      * @notice Batch process multiple winning trades
      * @param traders Array of trader addresses
      * @param profits Array of profit amounts
