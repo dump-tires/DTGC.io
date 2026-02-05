@@ -435,18 +435,31 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     };
   };
 
-  // ===== SHAREABLE P&L CARD =====
+  // ===== SHAREABLE P&L CARDS =====
   const [showShareCard, setShowShareCard] = useState(false);
+  const [showRetrospectCard, setShowRetrospectCard] = useState(false);
   const [currentMandoImage, setCurrentMandoImage] = useState(MANDO_IMAGES[0]);
   const pnlCardRef = useRef(null);
 
-  // Randomize Mando image when share card opens
+  // Randomize Mando image when either card opens
   useEffect(() => {
-    if (showShareCard) {
+    if (showShareCard || showRetrospectCard) {
       const randomIndex = Math.floor(Math.random() * MANDO_IMAGES.length);
       setCurrentMandoImage(MANDO_IMAGES[randomIndex]);
     }
-  }, [showShareCard]);
+  }, [showShareCard, showRetrospectCard]);
+
+  // Calculate ROI percentage
+  const getROI = () => {
+    if (!startingBalance || startingBalance <= 0) return 0;
+    const currentTotal = (balance || 0) + collateralDeployed + (realPnL.total || 0);
+    return ((currentTotal - startingBalance) / startingBalance) * 100;
+  };
+
+  // Get total system capital
+  const getTotalSystemCapital = () => {
+    return (balance || 0) + collateralDeployed + totalUnrealizedPnl;
+  };
 
   // Calculate gold bars based on profit
   const getGoldBars = (profit) => {
@@ -2900,27 +2913,44 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               )}
 
-              {/* Share Button */}
-              <button
-                onClick={() => setShowShareCard(true)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: 'linear-gradient(135deg, #FFD700, #ff8c00)',
-                  border: 'none',
-                  borderRadius: '10px',
-                  color: '#000',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  letterSpacing: '0.5px',
-                }}
-              >
-                📤 SHARE P&L CARD
-              </button>
+              {/* Share Buttons Row */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <button
+                  onClick={() => setShowShareCard(true)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 8px',
+                    background: 'linear-gradient(135deg, #0096ff, #0066cc)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  📸 SNAPSHOT CARD
+                </button>
+                <button
+                  onClick={() => setShowRetrospectCard(true)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 8px',
+                    background: 'linear-gradient(135deg, #FFD700, #ff8c00)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    color: '#000',
+                    fontWeight: 800,
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  📊 RETROSPECT CARD
+                </button>
+              </div>
 
               {/* Wallet Address - Shows connected wallet */}
-              <div style={{ textAlign: 'center', marginTop: '10px', color: '#555', fontSize: '8px' }}>
+              <div style={{ textAlign: 'center', color: '#555', fontSize: '8px' }}>
                 {userAddress ? `${userAddress.slice(0, 10)}...${userAddress.slice(-8)}` : 'Connect Wallet'}
               </div>
             </div>
@@ -4053,6 +4083,307 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
           >
             📋 COPY RESULTS
           </button>
+        </div>
+      )}
+
+      {/* ===== P&L RETROSPECT CARD MODAL ===== */}
+      {showRetrospectCard && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.95)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100000,
+          padding: '20px',
+        }}>
+          {/* Close Button */}
+          <button
+            onClick={() => setShowRetrospectCard(false)}
+            style={{
+              position: 'absolute',
+              top: '20px',
+              right: '20px',
+              background: 'rgba(255,255,255,0.1)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              color: '#fff',
+              fontSize: '20px',
+              cursor: 'pointer',
+            }}
+          >✕</button>
+
+          {/* RETROSPECT P&L CARD */}
+          <div style={{
+            background: 'linear-gradient(145deg, #0d1117 0%, #161b22 50%, #21262d 100%)',
+            borderRadius: '20px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '100%',
+            border: '3px solid rgba(255, 215, 0, 0.6)',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(255, 215, 0, 0.25)',
+          }}>
+            {/* Corner accents */}
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '60px', height: '60px', borderTop: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '16px 0 0 0' }} />
+            <div style={{ position: 'absolute', top: 0, right: 0, width: '60px', height: '60px', borderTop: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 16px 0 0' }} />
+            <div style={{ position: 'absolute', bottom: 0, left: 0, width: '60px', height: '60px', borderBottom: '4px solid #FFD700', borderLeft: '4px solid #FFD700', borderRadius: '0 0 0 16px' }} />
+            <div style={{ position: 'absolute', bottom: 0, right: 0, width: '60px', height: '60px', borderBottom: '4px solid #FFD700', borderRight: '4px solid #FFD700', borderRadius: '0 0 16px 0' }} />
+
+            {/* Mando Image */}
+            <div style={{ textAlign: 'center', marginBottom: '16px', position: 'relative', zIndex: 1 }}>
+              <img
+                src={currentMandoImage}
+                alt="Mando"
+                style={{
+                  width: '90px',
+                  height: '90px',
+                  borderRadius: '50%',
+                  border: '4px solid #FFD700',
+                  boxShadow: '0 0 30px rgba(255, 215, 0, 0.5)',
+                  objectFit: 'cover',
+                }}
+              />
+            </div>
+
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '20px', position: 'relative', zIndex: 1 }}>
+              <div style={{ color: '#FFD700', fontWeight: 900, fontSize: '20px', letterSpacing: '1px' }}>📊 P&L RETROSPECT</div>
+              <div style={{ color: '#888', fontSize: '11px', marginTop: '4px' }}>ARBITRUM • gTRADE • DTGC.io</div>
+              <div style={{ color: '#555', fontSize: '9px', marginTop: '2px' }}>Portfolio Performance Summary</div>
+            </div>
+
+            {/* Initial Capital */}
+            <div style={{
+              background: 'rgba(138, 43, 226, 0.15)',
+              borderRadius: '12px',
+              padding: '14px',
+              marginBottom: '12px',
+              border: '2px solid rgba(138, 43, 226, 0.4)',
+              position: 'relative',
+              zIndex: 1,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ color: '#8a2be2', fontSize: '11px', fontWeight: 700 }}>💰 INITIAL CAPITAL</div>
+                <div style={{ color: '#8a2be2', fontSize: '20px', fontWeight: 800 }}>
+                  ${(startingBalance || 0).toFixed(2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Closed Trades & Win Rate Row */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', position: 'relative', zIndex: 1 }}>
+              <div style={{
+                flex: 1,
+                background: 'rgba(255, 215, 0, 0.15)',
+                borderRadius: '12px',
+                padding: '14px',
+                textAlign: 'center',
+                border: '2px solid rgba(255, 215, 0, 0.4)',
+              }}>
+                <div style={{ color: '#FFD700', fontSize: '28px', fontWeight: 900 }}>{historicalTrades.length}</div>
+                <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700 }}>CLOSED TRADES</div>
+              </div>
+              <div style={{
+                flex: 1,
+                background: 'rgba(0, 255, 136, 0.15)',
+                borderRadius: '12px',
+                padding: '14px',
+                textAlign: 'center',
+                border: '2px solid rgba(0, 255, 136, 0.4)',
+              }}>
+                <div style={{ color: '#00ff88', fontSize: '28px', fontWeight: 900 }}>
+                  {(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%
+                </div>
+                <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700 }}>WIN RATE</div>
+              </div>
+            </div>
+
+            {/* W/L Breakdown */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', position: 'relative', zIndex: 1 }}>
+              <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.1)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                <div style={{ color: '#00ff88', fontSize: '18px', fontWeight: 700 }}>{realPnL.wins || 0}</div>
+                <div style={{ color: '#00ff88', fontSize: '8px' }}>WINS</div>
+              </div>
+              <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.1)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                <div style={{ color: '#ff4444', fontSize: '18px', fontWeight: 700 }}>{realPnL.losses || 0}</div>
+                <div style={{ color: '#ff4444', fontSize: '8px' }}>LOSSES</div>
+              </div>
+              <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.1)', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                <div style={{ color: '#0096ff', fontSize: '18px', fontWeight: 700 }}>{userPositions.length}</div>
+                <div style={{ color: '#0096ff', fontSize: '8px' }}>OPEN</div>
+              </div>
+            </div>
+
+            {/* Total System Capital NOW */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 200, 100, 0.1))',
+              borderRadius: '16px',
+              padding: '20px',
+              textAlign: 'center',
+              border: '3px solid rgba(0, 255, 136, 0.5)',
+              marginBottom: '12px',
+              position: 'relative',
+              zIndex: 1,
+              boxShadow: '0 4px 20px rgba(0, 255, 136, 0.2)',
+            }}>
+              <div style={{ color: '#888', fontSize: '11px', marginBottom: '6px', fontWeight: 600 }}>💎 TOTAL SYSTEM CAPITAL NOW</div>
+              <div style={{
+                color: '#00ff88',
+                fontSize: '38px',
+                fontWeight: 900,
+                textShadow: '0 0 30px rgba(0,255,136,0.6)',
+              }}>
+                ${getTotalSystemCapital().toFixed(2)}
+              </div>
+              {startingBalance && startingBalance > 0 && (
+                <div style={{
+                  color: getROI() >= 0 ? '#00ff88' : '#ff4444',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  marginTop: '6px',
+                }}>
+                  {getROI() >= 0 ? '↑' : '↓'} {Math.abs(getROI()).toFixed(2)}% ROI
+                </div>
+              )}
+            </div>
+
+            {/* Realized P&L */}
+            <div style={{
+              background: 'rgba(255, 215, 0, 0.1)',
+              borderRadius: '10px',
+              padding: '10px',
+              marginBottom: '16px',
+              position: 'relative',
+              zIndex: 1,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ color: '#FFD700', fontSize: '10px' }}>📜 Realized P&L</div>
+                <div style={{ color: (realPnL.total || 0) >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
+                  {(realPnL.total || 0) >= 0 ? '+' : ''}{(realPnL.total || 0).toFixed(2)} USDC
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                <div style={{ color: '#0096ff', fontSize: '10px' }}>📸 Unrealized P&L</div>
+                <div style={{ color: totalUnrealizedPnl >= 0 ? '#00ff88' : '#ff4444', fontSize: '14px', fontWeight: 700 }}>
+                  {totalUnrealizedPnl >= 0 ? '+' : ''}{totalUnrealizedPnl.toFixed(2)} USDC
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+              <div style={{ color: '#FFD700', fontSize: '11px', fontWeight: 700 }}>🎯 DTGC.io/gold</div>
+              <div style={{ color: '#555', fontSize: '9px', marginTop: '4px' }}>
+                {userAddress ? `${userAddress.slice(0, 12)}...${userAddress.slice(-10)}` : 'Connect Wallet'}
+              </div>
+              <div style={{ color: '#333', fontSize: '8px', marginTop: '4px' }}>
+                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
+            </div>
+
+            {/* Gold Bars for high profit */}
+            {getGoldBars(getTotalSystemCapital() - (startingBalance || 0)) > 0 && (
+              <div style={{
+                marginTop: '16px',
+                padding: '10px',
+                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 140, 0, 0.1))',
+                borderRadius: '10px',
+                border: '2px solid rgba(255, 215, 0, 0.4)',
+                position: 'relative',
+                zIndex: 1,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  {[...Array(getGoldBars(getTotalSystemCapital() - (startingBalance || 0)))].map((_, i) => (
+                    <img
+                      key={i}
+                      src="/gold_bar.png"
+                      alt="Gold Bar"
+                      style={{
+                        width: '40px',
+                        height: '20px',
+                        objectFit: 'contain',
+                        filter: 'drop-shadow(0 2px 4px rgba(255, 215, 0, 0.5))',
+                        animation: `goldPulse 1.5s ease-in-out ${i * 0.2}s infinite`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Share Instructions */}
+          <div style={{ color: '#888', fontSize: '12px', marginTop: '20px', textAlign: 'center' }}>
+            📸 Screenshot to share your portfolio journey!
+          </div>
+
+          {/* Share Buttons Row */}
+          <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+            <button
+              onClick={() => {
+                const text = `📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Closed: ${historicalTrades.length} trades (${realPnL.wins}W/${realPnL.losses}L)\n🎯 Win Rate: ${(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%\n💎 Current: $${getTotalSystemCapital().toFixed(2)}\n${startingBalance ? `📈 ROI: ${getROI() >= 0 ? '+' : ''}${getROI().toFixed(2)}%` : ''}\n\n🎯 dtgc.io/gold`;
+                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+              }}
+              style={{
+                padding: '12px 24px',
+                background: '#000',
+                border: '2px solid #333',
+                borderRadius: '10px',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              𝕏 POST
+            </button>
+            <button
+              onClick={() => {
+                const text = `📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Closed: ${historicalTrades.length} trades\n🎯 Win Rate: ${(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%\n💎 Current: $${getTotalSystemCapital().toFixed(2)}\n\n🎯 dtgc.io/gold`;
+                window.open(`https://t.me/share/url?url=${encodeURIComponent('https://dtgc.io/gold')}&text=${encodeURIComponent(text)}`, '_blank');
+              }}
+              style={{
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, #0088cc, #0066aa)',
+                border: 'none',
+                borderRadius: '10px',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              📱 TELEGRAM
+            </button>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`📊 Q7 Auto-Perp Retrospect\n\n💰 Started: $${(startingBalance || 0).toFixed(2)}\n📜 Closed: ${historicalTrades.length} trades (${realPnL.wins}W/${realPnL.losses}L)\n🎯 Win Rate: ${(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%\n💎 Current: $${getTotalSystemCapital().toFixed(2)}\n${startingBalance ? `📈 ROI: ${getROI() >= 0 ? '+' : ''}${getROI().toFixed(2)}%` : ''}\n\n🎯 dtgc.io/gold`);
+                setShowRetrospectCard(false);
+                showToastMsg('📋 Retrospect copied to clipboard!', 'success');
+              }}
+              style={{
+                padding: '12px 24px',
+                background: 'linear-gradient(135deg, #FFD700, #ff8c00)',
+                border: 'none',
+                borderRadius: '10px',
+                color: '#000',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              📋 COPY
+            </button>
+          </div>
         </div>
       )}
 
