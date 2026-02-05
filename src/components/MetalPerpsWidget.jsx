@@ -1092,73 +1092,115 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const fetchHistoricalTrades = async (walletAddr = Q7_DEV_WALLET) => {
     setHistoricalLoading(true);
     try {
-      // gTrade historical trades API - increased limit to 200
+      // gTrade historical trades API - multiple regional endpoints with 500 limit
       const endpoints = [
-        `https://backend-arbitrum.gains.trade/historical-trades/${walletAddr}?limit=200`,
-        `https://backend-arbitrum.eu.gains.trade/historical-trades/${walletAddr}?limit=200`,
+        `https://backend-arbitrum.gains.trade/historical-trades/${walletAddr}?limit=500`,
+        `https://backend-arbitrum.eu.gains.trade/historical-trades/${walletAddr}?limit=500`,
+        `https://backend-arbitrum.us.gains.trade/historical-trades/${walletAddr}?limit=500`,
+        // Also try user-trading-variables which may have trade history
+        `https://backend-arbitrum.gains.trade/user-trading-variables/${walletAddr}`,
       ];
 
       let data = null;
       for (const endpoint of endpoints) {
         try {
           console.log(`🔍 Fetching historical trades from: ${endpoint}`);
-          const response = await fetch(endpoint);
+          const response = await fetch(endpoint, {
+            headers: {
+              'Accept': 'application/json',
+              'Origin': 'https://gains.trade'
+            }
+          });
           if (response.ok) {
-            data = await response.json();
+            const result = await response.json();
+            // Handle both array response and object with trades property
+            data = Array.isArray(result) ? result : (result.trades || result.historicalTrades || []);
             console.log(`✅ Historical trades from gTrade API:`, data?.length || 0);
             if (data?.length > 0) break;
+          } else {
+            console.log(`⚠️ HTTP ${response.status} from ${endpoint}`);
           }
         } catch (e) {
           console.log(`⚠️ Historical endpoint failed: ${endpoint}`, e.message);
         }
       }
 
-      // Fallback: Try gTrade Subgraph if API returns empty
+      // Fallback 1: The Graph Decentralized Network (new endpoint)
       if (!data || data.length === 0) {
-        console.log('🔍 Trying gTrade Subgraph fallback...');
+        console.log('🔍 Trying The Graph decentralized network...');
         try {
-          const subgraphUrl = 'https://api.thegraph.com/subgraphs/name/gains-network/gains-network-arbitrum';
+          // gTrade stats subgraph on decentralized network
+          const subgraphUrls = [
+            'https://gateway-arbitrum.network.thegraph.com/api/subgraphs/id/2UG6c2jRXRbodLNS9Z3qAy4yMeSVoJ7oSzudeSoMfqTi',
+            'https://api.studio.thegraph.com/query/48014/gtrade-stats-arbitrum/version/latest',
+          ];
+
           const query = `{
-            trades(first: 200, where: {trader: "${walletAddr.toLowerCase()}"}, orderBy: closeTimestamp, orderDirection: desc) {
+            tradeHistories(first: 500, where: {address: "${walletAddr.toLowerCase()}"}, orderBy: date, orderDirection: desc) {
               id
               pairIndex
               long
-              collateralAmount
+              collateral
+              leverage
               openPrice
               closePrice
-              percentProfit
-              closeType
-              closeTimestamp
-              leverage
+              pnl
+              date
             }
           }`;
 
-          const subgraphResponse = await fetch(subgraphUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
-          });
+          for (const subgraphUrl of subgraphUrls) {
+            try {
+              const subgraphResponse = await fetch(subgraphUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query }),
+              });
 
-          if (subgraphResponse.ok) {
-            const subgraphData = await subgraphResponse.json();
-            if (subgraphData?.data?.trades?.length > 0) {
-              console.log(`✅ Historical trades from Subgraph:`, subgraphData.data.trades.length);
-              // Convert subgraph format to our format
-              data = subgraphData.data.trades.map(t => ({
-                pairIndex: t.pairIndex,
-                long: t.long,
-                collateralAmount: t.collateralAmount,
-                openPrice: t.openPrice,
-                closePrice: t.closePrice,
-                percentProfit: parseFloat(t.percentProfit) / 1e10, // Subgraph stores differently
-                closeType: t.closeType,
-                timestamp: parseInt(t.closeTimestamp) * 1000,
-                leverage: t.leverage,
-              }));
+              if (subgraphResponse.ok) {
+                const subgraphData = await subgraphResponse.json();
+                const trades = subgraphData?.data?.tradeHistories || [];
+                if (trades.length > 0) {
+                  console.log(`✅ Historical trades from Subgraph:`, trades.length);
+                  data = trades.map(t => ({
+                    pairIndex: t.pairIndex,
+                    long: t.long,
+                    collateralAmount: parseFloat(t.collateral) * 1e6,
+                    openPrice: parseFloat(t.openPrice) * 1e10,
+                    closePrice: parseFloat(t.closePrice) * 1e10,
+                    percentProfit: parseFloat(t.pnl),
+                    closeType: 'CLOSED',
+                    timestamp: parseInt(t.date) * 1000,
+                    leverage: parseFloat(t.leverage) * 1000,
+                  }));
+                  break;
+                }
+              }
+            } catch (e) {
+              console.log(`⚠️ Subgraph failed: ${e.message}`);
             }
           }
         } catch (subgraphError) {
           console.log('⚠️ Subgraph fallback failed:', subgraphError.message);
+        }
+      }
+
+      // Fallback 2: Direct Diamond contract event parsing (if all else fails)
+      if (!data || data.length === 0) {
+        console.log('🔍 Trying direct contract event logs...');
+        try {
+          // Use Arbiscan API to get trade closed events
+          const arbiscanUrl = `https://api.arbiscan.io/api?module=logs&action=getLogs&address=0xFF162c694eAA571f685030649814282eA457f169&topic0=0x3e62ac05c7ceb2c3ccc2e6ac82c5a7d36cc6ba1be15ff30c67deb6e65f1c0700&fromBlock=0&toBlock=latest&page=1&offset=100`;
+          const arbResponse = await fetch(arbiscanUrl);
+          if (arbResponse.ok) {
+            const arbData = await arbResponse.json();
+            if (arbData.status === '1' && arbData.result?.length > 0) {
+              console.log(`📊 Found ${arbData.result.length} trade events from Arbiscan`);
+              // Parse events for this wallet - would need ABI decoding
+            }
+          }
+        } catch (e) {
+          console.log('⚠️ Contract events fallback failed:', e.message);
         }
       }
 
@@ -1293,6 +1335,63 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
       fetchHistoricalTrades(userAddress);
     }
   }, [activeTab]);
+
+  // WebSocket connection for real-time trade history updates
+  useEffect(() => {
+    let ws = null;
+    let reconnectTimer = null;
+
+    const connectWebSocket = () => {
+      try {
+        // gTrade backend WebSocket for real-time events
+        ws = new WebSocket('wss://backend-arbitrum.gains.trade/events');
+
+        ws.onopen = () => {
+          console.log('🔌 gTrade WebSocket connected');
+          // Subscribe to trade history events
+          ws.send(JSON.stringify({ type: 'subscribe', channel: 'trade-history' }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            // Listen for new-trade-history events
+            if (data.type === 'new-trade-history' || data.event === 'TradeSettled') {
+              const targetWallet = userAddress || Q7_DEV_WALLET;
+              if (data.address?.toLowerCase() === targetWallet.toLowerCase()) {
+                console.log('📊 New trade history event received:', data);
+                // Refetch historical trades when new trade closes
+                fetchHistoricalTrades(targetWallet);
+              }
+            }
+          } catch (e) {
+            // Ignore non-JSON messages
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.log('⚠️ WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+          console.log('🔌 WebSocket disconnected, reconnecting in 10s...');
+          reconnectTimer = setTimeout(connectWebSocket, 10000);
+        };
+      } catch (e) {
+        console.log('⚠️ WebSocket connection failed:', e.message);
+      }
+    };
+
+    // Only connect if we have an address
+    if (userAddress || Q7_DEV_WALLET) {
+      connectWebSocket();
+    }
+
+    return () => {
+      if (ws) ws.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+    };
+  }, [userAddress]);
 
   // Sync tradeStats with userPositions (for OPEN position counts)
   useEffect(() => {
