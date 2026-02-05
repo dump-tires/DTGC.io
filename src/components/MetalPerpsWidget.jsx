@@ -328,9 +328,9 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
   // ===== COLLATERAL & BALANCE TRACKING =====
   const [startingBalance, setStartingBalance] = useState(() => {
-    // Try to load from localStorage
+    // Try to load from localStorage, default to Q7 initial capital
     const saved = localStorage.getItem('dtgc_starting_balance');
-    return saved ? parseFloat(saved) : null;
+    return saved ? parseFloat(saved) : 54.58; // Q7 initial capital
   });
   const [pnlTimeRange, setPnlTimeRange] = useState('all'); // '24h', '48h', '72h', 'all'
 
@@ -1222,12 +1222,18 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     }
   };
 
-  // Fetch historical trades for CONNECTED WALLET on mount AND when tab changes
+  // Fetch historical trades for Q7 wallet on MOUNT (always)
   useEffect(() => {
-    if (userAddress) {
+    // Always fetch Q7 wallet data on mount
+    fetchHistoricalTrades(Q7_DEV_WALLET);
+  }, []); // Run once on mount
+
+  // Fetch historical trades for CONNECTED WALLET when it changes
+  useEffect(() => {
+    if (userAddress && userAddress !== Q7_DEV_WALLET) {
       fetchHistoricalTrades(userAddress);
     }
-  }, [userAddress]); // Fetch on mount when wallet connects
+  }, [userAddress]); // Fetch when wallet connects
 
   // Refetch when switching to stats tab
   useEffect(() => {
@@ -4519,51 +4525,70 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* Closed Trades & Win Rate Row - Glassmorphism - transparent */}
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
-                <div style={{
-                  flex: 1,
-                  background: 'rgba(255, 215, 0, 0.08)',
-                  backdropFilter: 'blur(3px)',
-                  borderRadius: '12px',
-                  padding: '14px',
-                  textAlign: 'center',
-                  border: '2px solid rgba(255, 215, 0, 0.5)',
-                }}>
-                  <div style={{ color: '#FFD700', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(255,215,0,0.5)' }}>{historicalTrades.length}</div>
-                  <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>CLOSED TRADES</div>
-                </div>
-                <div style={{
-                  flex: 1,
-                  background: 'rgba(0, 255, 136, 0.08)',
-                  backdropFilter: 'blur(3px)',
-                  borderRadius: '12px',
-                  padding: '14px',
-                  textAlign: 'center',
-                  border: '2px solid rgba(0, 255, 136, 0.5)',
-                }}>
-                  <div style={{ color: '#00ff88', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(0,255,136,0.5)' }}>
-                    {(realPnL.wins + realPnL.losses) > 0 ? Math.round((realPnL.wins / (realPnL.wins + realPnL.losses)) * 100) : 0}%
-                  </div>
-                  <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
-                </div>
-              </div>
+              {/* Trades & Win Rate Row - Use OPEN positions if no closed trades */}
+              {(() => {
+                const liveStats = getLivePositionStats();
+                const hasClosedTrades = historicalTrades.length > 0;
+                const tradeCount = hasClosedTrades ? historicalTrades.length : userPositions.length;
+                const winRateBase = hasClosedTrades ? (realPnL.wins + realPnL.losses) : userPositions.length;
+                const wins = hasClosedTrades ? realPnL.wins : liveStats.wins;
+                const winRate = winRateBase > 0 ? Math.round((wins / winRateBase) * 100) : 0;
 
-              {/* W/L Breakdown - Glassmorphism - transparent */}
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
-                <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
-                  <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,255,136,0.4)' }}>{realPnL.wins || 0}</div>
-                  <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>WINS</div>
-                </div>
-                <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
-                  <div style={{ color: '#ff4444', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(255,68,68,0.4)' }}>{realPnL.losses || 0}</div>
-                  <div style={{ color: '#ff4444', fontSize: '9px', fontWeight: 600 }}>LOSSES</div>
-                </div>
-                <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 150, 255, 0.3)' }}>
-                  <div style={{ color: '#0096ff', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,150,255,0.4)' }}>{userPositions.length}</div>
-                  <div style={{ color: '#0096ff', fontSize: '9px', fontWeight: 600 }}>OPEN</div>
-                </div>
-              </div>
+                return (
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(255, 215, 0, 0.08)',
+                      backdropFilter: 'blur(3px)',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      textAlign: 'center',
+                      border: '2px solid rgba(255, 215, 0, 0.5)',
+                    }}>
+                      <div style={{ color: '#FFD700', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(255,215,0,0.5)' }}>{tradeCount}</div>
+                      <div style={{ color: '#FFD700', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>{hasClosedTrades ? 'CLOSED' : 'OPEN'} TRADES</div>
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      background: 'rgba(0, 255, 136, 0.08)',
+                      backdropFilter: 'blur(3px)',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      textAlign: 'center',
+                      border: '2px solid rgba(0, 255, 136, 0.5)',
+                    }}>
+                      <div style={{ color: '#00ff88', fontSize: '30px', fontWeight: 900, textShadow: '0 2px 10px rgba(0,255,136,0.5)' }}>
+                        {winRate}%
+                      </div>
+                      <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700, letterSpacing: '1px' }}>{hasClosedTrades ? 'WIN' : 'PROFIT'} RATE</div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* W/L Breakdown - Use open positions data if no closed trades */}
+              {(() => {
+                const liveStats = getLivePositionStats();
+                const hasClosedTrades = (realPnL.wins + realPnL.losses) > 0;
+                const displayWins = hasClosedTrades ? realPnL.wins : liveStats.wins;
+                const displayLosses = hasClosedTrades ? realPnL.losses : liveStats.losses;
+                return (
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+                    <div style={{ flex: 1, background: 'rgba(0, 255, 136, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 255, 136, 0.3)' }}>
+                      <div style={{ color: '#00ff88', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,255,136,0.4)' }}>{displayWins}</div>
+                      <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>{hasClosedTrades ? 'WINS' : 'WINNING'}</div>
+                    </div>
+                    <div style={{ flex: 1, background: 'rgba(255, 68, 68, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(255, 68, 68, 0.3)' }}>
+                      <div style={{ color: '#ff4444', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(255,68,68,0.4)' }}>{displayLosses}</div>
+                      <div style={{ color: '#ff4444', fontSize: '9px', fontWeight: 600 }}>{hasClosedTrades ? 'LOSSES' : 'LOSING'}</div>
+                    </div>
+                    <div style={{ flex: 1, background: 'rgba(0, 150, 255, 0.06)', backdropFilter: 'blur(2px)', borderRadius: '10px', padding: '10px', textAlign: 'center', border: '1px solid rgba(0, 150, 255, 0.3)' }}>
+                      <div style={{ color: '#0096ff', fontSize: '20px', fontWeight: 700, textShadow: '0 1px 5px rgba(0,150,255,0.4)' }}>{userPositions.length}</div>
+                      <div style={{ color: '#0096ff', fontSize: '9px', fontWeight: 600 }}>OPEN</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* P&L TIME GRAPH - transparent */}
               {historicalTrades.length >= 2 && (
