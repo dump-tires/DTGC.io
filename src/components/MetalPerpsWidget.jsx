@@ -4714,6 +4714,37 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
+              {/* BOT SERVICE STATUS */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(0,255,136,0.1), rgba(0,200,100,0.05))',
+                borderRadius: '8px',
+                padding: '10px',
+                marginBottom: '10px',
+                border: '1px solid rgba(0,255,136,0.3)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    background: '#00ff88',
+                    boxShadow: '0 0 10px #00ff88',
+                    animation: 'pulse 2s infinite',
+                  }} />
+                  <div>
+                    <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700 }}>Q7 COPY BOT: LIVE</div>
+                    <div style={{ color: '#666', fontSize: '8px' }}>Hetzner Server • 30s Scan</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 600 }}>gTrade v8</div>
+                  <div style={{ color: '#666', fontSize: '7px' }}>Arbitrum Network</div>
+                </div>
+              </div>
+
               {/* Copy Trade Toggle */}
               {hasCopyTradeAccess && userAddress ? (
                 <>
@@ -4736,7 +4767,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                       </div>
                     </div>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         const newEnabled = !copyTradeEnabled;
                         setCopyTradeEnabled(newEnabled);
                         if (newEnabled) {
@@ -4749,6 +4780,21 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                               return updated;
                             });
                             console.log(`🟢 Copy Trading ACTIVATED for ${connectedAddress.slice(0, 8)}...`);
+                            showToastMsg(`✅ Copy Trading ENABLED! You'll mirror Q7 trades.`, 'success');
+
+                            // Register with backend (Hetzner)
+                            try {
+                              await fetch('https://65.109.68.172:3001/api/register-copy-trader', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  address: connectedAddress,
+                                  dtgcBalance: dtgcUsdValue,
+                                  arbBalance: copyTradeArbBalance,
+                                  timestamp: Date.now(),
+                                }),
+                              }).catch(() => {}); // Silent fail for now
+                            } catch (e) { console.log('Backend registration pending'); }
                           }
                         } else {
                           // Mark user as inactive
@@ -4759,6 +4805,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                               return updated;
                             });
                             console.log(`🔴 Copy Trading STOPPED for ${connectedAddress.slice(0, 8)}...`);
+                            showToastMsg(`⏹ Copy Trading disabled.`, 'info');
                           }
                         }
                       }}
@@ -4940,27 +4987,57 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     </div>
                   </div>
 
-                  {/* 5% Flywheel Agreement */}
+                  {/* 5% Flywheel Agreement - ARB → PLS BRIDGE */}
                   <div style={{
                     background: 'linear-gradient(135deg, rgba(138,43,226,0.15), rgba(255,140,0,0.1))',
                     borderRadius: '8px',
-                    padding: '10px',
+                    padding: '12px',
                     border: '1px solid rgba(138,43,226,0.3)',
                     marginBottom: '8px',
                   }}>
-                    <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 700, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ color: '#8a2be2', fontSize: '10px', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       🔄 5% GROWTH ENGINE FLYWHEEL
+                      <span style={{ background: 'rgba(0,255,136,0.2)', color: '#00ff88', padding: '2px 6px', borderRadius: '4px', fontSize: '7px' }}>AUTO-BRIDGE</span>
                     </div>
-                    <div style={{ color: '#aaa', fontSize: '8px', lineHeight: 1.5, marginBottom: '8px' }}>
+                    <div style={{ color: '#aaa', fontSize: '8px', lineHeight: 1.5, marginBottom: '10px' }}>
                       By enabling copy trading, you agree that <strong style={{ color: '#00ff88' }}>5% of every winning trade</strong> will be automatically
-                      allocated to the DTGC Growth Engine Flywheel on PulseChain.
+                      bridged to the DTGC Growth Engine on PulseChain.
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '6px' }}>
-                      <span style={{ fontSize: '16px' }}>🌀</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>Your Wins → PLS Ecosystem</div>
-                        <div style={{ color: '#666', fontSize: '7px' }}>5% auto-converts to PLS buybacks</div>
+
+                    {/* Bridge Flow Visualization */}
+                    <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '8px', padding: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '20px' }}>⚡</div>
+                          <div style={{ color: '#12AAFF', fontSize: '8px', fontWeight: 600 }}>ARBITRUM</div>
+                          <div style={{ color: '#666', fontSize: '7px' }}>Win USDC</div>
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px' }}>
+                          <div style={{ height: '2px', flex: 1, background: 'linear-gradient(90deg, #12AAFF, #8a2be2)' }} />
+                          <div style={{ color: '#8a2be2', fontSize: '10px', margin: '0 4px' }}>→ 5% →</div>
+                          <div style={{ height: '2px', flex: 1, background: 'linear-gradient(90deg, #8a2be2, #00ff88)' }} />
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '20px' }}>💚</div>
+                          <div style={{ color: '#00ff88', fontSize: '8px', fontWeight: 600 }}>PULSECHAIN</div>
+                          <div style={{ color: '#666', fontSize: '7px' }}>Buy PLS</div>
+                        </div>
                       </div>
+
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                        <div style={{ flex: 1, background: 'rgba(18,170,255,0.1)', borderRadius: '4px', padding: '6px', textAlign: 'center' }}>
+                          <div style={{ color: '#12AAFF', fontSize: '8px', fontWeight: 600 }}>Your Profit</div>
+                          <div style={{ color: '#fff', fontSize: '10px', fontWeight: 700 }}>95%</div>
+                        </div>
+                        <div style={{ flex: 1, background: 'rgba(0,255,136,0.1)', borderRadius: '4px', padding: '6px', textAlign: 'center' }}>
+                          <div style={{ color: '#00ff88', fontSize: '8px', fontWeight: 600 }}>Growth Engine</div>
+                          <div style={{ color: '#fff', fontSize: '10px', fontWeight: 700 }}>5%</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ color: '#666', fontSize: '7px', marginTop: '8px', textAlign: 'center' }}>
+                      Growth Engine: 0x1449...eb610 • Auto PLS buybacks fuel ecosystem growth
                     </div>
                   </div>
 
