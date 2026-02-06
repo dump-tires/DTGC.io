@@ -362,6 +362,20 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const hasCopyTradeAccess = dtgcUsdValue >= COPY_TRADE_DTGC_MIN;
   const hasArbFunds = copyTradeArbBalance >= COPY_TRADE_ARB_MIN;
 
+  // Debug: Log copy trade access check
+  useEffect(() => {
+    if (connectedAddress) {
+      console.log('🔍 COPY TRADE ACCESS CHECK:', {
+        dtgcBalance,
+        dtgcPrice,
+        dtgcUsdValue,
+        requiredUsd: COPY_TRADE_DTGC_MIN,
+        hasCopyTradeAccess,
+        connectedAddress: connectedAddress?.slice(0, 10),
+      });
+    }
+  }, [dtgcBalance, dtgcPrice, connectedAddress]);
+
   // ===== HISTORICAL TRADE DATA (Real P&L) =====
   const [historicalTrades, setHistoricalTrades] = useState([]);
   const [historicalLoading, setHistoricalLoading] = useState(false);
@@ -4951,10 +4965,14 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 <div style={{ color: '#888', fontSize: '9px', marginBottom: '8px', fontWeight: 600 }}>📋 REQUIREMENTS TO COPY TRADE</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#888', fontSize: '10px' }}>💎 Hold $50+ DTGC (any chain)</span>
+                    <span style={{ color: '#888', fontSize: '10px' }}>💎 Hold $50+ DTGC (PulseChain)</span>
                     <span style={{ color: hasCopyTradeAccess ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>
                       {hasCopyTradeAccess ? `✓ $${dtgcUsdValue.toFixed(2)}` : `✗ $${dtgcUsdValue.toFixed(2)} (need $50)`}
                     </span>
+                  </div>
+                  {/* Debug: Show raw values */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.6 }}>
+                    <span style={{ color: '#666', fontSize: '8px' }}>↳ {(dtgcBalance || 0).toLocaleString()} DTGC × ${(dtgcPrice || 0).toFixed(8)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#888', fontSize: '10px' }}>⚡ Fund ARB wallet (for trades)</span>
