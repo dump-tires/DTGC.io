@@ -4940,6 +4940,30 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     </div>
                   </div>
 
+                  {/* 5% Flywheel Agreement */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(138,43,226,0.15), rgba(255,140,0,0.1))',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    border: '1px solid rgba(138,43,226,0.3)',
+                    marginBottom: '8px',
+                  }}>
+                    <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 700, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      🔄 5% GROWTH ENGINE FLYWHEEL
+                    </div>
+                    <div style={{ color: '#aaa', fontSize: '8px', lineHeight: 1.5, marginBottom: '8px' }}>
+                      By enabling copy trading, you agree that <strong style={{ color: '#00ff88' }}>5% of every winning trade</strong> will be automatically
+                      allocated to the DTGC Growth Engine Flywheel on PulseChain.
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '8px', borderRadius: '6px' }}>
+                      <span style={{ fontSize: '16px' }}>🌀</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: '#00ff88', fontSize: '9px', fontWeight: 600 }}>Your Wins → PLS Ecosystem</div>
+                        <div style={{ color: '#666', fontSize: '7px' }}>5% auto-converts to PLS buybacks</div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Risk Disclaimer */}
                   <div style={{
                     background: 'rgba(255, 140, 0, 0.1)',
@@ -4950,7 +4974,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     <div style={{ color: '#ff8c00', fontSize: '8px', fontWeight: 600, marginBottom: '4px' }}>⚠️ RISK DISCLAIMER</div>
                     <div style={{ color: '#888', fontSize: '8px', lineHeight: 1.4 }}>
                       Copy trading at your own risk. Past performance ≠ future results.
-                      You control your funds. 5% profit sharing on wins to Q7 dev wallet.
+                      You control your funds. Trades are non-custodial via gTrade delegation.
                     </div>
                   </div>
                 </>
