@@ -503,11 +503,40 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     setDelegationStatus('DELEGATING');
 
     try {
+      // IMPORTANT: Switch to Arbitrum network first (gTrade is on Arbitrum)
+      const ARBITRUM_CHAIN_ID = '0xa4b1'; // 42161 in hex
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: ARBITRUM_CHAIN_ID }],
+        });
+        showToastMsg('🔗 Switched to Arbitrum network', 'info');
+      } catch (switchError) {
+        // If Arbitrum not added, add it
+        if (switchError.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: ARBITRUM_CHAIN_ID,
+              chainName: 'Arbitrum One',
+              nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+              blockExplorerUrls: ['https://arbiscan.io'],
+            }],
+          });
+        } else if (switchError.code === 4001) {
+          showToastMsg('❌ Please switch to Arbitrum to continue', 'error');
+          setDelegationLoading(false);
+          setDelegationStatus('NOT_DELEGATED');
+          return false;
+        }
+      }
+
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(GTRADE_DIAMOND_ADDRESS, GTRADE_DELEGATION_ABI, signer);
 
-      showToastMsg('📝 Please sign the delegation transaction...', 'info');
+      showToastMsg('📝 Please sign the delegation transaction on Arbitrum...', 'info');
 
       // Call setTradingDelegate to authorize the bot
       const tx = await contract.setTradingDelegate(BOT_EXECUTOR_ADDRESS, true);
