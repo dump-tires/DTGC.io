@@ -2,6 +2,7 @@
 // Lambda: gTrade Direct Prices, Q7 Haneef System, 5-Factor Confluence
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createChart, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
+import { ethers } from 'ethers';
 
 // ==================== CONFIGURATION ====================
 
@@ -1077,6 +1078,9 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  // Alias for backward compatibility
+  const showToastMsg = showToast;
 
   // API helper
   const apiCall = async (action, params = {}) => {
