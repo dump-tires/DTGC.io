@@ -96,7 +96,8 @@ let lastKnownQ7Positions = [];
 let isScanning = false;
 
 // ==================== PROVIDER & WALLET ====================
-const provider = new ethers.JsonRpcProvider(CONFIG.ARBITRUM_RPC);
+// Using ethers v5 syntax for compatibility
+const provider = new ethers.providers.JsonRpcProvider(CONFIG.ARBITRUM_RPC);
 let executorWallet = null;
 
 if (CONFIG.BOT_EXECUTOR_PRIVATE_KEY) {
@@ -173,25 +174,25 @@ async function executeCopyTrade(trader, q7Trade) {
   try {
     const tradingContract = new ethers.Contract(CONFIG.GTRADE_TRADING, GTRADE_TRADING_ABI, executorWallet);
 
-    // Build trade params for delegated execution
+    // Build trade params for delegated execution (ethers v5 syntax)
     const tradeParams = {
       trader: address, // User's address (we're executing on their behalf)
       pairIndex: q7Trade.pairIndex,
       index: 0,
-      initialPosToken: ethers.parseUnits(userCollateral.toFixed(6), 6),
-      positionSizeUsd: ethers.parseUnits((userCollateral * userLeverage).toFixed(18), 18),
-      openPrice: 0n, // Market order
+      initialPosToken: ethers.utils.parseUnits(userCollateral.toFixed(6), 6),
+      positionSizeUsd: ethers.utils.parseUnits((userCollateral * userLeverage).toFixed(18), 18),
+      openPrice: 0, // Market order
       buy: q7Trade.direction === 'LONG',
-      leverage: BigInt(userLeverage),
-      tp: ethers.parseUnits(q7Trade.tp.toFixed(10), 10),
-      sl: ethers.parseUnits(q7Trade.sl.toFixed(10), 10),
-      timestamp: BigInt(Math.floor(Date.now() / 1000)),
+      leverage: userLeverage,
+      tp: ethers.utils.parseUnits(q7Trade.tp.toFixed(10), 10),
+      sl: ethers.utils.parseUnits(q7Trade.sl.toFixed(10), 10),
+      timestamp: Math.floor(Date.now() / 1000),
     };
 
     const tx = await tradingContract.openTrade(
       tradeParams,
       200, // 2% max slippage
-      ethers.ZeroAddress
+      ethers.constants.AddressZero
     );
 
     console.log(`   ⏳ Tx submitted: ${tx.hash}`);
