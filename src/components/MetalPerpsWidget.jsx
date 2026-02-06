@@ -333,10 +333,12 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const BOT_EXECUTOR_ADDRESS = '0x978c5786CDB46b1519A9c1C4814e06d5956f6c64'; // Bot wallet that executes trades
   const GTRADE_DIAMOND_ADDRESS = '0xFF162c694eAA571f685030649814282eA457f169'; // gTrade delegation contract
 
-  // gTrade Delegation ABI - for single-click auto-trading
+  // gTrade v10 Delegation ABI - for single-click auto-trading
+  // From ITradingInteractionsUtils interface
   const GTRADE_DELEGATION_ABI = [
-    'function setTradingDelegate(address delegate, bool enable)',
-    'function delegations(address trader, address delegate) view returns (bool)',
+    'function setTradingDelegate(address _delegate)',           // Approve a delegate
+    'function removeTradingDelegate()',                         // Remove current delegate
+    'function getTradingDelegate(address _trader) view returns (address)', // Get delegate for trader
   ];
 
   // Delegation state
@@ -471,10 +473,13 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(GTRADE_DIAMOND_ADDRESS, GTRADE_DELEGATION_ABI, provider);
-      const isDelegated = await contract.delegations(userAddr, BOT_EXECUTOR_ADDRESS);
+
+      // getTradingDelegate returns the delegate address for this trader
+      const currentDelegate = await contract.getTradingDelegate(userAddr);
+      const isDelegated = currentDelegate.toLowerCase() === BOT_EXECUTOR_ADDRESS.toLowerCase();
 
       setDelegationStatus(isDelegated ? 'DELEGATED' : 'NOT_DELEGATED');
-      console.log(`🔍 Delegation check for ${userAddr.slice(0, 8)}...: ${isDelegated ? 'ACTIVE' : 'NOT DELEGATED'}`);
+      console.log(`🔍 Delegation check for ${userAddr.slice(0, 8)}...: delegate=${currentDelegate.slice(0,10)}... isDelegated=${isDelegated}`);
 
       // Also check with backend
       try {
@@ -539,8 +544,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
       showToastMsg('📝 Please sign the delegation transaction on Arbitrum...', 'info');
 
-      // Call setTradingDelegate to authorize the bot
-      const tx = await contract.setTradingDelegate(BOT_EXECUTOR_ADDRESS, true);
+      // Call setTradingDelegate to authorize the bot (gTrade v10 - single parameter)
+      const tx = await contract.setTradingDelegate(BOT_EXECUTOR_ADDRESS);
       showToastMsg('⏳ Waiting for transaction confirmation...', 'info');
 
       await tx.wait();
