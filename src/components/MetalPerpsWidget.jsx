@@ -587,20 +587,28 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
   // Full single-click copy trading activation
   const activateCopyTrading = async () => {
+    console.log('🎯 activateCopyTrading() called', { connectedAddress });
+
     if (!connectedAddress) {
+      console.log('❌ No connected address');
       showToastMsg('❌ Please connect your wallet first', 'error');
       return;
     }
 
     // Check if already delegated
+    console.log('🔍 Checking delegation status...');
     const isDelegated = await checkDelegationStatus(connectedAddress);
+    console.log('📋 Delegation check result:', isDelegated);
 
     if (!isDelegated) {
       // Need to delegate first
+      console.log('🔐 Need to delegate first...');
       showToastMsg('🔐 Setting up auto-trading... Please approve the delegation.', 'info');
       const delegationSuccess = await requestDelegation();
+      console.log('✅ Delegation result:', delegationSuccess);
 
       if (!delegationSuccess) {
+        console.log('❌ Delegation failed or rejected');
         return; // User rejected or error
       }
     }
@@ -5155,14 +5163,21 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                       </div>
                     </div>
                     <button
-                      onClick={async () => {
-                        if (delegationLoading) return;
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🚀 START BUTTON CLICKED!', { delegationLoading, copyTradeEnabled, delegationStatus });
+
+                        if (delegationLoading) {
+                          console.log('⏳ Already loading, returning');
+                          return;
+                        }
 
                         if (copyTradeEnabled) {
-                          // STOP - Deactivate copy trading
+                          console.log('⏹ Stopping copy trading...');
                           await deactivateCopyTrading();
                         } else {
-                          // START - Full activation with delegation
+                          console.log('🟢 Starting copy trading...');
                           await activateCopyTrading();
                         }
                       }}
