@@ -2801,7 +2801,36 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
       display: 'flex',
       flexDirection: 'column',
     }}>
-      
+
+      {/* ===== GLOWING GOLD BANNER ===== */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 140, 0, 0.15) 50%, rgba(255, 215, 0, 0.2) 100%)',
+        padding: '8px 16px',
+        textAlign: 'center',
+        borderBottom: '1px solid rgba(255, 215, 0, 0.3)',
+        boxShadow: '0 0 20px rgba(255, 215, 0, 0.3)',
+        animation: 'bannerGlow 2s ease-in-out infinite',
+      }}>
+        <style>{`
+          @keyframes bannerGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(255, 215, 0, 0.2); }
+            50% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.5); }
+          }
+        `}</style>
+        <div style={{
+          color: '#FFD700',
+          fontWeight: 800,
+          fontSize: '13px',
+          letterSpacing: '0.5px',
+          textShadow: '0 0 10px rgba(255, 215, 0, 0.6), 0 1px 2px rgba(0,0,0,0.5)',
+        }}>
+          ✨ New: Quant 7, Perp Copy Trades ✨
+        </div>
+        <div style={{ color: 'rgba(255, 215, 0, 0.6)', fontSize: '8px', marginTop: '2px' }}>
+          One-click auto-execute • Mirror Q7 trades
+        </div>
+      </div>
+
       {/* ===== HEADER ===== */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 140, 0, 0.1) 100%)',
