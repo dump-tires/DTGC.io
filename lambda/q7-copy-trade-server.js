@@ -1,6 +1,12 @@
-// Q7 COPY TRADE SERVER v2.1 - TRUE AUTO-EXECUTION
+// Q7 COPY TRADE SERVER v2.2 - SMART FILTERING FOR LOW COLLATERAL WALLETS
 // Hetzner server that monitors Q7 wallet and executes trades for delegated users
 // Single-click activation: User delegates once, bot trades forever
+//
+// v2.2 NEW:
+// - Smart trade filtering based on wallet collateral
+// - Quality scoring for trades (leverage, asset risk, TP/SL ratio)
+// - Proportional position sizing for low-collateral wallets
+// - Skip high-risk trades for small accounts
 
 const express = require('express');
 const cors = require('cors');
@@ -40,6 +46,23 @@ const CONFIG = {
   // 5% Growth Engine Flywheel
   FLYWHEEL_PERCENTAGE: 0.05,
   GROWTH_ENGINE_WALLET: '0x1449a7d9973e6215534d785e3e306261156eb610',
+
+  // v2.2: SMART FILTERING FOR LOW COLLATERAL WALLETS
+  LOW_COLLATERAL_THRESHOLD: 100,     // Wallets with <$100 USDC are "low collateral"
+  MIN_TRADE_QUALITY_SCORE: 60,       // Only copy trades scoring 60+ for low-collateral
+  SMART_SIZING_ENABLED: true,        // Enable proportional position sizing
+  MAX_POSITION_PCT_OF_BALANCE: 0.25, // Max 25% of balance per trade for low-collateral
+  SKIP_HIGH_LEVERAGE_FOR_SMALL: true,// Skip >50x trades for low-collateral wallets
+  HIGH_LEVERAGE_THRESHOLD: 50,       // What counts as "high leverage"
+
+  // Risk tiers by asset (used for quality scoring)
+  ASSET_RISK_SCORES: {
+    BTC: 90,    // Most stable - high quality
+    ETH: 85,    // Very stable
+    GOLD: 80,   // Stable commodity
+    SILVER: 70, // More volatile commodity
+    DEFAULT: 50 // Unknown pairs
+  },
 
   // API - gTrade v9/v10 endpoint
   GTRADE_OPEN_TRADES_API: 'https://backend-arbitrum.gains.trade/trading-variables',
@@ -203,6 +226,108 @@ async function checkDelegation(userAddress) {
   }
 }
 
+// ==================== v2.2: SMART TRADE QUALITY SCORING ====================
+function calculateTradeQualityScore(trade) {
+  let score = 0;
+
+  // 1. Asset stability score (0-30 points)
+  const assetName = trade.asset?.toUpperCase() || '';
+  const assetScore = CONFIG.ASSET_RISK_SCORES[assetName] || CONFIG.ASSET_RISK_SCORES.DEFAULT;
+  score += (assetScore / 100) * 30;
+
+  // 2. Leverage risk (0-25 points) - lower leverage = higher quality
+  const leverage = trade.leverage || 10;
+  if (leverage <= 10) score += 25;
+  else if (leverage <= 25) score += 20;
+  else if (leverage <= 50) score += 15;
+  else if (leverage <= 75) score += 10;
+  else score += 5;
+
+  // 3. TP/SL ratio (0-25 points) - good risk/reward
+  if (trade.tp && trade.sl && trade.openPrice) {
+    const tpDistance = Math.abs(trade.tp - trade.openPrice);
+    const slDistance = Math.abs(trade.sl - trade.openPrice);
+    if (slDistance > 0) {
+      const riskReward = tpDistance / slDistance;
+      if (riskReward >= 2.0) score += 25;
+      else if (riskReward >= 1.5) score += 20;
+      else if (riskReward >= 1.0) score += 15;
+      else score += 10;
+    } else {
+      score += 10; // No SL set
+    }
+  } else {
+    score += 10; // Missing TP/SL data
+  }
+
+  // 4. Collateral size (0-20 points) - Q7 confidence indicator
+  const collateral = trade.collateral || 0;
+  if (collateral >= 50) score += 20;
+  else if (collateral >= 25) score += 15;
+  else if (collateral >= 10) score += 10;
+  else score += 5;
+
+  return Math.round(score);
+}
+
+function shouldCopyTradeForWallet(trade, trader) {
+  const walletBalance = trader.usdcBalance || trader.arbBalance || 100;
+  const isLowCollateral = walletBalance < CONFIG.LOW_COLLATERAL_THRESHOLD;
+  const qualityScore = calculateTradeQualityScore(trade);
+
+  console.log(`   📊 Trade Quality: ${qualityScore}/100 | Wallet: $${walletBalance.toFixed(2)} | Low-Collateral: ${isLowCollateral}`);
+
+  // For low-collateral wallets, apply strict filtering
+  if (isLowCollateral) {
+    // Skip high leverage trades for small accounts
+    if (CONFIG.SKIP_HIGH_LEVERAGE_FOR_SMALL && trade.leverage > CONFIG.HIGH_LEVERAGE_THRESHOLD) {
+      console.log(`   ⏭️ SKIP: ${trade.leverage}x leverage too high for low-collateral wallet`);
+      return { copy: false, reason: 'leverage_too_high', qualityScore };
+    }
+
+    // Only copy high-quality trades
+    if (qualityScore < CONFIG.MIN_TRADE_QUALITY_SCORE) {
+      console.log(`   ⏭️ SKIP: Quality score ${qualityScore} below threshold ${CONFIG.MIN_TRADE_QUALITY_SCORE}`);
+      return { copy: false, reason: 'quality_below_threshold', qualityScore };
+    }
+  }
+
+  return { copy: true, reason: 'approved', qualityScore };
+}
+
+function calculateSmartPositionSize(trade, trader) {
+  const walletBalance = trader.usdcBalance || trader.arbBalance || 100;
+  const isLowCollateral = walletBalance < CONFIG.LOW_COLLATERAL_THRESHOLD;
+
+  if (!CONFIG.SMART_SIZING_ENABLED || !isLowCollateral) {
+    // Use normal sizing for well-funded wallets
+    return trade.collateral * (trader.settings?.collateralMultiplier || 1.0);
+  }
+
+  // Smart sizing for low-collateral wallets:
+  // 1. Cap at MAX_POSITION_PCT_OF_BALANCE
+  const maxPosition = walletBalance * CONFIG.MAX_POSITION_PCT_OF_BALANCE;
+
+  // 2. Scale down Q7's position proportionally to wallet size
+  // Q7 typically trades with $10-50, scale based on ratio
+  const q7BaseSize = 25; // Assume Q7's typical trade size
+  const scaleFactor = Math.min(walletBalance / 100, 1); // Scale down for small wallets
+  const scaledPosition = trade.collateral * scaleFactor;
+
+  // 3. Take the smaller of max allowed or scaled position
+  const finalSize = Math.min(maxPosition, scaledPosition, trade.collateral);
+
+  // 4. Ensure minimum viable trade size ($5 minimum for gTrade)
+  const minimumSize = 5;
+  if (finalSize < minimumSize) {
+    console.log(`   ⚠️ Position too small ($${finalSize.toFixed(2)}), using minimum $${minimumSize}`);
+    return minimumSize;
+  }
+
+  console.log(`   💡 Smart Sizing: Q7=$${trade.collateral} → User=$${finalSize.toFixed(2)} (${(finalSize/walletBalance*100).toFixed(1)}% of balance)`);
+  return finalSize;
+}
+
 // ==================== EXECUTE COPY TRADE ====================
 async function executeCopyTrade(trader, q7Trade) {
   if (!executorWallet) {
@@ -211,7 +336,16 @@ async function executeCopyTrade(trader, q7Trade) {
   }
 
   const { address, settings } = trader;
-  const userCollateral = q7Trade.collateral * (settings?.collateralMultiplier || 1.0);
+
+  // v2.2: Smart filtering check
+  const filterResult = shouldCopyTradeForWallet(q7Trade, trader);
+  if (!filterResult.copy) {
+    console.log(`   ⏭️ Skipping trade for ${address.slice(0, 8)}... (${filterResult.reason})`);
+    return { success: false, skipped: true, reason: filterResult.reason, qualityScore: filterResult.qualityScore };
+  }
+
+  // v2.2: Smart position sizing
+  const userCollateral = calculateSmartPositionSize(q7Trade, trader);
   const userLeverage = Math.min(q7Trade.leverage, settings?.maxLeverage || 100);
 
   console.log(`\n📋 EXECUTING COPY TRADE`);
@@ -327,11 +461,27 @@ ${trade.direction === 'LONG' ? '📈' : '📉'} <b>${trade.direction} ${trade.as
 Executing for ${activeTradersArray.length} copy traders...
         `);
 
+        // v2.2: Track execution results
+        let copied = 0, skipped = 0;
+
         for (const trader of activeTradersArray) {
           const result = await executeCopyTrade(trader, trade);
           if (result.success) {
+            copied++;
             await sendTelegramNotification(`✅ Copied for ${trader.address.slice(0,8)}...`);
+          } else if (result.skipped) {
+            skipped++;
+            // Update trader stats
+            if (copyTraders[trader.address.toLowerCase()]) {
+              copyTraders[trader.address.toLowerCase()].stats.skippedTrades++;
+              saveCopyTraders(copyTraders);
+            }
           }
+        }
+
+        // v2.2: Summary notification
+        if (skipped > 0) {
+          await sendTelegramNotification(`📊 Trade Summary: ${copied} copied, ${skipped} skipped (low-collateral filter)`);
         }
       }
     }
@@ -360,13 +510,25 @@ ${trade.direction === 'LONG' ? '📈' : '📉'} ${trade.direction} ${trade.asset
 // ==================== API ENDPOINTS ====================
 
 app.get('/health', (req, res) => {
+  const traders = Object.values(copyTraders);
+  const activeTraders = traders.filter(t => t.enabled && t.delegated);
+  const lowCollateralTraders = activeTraders.filter(t => t.isLowCollateral);
+
   res.json({
     status: 'live',
-    version: '2.1',
+    version: '2.2',
+    features: ['smart-filtering', 'quality-scoring', 'proportional-sizing'],
     botExecutor: CONFIG.BOT_EXECUTOR_ADDRESS,
-    activeCopyTraders: Object.values(copyTraders).filter(t => t.enabled && t.delegated).length,
-    totalRegistered: Object.keys(copyTraders).length,
+    activeCopyTraders: activeTraders.length,
+    lowCollateralTraders: lowCollateralTraders.length,
+    totalRegistered: traders.length,
     q7Positions: lastKnownQ7Positions.length,
+    smartFiltering: {
+      enabled: CONFIG.SMART_SIZING_ENABLED,
+      lowCollateralThreshold: CONFIG.LOW_COLLATERAL_THRESHOLD,
+      minQualityScore: CONFIG.MIN_TRADE_QUALITY_SCORE,
+      maxPositionPct: CONFIG.MAX_POSITION_PCT_OF_BALANCE * 100,
+    },
   });
 });
 
@@ -384,6 +546,20 @@ app.get('/api/bot-info', (req, res) => {
   });
 });
 
+// ==================== v2.2: FETCH USDC BALANCE ====================
+const ERC20_ABI = ['function balanceOf(address) view returns (uint256)'];
+
+async function fetchUsdcBalance(address) {
+  try {
+    const usdc = new ethers.Contract(CONFIG.USDC_ADDRESS, ERC20_ABI, provider);
+    const balance = await usdc.balanceOf(address);
+    return parseFloat(ethers.utils.formatUnits(balance, 6));
+  } catch (e) {
+    console.error(`Failed to fetch USDC balance for ${address}:`, e.message);
+    return 0;
+  }
+}
+
 app.post('/api/register-copy-trader', async (req, res) => {
   try {
     const { address, dtgcBalance, arbBalance } = req.body;
@@ -391,6 +567,12 @@ app.post('/api/register-copy-trader', async (req, res) => {
 
     const normalizedAddress = address.toLowerCase();
     const isDelegated = await checkDelegation(address);
+
+    // v2.2: Fetch USDC balance for smart sizing
+    const usdcBalance = await fetchUsdcBalance(address);
+    const isLowCollateral = usdcBalance < CONFIG.LOW_COLLATERAL_THRESHOLD;
+
+    console.log(`📝 Register: ${address.slice(0, 8)}... | USDC: $${usdcBalance.toFixed(2)} | Low-Collateral: ${isLowCollateral}`);
 
     copyTraders[normalizedAddress] = {
       address: address,
@@ -400,12 +582,15 @@ app.post('/api/register-copy-trader', async (req, res) => {
       lastUpdate: Date.now(),
       dtgcBalance: dtgcBalance || 0,
       arbBalance: arbBalance || 0,
+      usdcBalance: usdcBalance,
+      isLowCollateral: isLowCollateral,
       settings: copyTraders[normalizedAddress]?.settings || {
         collateralMultiplier: 1.0,
         maxLeverage: 100,
       },
       stats: copyTraders[normalizedAddress]?.stats || {
         totalTrades: 0, wins: 0, losses: 0, totalPnL: 0,
+        skippedTrades: 0, // v2.2: Track skipped trades
       },
     };
 
@@ -477,12 +662,17 @@ app.get('/api/copy-traders', (req, res) => {
 
 // ==================== START SERVER ====================
 app.listen(CONFIG.PORT, () => {
-  console.log(`\n🚀 Q7 COPY TRADE SERVER v2.1`);
+  console.log(`\n🚀 Q7 COPY TRADE SERVER v2.2 - SMART FILTERING`);
   console.log(`   Port: ${CONFIG.PORT}`);
   console.log(`   Bot Executor: ${CONFIG.BOT_EXECUTOR_ADDRESS}`);
   console.log(`   Q7 Dev Wallet: ${CONFIG.Q7_DEV_WALLET}`);
   console.log(`   Scan Interval: ${CONFIG.SCAN_INTERVAL_MS / 1000}s`);
   console.log(`   Flywheel: ${CONFIG.FLYWHEEL_PERCENTAGE * 100}% to Growth Engine`);
+  console.log(`\n🎯 SMART FILTERING (v2.2):`);
+  console.log(`   Low-Collateral Threshold: $${CONFIG.LOW_COLLATERAL_THRESHOLD}`);
+  console.log(`   Min Quality Score: ${CONFIG.MIN_TRADE_QUALITY_SCORE}/100`);
+  console.log(`   Max Position %: ${CONFIG.MAX_POSITION_PCT_OF_BALANCE * 100}% of balance`);
+  console.log(`   Skip High Leverage (>${CONFIG.HIGH_LEVERAGE_THRESHOLD}x): ${CONFIG.SKIP_HIGH_LEVERAGE_FOR_SMALL}`);
   console.log(`\n📡 API Endpoints:`);
   console.log(`   GET  /health`);
   console.log(`   GET  /api/bot-info`);
