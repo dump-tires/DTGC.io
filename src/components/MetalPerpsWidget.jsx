@@ -546,13 +546,35 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
       // Call setTradingDelegate to authorize the bot (gTrade v10 - single parameter)
       const tx = await contract.setTradingDelegate(BOT_EXECUTOR_ADDRESS);
+      const txHash = tx.hash;
+      console.log(`📤 Delegation tx submitted: ${txHash}`);
       showToastMsg('⏳ Waiting for transaction confirmation...', 'info');
 
-      await tx.wait();
+      // Try to wait for confirmation, but handle RPC parsing errors gracefully
+      try {
+        await tx.wait();
+        console.log(`✅ Delegation confirmed! Tx: ${txHash}`);
+      } catch (waitError) {
+        // Arbitrum RPC sometimes returns malformed data (nonce: "undefined")
+        // If we have a tx hash, the transaction likely went through
+        console.warn('⚠️ tx.wait() error (may still succeed):', waitError.message);
 
-      console.log(`✅ Delegation successful! Tx: ${tx.hash}`);
+        // Wait a moment then verify delegation status directly
+        showToastMsg('⏳ Verifying delegation on-chain...', 'info');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // Re-check delegation status
+        const userAddr = await signer.getAddress();
+        const currentDelegate = await contract.getTradingDelegate(userAddr);
+        const isNowDelegated = currentDelegate.toLowerCase() === BOT_EXECUTOR_ADDRESS.toLowerCase();
+
+        if (!isNowDelegated) {
+          throw new Error(`Delegation verification failed. Check tx: ${txHash}`);
+        }
+        console.log(`✅ Delegation verified on-chain! Delegate: ${currentDelegate}`);
+      }
+
       showToastMsg('✅ Delegation successful! Auto-trading is now ACTIVE!', 'success');
-
       setDelegationStatus('DELEGATED');
       setDelegationLoading(false);
       return true;
