@@ -245,7 +245,7 @@ const TradingViewTickerTape = () => {
 
 // ==================== MAIN COMPONENT ====================
 
-export default function MetalPerpsWidget({ livePrices: externalPrices = {}, connectedAddress = null, dtgcBalance = 0 }) {
+export default function MetalPerpsWidget({ livePrices: externalPrices = {}, connectedAddress = null, dtgcBalance = 0, dtgcPrice = 0 }) {
   // Alias for backwards compatibility - userAddress is used throughout the component
   const userAddress = connectedAddress;
 
@@ -335,7 +335,9 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const [copyTradeLastSync, setCopyTradeLastSync] = useState(null);
 
   // Check if user meets copy trade requirements
-  const hasCopyTradeAccess = dtgcBalance >= COPY_TRADE_DTGC_MIN;
+  // Calculate DTGC USD value (dtgcBalance is raw token count, multiply by price)
+  const dtgcUsdValue = dtgcBalance * dtgcPrice;
+  const hasCopyTradeAccess = dtgcUsdValue >= COPY_TRADE_DTGC_MIN;
   const hasArbFunds = copyTradeArbBalance >= COPY_TRADE_ARB_MIN;
 
   // ===== HISTORICAL TRADE DATA (Real P&L) =====
@@ -4653,7 +4655,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: '#888', fontSize: '10px' }}>💎 $50 DTGC in wallet</span>
                     <span style={{ color: hasCopyTradeAccess ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>
-                      {hasCopyTradeAccess ? `✓ $${dtgcBalance.toFixed(0)}` : `✗ $${dtgcBalance.toFixed(0)}`}
+                      {hasCopyTradeAccess ? `✓ $${dtgcUsdValue.toFixed(2)}` : `✗ $${dtgcUsdValue.toFixed(2)}`}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

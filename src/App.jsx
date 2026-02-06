@@ -14307,6 +14307,7 @@ export default function App() {
         livePrices={{ BTC: cryptoPrices.btc, ETH: cryptoPrices.eth, GOLD: metalPrices.gold, SILVER: metalPrices.silver }}
         connectedAddress={account}
         dtgcBalance={parseFloat(dtgcBalance || '0')}
+        dtgcPrice={livePrices.dtgc || 0}
       />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
