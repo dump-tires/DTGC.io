@@ -540,44 +540,62 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const userAddr = await signer.getAddress();
       const contract = new ethers.Contract(GTRADE_DIAMOND_ADDRESS, GTRADE_DELEGATION_ABI, signer);
 
       showToastMsg('📝 Please sign the delegation transaction on Arbitrum...', 'info');
 
-      // Call setTradingDelegate to authorize the bot (gTrade v10 - single parameter)
-      const tx = await contract.setTradingDelegate(BOT_EXECUTOR_ADDRESS);
-      const txHash = tx.hash;
-      console.log(`📤 Delegation tx submitted: ${txHash}`);
-      showToastMsg('⏳ Waiting for transaction confirmation...', 'info');
+      let txHash = null;
+      let txSucceeded = false;
 
-      // Try to wait for confirmation, but handle RPC parsing errors gracefully
+      // Call setTradingDelegate - Arbitrum RPC sometimes returns malformed nonce
+      // which causes ethers.js to fail parsing the response even though tx succeeds
       try {
+        const tx = await contract.setTradingDelegate(BOT_EXECUTOR_ADDRESS);
+        txHash = tx.hash;
+        console.log(`📤 Delegation tx submitted: ${txHash}`);
+        showToastMsg('⏳ Waiting for transaction confirmation...', 'info');
         await tx.wait();
+        txSucceeded = true;
         console.log(`✅ Delegation confirmed! Tx: ${txHash}`);
-      } catch (waitError) {
-        // Arbitrum RPC sometimes returns malformed data (nonce: "undefined")
-        // If we have a tx hash, the transaction likely went through
-        console.warn('⚠️ tx.wait() error (may still succeed):', waitError.message);
+      } catch (txError) {
+        console.warn('⚠️ Transaction error (checking if it still succeeded):', txError.message);
 
-        // Wait a moment then verify delegation status directly
-        showToastMsg('⏳ Verifying delegation on-chain...', 'info');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        // Re-check delegation status
-        const userAddr = await signer.getAddress();
-        const currentDelegate = await contract.getTradingDelegate(userAddr);
-        const isNowDelegated = currentDelegate.toLowerCase() === BOT_EXECUTOR_ADDRESS.toLowerCase();
-
-        if (!isNowDelegated) {
-          throw new Error(`Delegation verification failed. Check tx: ${txHash}`);
+        // Extract tx hash from error if present (Arbitrum RPC nonce bug)
+        const errorStr = JSON.stringify(txError);
+        const hashMatch = errorStr.match(/"hash":\s*"(0x[a-fA-F0-9]{64})"/);
+        if (hashMatch) {
+          txHash = hashMatch[1];
+          console.log(`📤 Found tx hash in error: ${txHash}`);
         }
-        console.log(`✅ Delegation verified on-chain! Delegate: ${currentDelegate}`);
+
+        // If user rejected, don't continue
+        if (txError.code === 'ACTION_REJECTED' || txError.code === 4001) {
+          throw txError;
+        }
+
+        // If we have a tx hash, the transaction was submitted - verify on-chain
+        if (txHash) {
+          showToastMsg('⏳ Verifying delegation on-chain...', 'info');
+          await new Promise(resolve => setTimeout(resolve, 4000));
+        } else {
+          throw txError;
+        }
       }
 
-      showToastMsg('✅ Delegation successful! Auto-trading is now ACTIVE!', 'success');
-      setDelegationStatus('DELEGATED');
-      setDelegationLoading(false);
-      return true;
+      // Verify delegation status on-chain
+      const currentDelegate = await contract.getTradingDelegate(userAddr);
+      const isNowDelegated = currentDelegate.toLowerCase() === BOT_EXECUTOR_ADDRESS.toLowerCase();
+
+      if (isNowDelegated) {
+        console.log(`✅ Delegation verified! Delegate: ${currentDelegate}`);
+        showToastMsg('✅ Delegation successful! Auto-trading is now ACTIVE!', 'success');
+        setDelegationStatus('DELEGATED');
+        setDelegationLoading(false);
+        return true;
+      } else {
+        throw new Error(`Delegation not found on-chain. Tx: ${txHash || 'unknown'}`);
+      }
 
     } catch (error) {
       console.error('Delegation error:', error);
