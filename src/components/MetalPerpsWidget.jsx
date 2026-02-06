@@ -2754,30 +2754,76 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
   // ==================== COLLAPSED STATE ====================
   if (!isExpanded) {
+    const isCopyActive = copyTradeEnabled && delegationStatus === 'DELEGATED';
     return (
-      <div
-        onClick={() => setIsExpanded(true)}
-        style={{
-          position: 'fixed',
-          bottom: isMobile ? '75px' : '100px',
-          left: isMobile ? 'auto' : '20px',
-          right: isMobile ? '12px' : 'auto',
-          width: isMobile ? '48px' : '56px',
-          height: isMobile ? '48px' : '56px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #FFD700, #FFA500)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 4px 20px rgba(255, 215, 0, 0.4)',
-          zIndex: 9999,
-          transition: 'all 0.3s ease',
-        }}
-        onMouseEnter={(e) => !isMobile && (e.currentTarget.style.transform = 'scale(1.1)')}
-        onMouseLeave={(e) => !isMobile && (e.currentTarget.style.transform = 'scale(1)')}
-      >
-        <span style={{ fontSize: isMobile ? '18px' : '24px' }}>📊</span>
+      <div style={{
+        position: 'fixed',
+        bottom: isMobile ? '75px' : '100px',
+        left: isMobile ? 'auto' : '20px',
+        right: isMobile ? '12px' : 'auto',
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: isMobile ? 'flex-end' : 'flex-start',
+        gap: '6px',
+      }}>
+        {/* Copy Trading Status Badge - Shows when active */}
+        {isCopyActive && (
+          <div style={{
+            background: 'rgba(0, 255, 136, 0.15)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(0, 255, 136, 0.4)',
+            borderRadius: '20px',
+            padding: '6px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            animation: 'copyPulse 2s ease-in-out infinite',
+          }}>
+            <style>{`
+              @keyframes copyPulse {
+                0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 136, 0.3); }
+                50% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.6); }
+              }
+            `}</style>
+            <div style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: '#00ff88',
+              boxShadow: '0 0 8px #00ff88',
+              animation: 'pulse 1.5s infinite',
+            }} />
+            <span style={{ color: '#00ff88', fontSize: '9px', fontWeight: 700, letterSpacing: '0.5px' }}>
+              COPY TRADING LIVE
+            </span>
+          </div>
+        )}
+
+        {/* Main Collapsed Button */}
+        <div
+          onClick={() => setIsExpanded(true)}
+          style={{
+            width: isMobile ? '48px' : '56px',
+            height: isMobile ? '48px' : '56px',
+            borderRadius: '50%',
+            background: isCopyActive
+              ? 'linear-gradient(135deg, #00ff88, #00cc6a)'
+              : 'linear-gradient(135deg, #FFD700, #FFA500)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: isCopyActive
+              ? '0 4px 20px rgba(0, 255, 136, 0.5)'
+              : '0 4px 20px rgba(255, 215, 0, 0.4)',
+            transition: 'all 0.3s ease',
+          }}
+          onMouseEnter={(e) => !isMobile && (e.currentTarget.style.transform = 'scale(1.1)')}
+          onMouseLeave={(e) => !isMobile && (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          <span style={{ fontSize: isMobile ? '18px' : '24px' }}>{isCopyActive ? '🔄' : '📊'}</span>
+        </div>
       </div>
     );
   }
@@ -4902,57 +4948,114 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
               {/* Requirements Check */}
               <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
-                <div style={{ color: '#888', fontSize: '9px', marginBottom: '8px', fontWeight: 600 }}>REQUIREMENTS</div>
+                <div style={{ color: '#888', fontSize: '9px', marginBottom: '8px', fontWeight: 600 }}>📋 REQUIREMENTS TO COPY TRADE</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#888', fontSize: '10px' }}>💎 $50 DTGC in wallet</span>
+                    <span style={{ color: '#888', fontSize: '10px' }}>💎 Hold $50+ DTGC (any chain)</span>
                     <span style={{ color: hasCopyTradeAccess ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>
-                      {hasCopyTradeAccess ? `✓ $${dtgcUsdValue.toFixed(2)}` : `✗ $${dtgcUsdValue.toFixed(2)}`}
+                      {hasCopyTradeAccess ? `✓ $${dtgcUsdValue.toFixed(2)}` : `✗ $${dtgcUsdValue.toFixed(2)} (need $50)`}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#888', fontSize: '10px' }}>⚡ $40 ARB USDC/ETH</span>
+                    <span style={{ color: '#888', fontSize: '10px' }}>⚡ Fund ARB wallet (for trades)</span>
                     <span style={{ color: copyTradeArbBalance >= COPY_TRADE_ARB_MIN ? '#00ff88' : '#ff9900', fontSize: '10px', fontWeight: 600 }}>
-                      {copyTradeArbBalance >= COPY_TRADE_ARB_MIN ? `✓ $${copyTradeArbBalance?.toFixed(2)}` : `~ $${copyTradeArbBalance?.toFixed(2) || '0'}`}
+                      {copyTradeArbBalance >= COPY_TRADE_ARB_MIN ? `✓ $${copyTradeArbBalance?.toFixed(2)} USDC` : `⚠️ $${copyTradeArbBalance?.toFixed(2) || '0'} (need $40+)`}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: '#888', fontSize: '10px' }}>🔗 Wallet Connected</span>
+                    <span style={{ color: '#888', fontSize: '10px' }}>🔗 Connect Wallet</span>
                     <span style={{ color: userAddress ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 600 }}>
                       {userAddress ? '✓ Connected' : '✗ Not Connected'}
                     </span>
                   </div>
                 </div>
+                {!hasCopyTradeAccess && (
+                  <div style={{ marginTop: '8px', padding: '6px', background: 'rgba(255,68,68,0.1)', borderRadius: '4px' }}>
+                    <div style={{ color: '#ff6666', fontSize: '8px', textAlign: 'center' }}>
+                      🔒 Hold $50+ DTGC to unlock copy trading
+                    </div>
+                  </div>
+                )}
+                {hasCopyTradeAccess && copyTradeArbBalance < COPY_TRADE_ARB_MIN && (
+                  <div style={{ marginTop: '8px', padding: '6px', background: 'rgba(255,165,0,0.1)', borderRadius: '4px' }}>
+                    <div style={{ color: '#ffa500', fontSize: '8px', textAlign: 'center' }}>
+                      ⚠️ Fund your Arbitrum wallet with USDC to execute trades
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* BOT SERVICE STATUS */}
+              {/* BOT SERVICE STATUS + LIVE TRADES */}
               <div style={{
                 background: 'linear-gradient(135deg, rgba(0,255,136,0.1), rgba(0,200,100,0.05))',
                 borderRadius: '8px',
                 padding: '10px',
                 marginBottom: '10px',
                 border: '1px solid rgba(0,255,136,0.3)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    background: '#00ff88',
-                    boxShadow: '0 0 10px #00ff88',
-                    animation: 'pulse 2s infinite',
-                  }} />
-                  <div>
-                    <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700 }}>Q7 COPY BOT: LIVE</div>
-                    <div style={{ color: '#666', fontSize: '8px' }}>Hetzner Server • 30s Scan</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      background: '#00ff88',
+                      boxShadow: '0 0 10px #00ff88',
+                      animation: 'pulse 2s infinite',
+                    }} />
+                    <div>
+                      <div style={{ color: '#00ff88', fontSize: '10px', fontWeight: 700 }}>Q7 COPY BOT: LIVE</div>
+                      <div style={{ color: '#666', fontSize: '8px' }}>Hetzner Server • 30s Scan</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 600 }}>gTrade v10</div>
+                    <div style={{ color: '#666', fontSize: '7px' }}>Arbitrum Network</div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 600 }}>gTrade v8</div>
-                  <div style={{ color: '#666', fontSize: '7px' }}>Arbitrum Network</div>
+
+                {/* Q7 Live Positions Preview */}
+                {q7DevPositions && q7DevPositions.length > 0 && (
+                  <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '8px', marginTop: '8px' }}>
+                    <div style={{ color: '#888', fontSize: '8px', marginBottom: '6px' }}>🔴 Q7 LIVE POSITIONS ({q7DevPositions.length})</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '60px', overflow: 'auto' }}>
+                      {q7DevPositions.slice(0, 3).map((pos, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                          <span style={{ color: pos.long ? '#00ff88' : '#ff4444' }}>
+                            {pos.long ? '🟢 LONG' : '🔴 SHORT'} {pos.asset}
+                          </span>
+                          <span style={{ color: '#888' }}>{pos.leverage}x @ ${pos.openPrice?.toFixed(2)}</span>
+                        </div>
+                      ))}
+                      {q7DevPositions.length > 3 && (
+                        <div style={{ color: '#666', fontSize: '8px', textAlign: 'center' }}>
+                          +{q7DevPositions.length - 3} more positions...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* EDUCATIONAL: HOW IT WORKS */}
+              <div style={{
+                background: 'rgba(138, 43, 226, 0.1)',
+                borderRadius: '8px',
+                padding: '10px',
+                marginBottom: '10px',
+                border: '1px dashed rgba(138, 43, 226, 0.3)',
+              }}>
+                <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 700, marginBottom: '6px' }}>📚 HOW COPY TRADING WORKS</div>
+                <div style={{ color: '#888', fontSize: '8px', lineHeight: 1.4 }}>
+                  1️⃣ <span style={{ color: '#fff' }}>Click START</span> - Sign one transaction to delegate trading<br/>
+                  2️⃣ <span style={{ color: '#fff' }}>Q7 Bot monitors</span> - Scans Q7's live positions every 30 seconds<br/>
+                  3️⃣ <span style={{ color: '#fff' }}>Auto-execute</span> - New Q7 trades are mirrored to YOUR wallet instantly<br/>
+                  4️⃣ <span style={{ color: '#00ff88' }}>You keep 95%</span> - 5% of wins go to DTGC Growth Engine
+                </div>
+                <div style={{ marginTop: '8px', padding: '6px', background: 'rgba(255,215,0,0.1)', borderRadius: '4px' }}>
+                  <div style={{ color: '#FFD700', fontSize: '8px' }}>
+                    ⚠️ <strong>Non-custodial:</strong> You control your funds. Delegation only allows the bot to open/close trades on gTrade - never withdraw.
+                  </div>
                 </div>
               </div>
 
