@@ -154,10 +154,10 @@ async function fetchQ7Positions() {
         const isLong = t.long === true;
 
         // Parse numeric values
-        // openPrice: stored with 1e10 precision
+        // openPrice: stored with 1e10 precision (e.g., 49204714489732 = $4920.47)
         const openPrice = parseFloat(t.openPrice || '0') / 1e10;
-        // leverage: stored as leverage * 1e6 (e.g., 100000000 = 100x)
-        const leverage = parseFloat(t.leverage || '1000000') / 1e6;
+        // leverage: stored as leverage * 1000 (e.g., 10000 = 10x, 100000 = 100x)
+        const leverage = parseFloat(t.leverage || '1000') / 1000;
         // collateral: collateralAmount in USDC (6 decimals)
         const collateral = parseFloat(t.collateralAmount || '0') / 1e6;
         // TP/SL: stored with 1e10 precision
