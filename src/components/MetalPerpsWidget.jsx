@@ -321,10 +321,17 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   const COPY_TRADE_ARB_MIN = 40; // $40 Arbitrum USDC/ETH minimum
 
   // Registered Copy Traders - wallets authorized to copy Q7 trades
-  const REGISTERED_COPY_TRADERS = [
-    { address: '0x47E872162872B9858362118ec6D7b9a26C35Afac', name: 'Copy Trader 1', status: 'standby' },
-    { address: '0x777d7f3aD24832975AEC259AB7D7b57Be4225AbF', name: 'Copy Trader 2', status: 'standby' },
+  // Status is now determined dynamically based on copyTradeEnabled state
+  const REGISTERED_COPY_TRADER_ADDRESSES = [
+    { address: '0x47E872162872B9858362118ec6D7b9a26C35Afac', name: 'Copy Trader 1' },
+    { address: '0x777d7f3aD24832975AEC259AB7D7b57Be4225AbF', name: 'Copy Trader 2' },
   ];
+
+  // Active copy traders state (persisted)
+  const [activeCopyTraders, setActiveCopyTraders] = useState(() => {
+    const saved = localStorage.getItem('dtgc_active_copy_traders');
+    return saved ? JSON.parse(saved) : {};
+  });
 
   const [copyTradeWallet, setCopyTradeWallet] = useState(Q7_DEV_WALLET); // Default to Q7
   const [copyTradeEnabled, setCopyTradeEnabled] = useState(false);
@@ -1611,20 +1618,49 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
   }, [connectedAddress]);
 
   // ===== COPY TRADING SYNC - Mirror Q7 Bot Trades =====
-  const [lastKnownQ7Positions, setLastKnownQ7Positions] = useState([]);
+  const [lastKnownQ7Positions, setLastKnownQ7Positions] = useState(() => {
+    const saved = localStorage.getItem('dtgc_last_q7_positions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [copyTradeInitialized, setCopyTradeInitialized] = useState(false);
+
+  // Initialize copy trading state when enabled
+  useEffect(() => {
+    if (copyTradeEnabled && !copyTradeInitialized) {
+      console.log('🔄 Copy Trading Initializing...');
+      // Initialize with current Q7 positions (don't count existing as new)
+      if (q7DevPositions.length > 0) {
+        setLastKnownQ7Positions(q7DevPositions);
+        localStorage.setItem('dtgc_last_q7_positions', JSON.stringify(q7DevPositions));
+        console.log(`📋 Copy Trading initialized with ${q7DevPositions.length} existing Q7 positions`);
+      }
+      setCopyTradeInitialized(true);
+    }
+    if (!copyTradeEnabled) {
+      setCopyTradeInitialized(false);
+    }
+  }, [copyTradeEnabled, q7DevPositions]);
 
   // Detect new Q7 trades and update copy trade stats
   useEffect(() => {
-    if (!copyTradeEnabled || !q7DevPositions.length) return;
+    if (!copyTradeEnabled || !copyTradeInitialized) return;
 
     // Find NEW positions that weren't in last known
     const newPositions = q7DevPositions.filter(pos =>
-      !lastKnownQ7Positions.find(p => p.asset === pos.asset && p.openPrice === pos.openPrice)
+      !lastKnownQ7Positions.find(p =>
+        p.asset === pos.asset &&
+        Math.abs(p.openPrice - pos.openPrice) < 0.01 && // Allow small price differences
+        p.direction === pos.direction
+      )
     );
 
     // Find CLOSED positions (were in last known but not in current)
     const closedPositions = lastKnownQ7Positions.filter(pos =>
-      !q7DevPositions.find(p => p.asset === pos.asset && p.openPrice === pos.openPrice)
+      !q7DevPositions.find(p =>
+        p.asset === pos.asset &&
+        Math.abs(p.openPrice - pos.openPrice) < 0.01 &&
+        p.direction === pos.direction
+      )
     );
 
     // Process new trades
@@ -1633,7 +1669,8 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
       setCopyTradeMirroredCount(prev => prev + newPositions.length);
 
       newPositions.forEach(pos => {
-        showToastMsg(`📋 COPY: ${pos.direction} ${pos.asset} @ $${pos.openPrice?.toFixed(2)}`, 'info');
+        showToastMsg(`🔄 COPY: ${pos.direction} ${pos.asset} @ $${pos.openPrice?.toFixed(2)} (${pos.leverage}x)`, 'info');
+        console.log(`🔄 COPY TRADE SIGNAL: ${pos.direction} ${pos.asset} | Entry: $${pos.openPrice?.toFixed(2)} | Lev: ${pos.leverage}x | Collateral: $${pos.collateral?.toFixed(2)}`);
       });
     }
 
@@ -1654,12 +1691,16 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
         const emoji = pnlUsd >= 0 ? '✅' : '❌';
         showToastMsg(`${emoji} COPY CLOSE: ${pos.asset} ${pnlUsd >= 0 ? '+' : ''}$${pnlUsd.toFixed(2)}`, pnlUsd >= 0 ? 'success' : 'error');
+        console.log(`${emoji} COPY TRADE CLOSED: ${pos.asset} | P&L: ${pnlUsd >= 0 ? '+' : ''}$${pnlUsd.toFixed(2)}`);
       });
     }
 
-    // Update last known positions
-    setLastKnownQ7Positions(q7DevPositions);
-  }, [q7DevPositions, copyTradeEnabled, livePrices]);
+    // Update last known positions if changed
+    if (newPositions.length > 0 || closedPositions.length > 0) {
+      setLastKnownQ7Positions(q7DevPositions);
+      localStorage.setItem('dtgc_last_q7_positions', JSON.stringify(q7DevPositions));
+    }
+  }, [q7DevPositions, copyTradeEnabled, copyTradeInitialized, livePrices]);
 
   // Set copy trade start time when enabled
   useEffect(() => {
@@ -4696,9 +4737,29 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     </div>
                     <button
                       onClick={() => {
-                        setCopyTradeEnabled(!copyTradeEnabled);
-                        if (!copyTradeEnabled) {
+                        const newEnabled = !copyTradeEnabled;
+                        setCopyTradeEnabled(newEnabled);
+                        if (newEnabled) {
                           setCopyTradeLastSync(new Date());
+                          // Register this user as active copy trader
+                          if (connectedAddress) {
+                            setActiveCopyTraders(prev => {
+                              const updated = { ...prev, [connectedAddress.toLowerCase()]: { active: true, startTime: Date.now() } };
+                              localStorage.setItem('dtgc_active_copy_traders', JSON.stringify(updated));
+                              return updated;
+                            });
+                            console.log(`🟢 Copy Trading ACTIVATED for ${connectedAddress.slice(0, 8)}...`);
+                          }
+                        } else {
+                          // Mark user as inactive
+                          if (connectedAddress) {
+                            setActiveCopyTraders(prev => {
+                              const updated = { ...prev, [connectedAddress.toLowerCase()]: { active: false, stopTime: Date.now() } };
+                              localStorage.setItem('dtgc_active_copy_traders', JSON.stringify(updated));
+                              return updated;
+                            });
+                            console.log(`🔴 Copy Trading STOPPED for ${connectedAddress.slice(0, 8)}...`);
+                          }
                         }
                       }}
                       style={{
@@ -4717,6 +4778,74 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                       {copyTradeEnabled ? '⏹ STOP' : '▶ START'}
                     </button>
                   </div>
+
+                  {/* Q7 LIVE POSITIONS - Copy Trade Signals */}
+                  {copyTradeEnabled && (
+                    <div style={{
+                      background: 'linear-gradient(135deg, rgba(138,43,226,0.15), rgba(0,0,0,0.3))',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      marginBottom: '10px',
+                      border: '1px solid rgba(138,43,226,0.3)',
+                    }}>
+                      <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 600, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        🎯 Q7 LIVE POSITIONS ({q7DevPositions.length})
+                        <span style={{ color: '#00ff88', fontSize: '7px', padding: '2px 4px', background: 'rgba(0,255,136,0.2)', borderRadius: '3px' }}>SIGNALS</span>
+                      </div>
+                      {q7DevPositions.length > 0 ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {q7DevPositions.map((pos, idx) => (
+                            <div key={idx} style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '8px',
+                              background: 'rgba(0,0,0,0.4)',
+                              borderRadius: '6px',
+                              border: `1px solid ${pos.direction === 'LONG' ? 'rgba(0,255,136,0.3)' : 'rgba(255,68,68,0.3)'}`,
+                            }}>
+                              <div>
+                                <div style={{ color: pos.direction === 'LONG' ? '#00ff88' : '#ff4444', fontSize: '10px', fontWeight: 700 }}>
+                                  {pos.direction === 'LONG' ? '📈' : '📉'} {pos.direction} {pos.asset}
+                                </div>
+                                <div style={{ color: '#888', fontSize: '8px' }}>
+                                  Entry: ${pos.openPrice?.toFixed(2)} | {pos.leverage}x | ${pos.collateral?.toFixed(2)}
+                                </div>
+                                <div style={{ color: pos.pnl >= 0 ? '#00ff88' : '#ff4444', fontSize: '8px' }}>
+                                  P&L: {pos.pnl >= 0 ? '+' : ''}{pos.pnlPercent?.toFixed(2)}%
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setSelectedAsset(pos.asset);
+                                  setDirection(pos.direction);
+                                  setLeverage(pos.leverage);
+                                  setCollateral(pos.collateral?.toFixed(2) || '5');
+                                  showToastMsg(`📋 Trade pre-filled: ${pos.direction} ${pos.asset} ${pos.leverage}x`, 'info');
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'linear-gradient(135deg, #8a2be2, #6a1f9e)',
+                                  color: '#fff',
+                                  fontSize: '8px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                📋 COPY
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ color: '#666', fontSize: '9px', textAlign: 'center', padding: '12px' }}>
+                          ⏳ No active Q7 positions - watching for signals...
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Your Copy Trade P&L */}
                   {copyTradeEnabled && (
@@ -4757,10 +4886,14 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     marginBottom: '10px',
                   }}>
                     <div style={{ color: '#8a2be2', fontSize: '9px', fontWeight: 600, marginBottom: '8px' }}>
-                      👥 REGISTERED COPY TRADERS ({REGISTERED_COPY_TRADERS.length})
+                      👥 REGISTERED COPY TRADERS ({REGISTERED_COPY_TRADER_ADDRESSES.length})
                     </div>
-                    {REGISTERED_COPY_TRADERS.map((trader, idx) => {
+                    {REGISTERED_COPY_TRADER_ADDRESSES.map((trader, idx) => {
                       const isCurrentUser = connectedAddress?.toLowerCase() === trader.address.toLowerCase();
+                      // Dynamic status based on activeCopyTraders state
+                      const traderState = activeCopyTraders[trader.address.toLowerCase()];
+                      const dynamicStatus = isCurrentUser && copyTradeEnabled ? 'active' :
+                                           traderState?.active ? 'active' : 'standby';
                       return (
                         <div
                           key={idx}
@@ -4777,7 +4910,7 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '10px' }}>
-                              {trader.status === 'active' ? '🟢' : trader.status === 'standby' ? '🟡' : '⚪'}
+                              {dynamicStatus === 'active' ? '🟢' : '🟡'}
                             </span>
                             <div>
                               <div style={{ color: isCurrentUser ? '#00ff88' : '#aaa', fontSize: '9px', fontWeight: 600 }}>
@@ -4791,15 +4924,13 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                           <div style={{
                             padding: '2px 6px',
                             borderRadius: '4px',
-                            background: trader.status === 'active' ? 'rgba(0,255,136,0.2)' :
-                                        trader.status === 'standby' ? 'rgba(255,215,0,0.2)' : 'rgba(100,100,100,0.2)',
-                            color: trader.status === 'active' ? '#00ff88' :
-                                   trader.status === 'standby' ? '#FFD700' : '#888',
+                            background: dynamicStatus === 'active' ? 'rgba(0,255,136,0.2)' : 'rgba(255,215,0,0.2)',
+                            color: dynamicStatus === 'active' ? '#00ff88' : '#FFD700',
                             fontSize: '7px',
                             fontWeight: 600,
                             textTransform: 'uppercase',
                           }}>
-                            {trader.status}
+                            {dynamicStatus}
                           </div>
                         </div>
                       );
