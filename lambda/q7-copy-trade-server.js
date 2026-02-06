@@ -116,20 +116,46 @@ async function fetchQ7Positions() {
     if (!response.ok) throw new Error(`API error: ${response.status}`);
 
     const data = await response.json();
-    return (data || []).map(trade => ({
-      index: trade.index,
-      asset: PAIR_NAMES[trade.pairIndex] || `PAIR_${trade.pairIndex}`,
-      pairIndex: trade.pairIndex,
-      direction: trade.buy ? 'LONG' : 'SHORT',
-      buy: trade.buy,
-      openPrice: parseFloat(trade.openPrice) / 1e10,
-      collateral: parseFloat(trade.initialPosToken) / 1e6,
-      leverage: parseFloat(trade.leverage),
-      tp: parseFloat(trade.tp) / 1e10,
-      sl: parseFloat(trade.sl) / 1e10,
-      positionSizeUsd: parseFloat(trade.positionSizeUsd || 0) / 1e18,
-      timestamp: trade.timestamp,
-    }));
+
+    // Debug: log first trade structure on first call
+    if (data && data.length > 0 && !fetchQ7Positions.logged) {
+      console.log('📊 Sample trade structure:', JSON.stringify(data[0], null, 2));
+      fetchQ7Positions.logged = true;
+    }
+
+    return (data || []).map(item => {
+      // Handle both nested (item.trade) and flat structures
+      const trade = item.trade || item;
+
+      // Get pair index - try multiple field names
+      const pairIndex = trade.pairIndex ?? trade.pair ?? trade.pairId ?? 0;
+
+      // Get direction - try multiple field names
+      const isLong = trade.buy ?? trade.long ?? (trade.direction === 'LONG') ?? false;
+
+      // Get prices - handle different formats
+      const openPrice = parseFloat(trade.openPrice || trade.open_price || trade.entryPrice || 0);
+      const leverage = parseFloat(trade.leverage || trade.lev || 1);
+      const collateral = parseFloat(trade.initialPosToken || trade.collateral || trade.positionSizeCollateral || 0);
+
+      // Determine divisors based on magnitude
+      const priceDivisor = openPrice > 1e8 ? 1e10 : 1;
+      const collateralDivisor = collateral > 1e4 ? 1e6 : 1;
+
+      return {
+        index: trade.index ?? trade.tradeIndex ?? 0,
+        asset: PAIR_NAMES[pairIndex] || `PAIR_${pairIndex}`,
+        pairIndex: pairIndex,
+        direction: isLong ? 'LONG' : 'SHORT',
+        buy: isLong,
+        openPrice: openPrice / priceDivisor,
+        collateral: collateral / collateralDivisor,
+        leverage: leverage,
+        tp: parseFloat(trade.tp || trade.takeProfit || 0) / priceDivisor,
+        sl: parseFloat(trade.sl || trade.stopLoss || 0) / priceDivisor,
+        timestamp: trade.timestamp || trade.openedAt || Date.now(),
+      };
+    });
   } catch (error) {
     console.error('Error fetching Q7 positions:', error.message);
     return [];
