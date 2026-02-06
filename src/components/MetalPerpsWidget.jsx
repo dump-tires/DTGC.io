@@ -327,6 +327,21 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
     { address: '0x777d7f3aD24832975AEC259AB7D7b57Be4225AbF', name: 'Copy Trader 2' },
   ];
 
+  // ===== COPY BOT EXECUTOR CONFIG (Auto-execution) =====
+  const COPY_BOT_API = 'http://65.109.68.172:3001';
+  const BOT_EXECUTOR_ADDRESS = '0x978c5786CDB46b1519A9c1C4814e06d5956f6c64'; // Bot wallet that executes trades
+  const GTRADE_DIAMOND_ADDRESS = '0xFF162c694eAA571f685030649814282eA457f169'; // gTrade delegation contract
+
+  // gTrade Delegation ABI - for single-click auto-trading
+  const GTRADE_DELEGATION_ABI = [
+    'function setTradingDelegate(address delegate, bool enable)',
+    'function delegations(address trader, address delegate) view returns (bool)',
+  ];
+
+  // Delegation state
+  const [delegationStatus, setDelegationStatus] = useState('UNKNOWN'); // UNKNOWN, CHECKING, NOT_DELEGATED, DELEGATED, DELEGATING
+  const [delegationLoading, setDelegationLoading] = useState(false);
+
   // Active copy traders state (persisted)
   const [activeCopyTraders, setActiveCopyTraders] = useState(() => {
     const saved = localStorage.getItem('dtgc_active_copy_traders');
@@ -427,6 +442,173 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
       winningPositions: live.wins,
     };
   };
+
+  // ===== COPY TRADING DELEGATION FUNCTIONS =====
+
+  // Check if user has delegated trading to the bot
+  const checkDelegationStatus = async (userAddr) => {
+    if (!userAddr || !window.ethereum) {
+      setDelegationStatus('UNKNOWN');
+      return false;
+    }
+
+    setDelegationStatus('CHECKING');
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(GTRADE_DIAMOND_ADDRESS, GTRADE_DELEGATION_ABI, provider);
+      const isDelegated = await contract.delegations(userAddr, BOT_EXECUTOR_ADDRESS);
+
+      setDelegationStatus(isDelegated ? 'DELEGATED' : 'NOT_DELEGATED');
+      console.log(`🔍 Delegation check for ${userAddr.slice(0, 8)}...: ${isDelegated ? 'ACTIVE' : 'NOT DELEGATED'}`);
+
+      // Also check with backend
+      try {
+        const res = await fetch(`${COPY_BOT_API}/api/check-delegation/${userAddr}`);
+        if (res.ok) {
+          const data = await res.json();
+          console.log(`📡 Backend delegation status: ${data.status}`);
+        }
+      } catch (e) { /* Backend may not be reachable */ }
+
+      return isDelegated;
+    } catch (error) {
+      console.error('Delegation check error:', error);
+      setDelegationStatus('UNKNOWN');
+      return false;
+    }
+  };
+
+  // Request user to delegate trading to the bot (single-click setup)
+  const requestDelegation = async () => {
+    if (!connectedAddress || !window.ethereum) {
+      showToastMsg('❌ Please connect your wallet first', 'error');
+      return false;
+    }
+
+    setDelegationLoading(true);
+    setDelegationStatus('DELEGATING');
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(GTRADE_DIAMOND_ADDRESS, GTRADE_DELEGATION_ABI, signer);
+
+      showToastMsg('📝 Please sign the delegation transaction...', 'info');
+
+      // Call setTradingDelegate to authorize the bot
+      const tx = await contract.setTradingDelegate(BOT_EXECUTOR_ADDRESS, true);
+      showToastMsg('⏳ Waiting for transaction confirmation...', 'info');
+
+      await tx.wait();
+
+      console.log(`✅ Delegation successful! Tx: ${tx.hash}`);
+      showToastMsg('✅ Delegation successful! Auto-trading is now ACTIVE!', 'success');
+
+      setDelegationStatus('DELEGATED');
+      setDelegationLoading(false);
+      return true;
+
+    } catch (error) {
+      console.error('Delegation error:', error);
+      showToastMsg(`❌ Delegation failed: ${error.message?.slice(0, 50)}`, 'error');
+      setDelegationStatus('NOT_DELEGATED');
+      setDelegationLoading(false);
+      return false;
+    }
+  };
+
+  // Register with the copy trade backend
+  const registerWithCopyBot = async (userAddr) => {
+    try {
+      const response = await fetch(`${COPY_BOT_API}/api/register-copy-trader`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: userAddr,
+          dtgcBalance: dtgcUsdValue,
+          arbBalance: copyTradeArbBalance,
+          timestamp: Date.now(),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📡 Registered with copy bot:', data);
+        return data;
+      }
+    } catch (error) {
+      console.log('Backend registration pending - server may be starting');
+    }
+    return null;
+  };
+
+  // Full single-click copy trading activation
+  const activateCopyTrading = async () => {
+    if (!connectedAddress) {
+      showToastMsg('❌ Please connect your wallet first', 'error');
+      return;
+    }
+
+    // Check if already delegated
+    const isDelegated = await checkDelegationStatus(connectedAddress);
+
+    if (!isDelegated) {
+      // Need to delegate first
+      showToastMsg('🔐 Setting up auto-trading... Please approve the delegation.', 'info');
+      const delegationSuccess = await requestDelegation();
+
+      if (!delegationSuccess) {
+        return; // User rejected or error
+      }
+    }
+
+    // Register with backend
+    const registration = await registerWithCopyBot(connectedAddress);
+
+    // Update local state
+    setCopyTradeEnabled(true);
+    setCopyTradeLastSync(new Date());
+
+    setActiveCopyTraders(prev => {
+      const updated = { ...prev, [connectedAddress.toLowerCase()]: { active: true, delegated: true, startTime: Date.now() } };
+      localStorage.setItem('dtgc_active_copy_traders', JSON.stringify(updated));
+      return updated;
+    });
+
+    showToastMsg('🚀 AUTO COPY TRADING ACTIVATED! You will now mirror Q7 trades automatically.', 'success');
+    console.log(`🟢 Copy Trading FULLY ACTIVATED for ${connectedAddress.slice(0, 8)}...`);
+  };
+
+  // Deactivate copy trading (but keep delegation for easy reactivation)
+  const deactivateCopyTrading = async () => {
+    setCopyTradeEnabled(false);
+
+    if (connectedAddress) {
+      setActiveCopyTraders(prev => {
+        const updated = { ...prev, [connectedAddress.toLowerCase()]: { active: false, delegated: delegationStatus === 'DELEGATED', stopTime: Date.now() } };
+        localStorage.setItem('dtgc_active_copy_traders', JSON.stringify(updated));
+        return updated;
+      });
+
+      // Notify backend
+      try {
+        await fetch(`${COPY_BOT_API}/api/disable-copy-trader`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: connectedAddress }),
+        });
+      } catch (e) { /* Silent */ }
+
+      showToastMsg('⏹ Copy trading paused. Your delegation is still active for easy restart.', 'info');
+    }
+  };
+
+  // Check delegation on wallet connect/change
+  useEffect(() => {
+    if (connectedAddress) {
+      checkDelegationStatus(connectedAddress);
+    }
+  }, [connectedAddress]);
 
   // Generate P&L chart data for time graph
   const getPnLChartData = () => {
@@ -4745,84 +4927,83 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                 </div>
               </div>
 
-              {/* Copy Trade Toggle */}
+              {/* Copy Trade Toggle - SINGLE CLICK AUTO-EXECUTION */}
               {hasCopyTradeAccess && userAddress ? (
                 <>
+                  {/* Delegation Status Indicator */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px',
+                    background: delegationStatus === 'DELEGATED' ? 'rgba(0,255,136,0.1)' : 'rgba(255,165,0,0.1)',
+                    borderRadius: '6px',
+                    marginBottom: '10px',
+                    border: `1px solid ${delegationStatus === 'DELEGATED' ? 'rgba(0,255,136,0.3)' : 'rgba(255,165,0,0.3)'}`,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px' }}>{delegationStatus === 'DELEGATED' ? '✅' : delegationStatus === 'CHECKING' ? '🔍' : '🔐'}</span>
+                      <span style={{ color: delegationStatus === 'DELEGATED' ? '#00ff88' : '#ffa500', fontSize: '9px', fontWeight: 600 }}>
+                        {delegationStatus === 'DELEGATED' ? 'DELEGATED - Auto-execute ready' :
+                         delegationStatus === 'CHECKING' ? 'Checking delegation...' :
+                         delegationStatus === 'DELEGATING' ? 'Awaiting signature...' :
+                         'Delegation required for auto-trading'}
+                      </span>
+                    </div>
+                    <span style={{ color: '#888', fontSize: '7px' }}>Bot: {BOT_EXECUTOR_ADDRESS.slice(0, 6)}...{BOT_EXECUTOR_ADDRESS.slice(-4)}</span>
+                  </div>
+
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '12px',
-                    background: copyTradeEnabled ? 'rgba(0, 255, 136, 0.1)' : 'rgba(0,0,0,0.3)',
+                    background: copyTradeEnabled && delegationStatus === 'DELEGATED' ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0,0,0,0.3)',
                     borderRadius: '8px',
-                    border: copyTradeEnabled ? '1px solid rgba(0, 255, 136, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+                    border: copyTradeEnabled && delegationStatus === 'DELEGATED' ? '1px solid rgba(0, 255, 136, 0.4)' : '1px solid rgba(255,255,255,0.1)',
                     marginBottom: '10px',
                   }}>
                     <div>
-                      <div style={{ color: copyTradeEnabled ? '#00ff88' : '#888', fontSize: '11px', fontWeight: 700 }}>
-                        {copyTradeEnabled ? '🟢 COPY TRADING ACTIVE' : '⚪ COPY TRADING OFF'}
+                      <div style={{ color: copyTradeEnabled && delegationStatus === 'DELEGATED' ? '#00ff88' : '#888', fontSize: '11px', fontWeight: 700 }}>
+                        {copyTradeEnabled && delegationStatus === 'DELEGATED' ? '🟢 AUTO COPY TRADING ACTIVE' :
+                         copyTradeEnabled && delegationStatus !== 'DELEGATED' ? '🟡 PENDING DELEGATION' :
+                         '⚪ AUTO COPY TRADING OFF'}
                       </div>
                       <div style={{ color: '#555', fontSize: '8px', marginTop: '2px' }}>
-                        {copyTradeEnabled ? 'Mirroring Q7 trades to your wallet' : 'Enable to start copying trades'}
+                        {copyTradeEnabled && delegationStatus === 'DELEGATED' ? 'Bot will auto-execute Q7 trades on your wallet' :
+                         copyTradeEnabled ? 'Click START again to complete delegation' :
+                         'Single-click to enable auto copy trading'}
                       </div>
                     </div>
                     <button
                       onClick={async () => {
-                        const newEnabled = !copyTradeEnabled;
-                        setCopyTradeEnabled(newEnabled);
-                        if (newEnabled) {
-                          setCopyTradeLastSync(new Date());
-                          // Register this user as active copy trader
-                          if (connectedAddress) {
-                            setActiveCopyTraders(prev => {
-                              const updated = { ...prev, [connectedAddress.toLowerCase()]: { active: true, startTime: Date.now() } };
-                              localStorage.setItem('dtgc_active_copy_traders', JSON.stringify(updated));
-                              return updated;
-                            });
-                            console.log(`🟢 Copy Trading ACTIVATED for ${connectedAddress.slice(0, 8)}...`);
-                            showToastMsg(`✅ Copy Trading ENABLED! You'll mirror Q7 trades.`, 'success');
+                        if (delegationLoading) return;
 
-                            // Register with backend (Hetzner)
-                            try {
-                              await fetch('https://65.109.68.172:3001/api/register-copy-trader', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  address: connectedAddress,
-                                  dtgcBalance: dtgcUsdValue,
-                                  arbBalance: copyTradeArbBalance,
-                                  timestamp: Date.now(),
-                                }),
-                              }).catch(() => {}); // Silent fail for now
-                            } catch (e) { console.log('Backend registration pending'); }
-                          }
+                        if (copyTradeEnabled) {
+                          // STOP - Deactivate copy trading
+                          await deactivateCopyTrading();
                         } else {
-                          // Mark user as inactive
-                          if (connectedAddress) {
-                            setActiveCopyTraders(prev => {
-                              const updated = { ...prev, [connectedAddress.toLowerCase()]: { active: false, stopTime: Date.now() } };
-                              localStorage.setItem('dtgc_active_copy_traders', JSON.stringify(updated));
-                              return updated;
-                            });
-                            console.log(`🔴 Copy Trading STOPPED for ${connectedAddress.slice(0, 8)}...`);
-                            showToastMsg(`⏹ Copy Trading disabled.`, 'info');
-                          }
+                          // START - Full activation with delegation
+                          await activateCopyTrading();
                         }
                       }}
+                      disabled={delegationLoading}
                       style={{
-                        padding: '8px 16px',
+                        padding: '10px 20px',
                         borderRadius: '6px',
                         border: 'none',
-                        background: copyTradeEnabled
-                          ? 'linear-gradient(135deg, #ff4444, #ff0000)'
-                          : 'linear-gradient(135deg, #00ff88, #00cc6a)',
+                        background: delegationLoading ? 'rgba(128,128,128,0.5)' :
+                          copyTradeEnabled ? 'linear-gradient(135deg, #ff4444, #ff0000)' :
+                          'linear-gradient(135deg, #00ff88, #00cc6a)',
                         color: '#fff',
-                        fontSize: '10px',
+                        fontSize: '11px',
                         fontWeight: 700,
-                        cursor: 'pointer',
+                        cursor: delegationLoading ? 'wait' : 'pointer',
+                        minWidth: '90px',
+                        boxShadow: !delegationLoading && !copyTradeEnabled ? '0 0 15px rgba(0,255,136,0.4)' : 'none',
                       }}
                     >
-                      {copyTradeEnabled ? '⏹ STOP' : '▶ START'}
+                      {delegationLoading ? '⏳ SIGNING...' : copyTradeEnabled ? '⏹ STOP' : '🚀 START'}
                     </button>
                   </div>
 
@@ -4937,10 +5118,11 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
                     </div>
                     {REGISTERED_COPY_TRADER_ADDRESSES.map((trader, idx) => {
                       const isCurrentUser = connectedAddress?.toLowerCase() === trader.address.toLowerCase();
-                      // Dynamic status based on activeCopyTraders state
+                      // Dynamic status based on activeCopyTraders state AND delegation
                       const traderState = activeCopyTraders[trader.address.toLowerCase()];
-                      const dynamicStatus = isCurrentUser && copyTradeEnabled ? 'active' :
-                                           traderState?.active ? 'active' : 'standby';
+                      // ACTIVE = copy trading enabled AND delegated to bot
+                      const dynamicStatus = isCurrentUser && copyTradeEnabled && delegationStatus === 'DELEGATED' ? 'active' :
+                                           traderState?.active && traderState?.delegated ? 'active' : 'standby';
                       return (
                         <div
                           key={idx}
