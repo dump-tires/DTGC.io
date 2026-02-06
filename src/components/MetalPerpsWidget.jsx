@@ -554,7 +554,19 @@ export default function MetalPerpsWidget({ livePrices: externalPrices = {}, conn
 
     } catch (error) {
       console.error('Delegation error:', error);
-      showToastMsg(`❌ Delegation failed: ${error.message?.slice(0, 50)}`, 'error');
+
+      // Check for specific gTrade errors
+      const errorData = error.data || error.message || '';
+      if (errorData.includes('0xc5723b51') || errorData.includes('c5723b51')) {
+        // This error means user needs to have a gTrade account first
+        showToastMsg('⚠️ First make 1 trade on gTrade to activate your account, then try again', 'error');
+        console.log('💡 gTrade requires at least one trade before you can delegate. Open any small position first.');
+      } else if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        showToastMsg('❌ Transaction cancelled', 'error');
+      } else {
+        showToastMsg(`❌ Delegation failed: ${error.shortMessage || error.message?.slice(0, 60)}`, 'error');
+      }
+
       setDelegationStatus('NOT_DELEGATED');
       setDelegationLoading(false);
       return false;
