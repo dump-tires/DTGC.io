@@ -92,14 +92,16 @@ if (CONFIG.BOT_EXECUTOR_PRIVATE_KEY) {
 }
 
 // ==================== PAIR MAPPINGS ====================
-// gTrade v9/v10 pair indices
+// gTrade v9/v10 pair indices (Arbitrum)
 const PAIR_NAMES = {
   0: 'BTC/USD', 1: 'ETH/USD', 2: 'LINK/USD', 3: 'DOGE/USD',
   4: 'MATIC/USD', 5: 'ADA/USD', 6: 'SUSHI/USD', 7: 'AAVE/USD',
   8: 'ALGO/USD', 9: 'BAL/USD', 10: 'COMP/USD', 11: 'ATOM/USD',
   21: 'EUR/USD', 22: 'GBP/USD', 23: 'AUD/USD', 24: 'NZD/USD',
-  31: 'XAU/USD', 32: 'XAG/USD', // Gold and Silver
-  // Simplified names for common assets
+  31: 'XAU/USD', 32: 'XAG/USD',
+  // Commodities (newer indices)
+  90: 'XAU/USD', // Gold
+  91: 'XAG/USD', // Silver
 };
 
 function getPairName(pairIndex) {
@@ -141,30 +143,29 @@ async function fetchQ7Positions() {
       return [];
     }
 
-    // Parse positions - handle gTrade v9/v10 format
+    // Parse positions - gTrade v9/v10 format
     const positions = rawData.map((item, idx) => {
       try {
-        // gTrade returns nested structure: { trade: {...}, tradeInfo: {...} }
+        // gTrade returns: { trade: {...}, tradeInfo: {...} }
         const t = item.trade || item;
 
-        const pairIndex = parseInt(t.pairIndex || t.pair || 0);
-        const isLong = t.buy === true || t.buy === 'true' || t.long === true;
+        const pairIndex = parseInt(t.pairIndex || 0);
+        // Direction: gTrade uses "long" field (true/false)
+        const isLong = t.long === true;
 
-        // Parse numeric values - gTrade uses string representations
-        let openPrice = parseFloat(t.openPrice || t.entryPrice || '0');
-        let leverage = parseFloat(t.leverage || '1');
-        let collateral = parseFloat(t.initialPosToken || t.collateral || t.positionSizeCollateral || '0');
-        let tp = parseFloat(t.tp || t.takeProfit || '0');
-        let sl = parseFloat(t.sl || t.stopLoss || '0');
-
-        // gTrade stores prices with 1e10 precision, collateral with 1e6 (USDC)
-        if (openPrice > 1e8) openPrice = openPrice / 1e10;
-        if (collateral > 1e4) collateral = collateral / 1e6;
-        if (tp > 1e8) tp = tp / 1e10;
-        if (sl > 1e8) sl = sl / 1e10;
+        // Parse numeric values
+        // openPrice: stored with 1e10 precision
+        const openPrice = parseFloat(t.openPrice || '0') / 1e10;
+        // leverage: stored as leverage * 1e6 (e.g., 100000000 = 100x)
+        const leverage = parseFloat(t.leverage || '1000000') / 1e6;
+        // collateral: collateralAmount in USDC (6 decimals)
+        const collateral = parseFloat(t.collateralAmount || '0') / 1e6;
+        // TP/SL: stored with 1e10 precision
+        const tp = parseFloat(t.tp || '0') / 1e10;
+        const sl = parseFloat(t.sl || '0') / 1e10;
 
         return {
-          index: parseInt(t.index || t.tradeIndex || idx),
+          index: parseInt(t.index || idx),
           pairIndex: pairIndex,
           asset: getPairName(pairIndex),
           direction: isLong ? 'LONG' : 'SHORT',
@@ -174,7 +175,7 @@ async function fetchQ7Positions() {
           leverage: leverage,
           tp: tp,
           sl: sl,
-          timestamp: parseInt(t.timestamp || t.openedAt || Date.now() / 1000),
+          timestamp: parseInt(t.createdBlock || Date.now() / 1000),
         };
       } catch (parseErr) {
         console.error(`   Error parsing position ${idx}:`, parseErr.message);
